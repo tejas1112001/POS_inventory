@@ -30,6 +30,7 @@ import PurchaseReport from './pages/PurchaseReport';
 import CustomerDueReport from './pages/CustomerDueReport';
 import CustomerReport from './pages/CustomerReport';
 import SalesReport from './pages/SalesReport';
+import Inventory from './pages/Inventory';
 import SignIn from './pages/SignIn';
 import SignUp from './pages/SignUp';
 import { useEffect } from 'react';
@@ -77,6 +78,7 @@ function App() {
             <Route path="/customers" element={<ProtectedRoute><Customers /></ProtectedRoute>} />
             <Route path="/add-customer" element={<ProtectedRoute><AddCustomer /></ProtectedRoute>} />
             <Route path="/customer-report" element={<ProtectedRoute><CustomerReport /></ProtectedRoute>} />
+            <Route path="/inventory" element={<ProtectedRoute><Inventory /></ProtectedRoute>} />
           </Routes>
           </div>
         </div>

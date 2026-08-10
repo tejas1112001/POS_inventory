@@ -100,6 +100,7 @@ const NavBar = () => {
       items: [
         { name: 'Products List', path: '/products' },
         { name: 'Add Product', path: '/add-product' },
+        { name: 'Inventory', path: '/inventory' },
         { name: 'Categories', path: '/categories' },
         { name: 'Add Category', path: '/add-category' },
         { name: 'Brands', path: '/brands' },

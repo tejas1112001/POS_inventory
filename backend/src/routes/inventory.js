@@ -1,9 +1,65 @@
 import express from 'express';
-import { Inventory } from '../models/index.js';
+import { Inventory, ProductVariant, Product, Store } from '../models/index.js';
+import { authenticateToken } from '../middleware/auth.js';
+import isAdmin from '../middleware/admin.js';
 
 const router = express.Router();
 
-router.post('/', async (req, res) => {
+// GET /api/inventory — list all inventory records with product/variant/store details
+router.get('/', authenticateToken, async (req, res) => {
+  try {
+    const records = await Inventory.findAll({
+      include: [
+        {
+          model: ProductVariant,
+          as: 'Variant',
+          attributes: ['id', 'sku', 'attributes', 'price'],
+          include: [
+            {
+              model: Product,
+              as: 'Product',
+              attributes: ['id', 'name', 'image'],
+            },
+          ],
+        },
+        {
+          model: Store,
+          as: 'Store',
+          attributes: ['id', 'name'],
+        },
+      ],
+      order: [['updatedAt', 'DESC']],
+    });
+
+    const formatted = records.map((r) => {
+      const json = r.toJSON();
+      return {
+        id: json.id,
+        qty: json.qty,
+        quantityAlert: json.quantityAlert,
+        updatedAt: json.updatedAt,
+        variantId: json.Variant?.id,
+        sku: json.Variant?.sku,
+        attributes: json.Variant?.attributes,
+        price: json.Variant?.price,
+        productId: json.Variant?.Product?.id,
+        productName: json.Variant?.Product?.name,
+        productImage: json.Variant?.Product?.image,
+        storeId: json.Store?.id,
+        storeName: json.Store?.name,
+        status: json.qty <= 0 ? 'Out of Stock' : json.qty <= json.quantityAlert ? 'Low Stock' : 'In Stock',
+      };
+    });
+
+    res.json(formatted);
+  } catch (error) {
+    console.error('GET /inventory error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /api/inventory — upsert an inventory record (admin only)
+router.post('/', authenticateToken, isAdmin, async (req, res) => {
   try {
     const { variantId, storeId, qty, quantityAlert } = req.body;
 
