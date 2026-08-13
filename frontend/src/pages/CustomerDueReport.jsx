@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
+import ListPageShell from '../components/layout/ListPageShell';
 import CustomerDueReportList from '../components/lists/CustomerDueReportList';
 import { api } from '../services/api'; // <-- IMPORT API
 
@@ -54,19 +55,18 @@ export default function CustomerDueReport() {
     : 'Manage your customer reports';
 
   return (
-    <div className="p-6 bg-gray-50 min-h-screen flex flex-col">
-      {/* Navigation Tabs */}
-      <div className="mb-6 border-b">
+    <div className="flex h-full min-h-0 flex-1 flex-col">
+      <div className="mb-4 shrink-0 border-b">
         <ul className="flex">
           <li className="mr-2">
             <NavLink
               to="/customers/report"
               end
               className={({ isActive }) =>
-                `px-6 py-3 block text-sm font-medium ${
+                `block px-6 py-3 text-sm font-medium ${
                   isActive
-                    ? 'border-b-2 border-blue-500 text-blue-600'
-                    : 'text-gray-500 hover:text-gray-700'
+                    ? 'border-b-2 border-primary text-primary'
+                    : 'text-muted-foreground hover:text-foreground'
                 }`
               }
             >
@@ -77,10 +77,10 @@ export default function CustomerDueReport() {
             <NavLink
               to="/customers/report/due"
               className={({ isActive }) =>
-                `px-6 py-3 block text-sm font-medium ${
+                `block px-6 py-3 text-sm font-medium ${
                   isActive
-                    ? 'border-b-2 border-blue-500 text-blue-600'
-                    : 'text-gray-500 hover:text-gray-700'
+                    ? 'border-b-2 border-primary text-primary'
+                    : 'text-muted-foreground hover:text-foreground'
                 }`
               }
             >
@@ -90,12 +90,9 @@ export default function CustomerDueReport() {
         </ul>
       </div>
 
-      {/* Page Content */}
-      <CustomerDueReportList 
-        reports={reports} 
-        loading={loading}
-        error={error}
-      />
+      <ListPageShell>
+        <CustomerDueReportList reports={reports} loading={loading} error={error} />
+      </ListPageShell>
     </div>
   );
 }

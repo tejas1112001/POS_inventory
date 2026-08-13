@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import ListPageShell from '../components/layout/ListPageShell';
 import SalesReturnList from '../components/lists/SalesReturnList';
 import { api } from '../services/api';
 
@@ -29,12 +30,11 @@ export default function SalesReturn() {
   if (error) return <div className="p-6 text-red-500">{error}</div>;
 
   return (
-    <div className="p-6 bg-gray-50 min-h-screen flex flex-col">
-      <SalesReturnList 
-        salesReturns={salesReturns} 
-        setShowForm={setShowForm} 
+    <ListPageShell>
+      <SalesReturnList
+        salesReturns={salesReturns}
+        setShowForm={setShowForm}
       />
-      {/* Add Sales Return modal would go here */}
-    </div>
+    </ListPageShell>
   );
 }

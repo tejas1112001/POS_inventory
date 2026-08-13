@@ -1,10 +1,14 @@
 import React from 'react';
+import ListPageLayout from './ListPageLayout';
 
-export default function ListContainer({ children, extraElement }) {
+/** @deprecated Use ListPageLayout directly */
+export default function ListContainer({ children, extraElement, className }) {
   return (
-    <div className="space-y-4">
+    <div className={className}>
       {extraElement}
       {children}
     </div>
   );
 }
+
+export { ListPageLayout };

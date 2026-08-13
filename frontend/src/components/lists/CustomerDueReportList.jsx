@@ -4,12 +4,8 @@ import { indexColumn } from '../ListComponents/columnHelpers';
 import { PrinterIcon } from '@heroicons/react/24/outline';
 
 // Reusable components
-import ListContainer from '../ListComponents/ListContainer';
-import ListHeader from '../ListComponents/ListHeader';
+import ListPageLayout from '../ListComponents/ListPageLayout';
 import ListControlButtons from '../ListComponents/ListControlButtons';
-import ListFilter from '../ListComponents/ListFilter';
-import ListTable from '../ListComponents/ListTable';
-import ListPagination from '../ListComponents/ListPagination';
 import DateRangePicker from '../ListComponents/DateRangePicker';
 import SelectField from '../ListComponents/SelectField';
 import GenerateButton from '../ListComponents/GenerateButton';
@@ -162,66 +158,51 @@ export default function CustomerDueReportList({ reports }) {
 
 
   return (
-    <ListContainer>
-      <ListHeader 
-        title="Customer Due Report"
-        description="Manage your customer due reports"
-        controlButtons={<ListControlButtons buttons={customControlButtons} />}
-      />
-      
-    <ListFilter>
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-        <DateRangePicker
-          fromDate={fromDate}
-          toDate={toDate}
-          setFromDate={setFromDate}
-          setToDate={setToDate}
-        />
-
-        <SelectField
-          name="customer"
-          label="Customer"
-          value={customerFilter}
-          onChange={setCustomerFilter}
-          options={customerOptions}
-          placeholder="All"
-          colClass="md:col-span-3"
-        />
-
-        <SelectField
-          name="paymentMethod"
-          label="Payment Method"
-          value={paymentMethodFilter}
-          onChange={setPaymentMethodFilter}
-          options={paymentMethodOptions}
-          placeholder="All"
-          colClass="md:col-span-3"
-        />
-
-        <SelectField
-          name="paymentStatus"
-          label="Payment Status"
-          value={paymentStatusFilter}
-          onChange={setPaymentStatusFilter}
-          options={paymentStatusOptions}
-          placeholder="All"
-          colClass="md:col-span-2"
-        />
-
-        <GenerateButton onClick={handleGenerate} label="Generate PDF" />
-      </div>
-    </ListFilter>
-      
-      <ListTable 
-        table={table} 
-        emptyState={emptyState}
-        maxHeight={"max-h-[calc(100vh-30rem)]"}
-      />
-      
-      <ListPagination 
-        table={table} 
-        dataLength={filteredData.length} 
-      />
-    </ListContainer>
+    <ListPageLayout
+      title="Customer Due Report"
+      description="Manage your customer due reports"
+      controlButtons={<ListControlButtons buttons={customControlButtons} />}
+      filterRow={
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-12">
+          <DateRangePicker
+            fromDate={fromDate}
+            toDate={toDate}
+            setFromDate={setFromDate}
+            setToDate={setToDate}
+          />
+          <SelectField
+            name="customer"
+            label="Customer"
+            value={customerFilter}
+            onChange={setCustomerFilter}
+            options={customerOptions}
+            placeholder="All"
+            colClass="md:col-span-3"
+          />
+          <SelectField
+            name="paymentMethod"
+            label="Payment Method"
+            value={paymentMethodFilter}
+            onChange={setPaymentMethodFilter}
+            options={paymentMethodOptions}
+            placeholder="All"
+            colClass="md:col-span-3"
+          />
+          <SelectField
+            name="paymentStatus"
+            label="Payment Status"
+            value={paymentStatusFilter}
+            onChange={setPaymentStatusFilter}
+            options={paymentStatusOptions}
+            placeholder="All"
+            colClass="md:col-span-2"
+          />
+          <GenerateButton onClick={handleGenerate} label="Generate PDF" />
+        </div>
+      }
+      table={table}
+      emptyState={emptyState}
+      dataLength={filteredData.length}
+    />
   );
 }

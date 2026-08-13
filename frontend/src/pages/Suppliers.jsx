@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import ListPageShell from '../components/layout/ListPageShell';
 import SupplierList from '../components/lists/SupplierList';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
@@ -32,12 +33,12 @@ export default function Suppliers() {
   if (error) return <div className="p-6 text-red-500">{error}</div>;
 
   return (
-    <div className="p-6 bg-gray-50 min-h-screen flex flex-col">
-      <SupplierList 
-        suppliers={suppliers || []} 
+    <ListPageShell>
+      <SupplierList
+        suppliers={suppliers || []}
         setShowForm={() => navigate('/add-supplier')}
         onRefresh={fetchSuppliers}
       />
-    </div>
+    </ListPageShell>
   );
 }

@@ -1,4 +1,12 @@
-import React from 'react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
+import { cn } from '@/lib/utils';
 
 export default function SelectField({
   name,
@@ -10,36 +18,51 @@ export default function SelectField({
   colClass = 'md:col-span-3',
   className = '',
   required = false,
-  renderOption = null, // (opt) => JSX if you want custom option markup
+  compact = true,
+  renderOption = null,
 }) {
-  // normalize options: allow array of strings or array of { value, label }
-  const normalized = options.map(opt =>
+  const normalized = options.map((opt) =>
     typeof opt === 'string' ? { value: opt, label: opt } : opt
   );
 
-  return (
-    <div className={`${colClass}`}>
-      {label && (
-        <label htmlFor={name} className="block text-sm font-medium text-gray-700 mb-1">
-          {label}
-        </label>
-      )}
-      <select
+  const selectControl = (
+    <Select value={value} onValueChange={onChange} required={required}>
+      <SelectTrigger
         id={name}
-        name={name}
-        value={value}
-        onChange={e => onChange && onChange(e.target.value)}
-        className={`w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 ${className}`}
+        className={cn('h-9 w-full', compact ? '' : className)}
         aria-label={label || name}
-        required={required}
       >
-        {placeholder !== null && <option value="">{placeholder}</option>}
+        <SelectValue placeholder={placeholder || label} />
+      </SelectTrigger>
+      <SelectContent>
         {normalized.map((opt, i) => (
-          <option key={i} value={opt.value}>
+          <SelectItem key={i} value={opt.value}>
             {renderOption ? renderOption(opt) : opt.label}
-          </option>
+          </SelectItem>
         ))}
-      </select>
+      </SelectContent>
+    </Select>
+  );
+
+  if (compact) {
+    return (
+      <div className="flex w-full min-w-[160px] flex-col sm:w-auto sm:min-w-[180px]">
+        <Label htmlFor={name} className="sr-only">
+          {label || name}
+        </Label>
+        {selectControl}
+      </div>
+    );
+  }
+
+  return (
+    <div className={colClass}>
+      {label && (
+        <Label htmlFor={name} className="mb-1.5">
+          {label}
+        </Label>
+      )}
+      {selectControl}
     </div>
   );
 }

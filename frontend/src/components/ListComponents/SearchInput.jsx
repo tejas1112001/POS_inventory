@@ -1,22 +1,20 @@
-export default function SearchInput({ search, setSearch }) {
+import { Search } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+
+export default function SearchInput({ search, setSearch, placeholder = 'Search...', compact = true }) {
   return (
-    <div className="flex flex-col w-full md:w-auto">
-      <label className="block text-sm font-medium text-gray-700 mb-1">
-        Search
-      </label>
+    <div className="flex w-full min-w-[160px] flex-col sm:w-auto sm:min-w-[180px]">
+      <Label className={compact ? 'sr-only' : 'mb-1.5'}>Search</Label>
       <div className="relative w-full">
-        <input
+        <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
           type="text"
-          className="pl-10 pr-4 py-2 w-full border-2 border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-          placeholder="Search..."
+          className="h-9 pl-9"
+          placeholder={placeholder}
           value={search}
-          onChange={e => setSearch(e.target.value)}
+          onChange={(e) => setSearch(e.target.value)}
         />
-        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-          <svg className="h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-            <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
-          </svg>
-        </div>
       </div>
     </div>
   );

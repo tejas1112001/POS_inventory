@@ -6,14 +6,11 @@ import {
   indexColumn,
   imageColumn,
   actionsColumn,
+  StatusBadge,
 } from '../ListComponents/columnHelpers';
 import { api } from '../../services/api';
-import ListContainer from '../ListComponents/ListContainer';
-import ListHeader from '../ListComponents/ListHeader';
+import ListPageLayout from '../ListComponents/ListPageLayout';
 import ListControlButtons from '../ListComponents/ListControlButtons';
-import ListFilter from '../ListComponents/ListFilter';
-import ListTable from '../ListComponents/ListTable';
-import ListPagination from '../ListComponents/ListPagination';
 import SearchInput from '../ListComponents/SearchInput';
 import SelectFilters from '../ListComponents/SelectFilters';
 
@@ -112,12 +109,7 @@ function EditInventoryForm({ data, onSaved, onCancel }) {
   );
 }
 
-// Status badge
-const stockStatusConfig = {
-  'In Stock':    { className: 'bg-green-100 text-green-800' },
-  'Low Stock':   { className: 'bg-yellow-100 text-yellow-800' },
-  'Out of Stock':{ className: 'bg-red-100 text-red-800' },
-};
+// Status badge handled by shared StatusBadge component
 
 export default function InventoryList({ inventory = [], onRefresh }) {
   const [search, setSearch] = useState('');
@@ -198,15 +190,7 @@ export default function InventoryList({ inventory = [], onRefresh }) {
       accessorKey: 'status',
       header: 'Stock Status',
       size: 120,
-      cell: ({ getValue }) => {
-        const value = getValue();
-        const cfg = stockStatusConfig[value] || { className: 'bg-gray-100 text-gray-800' };
-        return (
-          <span className={`px-2 py-1 rounded-full text-xs font-medium ${cfg.className}`}>
-            {value}
-          </span>
-        );
-      },
+      cell: ({ getValue }) => <StatusBadge value={getValue()} />,
     },
     actionsColumn(['edit'], 70, {
       isActionDisabled: () => !isAdmin,
@@ -252,79 +236,72 @@ export default function InventoryList({ inventory = [], onRefresh }) {
   });
 
   return (
-    <ListContainer>
-      <ListHeader
-        title="Inventory"
-        description="Real-time stock levels across all stores"
-        controlButtons={<ListControlButtons buttons={controlButtons} />}
-        primaryButtons={primaryButtons.map((btn, i) => (
-          <React.Fragment key={i}>{btn.element}</React.Fragment>
-        ))}
-      />
-
-      <ListFilter>
-        <SearchInput
-          search={search}
-          setSearch={setSearch}
-          placeholder="Search product, SKU or store…"
-        />
-        <SelectFilters
-          statusFilter={storeFilter}
-          setStatusFilter={setStoreFilter}
-          statusOptions={storeOptions}
-          placeholder="Store"
-        />
-        <SelectFilters
-          statusFilter={statusFilter}
-          setStatusFilter={setStatusFilter}
-          statusOptions={statusOptions}
-          placeholder="Stock Status"
-        />
-      </ListFilter>
-
-      {/* Summary badges */}
-      <div className="flex gap-4 flex-wrap">
-        {[
-          {
-            label: 'Total SKUs',
-            value: inventory.length,
-            color: 'bg-blue-50 text-blue-700 border-blue-200',
-          },
-          {
-            label: 'In Stock',
-            value: inventory.filter((r) => r.status === 'In Stock').length,
-            color: 'bg-green-50 text-green-700 border-green-200',
-          },
-          {
-            label: 'Low Stock',
-            value: inventory.filter((r) => r.status === 'Low Stock').length,
-            color: 'bg-yellow-50 text-yellow-700 border-yellow-200',
-          },
-          {
-            label: 'Out of Stock',
-            value: inventory.filter((r) => r.status === 'Out of Stock').length,
-            color: 'bg-red-50 text-red-700 border-red-200',
-          },
-        ].map(({ label, value, color }) => (
-          <div
-            key={label}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl border text-sm font-medium ${color}`}
-          >
-            <span>{label}:</span>
-            <span className="text-lg font-bold">{value}</span>
-          </div>
-        ))}
-      </div>
-
-      <ListTable
-        table={table}
-        emptyState={emptyState}
-        maxHeight="max-h-[calc(100vh-30rem)]"
-        actionRenderers={actionRenderers}
-        actionTitles={actionTitles}
-      />
-
-      <ListPagination table={table} dataLength={filteredData.length} />
-    </ListContainer>
+    <ListPageLayout
+      title="Inventory"
+      description="Real-time stock levels across all stores"
+      controlButtons={<ListControlButtons buttons={controlButtons} />}
+      primaryButtons={primaryButtons.map((btn, i) => (
+        <React.Fragment key={i}>{btn.element}</React.Fragment>
+      ))}
+      filters={
+        <>
+          <SearchInput
+            search={search}
+            setSearch={setSearch}
+            placeholder="Search product, SKU or store…"
+          />
+          <SelectFilters
+            statusFilter={storeFilter}
+            setStatusFilter={setStoreFilter}
+            statusOptions={storeOptions}
+            placeholder="Store"
+          />
+          <SelectFilters
+            statusFilter={statusFilter}
+            setStatusFilter={setStatusFilter}
+            statusOptions={statusOptions}
+            placeholder="Stock Status"
+          />
+        </>
+      }
+      extraContent={
+        <div className="flex flex-wrap gap-2">
+          {[
+            {
+              label: 'Total SKUs',
+              value: inventory.length,
+              color: 'bg-primary/5 text-primary border-primary/20',
+            },
+            {
+              label: 'In Stock',
+              value: inventory.filter((r) => r.status === 'In Stock').length,
+              color: 'bg-emerald-500/10 text-emerald-700 border-emerald-500/20',
+            },
+            {
+              label: 'Low Stock',
+              value: inventory.filter((r) => r.status === 'Low Stock').length,
+              color: 'bg-amber-500/10 text-amber-700 border-amber-500/20',
+            },
+            {
+              label: 'Out of Stock',
+              value: inventory.filter((r) => r.status === 'Out of Stock').length,
+              color: 'bg-red-500/10 text-red-700 border-red-500/20',
+            },
+          ].map(({ label, value, color }) => (
+            <div
+              key={label}
+              className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium ${color}`}
+            >
+              <span>{label}:</span>
+              <span className="text-sm font-bold tabular-nums">{value}</span>
+            </div>
+          ))}
+        </div>
+      }
+      table={table}
+      emptyState={emptyState}
+      dataLength={filteredData.length}
+      tableProps={{ actionRenderers, actionTitles }}
+    />
   );
 }

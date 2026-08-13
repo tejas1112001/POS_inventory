@@ -5,9 +5,9 @@ const OrderItemsTable = ({ items }) => {
   const totalValue = items.reduce((sum, item) => sum + item.subtotal, 0);
 
   return (
-    <div className="overflow-x-auto">
-      <table className="table w-full border mt-4">
-        <thead className="bg-gray-100">
+    <div className="pos-table-wrap mt-3">
+      <table className="pos-table">
+        <thead>
           <tr>
             <th>Product (Code - Name)</th>
             <th>Net Unit Cost</th>
@@ -27,8 +27,8 @@ const OrderItemsTable = ({ items }) => {
             </tr>
           ))}
         </tbody>
-        <tfoot className="bg-gray-100 font-semibold">
-          <tr>
+        <tfoot>
+          <tr className="bg-muted/40 font-semibold">
             <td colSpan="2">Total</td>
             <td>{totalQty}</td>
             <td>-</td>

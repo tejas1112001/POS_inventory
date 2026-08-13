@@ -76,7 +76,7 @@ export const useUI = ({
           <button
             key="import"
             onClick={onImportItem}
-            className="px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center"
+            className="inline-flex items-center rounded-md border bg-background px-4 py-2 text-sm font-medium shadow-xs hover:bg-accent"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
               <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
@@ -106,7 +106,7 @@ export const useUI = ({
             key="add"
             onClick={onAddItem}
             disabled={isAddDisabled}
-            className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 flex items-center cursor-pointer disabled:bg-gray-400 disabled:cursor-not-allowed"
+            className="inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-xs hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"

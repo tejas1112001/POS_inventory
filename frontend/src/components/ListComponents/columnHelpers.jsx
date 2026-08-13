@@ -1,43 +1,68 @@
 import React from 'react';
 import { EyeIcon, PencilIcon, TrashIcon } from '@heroicons/react/24/outline';
+import { Checkbox } from '@/components/ui/checkbox';
+import { cn } from '@/lib/utils';
 
-// Define status configurations
-const statusMap = {
-  Received: { className: 'bg-green-100 text-green-800' },
-  Pending: { className: 'bg-cyan-100 text-cyan-800' },
-  Ordered: { className: 'bg-yellow-100 text-yellow-800' },
-  Active: { className: 'bg-green-100 text-green-800' },
-  Inactive: { className: 'bg-gray-100 text-gray-800' },
-  default: { className: 'bg-gray-100 text-gray-800' }
+const statusStyles = {
+  Received: { dot: 'bg-emerald-500', badge: 'bg-emerald-500/10 text-emerald-700 border-emerald-500/20' },
+  Pending: { dot: 'bg-sky-500', badge: 'bg-sky-500/10 text-sky-700 border-sky-500/20' },
+  Ordered: { dot: 'bg-amber-500', badge: 'bg-amber-500/10 text-amber-700 border-amber-500/20' },
+  Active: { dot: 'bg-emerald-500', badge: 'bg-emerald-500/10 text-emerald-700 border-emerald-500/20' },
+  Inactive: { dot: 'bg-muted-foreground', badge: 'bg-muted text-muted-foreground border-border' },
+  Paid: { dot: 'bg-emerald-500', badge: 'bg-emerald-500/10 text-emerald-700 border-emerald-500/20' },
+  Unpaid: { dot: 'bg-red-500', badge: 'bg-red-500/10 text-red-700 border-red-500/20' },
+  Overdue: { dot: 'bg-amber-500', badge: 'bg-amber-500/10 text-amber-700 border-amber-500/20' },
+  'In Stock': { dot: 'bg-emerald-500', badge: 'bg-emerald-500/10 text-emerald-700 border-emerald-500/20' },
+  'Low Stock': { dot: 'bg-amber-500', badge: 'bg-amber-500/10 text-amber-700 border-amber-500/20' },
+  'Out of Stock': { dot: 'bg-red-500', badge: 'bg-red-500/10 text-red-700 border-red-500/20' },
+  default: { dot: 'bg-muted-foreground', badge: 'bg-muted text-muted-foreground border-border' },
 };
 
-const paymentStatusConfig = {
-  Paid: { className: 'bg-green-100 text-green-800' },
-  Unpaid: { className: 'bg-red-100 text-red-800' },
-  Overdue: { className: 'bg-yellow-100 text-yellow-800' },
-  default: { className: 'bg-gray-100 text-gray-800' }
+export function StatusBadge({ value, className }) {
+  const style = statusStyles[value] || statusStyles.default;
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs font-medium',
+        style.badge,
+        className
+      )}
+    >
+      <span className={cn('size-1.5 shrink-0 rounded-full', style.dot)} />
+      {value}
+    </span>
+  );
 }
 
 // Reusable Select Column
-export const selectColumn = (size = 40) => ({
+export const selectColumn = (size = 48) => ({
   id: 'select',
   header: ({ table }) => (
-    <input
-      type="checkbox"
-      className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
-      checked={table.getIsAllRowsSelected()}
-      onChange={table.getToggleAllRowsSelectedHandler()}
-    />
+    <div className="flex items-center justify-center">
+      <Checkbox
+        aria-label="Select all rows"
+        checked={
+          table.getIsAllPageRowsSelected()
+            ? true
+            : table.getIsSomePageRowsSelected()
+              ? 'indeterminate'
+              : false
+        }
+        onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
+      />
+    </div>
   ),
   cell: ({ row }) => (
-    <input
-      type="checkbox"
-      className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
-      checked={row.getIsSelected()}
-      onChange={row.getToggleSelectedHandler()}
-    />
+    <div className="flex items-center justify-center">
+      <Checkbox
+        aria-label="Select row"
+        checked={row.getIsSelected()}
+        onCheckedChange={(value) => row.toggleSelected(!!value)}
+      />
+    </div>
   ),
-  size
+  size,
+  meta: { align: 'center' },
 });
 
 // Reusable Index Column
@@ -48,7 +73,7 @@ export const indexColumn = (size = 50) => ({
     const page = table.getState().pagination.pageIndex;
     const pageSize = table.getState().pagination.pageSize;
     return (
-      <span className="text-gray-500">
+      <span className="text-muted-foreground tabular-nums">
         {page * pageSize + row.index + 1}
       </span>
     );
@@ -61,15 +86,7 @@ export const indexColumn = (size = 50) => ({
 export const statusColumn = (accessor, header, size = 100) => ({
   accessorKey: accessor,
   header,
-  cell: ({ getValue }) => {
-    const value = getValue();
-    const statusConfig = statusMap[value] || paymentStatusConfig[value] || statusMap.default;
-    return (
-      <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusConfig.className}`}>
-        {value}
-      </span>
-    );
-  },
+  cell: ({ getValue }) => <StatusBadge value={getValue()} />,
   size
 });
 
@@ -77,17 +94,17 @@ export const statusColumn = (accessor, header, size = 100) => ({
 const actionConfig = {
   view: {
     label: 'View',
-    className: 'text-blue-600 hover:bg-blue-50',
+    className: 'text-primary hover:bg-primary/10',
     icon: EyeIcon,
   },
   edit: {
     label: 'Edit',
-    className: 'text-green-600 hover:bg-green-50',
+    className: 'text-emerald-600 hover:bg-emerald-500/10',
     icon: PencilIcon,
   },
   delete: {
     label: 'Delete',
-    className: 'text-red-600 hover:bg-red-50',
+    className: 'text-destructive hover:bg-destructive/10',
     icon: TrashIcon,
   },
 };
@@ -115,7 +132,7 @@ export const actionsColumn = (
           <button
             key={action}
             type="button"
-            className={`p-1.5 rounded-lg ${config.className || ''} ${
+            className={`p-1 rounded-md transition-colors ${config.className || ''} ${
               isDisabled ? 'opacity-40 cursor-not-allowed' : ''
             }`}
             onClick={() => !isDisabled && openModal(action, row.original)}
@@ -123,7 +140,7 @@ export const actionsColumn = (
             aria-label={label}
             title={label}
           >
-            {Icon ? <Icon className="w-5 h-5" /> : null}
+            {Icon ? <Icon className="w-4 h-4" /> : null}
           </button>
         );
       })}
@@ -141,12 +158,12 @@ export const imageColumn = (nameAccessor, header, imageAccessor, size = 'md') =>
     const name = row.original[nameAccessor] || 'Unknown';
     
     return (
-      <div className="flex items-center">
+      <div className="flex items-center gap-2">
         {imageData ? (
           <img 
             src={imageData} 
             alt={name}
-            className="w-10 h-10 rounded-full object-cover"
+            className="size-8 rounded-md object-cover ring-1 ring-border"
             onError={(e) => {
               e.target.style.display = 'none';
               // Show fallback when image fails to load
@@ -157,13 +174,13 @@ export const imageColumn = (nameAccessor, header, imageAccessor, size = 'md') =>
         ) : null}
         {/* Fallback displayed if no image or image fails to load */}
         <div 
-          className={`w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center ${imageData ? 'hidden' : 'flex'}`}
+          className={`size-8 bg-muted rounded-md flex items-center justify-center ring-1 ring-border ${imageData ? 'hidden' : 'flex'}`}
         >
-          <span className="text-sm font-medium text-gray-600">
+          <span className="text-xs font-medium text-muted-foreground">
             {name.charAt(0).toUpperCase()}
           </span>
         </div>
-        {nameAccessor && <span className="ml-3">{name}</span>}
+        {nameAccessor && <span className="font-medium">{name}</span>}
       </div>
     );
   },

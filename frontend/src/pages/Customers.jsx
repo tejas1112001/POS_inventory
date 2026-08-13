@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import ListPageShell from '../components/layout/ListPageShell';
 import CustomerList from '../components/lists/CustomerList';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
@@ -33,12 +34,12 @@ export default function Customers() {
   if (error) return <div className="p-6 text-red-500">{error}</div>;
 
   return (
-    <div className="p-6 bg-gray-50 min-h-screen flex flex-col">
-      <CustomerList 
-        customers={customers || []} 
-        setShowForm={() => navigate('/add-customer')} 
+    <ListPageShell>
+      <CustomerList
+        customers={customers || []}
+        setShowForm={() => navigate('/add-customer')}
         onRefresh={fetchCustomers}
       />
-    </div>
+    </ListPageShell>
   );
 }

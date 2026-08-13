@@ -1,4 +1,8 @@
-// Determine if we're in development or production
+import {
+  getToken,
+  isTokenExpired,
+} from '../lib/authStorage';
+
 const isDev = import.meta.env?.DEV ||
   window.location.hostname === 'localhost' ||
   window.location.hostname === '127.0.0.1';
@@ -8,7 +12,42 @@ const API_BASE_URL = normalizeBaseUrl(
   import.meta.env?.VITE_API_URL || (isDev ? 'http://localhost:3000' : '')
 );
 
-// Helper function to handle API errors
+let refreshPromise = null;
+
+async function tryRefreshToken() {
+  if (refreshPromise) return refreshPromise;
+
+  refreshPromise = (async () => {
+    const token = getToken();
+    if (!token) return false;
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/auth/refresh`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ remember: localStorage.getItem('rememberSession') === 'true' }),
+      });
+
+      if (!response.ok) return false;
+
+      const data = await response.json();
+      const storage = localStorage.getItem('rememberSession') === 'true' ? localStorage : sessionStorage;
+      storage.setItem('token', data.token);
+      storage.setItem('currentUser', JSON.stringify(data.user));
+      return true;
+    } catch {
+      return false;
+    } finally {
+      refreshPromise = null;
+    }
+  })();
+
+  return refreshPromise;
+}
+
 const handleResponse = async (response) => {
   if (!response.ok) {
     let errorPayload = { error: `HTTP error! status: ${response.status}` };
@@ -22,7 +61,6 @@ const handleResponse = async (response) => {
     }
 
     if (response.status === 401 || response.status === 403) {
-      // Token is invalid or expired, notify the app to log out
       window.dispatchEvent(new CustomEvent('apiError', { detail: errorPayload.error || 'You are not authorized to do that.' }));
       window.dispatchEvent(new Event('unauthorized'));
     } else {
@@ -41,34 +79,48 @@ const handleResponse = async (response) => {
   }
   return response.text();
 };
-// frontend/src/services/api.js
 
-// ... (keep API_BASE_URL and handleResponse functions as they are)
+const getAuthToken = () => getToken();
 
-// Helper function to get auth token
-const getAuthToken = () => {
-  return localStorage.getItem('token');
-};
-
-// Helper function to get default headers
 const getHeaders = () => {
   const headers = {
     'Content-Type': 'application/json',
   };
   const token = getAuthToken();
   if (token) {
-    headers['Authorization'] = `Bearer ${token}`; // <-- Add the token
+    headers['Authorization'] = `Bearer ${token}`;
   }
   return headers;
 };
 
+async function fetchWithAuth(endpoint, options = {}, retried = false) {
+  const token = getAuthToken();
+  if (token && isTokenExpired(token, 120) && !endpoint.includes('/api/auth/')) {
+    await tryRefreshToken();
+  }
+
+  const response = await fetch(`${API_BASE_URL}${endpoint}`, options);
+
+  if ((response.status === 401 || response.status === 403) && !retried &&
+      !endpoint.includes('/api/auth/login') && !endpoint.includes('/api/auth/refresh')) {
+    const refreshed = await tryRefreshToken();
+    if (refreshed) {
+      const newHeaders = { ...options.headers };
+      const newToken = getAuthToken();
+      if (newToken) {
+        newHeaders['Authorization'] = `Bearer ${newToken}`;
+      }
+      return fetchWithAuth(endpoint, { ...options, headers: newHeaders }, true);
+    }
+  }
+
+  return handleResponse(response);
+}
+
 export const api = {
   async get(endpoint) {
     try {
-      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-        headers: getHeaders(), // <-- Use headers
-      });
-      return handleResponse(response);
+      return await fetchWithAuth(endpoint, { headers: getHeaders() });
     } catch (error) {
       console.error('API GET Error:', error);
       throw error;
@@ -77,12 +129,11 @@ export const api = {
 
   async post(endpoint, data) {
     try {
-      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      return await fetchWithAuth(endpoint, {
         method: 'POST',
-        headers: getHeaders(), // <-- Use headers
+        headers: getHeaders(),
         body: JSON.stringify(data),
       });
-      return handleResponse(response);
     } catch (error) {
       console.error('API POST Error:', error);
       throw error;
@@ -91,12 +142,11 @@ export const api = {
 
   async put(endpoint, data) {
     try {
-      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      return await fetchWithAuth(endpoint, {
         method: 'PUT',
-        headers: getHeaders(), // <-- Use headers
+        headers: getHeaders(),
         body: JSON.stringify(data),
       });
-      return handleResponse(response);
     } catch (error) {
       console.error('API PUT Error:', error);
       throw error;
@@ -104,20 +154,18 @@ export const api = {
   },
 
   async postFormData(endpoint, data) {
-    // FormData handles its own headers, but we still need the auth token
     const headers = {};
     const token = getAuthToken();
     if (token) {
-      headers['Authorization'] = `Bearer ${token}`; // <-- Add the token
+      headers['Authorization'] = `Bearer ${token}`;
     }
 
     try {
-      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      return await fetchWithAuth(endpoint, {
         method: 'POST',
-        headers: headers, // <-- Use headers
+        headers,
         body: data,
       });
-      return handleResponse(response);
     } catch (error) {
       console.error('API POST FormData Error:', error);
       throw error;
@@ -126,11 +174,10 @@ export const api = {
 
   async delete(endpoint) {
     try {
-      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      return await fetchWithAuth(endpoint, {
         method: 'DELETE',
-        headers: getHeaders(), // <-- Use headers
+        headers: getHeaders(),
       });
-      return handleResponse(response);
     } catch (error) {
       console.error('API DELETE Error:', error);
       throw error;

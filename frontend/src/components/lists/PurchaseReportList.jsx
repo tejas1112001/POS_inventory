@@ -3,11 +3,7 @@ import { useUI } from "../ListComponents/useUI";
 import { indexColumn } from '../ListComponents/columnHelpers';
 
 // Reusable components
-import ListContainer from '../ListComponents/ListContainer';
-import ListHeader from '../ListComponents/ListHeader';
-import ListFilter from '../ListComponents/ListFilter';
-import ListTable from '../ListComponents/ListTable';
-import ListPagination from '../ListComponents/ListPagination';
+import ListPageLayout from '../ListComponents/ListPageLayout';
 import DateRangePicker from '../ListComponents/DateRangePicker';
 import SelectField from '../ListComponents/SelectField';
 import GenerateButton from '../ListComponents/GenerateButton';
@@ -146,64 +142,43 @@ export default function PurchaseReportList({ reports }) {
   });
 
   return (
-    <ListContainer>
-      <ListHeader 
-        title="Purchase Report"
-        description="Manage your purchase reports"
-        controlButtons={<ListControlButtons buttons={controlButtons} />}
-      />
-      
-      <ListFilter>
-        <div className="flex flex-wrap items-center justify-between gap-4 w-full">
-          <SearchInput 
-            search={search} 
-            setSearch={setSearch} 
-            placeholder="Search purchase reports..."
+    <ListPageLayout
+      title="Purchase Report"
+      description="Manage your purchase reports"
+      controlButtons={<ListControlButtons buttons={controlButtons} />}
+      filters={
+        <>
+          <SearchInput search={search} setSearch={setSearch} placeholder="Search purchase reports..." />
+          <DateRangePicker
+            fromDate={fromDate}
+            toDate={toDate}
+            setFromDate={setFromDate}
+            setToDate={setToDate}
           />
-
-          <div className="flex flex-wrap gap-3">
-            <DateRangePicker
-              fromDate={fromDate}
-              toDate={toDate}
-              setFromDate={setFromDate}
-              setToDate={setToDate}
-            />
-
-            <SelectField
-              name="supplier"
-              label="Supplier"
-              value={supplierFilter}
-              onChange={setSupplierFilter}
-              options={supplierOptions}
-              placeholder="All Suppliers"
-              widthClass="w-full md:w-40"
-            />
-
-            <SelectField
-              name="product"
-              label="Product"
-              value={productFilter}
-              onChange={setProductFilter}
-              options={productOptions}
-              placeholder="All Products"
-              widthClass="w-full md:w-40"
-            />
-
-            <GenerateButton onClick={handleGenerate} label="Generate PDF" />
-          </div>
-        </div>
-      </ListFilter>
-      
-      <ListTable 
-        table={table} 
-        emptyState={emptyState}
-        maxHeight={"max-h-[calc(100vh-26rem)]"}
-      />
-      
-      <ListPagination 
-        table={table} 
-        dataLength={filteredData.length} 
-      />
-    </ListContainer>
+          <SelectField
+            name="supplier"
+            label="Supplier"
+            value={supplierFilter}
+            onChange={setSupplierFilter}
+            options={supplierOptions}
+            placeholder="All Suppliers"
+            widthClass="w-full md:w-40"
+          />
+          <SelectField
+            name="product"
+            label="Product"
+            value={productFilter}
+            onChange={setProductFilter}
+            options={productOptions}
+            placeholder="All Products"
+            widthClass="w-full md:w-40"
+          />
+          <GenerateButton onClick={handleGenerate} label="Generate PDF" />
+        </>
+      }
+      table={table}
+      emptyState={emptyState}
+      dataLength={filteredData.length}
+    />
   );
 }

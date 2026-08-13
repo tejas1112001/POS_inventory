@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import ListPageShell from '../components/layout/ListPageShell';
 import SalesList from '../components/lists/SalesList';
 import { api } from '../services/api';
 
@@ -31,14 +32,12 @@ export default function Sales() {
   if (error) return <div className="p-6 text-red-500">{error}</div>;
 
   return (
-    <div className="p-6 h-full flex flex-col">
-      <div className="flex-1 min-h-0">
-        <SalesList 
-          sales={sales} 
-          onRefresh={fetchSales}
-          onAddItem={() => navigate('/add-sale')}
-        />
-      </div>
-    </div>
+    <ListPageShell>
+      <SalesList
+        sales={sales}
+        onRefresh={fetchSales}
+        onAddItem={() => navigate('/add-sale')}
+      />
+    </ListPageShell>
   );
 }

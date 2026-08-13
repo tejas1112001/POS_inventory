@@ -1,23 +1,34 @@
-export default function SelectFilters({ 
-  statusFilter, 
-  statusOptions = [], 
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+
+export default function SelectFilters({
+  statusFilter,
+  statusOptions = [],
   setStatusFilter,
-  placeholder = "Status"
+  placeholder = 'Status',
+  compact = true,
 }) {
   return (
-    <div className="flex flex-wrap gap-3">
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">{placeholder}</label>
-        <select
-          className="w-full md:w-40 px-3 py-2 border-2 border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-          value={statusFilter}
-          onChange={e => setStatusFilter(e.target.value)}
-        >
-          {statusOptions.map(status => (
-            <option key={status} value={status}>{status}</option>
+    <div className="flex min-w-[140px] flex-col sm:min-w-[160px]">
+      <Label className={compact ? 'sr-only' : 'mb-1.5'}>{placeholder}</Label>
+      <Select value={statusFilter} onValueChange={setStatusFilter}>
+        <SelectTrigger className="h-9 w-full">
+          <SelectValue placeholder={placeholder} />
+        </SelectTrigger>
+        <SelectContent>
+          {statusOptions.map((status) => (
+            <SelectItem key={status} value={status}>
+              {status}
+            </SelectItem>
           ))}
-        </select>
-      </div>
+        </SelectContent>
+      </Select>
     </div>
   );
 }

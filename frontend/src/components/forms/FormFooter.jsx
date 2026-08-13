@@ -1,28 +1,51 @@
-// components/FormFooter.jsx
 import React from 'react';
 import { NavLink } from 'react-router-dom';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
-const FormFooter = ({ 
-  cancelPath, 
-  submitLabel = 'Save', 
+const FormFooter = ({
+  cancelPath,
+  submitLabel = 'Save',
   cancelLabel = 'Cancel',
-  disabled = false
-}) => (
-  <div className="flex justify-end space-x-3 mt-4 pt-4 border-t border-gray-200 sticky bottom-0 bg-white z-10">
-    <NavLink
-      to={cancelPath}
-      className="px-6 py-2 border border-gray-600 text-gray-700 rounded-lg hover:bg-gray-50"
-    >
-      {cancelLabel}
-    </NavLink>
-    <button 
-      type="submit"
-      disabled={disabled}
-      className="px-6 py-2 bg-black text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
-    >
-      {submitLabel}
-    </button>
-  </div>
-);
+  disabled = false,
+  currentStep,
+  totalSteps,
+  onBack,
+  onNext,
+  showStepNav = false,
+}) => {
+  const isFirstStep = currentStep === 0;
+  const isLastStep = currentStep === undefined || currentStep === totalSteps - 1;
+
+  return (
+    <div className="sticky bottom-0 z-10 flex items-center justify-between gap-2 border-t bg-card/95 px-3 py-2.5 backdrop-blur-sm sm:px-4">
+      <div>
+        {showStepNav && !isFirstStep && (
+          <Button type="button" variant="outline" onClick={onBack}>
+            <ChevronLeft className="mr-1 size-4" />
+            Back
+          </Button>
+        )}
+      </div>
+
+      <div className="flex gap-3">
+        <Button variant="outline" asChild>
+          <NavLink to={cancelPath}>{cancelLabel}</NavLink>
+        </Button>
+
+        {showStepNav && !isLastStep ? (
+          <Button type="button" onClick={onNext}>
+            Next
+            <ChevronRight className="ml-1 size-4" />
+          </Button>
+        ) : (
+          <Button type="submit" disabled={disabled}>
+            {submitLabel}
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+};
 
 export default FormFooter;

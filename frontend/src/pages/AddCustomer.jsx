@@ -1,19 +1,17 @@
 import React, { useState } from 'react';
-import Accordion from '../components/forms/Accordion';
 import PageHeader from '../components/forms/PageHeader';
 import FormFooter from '../components/forms/FormFooter';
+import FormPageLayout, { FormCard, FormBody } from '../components/forms/FormPageLayout';
+import FormStepper from '../components/forms/FormStepper';
+import { useFormWizard, FORM_STEPS } from '../hooks/useFormWizard';
 import { useNavigate } from 'react-router-dom';
 import { usePos } from '../hooks/usePos';
 import { api } from '../services/api';
-import {
-  ArrowPathIcon,
-  ChevronUpIcon,
-  InformationCircleIcon,
-  PhotoIcon,
-} from '@heroicons/react/24/outline';
+import { PhotoIcon } from '@heroicons/react/24/outline';
 
 const AddCustomer = () => {
   const [selectedImage, setSelectedImage] = useState(null);
+  const { currentStep, goNext, goBack, goToStep } = useFormWizard(2);
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
@@ -61,32 +59,21 @@ const AddCustomer = () => {
   };
 
   return (
-    <div className="bg-gray-50 flex flex-col h-full p-6">
-      <PageHeader 
-        title="Create Customer"
-        subtitle="Create new customer"
-        backPath="/customers"
-        actionButtons={
-          <>
-            <button className="p-2 text-gray-600 hover:bg-gray-100 rounded-full">
-              <ArrowPathIcon className="w-5 h-5" />
-            </button>
-            <button className="p-2 text-gray-600 hover:bg-gray-100 rounded-full">
-              <ChevronUpIcon className="w-5 h-5" />
-            </button>
-          </>
-        }
-      />
+    <FormPageLayout>
+      <PageHeader />
 
-      <form className="bg-white rounded-xl shadow-sm p-6 flex flex-col min-h-0 h-full" onSubmit={handleSubmit}>
-        <div className="flex-1 min-h-0 overflow-y-auto">
-          <Accordion 
-            title="Customer Information"
-            icon={InformationCircleIcon}
-            isOpen={true}
-            onToggle={() => {}}
-          >
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <form className="flex min-h-0 flex-1 flex-col" onSubmit={handleSubmit}>
+        <FormCard>
+          <FormBody>
+            <FormStepper
+              steps={FORM_STEPS.customer}
+              currentStep={currentStep}
+              onStepClick={goToStep}
+            />
+
+          {currentStep === 0 && (
+          <div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Customer Name <span className="text-red-500">*</span>
@@ -179,14 +166,11 @@ const AddCustomer = () => {
                 </select>
               </div>
             </div>
-          </Accordion>
+          </div>
+          )}
 
-          <Accordion 
-            title="Profile Image"
-            icon={PhotoIcon}
-            isOpen={true}
-            onToggle={() => {}}
-          >
+          {currentStep === 1 && (
+          <div>
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Upload Profile Image
@@ -230,15 +214,22 @@ const AddCustomer = () => {
                 </div>
               </div>
             )}
-          </Accordion>
-        </div>
+          </div>
+          )}
+          </FormBody>
 
         <FormFooter 
           cancelPath="/customers" 
-          submitLabel="Add Customer" 
+          submitLabel="Add Customer"
+          showStepNav
+          currentStep={currentStep}
+          totalSteps={2}
+          onBack={goBack}
+          onNext={goNext}
         />
+        </FormCard>
       </form>
-    </div>
+    </FormPageLayout>
   );
 };
 

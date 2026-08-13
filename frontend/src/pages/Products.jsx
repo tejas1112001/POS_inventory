@@ -1,5 +1,6 @@
 // Products.jsx
 import React, { useState, useEffect } from 'react';
+import ListPageShell from '../components/layout/ListPageShell';
 import ProductList from '../components/lists/ProductList';
 import { NavLink } from 'react-router-dom';
 import ImportProduct from "../components/ImportProduct";
@@ -29,20 +30,23 @@ export default function Products() {
     }
   };
 
-  if (loading) return <div className="p-6">Loading products...</div>;
-  if (error) return <div className="p-6 text-red-500">{error}</div>;
+  if (loading) return <div className="py-10 text-center text-muted-foreground">Loading products...</div>;
+  if (error) return <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-destructive">{error}</div>;
 
   return (
-    <div className="p-6 h-full flex flex-col">
-      
-      <div className="flex-1 min-h-0">
-        <ProductList 
-          products={products || []} 
-          setShowForm={setShowForm} 
-          onRefresh={fetchProducts}
+    <ListPageShell>
+      <ProductList
+        products={products || []}
+        setShowForm={setShowForm}
+        onRefresh={fetchProducts}
+      />
+      {showForm && (
+        <ImportProduct
+          showForm={showForm}
+          setShowForm={setShowForm}
+          onImportComplete={fetchProducts}
         />
-      </div>
-      {showForm && <ImportProduct showForm={showForm} setShowForm={setShowForm} onImportComplete={fetchProducts}/>}
-    </div>
+      )}
+    </ListPageShell>
   );
 }

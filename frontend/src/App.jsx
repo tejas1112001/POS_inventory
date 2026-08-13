@@ -1,9 +1,11 @@
 import GlobalErrorHandler from './components/GlobalErrorHandler';
-import React from 'react';
+import React, { useEffect } from 'react';
 import { HashRouter as Router, Routes, Route } from 'react-router-dom';
 import ProtectedRoute from './components/ProtectedRoute';
 import { PosProvider } from './context/PosContext';
+import { ThemeProvider } from './context/ThemeContext';
 import { useError } from './context/ErrorContext';
+import AppLayout from './components/layout/AppLayout';
 import Dashboard from './pages/Dashboard';
 import Products from './pages/Products';
 import AddProduct from './pages/AddProduct';
@@ -11,7 +13,6 @@ import Sales from './pages/Sales';
 import AddSales from './pages/AddSales';
 import Purchases from './pages/Purchases';
 import AddPurchase from './pages/AddPurchase';
-import Navbar from './components/NavBar';
 import POS from './pages/POS';
 import Categories from './pages/Categories';
 import AddCategory from './pages/AddCategory';
@@ -21,6 +22,7 @@ import Units from './pages/Units';
 import AddUnit from './pages/AddUnit';
 import Invoices from './pages/Invoices';
 import SalesReturn from './pages/SalesReturn';
+import AddSalesReturn from './pages/AddSalesReturn';
 import Customers from './pages/Customers';
 import AddCustomer from './pages/AddCustomer';
 import Billers from './pages/Billers';
@@ -33,8 +35,17 @@ import SalesReport from './pages/SalesReport';
 import Inventory from './pages/Inventory';
 import SignIn from './pages/SignIn';
 import SignUp from './pages/SignUp';
-import { useEffect } from 'react';
-function App() {
+import Settings from './pages/Settings';
+
+function ProtectedLayout({ children, fullBleed = false }) {
+  return (
+    <ProtectedRoute>
+      <AppLayout fullBleed={fullBleed}>{children}</AppLayout>
+    </ProtectedRoute>
+  );
+}
+
+function AppRoutes() {
   const { showError } = useError();
 
   useEffect(() => {
@@ -44,46 +55,51 @@ function App() {
   }, [showError]);
 
   return (
-    <PosProvider>
-      <GlobalErrorHandler />
-      <Router>
-        <div className="flex flex-col h-screen">
-          <Navbar className="h-[5%] min-h-[3rem]" />
-          <div className="flex-1 overflow-hidden">
-            <Routes>
-            <Route path="/signin" element={<SignIn />} />
-            <Route path="/signup" element={<SignUp />} />
-            <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-            <Route path="/categories" element={<ProtectedRoute><Categories /></ProtectedRoute>} />
-            <Route path="/add-category" element={<ProtectedRoute><AddCategory /></ProtectedRoute>} />
-            <Route path="/products" element={<ProtectedRoute><Products /></ProtectedRoute>} />
-            <Route path="/brands" element={<ProtectedRoute><Brands /></ProtectedRoute>} />
-            <Route path="/add-brand" element={<ProtectedRoute><AddBrand /></ProtectedRoute>} />
-            <Route path="/units" element={<ProtectedRoute><Units /></ProtectedRoute>} />
-            <Route path="/add-unit" element={<ProtectedRoute><AddUnit /></ProtectedRoute>} />
-            <Route path="/invoices" element={<ProtectedRoute><Invoices /></ProtectedRoute>} />
-            <Route path="/billers" element={<ProtectedRoute><Billers /></ProtectedRoute>} />
-            <Route path="/suppliers" element={<ProtectedRoute><Suppliers /></ProtectedRoute>} />
-            <Route path="/add-supplier" element={<ProtectedRoute><AddSupplier /></ProtectedRoute>} />
-            <Route path="/sales-return" element={<ProtectedRoute><SalesReturn /></ProtectedRoute>} />
-            <Route path="/add-product" element={<ProtectedRoute><AddProduct /></ProtectedRoute>} />
-            <Route path="/pos" element={<ProtectedRoute><POS /></ProtectedRoute>} />
-            <Route path="/sales" element={<ProtectedRoute><Sales /></ProtectedRoute>} />
-            <Route path="/add-sale" element={<ProtectedRoute><AddSales /></ProtectedRoute>} />
-            <Route path="/sales-report" element={<ProtectedRoute><SalesReport /></ProtectedRoute>} />
-            <Route path="/purchases" element={<ProtectedRoute><Purchases /></ProtectedRoute>} />
-            <Route path="/add-purchase" element={<ProtectedRoute><AddPurchase /></ProtectedRoute>} />
-            <Route path="/purchase-report" element={<ProtectedRoute><PurchaseReport /></ProtectedRoute>} />
-            <Route path="/customer-due-report" element={<ProtectedRoute><CustomerDueReport /></ProtectedRoute>} />
-            <Route path="/customers" element={<ProtectedRoute><Customers /></ProtectedRoute>} />
-            <Route path="/add-customer" element={<ProtectedRoute><AddCustomer /></ProtectedRoute>} />
-            <Route path="/customer-report" element={<ProtectedRoute><CustomerReport /></ProtectedRoute>} />
-            <Route path="/inventory" element={<ProtectedRoute><Inventory /></ProtectedRoute>} />
-          </Routes>
-          </div>
-        </div>
-      </Router>
-    </PosProvider>
+    <Routes>
+      <Route path="/signin" element={<SignIn />} />
+      <Route path="/signup" element={<SignUp />} />
+      <Route path="/" element={<ProtectedLayout><Dashboard /></ProtectedLayout>} />
+      <Route path="/categories" element={<ProtectedLayout><Categories /></ProtectedLayout>} />
+      <Route path="/add-category" element={<ProtectedLayout><AddCategory /></ProtectedLayout>} />
+      <Route path="/products" element={<ProtectedLayout><Products /></ProtectedLayout>} />
+      <Route path="/brands" element={<ProtectedLayout><Brands /></ProtectedLayout>} />
+      <Route path="/add-brand" element={<ProtectedLayout><AddBrand /></ProtectedLayout>} />
+      <Route path="/units" element={<ProtectedLayout><Units /></ProtectedLayout>} />
+      <Route path="/add-unit" element={<ProtectedLayout><AddUnit /></ProtectedLayout>} />
+      <Route path="/invoices" element={<ProtectedLayout><Invoices /></ProtectedLayout>} />
+      <Route path="/billers" element={<ProtectedLayout><Billers /></ProtectedLayout>} />
+      <Route path="/suppliers" element={<ProtectedLayout><Suppliers /></ProtectedLayout>} />
+      <Route path="/add-supplier" element={<ProtectedLayout><AddSupplier /></ProtectedLayout>} />
+      <Route path="/sales-return" element={<ProtectedLayout><SalesReturn /></ProtectedLayout>} />
+      <Route path="/add-sales-return" element={<ProtectedLayout><AddSalesReturn /></ProtectedLayout>} />
+      <Route path="/add-product" element={<ProtectedLayout><AddProduct /></ProtectedLayout>} />
+      <Route path="/pos" element={<ProtectedLayout fullBleed><POS /></ProtectedLayout>} />
+      <Route path="/sales" element={<ProtectedLayout><Sales /></ProtectedLayout>} />
+      <Route path="/add-sale" element={<ProtectedLayout><AddSales /></ProtectedLayout>} />
+      <Route path="/sales-report" element={<ProtectedLayout><SalesReport /></ProtectedLayout>} />
+      <Route path="/purchases" element={<ProtectedLayout><Purchases /></ProtectedLayout>} />
+      <Route path="/add-purchase" element={<ProtectedLayout><AddPurchase /></ProtectedLayout>} />
+      <Route path="/purchase-report" element={<ProtectedLayout><PurchaseReport /></ProtectedLayout>} />
+      <Route path="/customer-due-report" element={<ProtectedLayout><CustomerDueReport /></ProtectedLayout>} />
+      <Route path="/customers" element={<ProtectedLayout><Customers /></ProtectedLayout>} />
+      <Route path="/add-customer" element={<ProtectedLayout><AddCustomer /></ProtectedLayout>} />
+      <Route path="/customer-report" element={<ProtectedLayout><CustomerReport /></ProtectedLayout>} />
+      <Route path="/inventory" element={<ProtectedLayout><Inventory /></ProtectedLayout>} />
+      <Route path="/settings" element={<ProtectedLayout><Settings /></ProtectedLayout>} />
+    </Routes>
+  );
+}
+
+function App() {
+  return (
+    <ThemeProvider>
+      <PosProvider>
+        <GlobalErrorHandler />
+        <Router>
+          <AppRoutes />
+        </Router>
+      </PosProvider>
+    </ThemeProvider>
   );
 }
 

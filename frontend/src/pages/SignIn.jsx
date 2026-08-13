@@ -1,136 +1,159 @@
-// frontend/src/pages/SignIn.jsx
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { Eye, EyeOff, ShoppingCart, Mail, Lock, Loader2 } from 'lucide-react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { api } from '../services/api';
 import { usePos } from '../hooks/usePos';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { getSavedEmail, setSavedEmail, getRememberSession, setRememberSession } from '../lib/authStorage';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 
 export default function SignIn() {
   const { login } = usePos();
   const navigate = useNavigate();
   const location = useLocation();
-  const [credentials, setCredentials] = useState({ email: '', password: '' });
+  const [credentials, setCredentials] = useState({
+    email: getSavedEmail(),
+    password: '',
+  });
+  const [showPw, setShowPw] = useState(false);
+  const [remember, setRemember] = useState(getRememberSession());
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // Redirect to the page the user was trying to access, or dashboard
   const from = location.state?.from?.pathname || '/';
 
-  const defaultOnSignIn = (response) => {
-    login(response);
-    navigate(from, { replace: true });
-  };
+  useEffect(() => {
+    const saved = getSavedEmail();
+    if (saved) {
+      setCredentials((prev) => ({ ...prev, email: saved }));
+    }
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsLoading(true);
-    setError(null); // <-- Clear previous errors
+    setError(null);
     try {
-      const response = await api.post('/api/auth/login', credentials);
-      defaultOnSignIn(response);
-    } catch (error) {
-      console.error('Login failed:', error);
-      setError(error.message || 'Login failed. Please check your credentials.'); // <-- Set error
+      const response = await api.post('/api/auth/login', {
+        ...credentials,
+        remember,
+      });
+      login(response);
+
+      if (remember) {
+        setSavedEmail(credentials.email);
+      } else {
+        setSavedEmail('');
+      }
+
+      navigate(from, { replace: true });
+    } catch (err) {
+      console.error('Login failed:', err);
+      setError(err.message || 'Login failed. Please check your credentials.');
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-blue-50 p-4">
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-sky-50 via-background to-blue-50 p-4">
       <div className="w-full max-w-md">
-        {/* Logo/Header */}
-        <div className="text-center mb-8">
-          <div className="flex justify-center mb-4">
-            <div className="w-16 h-16 bg-black rounded-full flex items-center justify-center">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z" clipRule="evenodd" />
-              </svg>
-            </div>
+        <div className="mb-6 flex flex-col items-center text-center">
+          <div className="mb-3 flex size-14 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-lg shadow-primary/20">
+            <ShoppingCart className="size-7" />
           </div>
-          <h1 className="text-3xl font-bold text-gray-800">Welcome Back</h1>
-          <p className="text-gray-600 mt-2">Sign in to your account</p>
+          <h1 className="text-2xl font-bold tracking-tight">ReactronPOS</h1>
+          <p className="text-sm text-muted-foreground">Retail POS & Inventory Management</p>
         </div>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-lg border border-gray-800 p-8">
-          <div className="space-y-5">
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
-                Email Address
-              </label>
-              <input
-                id="email"
-                type="email"
-                placeholder="Enter your email"
-                value={credentials.email}
-                onChange={(e) => setCredentials({ ...credentials, email: e.target.value })}
-                className="w-full px-4 py-3 border border-gray-600 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
-                required
-              />
-            </div>
+        <div className="rounded-xl border bg-card p-6 shadow-sm">
+          <h2 className="text-lg font-semibold">Sign in to your account</h2>
+          <p className="mt-1 text-sm text-muted-foreground">Enter your credentials to continue.</p>
 
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
-                Password
-              </label>
-              <input
-                id="password"
-                type="password"
-                placeholder="Enter your password"
-                value={credentials.password}
-                onChange={(e) => setCredentials({ ...credentials, password: e.target.value })}
-                className="w-full px-4 py-3 border border-gray-600 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
-                required
-              />
+          {error && (
+            <div className="mt-4 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {error}
             </div>
+          )}
 
-            <div className="flex items-center justify-between text-sm">
-              <div className="flex items-center">
-                <input
-                  id="remember-me"
-                  name="remember-me"
-                  type="checkbox"
-                  className="h-4 w-4 text-black focus:ring-black border-gray-600 rounded"
+          <form onSubmit={handleSubmit} className="mt-5 space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="email">Email</Label>
+              <div className="relative">
+                <Mail className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  id="email"
+                  type="email"
+                  value={credentials.email}
+                  onChange={(e) => setCredentials({ ...credentials, email: e.target.value })}
+                  className="pl-8"
+                  placeholder="you@store.com"
+                  required
+                  autoComplete="email"
                 />
-                <label htmlFor="remember-me" className="ml-2 block text-gray-700">
-                  Remember me
-                </label>
               </div>
-
-              <a href="" className="font-medium text-black hover:text-gray-700">
-                Forgot password?
-              </a>
             </div>
 
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="w-full py-3 px-4 bg-black text-white rounded-lg hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-black transition-colors duration-200 flex items-center justify-center"
-            >
-              {isLoading ? (
-                <>
-                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Signing in...
-                </>
-              ) : (
-                'Sign in'
-              )}
-            </button>
-          </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="password">Password</Label>
+              <div className="relative">
+                <Lock className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  id="password"
+                  type={showPw ? 'text' : 'password'}
+                  value={credentials.password}
+                  onChange={(e) => setCredentials({ ...credentials, password: e.target.value })}
+                  className="px-8"
+                  placeholder="••••••••"
+                  required
+                  autoComplete={remember ? 'current-password' : 'off'}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPw((v) => !v)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-sm p-0.5 text-muted-foreground hover:text-foreground"
+                  aria-label={showPw ? 'Hide password' : 'Show password'}
+                >
+                  {showPw ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                </button>
+              </div>
+            </div>
 
-          <div className="mt-6 text-center">
-            <p className="text-sm text-gray-600">
-              Don't have an account?{' '}
-              <a href="/#/signup" className="font-medium text-black hover:text-gray-700">
-                Sign up
-              </a>
-            </p>
-          </div>
-        </form>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="remember"
+                  checked={remember}
+                  onCheckedChange={(v) => {
+                    const val = !!v;
+                    setRemember(val);
+                    setRememberSession(val);
+                  }}
+                />
+                <Label htmlFor="remember" className="cursor-pointer text-sm font-normal">
+                  Remember me
+                </Label>
+              </div>
+              <button type="button" className="text-xs font-medium text-primary hover:underline">
+                Forgot password?
+              </button>
+            </div>
+
+            <Button type="submit" className="h-11 w-full" disabled={isLoading}>
+              {isLoading && <Loader2 className="size-4 animate-spin" />}
+              {isLoading ? 'Signing in...' : 'Sign In'}
+            </Button>
+          </form>
+
+          <p className="mt-5 text-center text-sm text-muted-foreground">
+            Don&apos;t have an account?{' '}
+            <Link to="/signup" className="font-medium text-primary hover:underline">
+              Sign Up
+            </Link>
+          </p>
+        </div>
       </div>
     </div>
   );

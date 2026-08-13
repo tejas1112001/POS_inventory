@@ -1,31 +1,48 @@
-// components/Accordion.jsx
 import React from 'react';
-import { ChevronUpIcon } from '@heroicons/react/24/outline';
+import { ChevronDown } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
-const Accordion = ({ 
-  title, 
-  isOpen, 
-  onToggle, 
+const Accordion = ({
+  title,
+  isOpen,
+  onToggle,
   children,
-  icon: Icon 
+  icon: Icon,
+  description,
 }) => (
-  <div className="border border-gray-800 rounded-lg mb-6">
+  <div className="mb-4 overflow-hidden rounded-xl border bg-card shadow-sm last:mb-0">
     <button
       type="button"
-      className="flex items-center justify-between w-full p-4 bg-gray-50 hover:bg-gray-100 rounded-t-lg"
+      className={cn(
+        'flex w-full items-center justify-between gap-3 px-4 py-3.5 text-left transition-colors hover:bg-muted/50 sm:px-5',
+        isOpen && 'border-b bg-muted/30'
+      )}
       onClick={onToggle}
+      aria-expanded={isOpen}
     >
-      <div className="flex items-center">
-        <Icon className="w-5 h-5 text-black mr-2" />
-        <span className="font-medium">{title}</span>
+      <div className="flex min-w-0 items-center gap-3">
+        {Icon && (
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <Icon className="size-4" />
+          </span>
+        )}
+        <div className="min-w-0">
+          <span className="block text-sm font-semibold text-foreground">{title}</span>
+          {description && (
+            <span className="block truncate text-xs text-muted-foreground">{description}</span>
+          )}
+        </div>
       </div>
-      <ChevronUpIcon
-        className={`w-5 h-5 transition-transform ${isOpen ? 'rotate-0' : 'rotate-180'}`}
+      <ChevronDown
+        className={cn(
+          'size-4 shrink-0 text-muted-foreground transition-transform duration-200',
+          isOpen && 'rotate-180'
+        )}
       />
     </button>
-    
+
     {isOpen && (
-      <div className="p-4 border-t border-gray-600">
+      <div className="p-4 sm:p-5">
         {children}
       </div>
     )}

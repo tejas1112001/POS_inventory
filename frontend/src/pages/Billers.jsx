@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import ListPageShell from '../components/layout/ListPageShell';
 import BillerList from '../components/lists/BillerList';
 import { api } from '../services/api';
 import { usePos } from '../hooks/usePos';
@@ -36,8 +37,8 @@ export default function Billers() {
   }
 
   return (
-    <div className="p-6 bg-gray-50 min-h-screen flex flex-col">
+    <ListPageShell>
       <BillerList billers={billers} setShowForm={setShowForm} onRefresh={fetchBillers} />
-    </div>
+    </ListPageShell>
   );
 }

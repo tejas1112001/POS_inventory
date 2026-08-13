@@ -1,18 +1,16 @@
 import React, { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useUI } from "../ListComponents/useUI";
 import { selectColumn, indexColumn, actionsColumn } from '../ListComponents/columnHelpers';
 
 // Reusable components
-import ListContainer from '../ListComponents/ListContainer';
-import ListHeader from '../ListComponents/ListHeader';
+import ListPageLayout from '../ListComponents/ListPageLayout';
 import ListControlButtons from '../ListComponents/ListControlButtons';
-import ListFilter from '../ListComponents/ListFilter';
-import ListTable from '../ListComponents/ListTable';
-import ListPagination from '../ListComponents/ListPagination';
 import SearchInput from '../ListComponents/SearchInput';
 import SelectField from '../ListComponents/SelectField';
 
 export default function SalesReturnList({ salesReturns, setShowForm }) {
+  const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [customerFilter, setCustomerFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
@@ -169,7 +167,7 @@ export default function SalesReturnList({ salesReturns, setShowForm }) {
     {
       component: (
         <button 
-          onClick={() => setShowForm(true)}
+          onClick={() => navigate('/add-sales-return')}
           className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 flex items-center"
         >
           <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
@@ -182,65 +180,45 @@ export default function SalesReturnList({ salesReturns, setShowForm }) {
   ];
 
   return (
-    <ListContainer>
-      <ListHeader 
-        title="Sales Return"
-        description="Manage your returns"
-        controlButtons={<ListControlButtons buttons={customControlButtons} />}
-      />
-      
-      <ListFilter>
-        <div className="flex flex-wrap items-center justify-between gap-4 w-full">
-          <SearchInput 
-            search={search} 
-            setSearch={setSearch} 
-            placeholder="Search sales returns..."
+    <ListPageLayout
+      title="Sales Return"
+      description="Manage your returns"
+      controlButtons={<ListControlButtons buttons={customControlButtons} />}
+      filters={
+        <>
+          <SearchInput search={search} setSearch={setSearch} placeholder="Search sales returns..." />
+          <SelectField
+            name="customer"
+            label="Customer"
+            value={customerFilter}
+            onChange={setCustomerFilter}
+            options={customerOptions}
+            placeholder="All"
+            widthClass="w-full md:w-40"
           />
-
-          <div className="flex flex-wrap gap-3">
-            <SelectField
-              name="customer"
-              label="Customer"
-              value={customerFilter}
-              onChange={setCustomerFilter}
-              options={customerOptions}
-              placeholder="All"
-              widthClass="w-full md:w-40"
-            />
-
-            <SelectField
-              name="status"
-              label="Status"
-              value={statusFilter}
-              onChange={setStatusFilter}
-              options={statusOptions}
-              placeholder="All"
-              widthClass="w-full md:w-40"
-            />
-
-            <SelectField
-              name="paymentStatus"
-              label="Payment Status"
-              value={paymentStatusFilter}
-              onChange={setPaymentStatusFilter}
-              options={paymentStatusOptions}
-              placeholder="All"
-              widthClass="w-full md:w-40"
-            />
-          </div>
-        </div>
-      </ListFilter>
-      
-      <ListTable 
-        table={table} 
-        emptyState={emptyState}
-        maxHeight={"max-h-[calc(100vh-26rem)]"}
-      />
-      
-      <ListPagination 
-        table={table} 
-        dataLength={filteredData.length} 
-      />
-    </ListContainer>
+          <SelectField
+            name="status"
+            label="Status"
+            value={statusFilter}
+            onChange={setStatusFilter}
+            options={statusOptions}
+            placeholder="All"
+            widthClass="w-full md:w-40"
+          />
+          <SelectField
+            name="paymentStatus"
+            label="Payment Status"
+            value={paymentStatusFilter}
+            onChange={setPaymentStatusFilter}
+            options={paymentStatusOptions}
+            placeholder="All"
+            widthClass="w-full md:w-40"
+          />
+        </>
+      }
+      table={table}
+      emptyState={emptyState}
+      dataLength={filteredData.length}
+    />
   );
 }

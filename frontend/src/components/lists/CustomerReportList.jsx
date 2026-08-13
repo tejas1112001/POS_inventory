@@ -3,12 +3,8 @@ import { useUI } from "../ListComponents/useUI";
 import { indexColumn } from '../ListComponents/columnHelpers';
 
 // Reusable components
-import ListContainer from '../ListComponents/ListContainer';
-import ListHeader from '../ListComponents/ListHeader';
+import ListPageLayout from '../ListComponents/ListPageLayout';
 import ListControlButtons from '../ListComponents/ListControlButtons';
-import ListFilter from '../ListComponents/ListFilter';
-import ListTable from '../ListComponents/ListTable';
-import ListPagination from '../ListComponents/ListPagination';
 import DateRangePicker from '../ListComponents/DateRangePicker';
 import SelectField from '../ListComponents/SelectField';
 import GenerateButton from '../ListComponents/GenerateButton';
@@ -174,22 +170,18 @@ export default function CustomerReportList({ reports }) {
   ];
 
   return (
-    <ListContainer>
-      <ListHeader 
-        title="Customer Report"
-        description="Manage your customer reports"
-        controlButtons={<ListControlButtons buttons={customControlButtons} />}
-      />
-      
-      <ListFilter>
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+    <ListPageLayout
+      title="Customer Report"
+      description="Manage your customer reports"
+      controlButtons={<ListControlButtons buttons={customControlButtons} />}
+      filterRow={
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-12">
           <DateRangePicker
             fromDate={fromDate}
             toDate={toDate}
             setFromDate={setFromDate}
             setToDate={setToDate}
           />
-
           <SelectField
             name="customer"
             label="Customer"
@@ -199,7 +191,6 @@ export default function CustomerReportList({ reports }) {
             placeholder="All"
             colClass="md:col-span-3"
           />
-
           <SelectField
             name="paymentMethod"
             label="Payment Method"
@@ -209,7 +200,6 @@ export default function CustomerReportList({ reports }) {
             placeholder="All"
             colClass="md:col-span-3"
           />
-
           <SelectField
             name="paymentStatus"
             label="Payment Status"
@@ -219,30 +209,22 @@ export default function CustomerReportList({ reports }) {
             placeholder="All"
             colClass="md:col-span-2"
           />
-
           <GenerateButton onClick={handleGenerate} label="Generate PDF" />
         </div>
-      </ListFilter>
-      
-      <ListTable 
-        table={table} 
-        emptyState={emptyState}
-        maxHeight={"max-h-[calc(100vh-35rem)]"}
-      />
-      
-      {filteredData.length > 0 && (
-        <div className="bg-gray-100 rounded-b-xl p-4 border-t border-gray-300">
-          <div className="flex justify-between items-center">
-            <span className="font-semibold">Total</span>
-            <span className="font-bold">PKR {totalAmount.toFixed(2)}</span>
+      }
+      table={table}
+      emptyState={emptyState}
+      dataLength={filteredData.length}
+      afterTable={
+        filteredData.length > 0 ? (
+          <div className="rounded-b-xl border border-t border-border bg-muted/40 p-4">
+            <div className="flex items-center justify-between">
+              <span className="font-semibold">Total</span>
+              <span className="font-bold">PKR {totalAmount.toFixed(2)}</span>
+            </div>
           </div>
-        </div>
-      )}
-      
-      <ListPagination 
-        table={table} 
-        dataLength={filteredData.length} 
-      />
-    </ListContainer>
+        ) : null
+      }
+    />
   );
 }

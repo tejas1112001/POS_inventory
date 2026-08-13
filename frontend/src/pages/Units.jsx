@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import ListPageShell from '../components/layout/ListPageShell';
 import UnitList from '../components/lists/UnitList';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
@@ -43,12 +44,12 @@ export default function Units() {
   if (error) return <div className="p-6 text-red-500">{error}</div>;
 
   return (
-    <div className="p-6 bg-gray-50 min-h-screen flex flex-col">
-      <UnitList 
-        units={units || []} 
+    <ListPageShell>
+      <UnitList
+        units={units || []}
         setShowForm={() => navigate('/add-unit')}
         onRefresh={fetchUnits}
       />
-    </div>
+    </ListPageShell>
   );
 }

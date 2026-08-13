@@ -1,27 +1,22 @@
 import React from 'react';
+import { cn } from '@/lib/utils';
 
-export default function ListHeader({ title, description, controlButtons, primaryButtons, extraElement }) {
+export default function ListHeader({ title, description, controlButtons, primaryButtons, extraElement, className }) {
   return (
-    <div className="bg-white rounded-xl p-4 shadow-sm border-2 border-gray-300">
+    <div className={cn('rounded-xl border bg-card p-4 shadow-sm', className)}>
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">{title}</h1>
-          <p className="text-gray-600">{description}</p>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">{title}</h1>
+          {description && <p className="mt-1 text-sm text-muted-foreground">{description}</p>}
         </div>
-        
-        <div className='flex gap-1'>
+
+        <div className="flex flex-wrap items-center gap-2">
           {controlButtons && (
-            <div className="flex items-center space-x-2">
-              {controlButtons}
-            </div>
+            <div className="flex items-center gap-2">{controlButtons}</div>
           )}
-          
           {primaryButtons && (
-            <div className="flex space-x-3">
-              {primaryButtons}
-            </div>
+            <div className="flex items-center gap-2">{primaryButtons}</div>
           )}
-          
           {extraElement}
         </div>
       </div>

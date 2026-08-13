@@ -10,12 +10,8 @@ import { api } from '../../services/api';
 import EditSupplierForm from '../forms/EditSupplierForm';
 
 // Reusable components
-import ListContainer from '../ListComponents/ListContainer';
-import ListHeader from '../ListComponents/ListHeader';
+import ListPageLayout from '../ListComponents/ListPageLayout';
 import ListControlButtons from '../ListComponents/ListControlButtons';
-import ListFilter from '../ListComponents/ListFilter';
-import ListTable from '../ListComponents/ListTable';
-import ListPagination from '../ListComponents/ListPagination';
 import SearchInput from '../ListComponents/SearchInput';
 import SelectFilters from '../ListComponents/SelectFilters';
 
@@ -122,37 +118,27 @@ export default function SupplierList({ suppliers = [], setShowForm, onRefresh })
   });
 
   return (
-    <ListContainer>
-      <ListHeader 
-        title="Suppliers"
-        description="Manage your suppliers"
-        controlButtons={<ListControlButtons buttons={controlButtons} />}
-        primaryButtons={primaryButtons.map((btn, i) => (
-          <React.Fragment key={i}>{btn.element}</React.Fragment>
-        ))}
-      />
-
-      <ListFilter>
-        <SearchInput search={search} setSearch={setSearch} placeholder="Search suppliers..." />
-        <SelectFilters 
-          statusFilter={statusFilter} 
-          setStatusFilter={setStatusFilter} 
-          statusOptions={statusOptions} 
-        />
-      </ListFilter>
-
-      <ListTable 
-        table={table} 
-        emptyState={emptyState}
-        maxHeight="max-h-[calc(100vh-26rem)]"
-        handleDelete={handleDelete}
-        actionRenderers={actionRenderers}
-      />
-
-      <ListPagination 
-        table={table} 
-        dataLength={filteredData.length} 
-      />
-    </ListContainer>
+    <ListPageLayout
+      title="Suppliers"
+      description="Manage your suppliers"
+      controlButtons={<ListControlButtons buttons={controlButtons} />}
+      primaryButtons={primaryButtons.map((btn, i) => (
+        <React.Fragment key={i}>{btn.element}</React.Fragment>
+      ))}
+      filters={
+        <>
+          <SearchInput search={search} setSearch={setSearch} placeholder="Search suppliers..." />
+          <SelectFilters
+            statusFilter={statusFilter}
+            setStatusFilter={setStatusFilter}
+            statusOptions={statusOptions}
+          />
+        </>
+      }
+      table={table}
+      emptyState={emptyState}
+      dataLength={filteredData.length}
+      tableProps={{ handleDelete, actionRenderers }}
+    />
   );
 }

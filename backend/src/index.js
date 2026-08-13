@@ -31,14 +31,31 @@ export async function startServer() {
 
   app.disable('x-powered-by');
 
-  const allowedOrigins = (process.env.CORS_ORIGIN || '')
+  const configuredOrigins = (process.env.CORS_ORIGIN || '')
     .split(',')
-    .map(origin => origin.trim())
+    .map((origin) => origin.trim())
     .filter(Boolean);
 
+  const isLocalhostOrigin = (origin) =>
+    /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+
   app.use(cors({
-    origin: allowedOrigins.length ? allowedOrigins : true,
-    credentials: true
+    origin(origin, callback) {
+      if (!origin) {
+        return callback(null, true);
+      }
+
+      if (configuredOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      if (process.env.NODE_ENV === 'development' && isLocalhostOrigin(origin)) {
+        return callback(null, true);
+      }
+
+      callback(new Error(`Origin ${origin} not allowed by CORS`));
+    },
+    credentials: true,
   }));
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ limit: '10mb', extended: true }));

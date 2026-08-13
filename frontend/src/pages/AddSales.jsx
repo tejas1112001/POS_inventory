@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import Accordion from '../components/forms/Accordion';
 import PageHeader from '../components/forms/PageHeader';
 import FormFooter from '../components/forms/FormFooter';
+import FormPageLayout, { FormCard, FormBody } from '../components/forms/FormPageLayout';
+import FormStepper from '../components/forms/FormStepper';
+import { useFormWizard, FORM_STEPS } from '../hooks/useFormWizard';
 import { useNavigate } from 'react-router-dom';
 import { usePos } from '../hooks/usePos';
 import { api } from '../services/api';
 import {
-  ArrowPathIcon,
-  ChevronUpIcon,
   InformationCircleIcon,
   DocumentTextIcon,
   PlusCircleIcon,
@@ -19,11 +19,7 @@ const AddSales = () => {
   const [products, setProducts] = useState([]);
   const [orderItems, setOrderItems] = useState([]);
   const { currentUser } = usePos();
-  const [accordion, setAccordion] = useState({
-    saleInfo: true,
-    orderItems: false,
-    paymentInfo: false
-  });
+  const { currentStep, goNext, goBack, goToStep } = useFormWizard(3);
   
   const navigate = useNavigate();
 
@@ -111,13 +107,6 @@ const handleSubmit = async (e) => {
   }
 };
 
-  const toggleAccordion = (section) => {
-    setAccordion(prev => ({
-      ...prev,
-      [section]: !prev[section]
-    }));
-  };
-
   const addOrderItem = () => {
     setOrderItems([...orderItems, { productId: '', variantId: '', quantity: 1, unitPrice: 0 }]);
   };
@@ -135,32 +124,21 @@ const handleSubmit = async (e) => {
   };
 
   return (
-    <div className="bg-gray-50 flex flex-col h-full p-6">
-      <PageHeader 
-        title="Create Sale"
-        subtitle="Create new sale"
-        backPath="/sales"
-        actionButtons={
-          <>
-            <button className="p-2 text-gray-600 hover:bg-gray-100 rounded-full">
-              <ArrowPathIcon className="w-5 h-5" />
-            </button>
-            <button className="p-2 text-gray-600 hover:bg-gray-100 rounded-full">
-              <ChevronUpIcon className="w-5 h-5" />
-            </button>
-          </>
-        }
-      />
+    <FormPageLayout>
+      <PageHeader />
 
-      <form className="bg-white rounded-xl shadow-sm p-6 flex flex-col min-h-0 h-full" onSubmit={handleSubmit}>
-        <div className="flex-1 min-h-0 overflow-y-auto">
-          <Accordion 
-            title="Sale Information"
-            icon={InformationCircleIcon}
-            isOpen={accordion.saleInfo}
-            onToggle={() => toggleAccordion('saleInfo')}
-          >
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <form className="flex min-h-0 flex-1 flex-col" onSubmit={handleSubmit}>
+        <FormCard>
+          <FormBody>
+            <FormStepper
+              steps={FORM_STEPS.sale}
+              currentStep={currentStep}
+              onStepClick={goToStep}
+            />
+
+          {currentStep === 0 && (
+          <div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Reference <span className="text-red-500">*</span>
@@ -240,14 +218,11 @@ const handleSubmit = async (e) => {
                 placeholder="Enter sale note"
               ></textarea>
             </div>
-          </Accordion>
+          </div>
+          )}
 
-          <Accordion 
-            title="Order Items"
-            icon={DocumentTextIcon}
-            isOpen={accordion.orderItems}
-            onToggle={() => toggleAccordion('orderItems')}
-          >
+          {currentStep === 1 && (
+          <div>
             <div className="mb-4">
               <button 
                 type="button" 
@@ -260,18 +235,18 @@ const handleSubmit = async (e) => {
             </div>
             
             {orderItems.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
+              <div className="pos-table-wrap">
+                <table className="pos-table">
+                  <thead>
                     <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Unit Price</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                      <th>Product</th>
+                      <th>Quantity</th>
+                      <th>Unit Price</th>
+                      <th>Total</th>
+                      <th>Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
+                  <tbody>
                     {orderItems.map((item, index) => (
                       <tr key={index}>
                         <td className="px-4 py-3">
@@ -335,15 +310,12 @@ const handleSubmit = async (e) => {
                 No items added yet. Click "Add Item" to get started.
               </div>
             )}
-          </Accordion>
+          </div>
+          )}
 
-          <Accordion 
-            title="Payment Information"
-            icon={DocumentTextIcon}
-            isOpen={accordion.paymentInfo}
-            onToggle={() => toggleAccordion('paymentInfo')}
-          >
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {currentStep === 2 && (
+          <div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Payment Status <span className="text-red-500">*</span>
@@ -431,15 +403,22 @@ const handleSubmit = async (e) => {
                 />
               </div>
             </div>
-          </Accordion>
-        </div>
+          </div>
+          )}
+          </FormBody>
 
         <FormFooter 
           cancelPath="/sales" 
-          submitLabel="Create Sale" 
+          submitLabel="Create Sale"
+          showStepNav
+          currentStep={currentStep}
+          totalSteps={3}
+          onBack={goBack}
+          onNext={goNext}
         />
+        </FormCard>
       </form>
-    </div>
+    </FormPageLayout>
   );
 };
 

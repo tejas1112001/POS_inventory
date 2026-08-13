@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import Accordion from '../components/forms/Accordion';
 import PageHeader from '../components/forms/PageHeader';
 import FormFooter from '../components/forms/FormFooter';
+import FormPageLayout, { FormCard, FormBody } from '../components/forms/FormPageLayout';
+import FormStepper from '../components/forms/FormStepper';
+import { useFormWizard, FORM_STEPS } from '../hooks/useFormWizard';
 import { useNavigate } from 'react-router-dom';
 import SubcategoryModal from '../components/forms/SubcategoryModal';
 import SupplierModal from '../components/forms/SupplierModal'; 
@@ -31,12 +33,7 @@ const AddProduct = () => {
   const { currentUser } = usePos();
   const isAdmin = currentUser?.role === 'admin';
   const [showSupplierModal, setShowSupplierModal] = useState(false);
-  const [accordion, setAccordion] = useState({
-    productInfo: true,
-    pricingStocks: false,
-    images: false,
-    customFields: false
-  });
+  const { currentStep, goNext, goBack, goToStep } = useFormWizard(4);
   
   const navigate = useNavigate();  
   const [productType, setProductType] = useState('single');
@@ -185,13 +182,6 @@ const AddProduct = () => {
     }
 };
 
-  const toggleAccordion = (section) => {
-    setAccordion(prev => ({
-      ...prev,
-      [section]: !prev[section]
-    }));
-  };
-
   const toBase64 = (file) => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -221,32 +211,21 @@ const AddProduct = () => {
   };
 
   return (
-    <div className="bg-gray-50 flex flex-col h-full p-6">
-      <PageHeader 
-        title="Create Product"
-        subtitle="Create new product"
-        backPath="/products"
-        actionButtons={
-          <>
-            <button className="p-2 text-gray-600 hover:bg-gray-100 rounded-full">
-              <ArrowPathIcon className="w-5 h-5" />
-            </button>
-            <button className="p-2 text-gray-600 hover:bg-gray-100 rounded-full">
-              <ChevronUpIcon className="w-5 h-5" />
-            </button>
-          </>
-        }
-      />
+    <FormPageLayout>
+      <PageHeader />
 
-      <form className="bg-white rounded-xl shadow-sm p-6 flex flex-col min-h-0 h-full" onSubmit={handleSubmit}>
-        <div className="flex-1 min-h-0 overflow-y-auto">
-          <Accordion 
-            title="Product Information"
-            icon={InformationCircleIcon}
-            isOpen={accordion.productInfo}
-            onToggle={() => toggleAccordion('productInfo')}
-          >
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <form className="flex min-h-0 flex-1 flex-col" onSubmit={handleSubmit}>
+        <FormCard>
+          <FormBody>
+            <FormStepper
+              steps={FORM_STEPS.product}
+              currentStep={currentStep}
+              onStepClick={goToStep}
+            />
+
+          {currentStep === 0 && (
+          <div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -467,14 +446,11 @@ const AddProduct = () => {
               ></textarea>
               <p className="text-sm text-gray-500 mt-1">Maximum 60 Words</p>
             </div>
-          </Accordion>
+          </div>
+          )}
 
-          <Accordion 
-            title="Pricing & Stocks"
-            icon={LifebuoyIcon}
-            isOpen={accordion.pricingStocks}
-            onToggle={() => toggleAccordion('pricingStocks')}
-          >
+          {currentStep === 1 && (
+          <div>
             <div className="mb-6">
               <label className="block text-sm font-medium text-gray-700 mb-3">
                 Product Type <span className="text-red-500">*</span>
@@ -506,7 +482,7 @@ const AddProduct = () => {
             </div>
             
             {productType === 'single' ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Quantity <span className="text-red-500">*</span>
@@ -610,19 +586,19 @@ const AddProduct = () => {
                   </div>
                 </div>
                 
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
+                <div className="pos-table-wrap">
+                  <table className="pos-table">
+                    <thead>
                       <tr>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Variation</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Variant Value</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">SKU</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                        <th>Variation</th>
+                        <th>Variant Value</th>
+                        <th>SKU</th>
+                        <th>Quantity</th>
+                        <th>Price</th>
+                        <th>Actions</th>
                       </tr>
                     </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
+                    <tbody>
                       <tr>
                         <td className="px-4 py-3">
                           <input name="variantAttribute1"
@@ -726,14 +702,11 @@ const AddProduct = () => {
                 </div>
               </div>
             )}
-          </Accordion>
+          </div>
+          )}
 
-          <Accordion 
-            title="Images"
-            icon={PhotoIcon}
-            isOpen={accordion.images}
-            onToggle={() => toggleAccordion('images')}
-          >
+          {currentStep === 2 && (
+          <div>
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Upload Product Images
@@ -777,14 +750,11 @@ const AddProduct = () => {
                 </div>
               </div>
             )}
-          </Accordion>
+          </div>
+          )}
 
-          <Accordion 
-            title="Custom Fields"
-            icon={ListBulletIcon}
-            isOpen={accordion.customFields}
-            onToggle={() => toggleAccordion('customFields')}
-          >
+          {currentStep === 3 && (
+          <div>
             <div className="p-3 bg-gray-50 rounded-lg border border-gray-600 mb-6">
               <div className="flex flex-wrap gap-4">
                 <label className="flex items-center">
@@ -817,7 +787,7 @@ const AddProduct = () => {
               </div>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {customFields.warranties && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -869,14 +839,21 @@ const AddProduct = () => {
                 </div>
               )}
             </div>
-          </Accordion>
-        </div>
+          </div>
+          )}
+          </FormBody>
 
         <FormFooter 
           cancelPath="/products" 
           submitLabel="Add Product" 
           disabled={!isAdmin}
+          showStepNav
+          currentStep={currentStep}
+          totalSteps={4}
+          onBack={goBack}
+          onNext={goNext}
         />
+        </FormCard>
       </form>
       <StoreModal 
         showModal={showStoreModal}
@@ -894,7 +871,7 @@ const AddProduct = () => {
         setShowModal={setShowSupplierModal}
         onSupplierCreated={handleSupplierCreated}
       />
-    </div>
+    </FormPageLayout>
   );
 };
 

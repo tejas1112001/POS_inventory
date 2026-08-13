@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
+import ListPageShell from '../components/layout/ListPageShell';
 import InventoryList from '../components/lists/InventoryList';
 
 export default function Inventory() {
@@ -29,10 +30,8 @@ export default function Inventory() {
   if (error) return <div className="p-6 text-red-500">{error}</div>;
 
   return (
-    <div className="p-6 h-full flex flex-col">
-      <div className="flex-1 min-h-0">
-        <InventoryList inventory={inventory} onRefresh={fetchInventory} />
-      </div>
-    </div>
+    <ListPageShell>
+      <InventoryList inventory={inventory} onRefresh={fetchInventory} />
+    </ListPageShell>
   );
 }

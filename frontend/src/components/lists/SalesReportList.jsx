@@ -3,12 +3,8 @@ import { useUI } from "../ListComponents/useUI";
 import { indexColumn } from '../ListComponents/columnHelpers';
 
 // Reusable components
-import ListContainer from '../ListComponents/ListContainer';
-import ListHeader from '../ListComponents/ListHeader';
+import ListPageLayout from '../ListComponents/ListPageLayout';
 import ListControlButtons from '../ListComponents/ListControlButtons';
-import ListFilter from '../ListComponents/ListFilter';
-import ListTable from '../ListComponents/ListTable';
-import ListPagination from '../ListComponents/ListPagination';
 import DateRangePicker from '../ListComponents/DateRangePicker';
 import SelectField from '../ListComponents/SelectField';
 import GenerateButton from '../ListComponents/GenerateButton';
@@ -167,32 +163,29 @@ export default function SalesReportList({ reports }) {
   ];
 
   return (
-    <ListContainer>
-      <ListHeader 
-        title="Sales Report"
-        description="Manage your sales reports"
-        controlButtons={<ListControlButtons buttons={customControlButtons} />}
-      />
-      
-      {/* Sales Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {salesSummary.map((item, index) => (
-          <div key={index} className="bg-white rounded-xl p-4 shadow-sm border border-gray-200">
-            <div className="flex items-center">
-              <span className={`${item.color} p-3 rounded-full mr-4`}>
-                <item.icon className="h-6 w-6 text-white" />
-              </span>
-              <div>
-                <p className="text-sm font-medium text-gray-600">{item.title}</p>
-                <h3 className="text-xl font-bold">{item.value}</h3>
+    <ListPageLayout
+      title="Sales Report"
+      description="Manage your sales reports"
+      controlButtons={<ListControlButtons buttons={customControlButtons} />}
+      extraContent={
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {salesSummary.map((item, index) => (
+            <div key={index} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+              <div className="flex items-center">
+                <span className={`${item.color} mr-4 rounded-full p-3`}>
+                  <item.icon className="h-6 w-6 text-white" />
+                </span>
+                <div>
+                  <p className="text-sm font-medium text-gray-600">{item.title}</p>
+                  <h3 className="text-xl font-bold">{item.value}</h3>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
-      </div>
-
-      <ListFilter>
-        <div className="grid grid-cols-1 md:grid-cols-10 gap-4">
+          ))}
+        </div>
+      }
+      filterRow={
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-10">
           <DateRangePicker
             fromDate={fromDate}
             toDate={toDate}
@@ -200,7 +193,6 @@ export default function SalesReportList({ reports }) {
             setToDate={setToDate}
             colClass="md:col-span-3"
           />
-
           <SelectField
             name="store"
             label="Store"
@@ -210,7 +202,6 @@ export default function SalesReportList({ reports }) {
             placeholder="All"
             colClass="md:col-span-3"
           />
-
           <SelectField
             name="product"
             label="Products"
@@ -220,21 +211,12 @@ export default function SalesReportList({ reports }) {
             placeholder="All"
             colClass="md:col-span-3"
           />
-
           <GenerateButton onClick={handleGenerate} label="Generate PDF" />
         </div>
-      </ListFilter>
-      
-      <ListTable 
-        table={table} 
-        emptyState={emptyState}
-        maxHeight={"max-h-[calc(100vh-32rem)]"}
-      />
-      
-      <ListPagination 
-        table={table} 
-        dataLength={filteredData.length} 
-      />
-    </ListContainer>
+      }
+      table={table}
+      emptyState={emptyState}
+      dataLength={filteredData.length}
+    />
   );
 }

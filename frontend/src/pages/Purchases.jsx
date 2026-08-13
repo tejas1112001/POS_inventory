@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import ListPageShell from "../components/layout/ListPageShell";
 import PurchaseList from "../components/lists/PurchaseList";
 import { useNavigate } from "react-router-dom";
 import { api } from "../services/api";
@@ -40,14 +41,12 @@ const Purchases = () => {
   if (error) return <div className="p-6 text-red-500">{error}</div>;
 
   return (
-    <div className="p-6 h-full flex flex-col">
-      <div className="flex-1 min-h-0">
-        <PurchaseList 
-          purchases={purchases || []} 
-          onAddPurchase={() => navigate("/add-purchase")}
-        />
-      </div>
-    </div>
+    <ListPageShell>
+      <PurchaseList
+        purchases={purchases || []}
+        onAddPurchase={() => navigate("/add-purchase")}
+      />
+    </ListPageShell>
   );
 };
 

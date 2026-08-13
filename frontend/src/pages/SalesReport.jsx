@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import ListPageShell from '../components/layout/ListPageShell';
 import SalesReportList from '../components/lists/SalesReportList';
 import { api } from '../services/api';
 
@@ -28,8 +29,8 @@ export default function SalesReport() {
   if (error) return <div className="p-6 text-red-500">{error}</div>;
 
   return (
-    <div className="p-6 bg-gray-50 min-h-screen flex flex-col">
+    <ListPageShell>
       <SalesReportList reports={reports} />
-    </div>
+    </ListPageShell>
   );
 }
