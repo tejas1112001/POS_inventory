@@ -25,6 +25,13 @@ Sale.init(
     modelName: 'Sale',
     tableName: 'sales',
     timestamps: true,
+    indexes: [
+      { fields: ['reference'] },
+      { fields: ['date'] },
+      { fields: ['customer_id'] },
+      { fields: ['store_id'] },
+      { fields: ['user_id'] },
+    ],
   }
 );
 

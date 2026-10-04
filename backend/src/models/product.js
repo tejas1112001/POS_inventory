@@ -25,12 +25,23 @@ Product.init(
     barcodeSymbology: { type: DataTypes.STRING, field: 'barcode_symbology' },
     isLocked: { type: DataTypes.BOOLEAN, defaultValue: false, field: 'is_locked' },
     lockedAt: { type: DataTypes.DATE, field: 'locked_at' },
+    isPublished: { type: DataTypes.BOOLEAN, defaultValue: false, field: 'is_published' },
+    isFeatured: { type: DataTypes.BOOLEAN, defaultValue: false, field: 'is_featured' },
   },
   {
     sequelize,
     modelName: 'Product',
     tableName: 'products',
     timestamps: true,
+    indexes: [
+      { fields: ['name'] },
+      { fields: ['status'] },
+      { fields: ['is_published'] },
+      { fields: ['is_featured'] },
+      { fields: ['category_id'] },
+      { fields: ['brand_id'] },
+      { fields: ['unit_id'] },
+    ],
   }
 );
 

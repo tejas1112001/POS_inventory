@@ -2,7 +2,7 @@ import express from 'express';
 import { sequelize, Product, ProductVariant, Inventory, Category, Brand, Unit, User, SubCategory, Supplier } from '../models/index.js';
 import ExpressError from '../utils/ExpressError.js';
 import { authenticateToken } from '../middleware/auth.js';
-import isAdmin from '../middleware/admin.js';
+import { requirePermission } from '../middleware/permission.js';
 
 const router = express.Router();
 
@@ -48,10 +48,51 @@ const transformProduct = (p) => {
   };
 };
 
-// GET /products
-router.get('/', async (req, res) => {
+import { Op } from 'sequelize';
+
+// GET /products (Supports pagination & search)
+router.get('/', authenticateToken, requirePermission('products', 'view'), async (req, res) => {
   try {
-    const products = await Product.findAll({ include: productIncludes });
+    const { page, limit, search, categoryId, brandId, status } = req.query;
+
+    const where = {};
+    if (status) where.status = status;
+    if (categoryId) where.category_id = categoryId;
+    if (brandId) where.brand_id = brandId;
+    if (search && search.trim()) {
+      where.name = { [Op.iLike || Op.like]: `%${search.trim()}%` };
+    }
+
+    if (page || limit) {
+      const pageNum = Math.max(1, parseInt(page) || 1);
+      const limitNum = Math.max(1, parseInt(limit) || 20);
+      const offset = (pageNum - 1) * limitNum;
+
+      const { count, rows } = await Product.findAndCountAll({
+        where,
+        include: productIncludes,
+        limit: limitNum,
+        offset,
+        order: [['createdAt', 'DESC']],
+        distinct: true,
+      });
+
+      return res.json({
+        data: rows.map(transformProduct),
+        pagination: {
+          total: count,
+          page: pageNum,
+          limit: limitNum,
+          totalPages: Math.ceil(count / limitNum),
+        },
+      });
+    }
+
+    const products = await Product.findAll({
+      where,
+      include: productIncludes,
+      order: [['createdAt', 'DESC']],
+    });
     res.json(products.map(transformProduct));
   } catch (error) {
     console.error('GET /products error:', error);
@@ -59,8 +100,48 @@ router.get('/', async (req, res) => {
   }
 });
 
+// GET /products/barcode/:barcode — Sub-millisecond lookup for POS barcode scanners
+router.get('/barcode/:barcode', authenticateToken, requirePermission('pos', 'view'), async (req, res) => {
+  try {
+    const { barcode } = req.params;
+    const { storeId } = req.query;
+
+    const variant = await ProductVariant.findOne({
+      where: {
+        [Op.or]: [{ item_barcode: barcode }, { sku: barcode }],
+      },
+      include: [
+        {
+          model: Product,
+          as: 'Product',
+          include: [
+            { model: Category, as: 'Category', attributes: ['name'] },
+            { model: Brand, as: 'Brand', attributes: ['name'] },
+            { model: Unit, as: 'Unit', attributes: ['name'] },
+          ],
+        },
+        {
+          model: Inventory,
+          as: 'Inventories',
+          ...(storeId ? { where: { store_id: storeId }, required: false } : {}),
+        },
+      ],
+    });
+
+    if (!variant || !variant.Product) {
+      return res.status(404).json({ message: `No product found matching barcode ${barcode}` });
+    }
+
+    const fullProduct = await Product.findByPk(variant.Product.id, { include: productIncludes });
+    res.json(transformProduct(fullProduct));
+  } catch (error) {
+    console.error('GET /products/barcode error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // GET /products/pos
-router.get('/pos', async (req, res) => {
+router.get('/pos', authenticateToken, requirePermission('pos', 'view'), async (req, res) => {
   try {
     const { storeId } = req.query;
     if (!storeId) {
@@ -100,7 +181,7 @@ router.get('/pos', async (req, res) => {
 });
 
 // POST /products
-router.post('/', authenticateToken, isAdmin, async (req, res) => {
+router.post('/', authenticateToken, requirePermission('products', 'create'), async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const {
@@ -143,7 +224,7 @@ router.post('/', authenticateToken, isAdmin, async (req, res) => {
     );
 
     if (productType === 'single') {
-      if (!sku || !price || !quantity || !storeId)
+      if (!sku || price === undefined || price === null || price === '' || quantity === undefined || quantity === null || quantity === '' || !storeId)
         throw new Error('Missing required fields for single product: sku, price, quantity, storeId');
 
       const variant = await ProductVariant.create(
@@ -160,7 +241,7 @@ router.post('/', authenticateToken, isAdmin, async (req, res) => {
       );
 
       await Inventory.create(
-        { variant_id: variant.id, store_id: storeId, qty: parseInt(quantity), quantity_alert: toNull(quantityAlert) || 0 },
+        { variant_id: variant.id, store_id: storeId, qty: parseInt(quantity) || 0, quantity_alert: toNull(quantityAlert) || 0 },
         { transaction: t }
       );
     } else {
@@ -208,7 +289,7 @@ router.post('/', authenticateToken, isAdmin, async (req, res) => {
 });
 
 // PUT /products/:id
-router.put('/:id', authenticateToken, isAdmin, async (req, res) => {
+router.put('/:id', authenticateToken, requirePermission('products', 'edit'), async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const productId = req.params.id;
@@ -319,7 +400,7 @@ router.put('/:id', authenticateToken, isAdmin, async (req, res) => {
 });
 
 // DELETE /products/:id
-router.delete('/:id', authenticateToken, isAdmin, async (req, res) => {
+router.delete('/:id', authenticateToken, requirePermission('products', 'delete'), async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const product = await Product.findByPk(req.params.id, { transaction: t });
@@ -343,7 +424,7 @@ router.delete('/:id', authenticateToken, isAdmin, async (req, res) => {
 });
 
 // PUT /products/:id/lock
-router.put('/:id/lock', authenticateToken, async (req, res) => {
+router.put('/:id/lock', authenticateToken, requirePermission('pos', 'create'), async (req, res) => {
   try {
     const { lock, storeId } = req.body;
     const { userId } = req.user;

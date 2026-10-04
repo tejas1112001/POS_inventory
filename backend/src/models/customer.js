@@ -20,6 +20,11 @@ Customer.init(
     modelName: 'Customer',
     tableName: 'customers',
     timestamps: true,
+    indexes: [
+      { fields: ['name'] },
+      { fields: ['phone'] },
+      { fields: ['email'] },
+    ],
   }
 );
 

@@ -60,8 +60,8 @@ const handleResponse = async (response) => {
       if (text) errorPayload = { error: text };
     }
 
-    if (response.status === 401 || response.status === 403) {
-      window.dispatchEvent(new CustomEvent('apiError', { detail: errorPayload.error || 'You are not authorized to do that.' }));
+    if (response.status === 401) {
+      window.dispatchEvent(new CustomEvent('apiError', { detail: errorPayload.error || 'Your session has expired. Please sign in again.' }));
       window.dispatchEvent(new Event('unauthorized'));
     } else {
       window.dispatchEvent(new CustomEvent('apiError', { detail: errorPayload.error || `HTTP error! status: ${response.status}` }));
@@ -101,7 +101,7 @@ async function fetchWithAuth(endpoint, options = {}, retried = false) {
 
   const response = await fetch(`${API_BASE_URL}${endpoint}`, options);
 
-  if ((response.status === 401 || response.status === 403) && !retried &&
+  if (response.status === 401 && !retried &&
       !endpoint.includes('/api/auth/login') && !endpoint.includes('/api/auth/refresh')) {
     const refreshed = await tryRefreshToken();
     if (refreshed) {

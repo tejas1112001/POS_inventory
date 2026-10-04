@@ -1,13 +1,13 @@
 import express from 'express';
 import { Unit, User } from '../models/index.js';
 import { authenticateToken } from '../middleware/auth.js';
-import isAdmin from '../middleware/admin.js';
+import { requirePermission } from '../middleware/permission.js';
 
 const router = express.Router();
 
 const normalizeStatus = (s) => (['Active', 'Inactive'].includes(s) ? s : 'Active');
 
-router.get('/', authenticateToken, async (req, res) => {
+router.get('/', authenticateToken, requirePermission('units', 'view'), async (req, res) => {
   try {
     const units = await Unit.findAll({
       include: [{ model: User, as: 'creator', attributes: ['name'] }],
@@ -26,7 +26,7 @@ router.get('/', authenticateToken, async (req, res) => {
   }
 });
 
-router.post('/', authenticateToken, isAdmin, async (req, res) => {
+router.post('/', authenticateToken, requirePermission('units', 'create'), async (req, res) => {
   try {
     const { name, short_name, status } = req.body;
     if (!name || !name.trim()) {
@@ -46,7 +46,7 @@ router.post('/', authenticateToken, isAdmin, async (req, res) => {
   }
 });
 
-router.put('/:id', authenticateToken, isAdmin, async (req, res) => {
+router.put('/:id', authenticateToken, requirePermission('units', 'edit'), async (req, res) => {
   try {
     const unit = await Unit.findByPk(req.params.id);
     if (!unit) return res.status(404).json({ error: 'Unit not found.' });
@@ -68,7 +68,7 @@ router.put('/:id', authenticateToken, isAdmin, async (req, res) => {
   }
 });
 
-router.delete('/:id', authenticateToken, isAdmin, async (req, res) => {
+router.delete('/:id', authenticateToken, requirePermission('units', 'delete'), async (req, res) => {
   try {
     const unit = await Unit.findByPk(req.params.id);
     if (!unit) return res.status(404).json({ error: 'Unit not found.' });

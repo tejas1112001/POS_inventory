@@ -1,7 +1,7 @@
 import express from 'express';
 import { sequelize, Sale, OrderItem, Inventory, Product, ProductVariant, Customer, User } from '../models/index.js';
 import { authenticateToken } from '../middleware/auth.js';
-import isAdmin from '../middleware/admin.js';
+import { requirePermission } from '../middleware/permission.js';
 
 const router = express.Router();
 
@@ -18,12 +18,51 @@ const saleIncludes = [
   },
 ];
 
-// GET /sales
-router.get('/', authenticateToken, async (req, res) => {
+import { Op } from 'sequelize';
+
+// GET /sales (Supports pagination, search, date filtering)
+router.get('/', authenticateToken, requirePermission('sales', 'view'), async (req, res) => {
   try {
+    const { page, limit, search, startDate, endDate, storeId, customerId } = req.query;
     const where = {};
+
     if (req.user.role === 'biller') {
       where.user_id = req.user.userId;
+    }
+    if (storeId) where.store_id = storeId;
+    if (customerId) where.customer_id = customerId;
+    if (search && search.trim()) {
+      where.reference = { [Op.iLike || Op.like]: `%${search.trim()}%` };
+    }
+    if (startDate || endDate) {
+      where.createdAt = {};
+      if (startDate) where.createdAt[Op.gte] = new Date(startDate);
+      if (endDate) where.createdAt[Op.lte] = new Date(endDate);
+    }
+
+    if (page || limit) {
+      const pageNum = Math.max(1, parseInt(page) || 1);
+      const limitNum = Math.max(1, parseInt(limit) || 20);
+      const offset = (pageNum - 1) * limitNum;
+
+      const { count, rows } = await Sale.findAndCountAll({
+        where,
+        include: saleIncludes,
+        limit: limitNum,
+        offset,
+        order: [['createdAt', 'DESC']],
+        distinct: true,
+      });
+
+      return res.json({
+        data: rows.map((s) => s.toJSON()),
+        pagination: {
+          total: count,
+          page: pageNum,
+          limit: limitNum,
+          totalPages: Math.ceil(count / limitNum),
+        },
+      });
     }
 
     const sales = await Sale.findAll({
@@ -40,14 +79,36 @@ router.get('/', authenticateToken, async (req, res) => {
 });
 
 // POST /sales
-router.post('/', authenticateToken, async (req, res) => {
+router.post('/', authenticateToken, requirePermission('sales', 'create'), async (req, res) => {
   const t = await sequelize.transaction();
   try {
-    const { orderItems, customerId, storeId, ...saleData } = req.body;
+    const { orderItems, customerId, storeId, reference, ...saleData } = req.body;
 
     if (!customerId || !storeId || !Array.isArray(orderItems) || orderItems.length === 0) {
       throw new Error('Customer, store, and at least one order item are required.');
     }
+
+    // Server-side reference generation if not provided
+    const saleReference = reference || `POS-INV-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
+
+    // Validate quantities and compute items total
+    let calculatedSubtotal = 0;
+    for (const item of orderItems) {
+      const qty = parseInt(item.quantity);
+      if (isNaN(qty) || qty <= 0) {
+        throw new Error(`Invalid item quantity: ${item.quantity}`);
+      }
+      const unitPrice = parseFloat(item.unitPrice) || 0;
+      calculatedSubtotal += qty * unitPrice;
+    }
+
+    const discount = parseFloat(saleData.discount) || 0;
+    const tax = parseFloat(saleData.tax) || 0;
+    const shipping = parseFloat(saleData.shipping) || 0;
+    const computedTotal = Math.max(0, calculatedSubtotal - discount + tax + shipping);
+    const paid = parseFloat(saleData.paid) || computedTotal;
+    const due = Math.max(0, computedTotal - paid);
+    const paymentStatus = paid >= computedTotal ? 'Paid' : paid > 0 ? 'Partial' : 'Unpaid';
 
     // 1. Validate inventory
     for (const item of orderItems) {
@@ -64,7 +125,21 @@ router.post('/', authenticateToken, async (req, res) => {
 
     // 2. Create sale
     const sale = await Sale.create(
-      { ...saleData, customer_id: customerId, store_id: storeId, user_id: req.user.userId },
+      {
+        ...saleData,
+        reference: saleReference,
+        subtotal: calculatedSubtotal,
+        discount,
+        tax,
+        shipping,
+        total: computedTotal,
+        paid,
+        due,
+        payment_status: saleData.payment_status || paymentStatus,
+        customer_id: customerId,
+        store_id: storeId,
+        user_id: req.user.userId,
+      },
       { transaction: t }
     );
 
@@ -77,7 +152,7 @@ router.post('/', authenticateToken, async (req, res) => {
         quantity: item.quantity,
         unit_price: item.unitPrice,
         discount: item.discount || 0,
-        subtotal: item.total,
+        subtotal: item.total || (item.quantity * item.unitPrice),
       })),
       { transaction: t }
     );
@@ -94,7 +169,17 @@ router.post('/', authenticateToken, async (req, res) => {
     await t.commit();
 
     const populated = await Sale.findByPk(sale.id, { include: saleIncludes });
-    res.status(201).json(populated.toJSON());
+    const json = populated.toJSON();
+    // Normalize item fields for receipts/clients
+    json.items = (json.items || []).map((item) => ({
+      ...item,
+      quantity: item.quantity,
+      qty: item.quantity,
+      unitPrice: item.unit_price,
+      price: item.unit_price,
+    }));
+
+    res.status(201).json(json);
   } catch (error) {
     await t.rollback();
     console.error('POST /sales error:', error);
@@ -103,7 +188,7 @@ router.post('/', authenticateToken, async (req, res) => {
 });
 
 // PUT /sales/:id
-router.put('/:id', authenticateToken, isAdmin, async (req, res) => {
+router.put('/:id', authenticateToken, requirePermission('sales', 'edit'), async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const saleId = req.params.id;
@@ -185,7 +270,7 @@ router.put('/:id', authenticateToken, isAdmin, async (req, res) => {
 });
 
 // DELETE /sales/:id
-router.delete('/:id', authenticateToken, isAdmin, async (req, res) => {
+router.delete('/:id', authenticateToken, requirePermission('sales', 'delete'), async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const sale = await Sale.findByPk(req.params.id, {

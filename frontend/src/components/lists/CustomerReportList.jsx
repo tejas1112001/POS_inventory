@@ -10,6 +10,7 @@ import SelectField from '../ListComponents/SelectField';
 import GenerateButton from '../ListComponents/GenerateButton';
 import { exportToPDF } from '../ListComponents/exportFunctions';
 import { PrinterIcon } from '@heroicons/react/24/outline';
+import { formatCurrency } from '@/lib/format';
 
 export default function CustomerReportList({ reports }) {
   const [search, setSearch] = useState('');
@@ -77,8 +78,8 @@ export default function CustomerReportList({ reports }) {
       {
         accessorKey: 'amount',
         header: 'Amount',
-        cell: ({ getValue }) => <span>PKR {getValue()}</span>,
-        size: 100,
+        cell: ({ getValue }) => <span>{formatCurrency(getValue())}</span>,
+        size: 110,
       },
       {
         accessorKey: 'paymentMethod',
@@ -220,7 +221,7 @@ export default function CustomerReportList({ reports }) {
           <div className="rounded-b-xl border border-t border-border bg-muted/40 p-4">
             <div className="flex items-center justify-between">
               <span className="font-semibold">Total</span>
-              <span className="font-bold">PKR {totalAmount.toFixed(2)}</span>
+              <span className="font-bold">{formatCurrency(totalAmount)}</span>
             </div>
           </div>
         ) : null

@@ -31,6 +31,11 @@ User.init(
       type: DataTypes.STRING,
       allowNull: false,
     },
+    role_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      field: 'role_id',
+    },
   },
   {
     sequelize,

@@ -1,13 +1,13 @@
 import express from 'express';
 import { Category, User } from '../models/index.js';
 import { authenticateToken } from '../middleware/auth.js';
-import isAdmin from '../middleware/admin.js';
+import { requirePermission } from '../middleware/permission.js';
 
 const router = express.Router();
 
 const normalizeStatus = (s) => (['Active', 'Inactive'].includes(s) ? s : 'Active');
 
-router.get('/', authenticateToken, async (req, res) => {
+router.get('/', authenticateToken, requirePermission('categories', 'view'), async (req, res) => {
   try {
     const categories = await Category.findAll({
       include: [{ model: User, as: 'creator', attributes: ['name'] }],
@@ -26,7 +26,7 @@ router.get('/', authenticateToken, async (req, res) => {
   }
 });
 
-router.post('/', authenticateToken, isAdmin, async (req, res) => {
+router.post('/', authenticateToken, requirePermission('categories', 'create'), async (req, res) => {
   try {
     const { name, status, image } = req.body;
     if (!name || !name.trim()) {
@@ -46,7 +46,7 @@ router.post('/', authenticateToken, isAdmin, async (req, res) => {
   }
 });
 
-router.put('/:id', authenticateToken, isAdmin, async (req, res) => {
+router.put('/:id', authenticateToken, requirePermission('categories', 'edit'), async (req, res) => {
   try {
     const category = await Category.findByPk(req.params.id);
     if (!category) return res.status(404).json({ error: 'Category not found.' });
@@ -63,7 +63,7 @@ router.put('/:id', authenticateToken, isAdmin, async (req, res) => {
   }
 });
 
-router.delete('/:id', authenticateToken, isAdmin, async (req, res) => {
+router.delete('/:id', authenticateToken, requirePermission('categories', 'delete'), async (req, res) => {
   try {
     const category = await Category.findByPk(req.params.id);
     if (!category) return res.status(404).json({ error: 'Category not found.' });

@@ -18,6 +18,23 @@ import Unit from './unit.js';
 import User from './user.js';
 import Store from './store.js';
 import Warehouse from './warehouse.js';
+import StockAdjustment from './stockAdjustment.js';
+import Role from './role.js';
+import Permission from './permission.js';
+import RolePermission from './rolePermission.js';
+import StoreProduct from './storeProduct.js';
+
+// ─── Role & Permission associations ───────────────────────────────────────────
+Role.belongsToMany(Permission, { through: RolePermission, foreignKey: 'role_id', as: 'permissions' });
+Permission.belongsToMany(Role, { through: RolePermission, foreignKey: 'permission_id', as: 'roles' });
+User.belongsTo(Role, { foreignKey: 'role_id', as: 'Role' });
+Role.hasMany(User, { foreignKey: 'role_id', as: 'users' });
+
+// ─── Store & StoreProduct associations ─────────────────────────────────────────
+Store.hasMany(StoreProduct, { foreignKey: 'store_id', as: 'StoreProducts' });
+Product.hasMany(StoreProduct, { foreignKey: 'product_id', as: 'StoreProducts' });
+StoreProduct.belongsTo(Store, { foreignKey: 'store_id', as: 'Store' });
+StoreProduct.belongsTo(Product, { foreignKey: 'product_id', as: 'Product' });
 
 // ─── User associations ────────────────────────────────────────────────────────
 Brand.belongsTo(User, { foreignKey: 'created_by', as: 'creator' });
@@ -33,6 +50,9 @@ Product.belongsTo(User, { foreignKey: 'locked_by', as: 'locker' });
 ProductVariant.belongsTo(User, { foreignKey: 'created_by', as: 'creator' });
 Purchase.belongsTo(User, { foreignKey: 'created_by', as: 'creator' });
 SaleReturn.belongsTo(User, { foreignKey: 'created_by', as: 'creator' });
+StockAdjustment.belongsTo(User, { foreignKey: 'created_by', as: 'creator' });
+StockAdjustment.belongsTo(Store, { foreignKey: 'store_id', as: 'Store' });
+StockAdjustment.belongsTo(ProductVariant, { foreignKey: 'variant_id', as: 'Variant' });
 
 // ─── Product associations ─────────────────────────────────────────────────────
 Product.belongsTo(Category, { foreignKey: 'category_id', as: 'Category' });
@@ -95,8 +115,11 @@ export {
   ProductVariant,
   Purchase,
   PurchaseItem,
+  Permission,
   Report,
   ReturnItem,
+  Role,
+  RolePermission,
   Sale,
   SaleReturn,
   SubCategory,
@@ -104,5 +127,7 @@ export {
   Unit,
   User,
   Store,
+  StoreProduct,
   Warehouse,
+  StockAdjustment,
 };

@@ -22,3 +22,15 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Environment / Secrets — never commit real credentials
+backend/.env
+.env
+.env.*
+!.env.example
+
+# Local PostgreSQL data directory
+.pgdata/
+
+# Git submodule references (local only)
+.gitmodules

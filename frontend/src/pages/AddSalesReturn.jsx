@@ -22,6 +22,7 @@ const AddSalesReturn = () => {
   const [customers, setCustomers] = useState([]);
   const [products, setProducts] = useState([]);
   const [stores, setStores] = useState([]);
+  const [sales, setSales] = useState([]);
   const [returnItems, setReturnItems] = useState([]);
   const { currentUser } = usePos();
   const { currentStep, goNext, goBack, goToStep } = useFormWizard(3);
@@ -31,14 +32,16 @@ const AddSalesReturn = () => {
   useEffect(() => {
     const fetchOptions = async () => {
       try {
-        const [customersResponse, productsResponse, storesResponse] = await Promise.all([
+        const [customersResponse, productsResponse, storesResponse, salesResponse] = await Promise.all([
           api.get('/api/customers'),
           api.get('/api/products'),
-          api.get('/api/stores')
+          api.get('/api/stores'),
+          api.get('/api/sales')
         ]);
         setCustomers(customersResponse);
         setProducts(productsResponse);
         setStores(storesResponse);
+        setSales(salesResponse);
       } catch (error) {
         console.error('Error fetching options:', error);
       }
@@ -65,9 +68,9 @@ const AddSalesReturn = () => {
       let subtotal = 0;
       
       returnItems.forEach((item, index) => {
-        const quantity = parseFloat(data[`quantity_${index}`]) || 0;
-        const unitPrice = parseFloat(data[`unitPrice_${index}`]) || 0;
-        const reason = data[`reason_${index}`] || '';
+        const quantity = parseFloat(data[`quantity_${index}`]) || item.quantity || 0;
+        const unitPrice = parseFloat(data[`unitPrice_${index}`]) || item.unitPrice || 0;
+        const reason = data[`reason_${index}`] || item.reason || '';
         const total = quantity * unitPrice;
         
         items.push({
@@ -97,6 +100,7 @@ const AddSalesReturn = () => {
         due: due,
         customerId: data.customerId,
         storeId: data.storeId,
+        saleId: data.saleId || null,
         returnItems: items
       };
       
@@ -136,8 +140,7 @@ const AddSalesReturn = () => {
               onStepClick={goToStep}
             />
 
-          {currentStep === 0 && (
-          <div>
+          <div className={currentStep === 0 ? 'block' : 'hidden'}>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -175,6 +178,32 @@ const AddSalesReturn = () => {
                   defaultValue={new Date().toISOString().split('T')[0]}
                   required
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Original Sale (Optional Link)
+                </label>
+                <select 
+                  name="saleId" 
+                  className="w-full px-3 py-2 border border-gray-600 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                  onChange={(e) => {
+                    const selectedSale = sales.find(s => String(s.id) === e.target.value);
+                    if (selectedSale) {
+                      const custSelect = document.querySelector('[name="customerId"]');
+                      const storeSelect = document.querySelector('[name="storeId"]');
+                      if (custSelect && selectedSale.customer_id) custSelect.value = selectedSale.customer_id;
+                      if (storeSelect && selectedSale.store_id) storeSelect.value = selectedSale.store_id;
+                    }
+                  }}
+                >
+                  <option value="">Select Original Sale</option>
+                  {sales.map(sale => (
+                    <option key={sale.id} value={sale.id}>
+                      {sale.reference || `Sale #${sale.id}`} - ₹{sale.total}
+                    </option>
+                  ))}
+                </select>
               </div>
               
               <div>
@@ -224,10 +253,8 @@ const AddSalesReturn = () => {
               </div>
             </div>
           </div>
-          )}
 
-          {currentStep === 1 && (
-          <div>
+          <div className={currentStep === 1 ? 'block' : 'hidden'}>
             <div className="mb-4">
               <button 
                 type="button" 
@@ -328,10 +355,8 @@ const AddSalesReturn = () => {
               </div>
             )}
           </div>
-          )}
 
-          {currentStep === 2 && (
-          <div>
+          <div className={currentStep === 2 ? 'block' : 'hidden'}>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -381,7 +406,6 @@ const AddSalesReturn = () => {
               </div>
             </div>
           </div>
-          )}
           </FormBody>
 
         <FormFooter 

@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { usePos } from '../../hooks/usePos';
+import { usePermission } from '../../hooks/usePermission';
 import { useUI } from "../ListComponents/useUI";
 import {
   selectColumn,
@@ -19,8 +20,7 @@ export default function SupplierList({ suppliers = [], setShowForm, onRefresh })
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [rowSelection, setRowSelection] = useState({});
-  const { currentUser } = usePos();
-  const isAdmin = currentUser?.role === 'admin';
+  const { hasPermission } = usePermission();
 
   // Status options
   const statusOptions = useMemo(() => ['All', 'Active', 'Inactive'], []);
@@ -64,7 +64,7 @@ export default function SupplierList({ suppliers = [], setShowForm, onRefresh })
     },
     statusColumn('status', 'Status'),
     actionsColumn(['view', 'edit', 'delete'], 120, {
-      isActionDisabled: (action) => !isAdmin && (action === 'edit' || action === 'delete'),
+      isActionDisabled: (action) => !hasPermission('suppliers', action),
     })
   ];
 
@@ -108,7 +108,7 @@ export default function SupplierList({ suppliers = [], setShowForm, onRefresh })
     rowSelection,
     setRowSelection,
     onAddItem: () => setShowForm(true),
-    isAddDisabled: !isAdmin,
+    isAddDisabled: !hasPermission('suppliers', 'create'),
     onRefresh,
     resetFilters: () => {
       setSearch('');

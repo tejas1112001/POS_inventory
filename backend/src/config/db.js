@@ -28,10 +28,10 @@ const sequelize = new Sequelize(DB_NAME, DB_USER, DB_PASSWORD, {
     ? { ssl: { require: true, rejectUnauthorized: false } }
     : {},
   pool: {
-    max: 10,
-    min: 0,
-    acquire: 30000,
-    idle: 10000,
+    max: parseInt(process.env.DB_POOL_MAX || '25', 10),
+    min: parseInt(process.env.DB_POOL_MIN || '5', 10),
+    acquire: parseInt(process.env.DB_POOL_ACQUIRE || '30000', 10),
+    idle: parseInt(process.env.DB_POOL_IDLE || '10000', 10),
   },
 });
 

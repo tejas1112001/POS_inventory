@@ -1,9 +1,5 @@
 import React from 'react';
-
-const formatCurrency = (value) => {
-  if (value === null || value === undefined || value === '') return '—';
-  return `PKR ${Number(value)}`;
-};
+import { formatCurrency } from '@/lib/format';
 
 const getPrimaryVariant = (product) => {
   const variants = product?.ProductVariants || product?.variants || [];

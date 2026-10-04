@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { usePos } from '../../hooks/usePos';
+import { usePermission } from '../../hooks/usePermission';
 // Reusable components
 import ListPageLayout from '../ListComponents/ListPageLayout';
 import ListControlButtons from '../ListComponents/ListControlButtons';
@@ -12,8 +13,7 @@ const PurchaseList = ({ purchases = [], onAddPurchase }) => {
   const [search, setSearch] = useState('');
   const [paymentStatusFilter, setPaymentStatusFilter] = useState('All');
   const [rowSelection, setRowSelection] = useState({});
-  const { currentUser } = usePos();
-  const isAdmin = currentUser?.role === 'admin';
+  const { hasPermission } = usePermission();
 
   // Payment status options
   const paymentStatusOptions = useMemo(() => ['All', 'Paid', 'Unpaid', 'Overdue'], []);
@@ -99,7 +99,7 @@ const PurchaseList = ({ purchases = [], onAddPurchase }) => {
     rowSelection,
     setRowSelection,
     onAddItem: onAddPurchase,
-    isAddDisabled: !isAdmin,
+    isAddDisabled: !hasPermission('purchases', 'create'),
     resetFilters: () => {
       setSearch('');
       setPaymentStatusFilter('All');

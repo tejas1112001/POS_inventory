@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   Search, Minus, Plus, Trash2, ShoppingCart, X, UserPlus, Banknote, CheckCircle2,
 } from 'lucide-react';
@@ -61,10 +61,32 @@ export default function POS() {
   const [error, setError] = useState(null);
   const [clearConfirm, setClearConfirm] = useState(false);
 
+  const [completedSale, setCompletedSale] = useState(null);
+
+  // Compute subtotal and dynamic item-level tax
   const subtotal = orderItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
   const [discount, setDiscount] = useState(0.0);
-  const tax = subtotal * 0.08;
-  const total = subtotal + tax - discount;
+
+  const calculateTax = () => {
+    return orderItems.reduce((totalTax, item) => {
+      const itemSubtotal = item.price * item.quantity;
+      if (!item.tax) return totalTax;
+      const match = String(item.tax).match(/(\d+(\.\d+)?)/);
+      const rate = match ? parseFloat(match[0]) / 100 : 0;
+      if (rate <= 0) return totalTax;
+      
+      if (item.taxType === 'Inclusive') {
+        const itemTax = itemSubtotal - (itemSubtotal / (1 + rate));
+        return totalTax + itemTax;
+      } else {
+        const itemTax = itemSubtotal * rate;
+        return totalTax + itemTax;
+      }
+    }, 0);
+  };
+
+  const tax = calculateTax();
+  const total = Math.max(0, subtotal + tax - discount);
 
   const prevOrderItems = usePrevious(orderItems);
 
@@ -146,9 +168,14 @@ export default function POS() {
     }
   }, [selectedStore, fetchProducts]);
 
-  const filteredProducts = products
-    .filter((product) => activeCategory === 'all' || product.category === activeCategory)
-    .filter((product) => product.name.toLowerCase().includes(searchTerm.toLowerCase()));
+  const filteredProducts = useMemo(() => {
+    const query = searchTerm.trim().toLowerCase();
+    return products.filter((product) => {
+      const matchCategory = activeCategory === 'all' || product.category === activeCategory;
+      const matchName = !query || product.name.toLowerCase().includes(query) || product.sku?.toLowerCase().includes(query);
+      return matchCategory && matchName;
+    });
+  }, [products, activeCategory, searchTerm]);
 
   const addToOrder = useCallback(async (product) => {
     if (orderItems.some((item) => item.id === product.id)) {
@@ -167,7 +194,8 @@ export default function POS() {
         throw new Error(`No variants available for ${lockedProduct.name}.`);
       }
 
-      if (variant.qty <= 0) {
+      const availableQty = variant.Inventories?.[0]?.qty ?? product.qty ?? 0;
+      if (availableQty <= 0) {
         await api.put(`/api/products/${lockedProduct.id}/lock`, { lock: false, storeId: selectedStore });
         throw new Error(`Insufficient stock for ${lockedProduct.name}`);
       }
@@ -177,6 +205,7 @@ export default function POS() {
       setOrderItems((prev) => [...prev, {
         ...lockedProduct,
         quantity: 1,
+        maxQty: availableQty,
         variantId: variant.id,
         unitPrice: variant.price,
         price: variant.price,
@@ -188,6 +217,11 @@ export default function POS() {
   }, [orderItems, selectedStore]);
 
   function addQuantity(item) {
+    if (item.quantity + 1 > item.maxQty) {
+      setError(`Cannot add more than ${item.maxQty} units of "${item.name}" (only ${item.maxQty} in stock).`);
+      return;
+    }
+    setError(null);
     setOrderItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, quantity: i.quantity + 1 } : i)));
   }
 
@@ -227,6 +261,7 @@ export default function POS() {
       };
 
       const result = await api.post('/api/sales', orderData);
+      setCompletedSale(result);
       setShowReceipt(true);
       return result;
     } catch (err) {
@@ -509,8 +544,10 @@ export default function POS() {
           isOpen={showReceipt}
           onClose={() => {
             setShowReceipt(false);
+            setCompletedSale(null);
             clearAll();
           }}
+          invoiceNo={completedSale?.reference}
           customerName={selectedCustomerObj?.name || 'Walk-in Customer'}
           customerId={selectedCustomer}
           orderItems={orderItems}

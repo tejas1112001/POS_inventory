@@ -21,6 +21,8 @@ import inventoryRoutes from './routes/inventory.js';
 import salesReturnRoutes from './routes/salesReturns.js';
 import salesReportRoutes from './routes/salesReports.js';
 import invoiceRoutes from './routes/invoices.js';
+import publicShopRoutes from './routes/publicShop.js';
+import showcaseAdminRoutes from './routes/showcaseAdmin.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -71,14 +73,19 @@ export async function startServer() {
   app.use('/api/purchases', (await import('./routes/purchases.js')).default);
   app.use('/api/purchase/report', (await import("./routes/purchaseRoutes.js")).default);
   app.use('/api/billers', billersRoute);
+  app.use('/api/users', billersRoute);
   app.use('/api/stores', storeRoutes);
+  app.use('/api/stores', showcaseAdminRoutes);
+  app.use('/api/public/shop', publicShopRoutes);
   app.use('/api/sub-categories', subCategoryRoutes);
   app.use('/api/product-variants', productVariantRoutes);
   app.use('/api/inventory', inventoryRoutes);
   app.use('/api/sales/returns', salesReturnRoutes);
   app.use('/api/sales/report', salesReportRoutes);
   app.use('/api/invoices', invoiceRoutes);
+  app.use('/api/stock-adjustments', (await import('./routes/stockAdjustments.js')).default);
   app.use('/api/dashboard', (await import('./routes/dashboard.js')).default);
+  app.use('/api/roles', (await import('./routes/roles.js')).default);
 
   app.use((req, res, next) => {
     next(new ExpressError('Route not found.', 404));
@@ -94,6 +101,14 @@ export async function startServer() {
   try {
     await connectDB();
     console.log('Database connected successfully');
+
+    try {
+      const { seedPermissions } = await import('./services/permissionSeed.js');
+      await seedPermissions();
+      console.log('Permissions seeded successfully');
+    } catch (seedErr) {
+      console.error('Failed to seed permissions:', seedErr);
+    }
 
     const port = process.env.PORT || 3000;
     const host = process.env.HOST || '0.0.0.0';

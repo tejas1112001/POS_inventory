@@ -1,12 +1,12 @@
 import express from 'express';
 import { Inventory, ProductVariant, Product, Store } from '../models/index.js';
 import { authenticateToken } from '../middleware/auth.js';
-import isAdmin from '../middleware/admin.js';
+import { requirePermission } from '../middleware/permission.js';
 
 const router = express.Router();
 
 // GET /api/inventory — list all inventory records with product/variant/store details
-router.get('/', authenticateToken, async (req, res) => {
+router.get('/', authenticateToken, requirePermission('inventory', 'view'), async (req, res) => {
   try {
     const records = await Inventory.findAll({
       include: [
@@ -58,8 +58,8 @@ router.get('/', authenticateToken, async (req, res) => {
   }
 });
 
-// POST /api/inventory — upsert an inventory record (admin only)
-router.post('/', authenticateToken, isAdmin, async (req, res) => {
+// POST /api/inventory — upsert an inventory record
+router.post('/', authenticateToken, requirePermission('inventory', 'edit'), async (req, res) => {
   try {
     const { variantId, storeId, qty, quantityAlert } = req.body;
 

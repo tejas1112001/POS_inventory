@@ -1,11 +1,11 @@
 import express from 'express';
 import { Store } from '../models/index.js';
 import { authenticateToken } from '../middleware/auth.js';
-import isAdmin from '../middleware/admin.js';
+import { requirePermission } from '../middleware/permission.js';
 
 const router = express.Router();
 
-router.get('/', async (req, res) => {
+router.get('/', authenticateToken, async (req, res) => {
   try {
     const stores = await Store.findAll({ where: { status: 'Active' } });
     res.json(stores.map((s) => s.toJSON()));
@@ -14,7 +14,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-router.get('/:id', async (req, res) => {
+router.get('/:id', authenticateToken, async (req, res) => {
   try {
     const store = await Store.findByPk(req.params.id);
     if (!store) return res.status(404).json({ error: 'Store not found' });
@@ -24,7 +24,7 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-router.post('/', authenticateToken, isAdmin, async (req, res) => {
+router.post('/', authenticateToken, requirePermission('stores', 'create'), async (req, res) => {
   try {
     const { name, address, status } = req.body;
     const store = await Store.create({
@@ -39,7 +39,7 @@ router.post('/', authenticateToken, isAdmin, async (req, res) => {
   }
 });
 
-router.put('/:id', authenticateToken, isAdmin, async (req, res) => {
+router.put('/:id', authenticateToken, requirePermission('stores', 'edit'), async (req, res) => {
   try {
     const store = await Store.findByPk(req.params.id);
     if (!store) return res.status(404).json({ error: 'Store not found' });
@@ -51,7 +51,7 @@ router.put('/:id', authenticateToken, isAdmin, async (req, res) => {
   }
 });
 
-router.delete('/:id', authenticateToken, isAdmin, async (req, res) => {
+router.delete('/:id', authenticateToken, requirePermission('stores', 'delete'), async (req, res) => {
   try {
     const store = await Store.findByPk(req.params.id);
     if (!store) return res.status(404).json({ error: 'Store not found' });

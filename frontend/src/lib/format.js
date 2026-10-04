@@ -1,13 +1,15 @@
 export function formatCurrency(value) {
-  return new Intl.NumberFormat('en-PK', {
+  const amount = Number(value) || 0;
+  return new Intl.NumberFormat('en-IN', {
     style: 'currency',
-    currency: 'PKR',
+    currency: 'INR',
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  }).format(value || 0);
+  }).format(amount);
 }
 
 export function initials(name) {
+  if (!name) return '';
   return name
     .split(' ')
     .filter(Boolean)
@@ -15,3 +17,4 @@ export function initials(name) {
     .map((s) => s[0]?.toUpperCase())
     .join('');
 }
+

@@ -16,6 +16,11 @@ OrderItem.init(
     modelName: 'OrderItem',
     tableName: 'order_items',
     timestamps: true,
+    indexes: [
+      { fields: ['sale_id'] },
+      { fields: ['product_id'] },
+      { fields: ['variant_id'] },
+    ],
   }
 );
 

@@ -9,12 +9,12 @@ import {
   Product,
 } from '../models/index.js';
 import { authenticateToken } from '../middleware/auth.js';
-import isAdmin from '../middleware/admin.js';
+import { requirePermission } from '../middleware/permission.js';
 
 const router = express.Router();
 
 // GET /sales-returns
-router.get('/', async (req, res) => {
+router.get('/', authenticateToken, requirePermission('sales_returns', 'view'), async (req, res) => {
   try {
     const salesReturns = await SaleReturn.findAll({
       include: [
@@ -50,19 +50,16 @@ router.get('/', async (req, res) => {
         total: obj.total,
         paid: obj.paid,
         due: obj.due,
-        paymentStatus: obj.payment_status,
-        customer: obj.customer
-          ? {
-              id: obj.customer.id,
-              name: obj.customer.name,
-              email: obj.customer.email,
-              phone: obj.customer.phone,
-              avatar: obj.customer.image,
-            }
-          : null,
-        product: firstProduct
-          ? { id: firstProduct.id, name: firstProduct.name, image: firstProduct.image }
-          : null,
+        payment_status: obj.payment_status,
+        reference: obj.reference,
+        customerName: obj.customer?.name ?? 'Walk-In Customer',
+        customerEmail: obj.customer?.email ?? '',
+        customerPhone: obj.customer?.phone ?? '',
+        customerImage: obj.customer?.image ?? '',
+        productName: firstProduct?.name ?? 'N/A',
+        productImage: firstProduct?.image ?? '',
+        itemsCount: obj.items?.length ?? 0,
+        items: obj.items,
       };
     });
 
@@ -74,19 +71,59 @@ router.get('/', async (req, res) => {
 });
 
 // POST /sales-returns
-router.post('/', authenticateToken, isAdmin, async (req, res) => {
+router.post('/', authenticateToken, requirePermission('sales_returns', 'create'), async (req, res) => {
   const t = await sequelize.transaction();
   try {
-    const { returnItems, storeId, customerId, ...saleReturnData } = req.body;
+    const { returnItems, storeId, customerId, saleId, sale_id, ...saleReturnData } = req.body;
+    const targetSaleId = saleId || sale_id;
 
     if (!storeId || !customerId || !Array.isArray(returnItems) || returnItems.length === 0) {
       throw new Error('Store, customer, and at least one return item are required.');
     }
 
-    // 1. Create the SaleReturn
+    // 1. If saleId provided, validate original sale and item quantities
+    if (targetSaleId) {
+      const { Sale, OrderItem } = await import('../models/index.js');
+      const originalSale = await Sale.findByPk(targetSaleId, {
+        include: [{ model: OrderItem, as: 'items' }],
+        transaction: t,
+      });
+
+      if (!originalSale) {
+        throw new Error(`Original sale with ID ${targetSaleId} not found.`);
+      }
+
+      for (const item of returnItems) {
+        const matchingOrderItem = originalSale.items?.find(
+          (oi) =>
+            oi.product_id === parseInt(item.productId) &&
+            (!item.variantId || oi.variant_id === parseInt(item.variantId))
+        );
+
+        if (!matchingOrderItem) {
+          throw new Error(`Product ${item.productId} was not part of original sale ID ${targetSaleId}.`);
+        }
+
+        if (item.quantity > matchingOrderItem.quantity) {
+          throw new Error(
+            `Return quantity (${item.quantity}) exceeds original sold quantity (${matchingOrderItem.quantity}) for product ${item.productId}.`
+          );
+        }
+      }
+    }
+
+    // 2. Create the SaleReturn
+    const computedTotal = parseFloat(saleReturnData.total) || returnItems.reduce((sum, i) => sum + (i.quantity * i.unitPrice), 0);
+    const paid = parseFloat(saleReturnData.paid) || computedTotal;
+    const due = Math.max(0, computedTotal - paid);
+
     const saleReturn = await SaleReturn.create(
       {
         ...saleReturnData,
+        total: computedTotal,
+        paid,
+        due,
+        sale_id: targetSaleId || null,
         customer_id: customerId,
         store_id: storeId,
         created_by: req.user.userId,
@@ -94,7 +131,7 @@ router.post('/', authenticateToken, isAdmin, async (req, res) => {
       { transaction: t }
     );
 
-    // 2. Create ReturnItem rows
+    // 3. Create ReturnItem rows
     await ReturnItem.bulkCreate(
       returnItems.map((item) => ({
         sale_return_id: saleReturn.id,
@@ -103,16 +140,15 @@ router.post('/', authenticateToken, isAdmin, async (req, res) => {
         quantity: item.quantity,
         unitPrice: item.unitPrice,
         reason: item.reason || '',
-        subtotal: item.total,
+        subtotal: item.total || (item.quantity * item.unitPrice),
       })),
       { transaction: t }
     );
 
-    // 3. Restore inventory for each returned item
+    // 4. Restore inventory for each returned item
     for (const item of returnItems) {
       let variantId = item.variantId;
 
-      // Fall back to first variant of product if no variantId provided
       if (!variantId && item.productId) {
         const variant = await ProductVariant.findOne({
           where: { product_id: item.productId },

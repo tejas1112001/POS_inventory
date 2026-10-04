@@ -1,10 +1,12 @@
 import express from 'express';
 import { Sale, Customer, OrderItem, Product } from '../models/index.js';
+import { authenticateToken } from '../middleware/auth.js';
+import { requirePermission } from '../middleware/permission.js';
 
 const router = express.Router();
 
 // GET /invoices — derives invoices from sales
-router.get('/', async (req, res) => {
+router.get('/', authenticateToken, requirePermission('invoices', 'view'), async (req, res) => {
   try {
     const sales = await Sale.findAll({
       include: [

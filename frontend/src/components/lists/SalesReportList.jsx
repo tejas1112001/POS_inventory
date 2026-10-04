@@ -10,6 +10,7 @@ import SelectField from '../ListComponents/SelectField';
 import GenerateButton from '../ListComponents/GenerateButton';
 import { exportToPDF } from '../ListComponents/exportFunctions';
 import { PrinterIcon } from '@heroicons/react/24/outline';
+import { formatCurrency } from '@/lib/format';
 import { 
   CurrencyDollarIcon, 
   ClipboardDocumentCheckIcon, 
@@ -90,7 +91,7 @@ export default function SalesReportList({ reports }) {
       {
         accessorKey: 'soldAmount',
         header: 'Sold Amount',
-        cell: ({ getValue }) => <span>${getValue()}</span>,
+        cell: ({ getValue }) => <span>{formatCurrency(getValue())}</span>,
         size: 120,
       },
       {
@@ -124,10 +125,10 @@ export default function SalesReportList({ reports }) {
 
   // Sales summary data
   const salesSummary = [
-    { title: 'Total Amount', value: '$4,56,000', icon: CurrencyDollarIcon, color: 'bg-green-500' },
-    { title: 'Total Paid', value: '$2,56,42', icon: ClipboardDocumentCheckIcon, color: 'bg-blue-500' },
-    { title: 'Total Unpaid', value: '$1,52,45', icon: BanknotesIcon, color: 'bg-orange-500' },
-    { title: 'Overdue', value: '$2,56,12', icon: ExclamationCircleIcon, color: 'bg-red-500' }
+    { title: 'Total Amount', value: formatCurrency(456000), icon: CurrencyDollarIcon, color: 'bg-green-500' },
+    { title: 'Total Paid', value: formatCurrency(256420), icon: ClipboardDocumentCheckIcon, color: 'bg-blue-500' },
+    { title: 'Total Unpaid', value: formatCurrency(152450), icon: BanknotesIcon, color: 'bg-orange-500' },
+    { title: 'Overdue', value: formatCurrency(256120), icon: ExclamationCircleIcon, color: 'bg-red-500' }
   ];
 
   // Use UI hook

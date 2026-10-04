@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { DollarSign, ShoppingBag, Users, Package } from 'lucide-react';
+import { IndianRupee, ShoppingBag, Users, Package, Banknote, CheckCircle2, Clock, AlertCircle } from 'lucide-react';
 import { Bar, Pie } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -94,7 +94,7 @@ export default function Dashboard() {
       y: {
         beginAtZero: true,
         ticks: {
-          callback: (value) => (activeChart === 'revenue' ? formatCurrency(value) : value),
+          callback: (value) => (activeChart === 'revenue' ? `₹${value}` : value),
         },
       },
     },
@@ -116,7 +116,15 @@ export default function Dashboard() {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
-      legend: { position: 'right' },
+      legend: {
+        position: 'bottom',
+        labels: {
+          boxWidth: 10,
+          padding: 10,
+          font: { size: 11 },
+          usePointStyle: true,
+        },
+      },
       tooltip: {
         callbacks: {
           label: (context) => {
@@ -144,7 +152,7 @@ export default function Dashboard() {
                 className={cn(
                   'rounded-md px-3 py-1.5 text-xs font-medium capitalize transition-colors',
                   activeChart === r
-                    ? 'bg-primary text-primary-foreground'
+                    ? 'bg-primary text-primary-foreground shadow-xs font-semibold'
                     : 'text-muted-foreground hover:bg-accent hover:text-foreground'
                 )}
               >
@@ -156,48 +164,28 @@ export default function Dashboard() {
       />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard label="Total Revenue" value={formatCurrency(data.stats.totalRevenue)} icon={DollarSign} accent="emerald" />
+        <KpiCard label="Total Revenue" value={formatCurrency(data.stats.totalRevenue)} icon={IndianRupee} accent="emerald" />
         <KpiCard label="Total Orders" value={String(data.stats.totalOrders)} icon={ShoppingBag} accent="sky" />
         <KpiCard label="Total Customers" value={String(data.stats.totalCustomers)} icon={Users} accent="violet" />
         <KpiCard label="Total Products" value={String(data.stats.totalProducts)} icon={Package} accent="amber" />
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card className="shadow-sm">
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">Total Amount</p>
-            <p className="mt-1 text-xl font-bold">{formatCurrency(data.summaryCards.totalAmount)}</p>
-          </CardContent>
-        </Card>
-        <Card className="shadow-sm">
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">Total Paid</p>
-            <p className="mt-1 text-xl font-bold text-emerald-700">{formatCurrency(data.summaryCards.totalPaid)}</p>
-          </CardContent>
-        </Card>
-        <Card className="shadow-sm">
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">Total Unpaid</p>
-            <p className="mt-1 text-xl font-bold text-amber-700">{formatCurrency(data.summaryCards.totalUnpaid)}</p>
-          </CardContent>
-        </Card>
-        <Card className="shadow-sm">
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">Total Overdue</p>
-            <p className="mt-1 text-xl font-bold text-rose-700">{formatCurrency(data.summaryCards.totalOverdue)}</p>
-          </CardContent>
-        </Card>
+        <KpiCard label="Total Amount" value={formatCurrency(data.summaryCards.totalAmount)} icon={Banknote} accent="sky" />
+        <KpiCard label="Total Paid" value={formatCurrency(data.summaryCards.totalPaid)} icon={CheckCircle2} accent="emerald" />
+        <KpiCard label="Total Unpaid" value={formatCurrency(data.summaryCards.totalUnpaid)} icon={Clock} accent="amber" />
+        <KpiCard label="Total Overdue" value={formatCurrency(data.summaryCards.totalOverdue)} icon={AlertCircle} accent="rose" />
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <SectionCard title="Revenue Overview" className="lg:col-span-2" contentClassName="p-6 pt-0">
-          <div className="h-[320px] w-full">
+        <SectionCard title="Revenue Overview" className="lg:col-span-2" contentClassName="p-4 sm:p-6 pt-0">
+          <div className="h-[340px] w-full">
             <Bar data={barChartData} options={barChartOptions} />
           </div>
         </SectionCard>
 
-        <SectionCard title="Sales Distribution" contentClassName="p-6 pt-0">
-          <div className="h-[320px] w-full">
+        <SectionCard title="Sales Distribution" contentClassName="p-4 sm:p-6 pt-0">
+          <div className="h-[340px] w-full flex items-center justify-center">
             <Pie data={pieChartData} options={pieChartOptions} />
           </div>
         </SectionCard>

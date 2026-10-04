@@ -5,13 +5,12 @@ import FormPageLayout, { FormCard, FormBody } from '../components/forms/FormPage
 import FormStepper from '../components/forms/FormStepper';
 import { useFormWizard, FORM_STEPS } from '../hooks/useFormWizard';
 import { useNavigate } from 'react-router-dom';
-import { usePos } from '../hooks/usePos';
+import { usePermission } from '../hooks/usePermission';
 import { api } from '../services/api';
 import { PhotoIcon } from '@heroicons/react/24/outline';
 
 const AddSupplier = () => {
-  const { currentUser } = usePos();
-  const isAdmin = currentUser?.role === 'admin';
+  const { hasPermission } = usePermission();
   const [selectedImage, setSelectedImage] = useState(null);
   const { currentStep, goNext, goBack, goToStep } = useFormWizard(2);
   const navigate = useNavigate();
@@ -197,7 +196,7 @@ const AddSupplier = () => {
         <FormFooter 
           cancelPath="/suppliers" 
           submitLabel="Add Supplier" 
-          disabled={!isAdmin}
+          disabled={!hasPermission('suppliers', 'create')}
           showStepNav
           currentStep={currentStep}
           totalSteps={2}

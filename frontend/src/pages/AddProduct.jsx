@@ -31,7 +31,7 @@ const AddProduct = () => {
   const [stores, setStores] = useState([]);
   const [subCategories, setSubCategories] = useState([]);
   const { currentUser } = usePos();
-  const isAdmin = currentUser?.role === 'admin';
+  const { hasPermission } = usePermission();
   const [showSupplierModal, setShowSupplierModal] = useState(false);
   const { currentStep, goNext, goBack, goToStep } = useFormWizard(4);
   

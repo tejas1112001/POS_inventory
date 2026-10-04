@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useUI } from "../ListComponents/useUI";
 import { indexColumn } from '../ListComponents/columnHelpers';
 import { PrinterIcon } from '@heroicons/react/24/outline';
+import { formatCurrency } from '@/lib/format';
 
 // Reusable components
 import ListPageLayout from '../ListComponents/ListPageLayout';
@@ -65,18 +66,21 @@ export default function CustomerDueReportList({ reports }) {
     {
       accessorKey: 'totalAmount',
       header: 'Total Amount',
-      cell: ({ getValue }) => <span>PKR {getValue()}</span>,
-      size: 120,    },
+      cell: ({ getValue }) => <span>{formatCurrency(getValue())}</span>,
+      size: 120,
+    },
     {
       accessorKey: 'paid',
       header: 'Paid',
-      cell: ({ getValue }) => <span>PKR {getValue()}</span>,
-      size: 100,    },
+      cell: ({ getValue }) => <span>{formatCurrency(getValue())}</span>,
+      size: 110,
+    },
     {
       accessorKey: 'due',
       header: 'Due',
-      cell: ({ getValue }) => <span>PKR {getValue()}</span>,
-      size: 100,    },
+      cell: ({ getValue }) => <span>{formatCurrency(getValue())}</span>,
+      size: 110,
+    },
     {
       accessorKey: 'status',
       header: 'Status',

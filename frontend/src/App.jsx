@@ -3,6 +3,7 @@ import React, { useEffect } from 'react';
 import { HashRouter as Router, Routes, Route } from 'react-router-dom';
 import ProtectedRoute from './components/ProtectedRoute';
 import { PosProvider } from './context/PosContext';
+import { PermissionProvider } from './context/PermissionContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { useError } from './context/ErrorContext';
 import AppLayout from './components/layout/AppLayout';
@@ -33,13 +34,17 @@ import CustomerDueReport from './pages/CustomerDueReport';
 import CustomerReport from './pages/CustomerReport';
 import SalesReport from './pages/SalesReport';
 import Inventory from './pages/Inventory';
+import Roles from './pages/Roles';
+import AddRole from './pages/AddRole';
 import SignIn from './pages/SignIn';
 import SignUp from './pages/SignUp';
 import Settings from './pages/Settings';
+import ShowcaseSettings from './pages/ShowcaseSettings';
+import PublicShopPage from './pages/PublicShopPage';
 
-function ProtectedLayout({ children, fullBleed = false }) {
+function ProtectedLayout({ children, fullBleed = false, module, action = 'view' }) {
   return (
-    <ProtectedRoute>
+    <ProtectedRoute module={module} action={action}>
       <AppLayout fullBleed={fullBleed}>{children}</AppLayout>
     </ProtectedRoute>
   );
@@ -58,34 +63,41 @@ function AppRoutes() {
     <Routes>
       <Route path="/signin" element={<SignIn />} />
       <Route path="/signup" element={<SignUp />} />
-      <Route path="/" element={<ProtectedLayout><Dashboard /></ProtectedLayout>} />
-      <Route path="/categories" element={<ProtectedLayout><Categories /></ProtectedLayout>} />
-      <Route path="/add-category" element={<ProtectedLayout><AddCategory /></ProtectedLayout>} />
-      <Route path="/products" element={<ProtectedLayout><Products /></ProtectedLayout>} />
-      <Route path="/brands" element={<ProtectedLayout><Brands /></ProtectedLayout>} />
-      <Route path="/add-brand" element={<ProtectedLayout><AddBrand /></ProtectedLayout>} />
-      <Route path="/units" element={<ProtectedLayout><Units /></ProtectedLayout>} />
-      <Route path="/add-unit" element={<ProtectedLayout><AddUnit /></ProtectedLayout>} />
-      <Route path="/invoices" element={<ProtectedLayout><Invoices /></ProtectedLayout>} />
-      <Route path="/billers" element={<ProtectedLayout><Billers /></ProtectedLayout>} />
-      <Route path="/suppliers" element={<ProtectedLayout><Suppliers /></ProtectedLayout>} />
-      <Route path="/add-supplier" element={<ProtectedLayout><AddSupplier /></ProtectedLayout>} />
-      <Route path="/sales-return" element={<ProtectedLayout><SalesReturn /></ProtectedLayout>} />
-      <Route path="/add-sales-return" element={<ProtectedLayout><AddSalesReturn /></ProtectedLayout>} />
-      <Route path="/add-product" element={<ProtectedLayout><AddProduct /></ProtectedLayout>} />
-      <Route path="/pos" element={<ProtectedLayout fullBleed><POS /></ProtectedLayout>} />
-      <Route path="/sales" element={<ProtectedLayout><Sales /></ProtectedLayout>} />
-      <Route path="/add-sale" element={<ProtectedLayout><AddSales /></ProtectedLayout>} />
-      <Route path="/sales-report" element={<ProtectedLayout><SalesReport /></ProtectedLayout>} />
-      <Route path="/purchases" element={<ProtectedLayout><Purchases /></ProtectedLayout>} />
-      <Route path="/add-purchase" element={<ProtectedLayout><AddPurchase /></ProtectedLayout>} />
-      <Route path="/purchase-report" element={<ProtectedLayout><PurchaseReport /></ProtectedLayout>} />
-      <Route path="/customer-due-report" element={<ProtectedLayout><CustomerDueReport /></ProtectedLayout>} />
-      <Route path="/customers" element={<ProtectedLayout><Customers /></ProtectedLayout>} />
-      <Route path="/add-customer" element={<ProtectedLayout><AddCustomer /></ProtectedLayout>} />
-      <Route path="/customer-report" element={<ProtectedLayout><CustomerReport /></ProtectedLayout>} />
-      <Route path="/inventory" element={<ProtectedLayout><Inventory /></ProtectedLayout>} />
-      <Route path="/settings" element={<ProtectedLayout><Settings /></ProtectedLayout>} />
+      <Route path="/" element={<ProtectedLayout module="dashboard"><Dashboard /></ProtectedLayout>} />
+      <Route path="/categories" element={<ProtectedLayout module="categories" action="view"><Categories /></ProtectedLayout>} />
+      <Route path="/add-category" element={<ProtectedLayout module="categories" action="create"><AddCategory /></ProtectedLayout>} />
+      <Route path="/products" element={<ProtectedLayout module="products" action="view"><Products /></ProtectedLayout>} />
+      <Route path="/add-product" element={<ProtectedLayout module="products" action="create"><AddProduct /></ProtectedLayout>} />
+      <Route path="/brands" element={<ProtectedLayout module="brands" action="view"><Brands /></ProtectedLayout>} />
+      <Route path="/add-brand" element={<ProtectedLayout module="brands" action="create"><AddBrand /></ProtectedLayout>} />
+      <Route path="/units" element={<ProtectedLayout module="units" action="view"><Units /></ProtectedLayout>} />
+      <Route path="/add-unit" element={<ProtectedLayout module="units" action="create"><AddUnit /></ProtectedLayout>} />
+      <Route path="/invoices" element={<ProtectedLayout module="invoices" action="view"><Invoices /></ProtectedLayout>} />
+      <Route path="/billers" element={<ProtectedLayout module="users" action="view"><Billers /></ProtectedLayout>} />
+      <Route path="/users" element={<ProtectedLayout module="users" action="view"><Billers /></ProtectedLayout>} />
+      <Route path="/roles" element={<ProtectedLayout module="roles" action="view"><Roles /></ProtectedLayout>} />
+      <Route path="/add-role" element={<ProtectedLayout module="roles" action="create"><AddRole /></ProtectedLayout>} />
+      <Route path="/edit-role/:id" element={<ProtectedLayout module="roles" action="edit"><AddRole /></ProtectedLayout>} />
+      <Route path="/suppliers" element={<ProtectedLayout module="suppliers" action="view"><Suppliers /></ProtectedLayout>} />
+      <Route path="/add-supplier" element={<ProtectedLayout module="suppliers" action="create"><AddSupplier /></ProtectedLayout>} />
+      <Route path="/sales-return" element={<ProtectedLayout module="sales_returns" action="view"><SalesReturn /></ProtectedLayout>} />
+      <Route path="/add-sales-return" element={<ProtectedLayout module="sales_returns" action="create"><AddSalesReturn /></ProtectedLayout>} />
+      <Route path="/pos" element={<ProtectedLayout fullBleed module="pos" action="view"><POS /></ProtectedLayout>} />
+      <Route path="/sales" element={<ProtectedLayout module="sales" action="view"><Sales /></ProtectedLayout>} />
+      <Route path="/add-sale" element={<ProtectedLayout module="sales" action="create"><AddSales /></ProtectedLayout>} />
+      <Route path="/sales-report" element={<ProtectedLayout module="reports" action="view"><SalesReport /></ProtectedLayout>} />
+      <Route path="/purchases" element={<ProtectedLayout module="purchases" action="view"><Purchases /></ProtectedLayout>} />
+      <Route path="/add-purchase" element={<ProtectedLayout module="purchases" action="create"><AddPurchase /></ProtectedLayout>} />
+      <Route path="/purchase-report" element={<ProtectedLayout module="reports" action="view"><PurchaseReport /></ProtectedLayout>} />
+      <Route path="/customer-due-report" element={<ProtectedLayout module="reports" action="view"><CustomerDueReport /></ProtectedLayout>} />
+      <Route path="/customers" element={<ProtectedLayout module="customers" action="view"><Customers /></ProtectedLayout>} />
+      <Route path="/add-customer" element={<ProtectedLayout module="customers" action="create"><AddCustomer /></ProtectedLayout>} />
+      <Route path="/customer-report" element={<ProtectedLayout module="reports" action="view"><CustomerReport /></ProtectedLayout>} />
+      <Route path="/inventory" element={<ProtectedLayout module="inventory" action="view"><Inventory /></ProtectedLayout>} />
+      <Route path="/settings" element={<ProtectedLayout module="stores" action="view"><Settings /></ProtectedLayout>} />
+      <Route path="/showcase-settings" element={<ProtectedLayout module="stores" action="view"><ShowcaseSettings /></ProtectedLayout>} />
+      <Route path="/shop/:slug" element={<PublicShopPage />} />
+      <Route path="/shop/:slug/product/:productId" element={<PublicShopPage />} />
     </Routes>
   );
 }
@@ -94,10 +106,12 @@ function App() {
   return (
     <ThemeProvider>
       <PosProvider>
-        <GlobalErrorHandler />
-        <Router>
-          <AppRoutes />
-        </Router>
+        <PermissionProvider>
+          <GlobalErrorHandler />
+          <Router>
+            <AppRoutes />
+          </Router>
+        </PermissionProvider>
       </PosProvider>
     </ThemeProvider>
   );

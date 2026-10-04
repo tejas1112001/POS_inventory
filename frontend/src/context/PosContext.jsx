@@ -49,6 +49,7 @@ export const PosProvider = ({ children }) => {
       setAuthData({
         user: data.user,
         token: data.token,
+        permissions: data.permissions || [],
         remember: data.remember ?? getRememberSession(),
       });
       setCurrentUser(data.user);
@@ -66,17 +67,23 @@ export const PosProvider = ({ children }) => {
     const token = getToken();
     if (!token) return;
 
-    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
-    const expiresAt = payload.exp * 1000;
-    const refreshAt = expiresAt - 5 * 60 * 1000;
-    const delay = Math.max(refreshAt - Date.now(), 30_000);
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+      const expiresAt = payload.exp * 1000;
+      const refreshAt = expiresAt - 5 * 60 * 1000;
+      // Clamp delay between 30 seconds and 24 hours (2147483647 ms max for 32-bit int)
+      const rawDelay = refreshAt - Date.now();
+      const delay = Math.min(Math.max(rawDelay, 30_000), 86_400_000);
 
-    refreshTimerRef.current = setTimeout(async () => {
-      const ok = await refreshSession();
-      if (ok) {
-        scheduleRefresh();
-      }
-    }, delay);
+      refreshTimerRef.current = setTimeout(async () => {
+        const ok = await refreshSession();
+        if (ok) {
+          scheduleRefresh();
+        }
+      }, delay);
+    } catch (e) {
+      console.error('Failed to schedule token refresh:', e);
+    }
   }, [refreshSession]);
 
   useEffect(() => {
@@ -122,8 +129,8 @@ export const PosProvider = ({ children }) => {
   }, [logout, refreshSession, scheduleRefresh, showError]);
 
   const login = (userData) => {
-    const { user, token, remember = true } = userData;
-    setAuthData({ user, token, remember });
+    const { user, token, permissions, remember = true } = userData;
+    setAuthData({ user, token, permissions, remember });
     setCurrentUser(user);
     scheduleRefresh();
   };

@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useUI } from "../ListComponents/useUI";
 import { selectColumn, indexColumn, statusColumn, actionsColumn } from '../ListComponents/columnHelpers';
 import { usePos } from '../../hooks/usePos';
+import { usePermission } from '../../hooks/usePermission';
 import { api } from '../../services/api';
 import EditCategoryForm from '../forms/EditCategoryForm';
 
@@ -15,8 +16,7 @@ export default function CategoryList({ categories = [], setShowForm, onRefresh }
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [rowSelection, setRowSelection] = useState({});
-  const { currentUser } = usePos();
-  const isAdmin = currentUser?.role === 'admin';
+  const { hasPermission } = usePermission();
 
   // Status options
   const statusOptions = useMemo(() => ['All', 'Active', 'Inactive'], []);
@@ -53,7 +53,7 @@ export default function CategoryList({ categories = [], setShowForm, onRefresh }
       cell: ({ getValue }) => getValue() || '-'
     },
     actionsColumn(['edit', 'delete'], 120, {
-      isActionDisabled: (action) => !isAdmin && (action === 'edit' || action === 'delete'),
+      isActionDisabled: (action) => !hasPermission('categories', action),
     })
   ];
 
@@ -94,7 +94,7 @@ export default function CategoryList({ categories = [], setShowForm, onRefresh }
     rowSelection,
     setRowSelection,
     onAddItem: () => setShowForm(true),
-    isAddDisabled: !isAdmin,
+    isAddDisabled: !hasPermission('categories', 'create'),
     onRefresh,
     resetFilters: () => {
       setSearch('');

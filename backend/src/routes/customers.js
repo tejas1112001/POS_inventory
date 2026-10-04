@@ -1,17 +1,15 @@
 import express from 'express';
 import { Customer, User } from '../models/index.js';
 import { authenticateToken } from '../middleware/auth.js';
-import isAdmin from '../middleware/admin.js';
+import { requirePermission } from '../middleware/permission.js';
 
 const router = express.Router();
 
 const normalizeStatus = (s) => (['Active', 'Inactive'].includes(s) ? s : 'Active');
 
-router.get('/', authenticateToken, async (req, res) => {
+router.get('/', authenticateToken, requirePermission('customers', 'view'), async (req, res) => {
   try {
-    const where = req.user?.role === 'admin' ? {} : { status: 'Active' };
     const customers = await Customer.findAll({
-      where,
       include: [{ model: User, as: 'creator', attributes: ['name'] }],
       order: [['createdAt', 'DESC']],
     });
@@ -28,7 +26,7 @@ router.get('/', authenticateToken, async (req, res) => {
   }
 });
 
-router.post('/', authenticateToken, async (req, res) => {
+router.post('/', authenticateToken, requirePermission('customers', 'create'), async (req, res) => {
   try {
     const { name, email, phone, address, city, country, image, status } = req.body;
     if (!name || !name.trim()) {
@@ -53,7 +51,7 @@ router.post('/', authenticateToken, async (req, res) => {
   }
 });
 
-router.put('/:id', authenticateToken, isAdmin, async (req, res) => {
+router.put('/:id', authenticateToken, requirePermission('customers', 'edit'), async (req, res) => {
   try {
     const customer = await Customer.findByPk(req.params.id);
     if (!customer) return res.status(404).json({ error: 'Customer not found.' });
@@ -80,7 +78,7 @@ router.put('/:id', authenticateToken, isAdmin, async (req, res) => {
   }
 });
 
-router.delete('/:id', authenticateToken, isAdmin, async (req, res) => {
+router.delete('/:id', authenticateToken, requirePermission('customers', 'delete'), async (req, res) => {
   try {
     const customer = await Customer.findByPk(req.params.id);
     if (!customer) return res.status(404).json({ error: 'Customer not found.' });

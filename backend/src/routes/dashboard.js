@@ -1,10 +1,12 @@
 import express from 'express';
 import { sequelize, Sale, Customer, Product, OrderItem } from '../models/index.js';
 import { QueryTypes } from 'sequelize';
+import { authenticateToken } from '../middleware/auth.js';
+import { requirePermission } from '../middleware/permission.js';
 
 const router = express.Router();
 
-router.get('/', async (req, res) => {
+router.get('/', authenticateToken, requirePermission('dashboard', 'view'), async (req, res) => {
   try {
     const [totalOrders, totalCustomers, totalProducts] = await Promise.all([
       Sale.count(),

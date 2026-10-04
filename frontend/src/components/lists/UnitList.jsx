@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { usePos } from '../../hooks/usePos';
+import { usePermission } from '../../hooks/usePermission';
 import { useUI } from "../ListComponents/useUI";
 import { 
   selectColumn, 
@@ -20,11 +21,8 @@ export default function UnitList({ units = [], setShowForm, onRefresh }) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [rowSelection, setRowSelection] = useState({});
-  const { currentUser } = usePos();
-  const isAdmin = currentUser?.role === 'admin';
+  const { hasPermission } = usePermission();
 
-
- 
   // Status options
   const statusOptions = useMemo(() => ['All', 'Active', 'Inactive'], []);
 
@@ -55,7 +53,7 @@ export default function UnitList({ units = [], setShowForm, onRefresh }) {
     },
     statusColumn('status', 'Status'),
     actionsColumn(['edit', 'delete'], 120, {
-      isActionDisabled: (action) => !isAdmin && (action === 'edit' || action === 'delete'),
+      isActionDisabled: (action) => !hasPermission('units', action),
     })
   ];
 
@@ -98,7 +96,7 @@ export default function UnitList({ units = [], setShowForm, onRefresh }) {
     rowSelection,
     setRowSelection,
     onAddItem: () => setShowForm(true),
-    isAddDisabled: !isAdmin,
+    isAddDisabled: !hasPermission('units', 'create'),
     onRefresh,
     resetFilters: () => {
       setSearch('');

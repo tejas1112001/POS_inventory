@@ -14,6 +14,10 @@ Inventory.init(
     modelName: 'Inventory',
     tableName: 'inventories',
     timestamps: true,
+    indexes: [
+      { fields: ['variant_id', 'store_id'], unique: true },
+      { fields: ['store_id'] },
+    ],
   }
 );
 

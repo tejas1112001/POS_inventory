@@ -8,6 +8,7 @@ import { useNavigate } from 'react-router-dom';
 import SupplierModal from '../components/forms/SupplierModal';
 import { api } from '../services/api';
 import { usePos } from '../hooks/usePos';
+import { usePermission } from '../hooks/usePermission';
 import {
   InformationCircleIcon,
   PlusCircleIcon,
@@ -22,7 +23,7 @@ const AddPurchase = () => {
   const [purchaseItems, setPurchaseItems] = useState([]);
   const { currentStep, goNext, goBack, goToStep } = useFormWizard(2);
   const { currentUser } = usePos();
-  const isAdmin = currentUser?.role === 'admin';
+  const { hasPermission } = usePermission();
   
   const navigate = useNavigate();
 
@@ -179,8 +180,7 @@ const AddPurchase = () => {
               onStepClick={goToStep}
             />
 
-          {currentStep === 0 && (
-          <div>
+          <div className={currentStep === 0 ? 'block' : 'hidden'}>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -209,7 +209,6 @@ const AddPurchase = () => {
               </div>
               
               <div>
-                {/* <-- 4. ADD "ADD NEW" BUTTON --> */}
                 <div className="flex items-center justify-between mb-1">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Supplier <span className="text-red-500">*</span>
@@ -311,10 +310,8 @@ const AddPurchase = () => {
               </div>
             </div>
           </div>
-          )}
 
-          {currentStep === 1 && (
-          <div>
+          <div className={currentStep === 1 ? 'block' : 'hidden'}>
             <div className="mb-4">
               <button 
                 type="button" 
@@ -450,7 +447,6 @@ const AddPurchase = () => {
               </div>
             )}
           </div>
-          )}
           </FormBody>
 
         <FormFooter 

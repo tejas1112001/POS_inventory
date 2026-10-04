@@ -16,7 +16,9 @@ import {
 } from '../ListComponents/columnHelpers';
 
 import { usePos } from '../../hooks/usePos';
+import { usePermission } from '../../hooks/usePermission';
 import { api } from '../../services/api';
+import { formatCurrency } from '@/lib/format';
 import EditProductForm from '../forms/EditProductForm';
 import ProductDetails from './ProductDetails';
 
@@ -25,9 +27,9 @@ export default function ProductList({ products = [], setShowForm, onRefresh }) {
   const [categoryFilter, setCategoryFilter] = useState('All');
   const [brandFilter, setBrandFilter] = useState('All');
   const [rowSelection, setRowSelection] = useState({});
-   const navigate = useNavigate();
-   const { currentUser } = usePos();
-  const isAdmin = currentUser?.role === 'admin';
+  const navigate = useNavigate();
+  const { hasPermission } = usePermission();
+
   // Derive unique categories & brands
   const categories = useMemo(() => {
     const values = products.map(p => p.category).filter(Boolean);
@@ -56,8 +58,8 @@ const columns = [
   {
     accessorKey: 'price',
     header: 'Price',
-    cell: ({ getValue }) => `PKR ${getValue()}`,
-    size: 80,
+    cell: ({ getValue }) => formatCurrency(getValue()),
+    size: 90,
   },
   {
     accessorKey: 'unit',
@@ -78,7 +80,7 @@ const columns = [
   },
   // imageColumn('createdBy', 'Created By', 'createdByAvatar', 140),
   actionsColumn(['view', 'edit', 'delete'], 120, {
-    isActionDisabled: (action) => !isAdmin && (action === 'edit' || action === 'delete'),
+    isActionDisabled: (action) => !hasPermission('products', action),
   })
 ];
 
@@ -130,9 +132,9 @@ const columns = [
   columns,
   rowSelection,
   setRowSelection,
-  onImportItem: () => setShowForm(true),
+  onImportItem: hasPermission('products', 'create') ? () => setShowForm(true) : null,
   onAddItem: () => navigate('/add-product'),
-  isAddDisabled: !isAdmin,
+  isAddDisabled: !hasPermission('products', 'create'),
   onRefresh,
   resetFilters: () => {
           setSearch('');

@@ -1,11 +1,13 @@
 import express from 'express';
 import { Op } from 'sequelize';
 import { Sale, OrderItem, Product, Category, Brand } from '../models/index.js';
+import { authenticateToken } from '../middleware/auth.js';
+import { requirePermission } from '../middleware/permission.js';
 
 const router = express.Router();
 
 // GET /sales-report
-router.get('/', async (req, res) => {
+router.get('/', authenticateToken, requirePermission('reports', 'view'), async (req, res) => {
   try {
     const { startDate, endDate, productId, customerId } = req.query;
 

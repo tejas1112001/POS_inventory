@@ -21,6 +21,11 @@ ProductVariant.init(
     modelName: 'ProductVariant',
     tableName: 'product_variants',
     timestamps: true,
+    indexes: [
+      { fields: ['sku'] },
+      { fields: ['item_barcode'] },
+      { fields: ['product_id'] },
+    ],
   }
 );
 

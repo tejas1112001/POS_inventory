@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { usePos } from '../../hooks/usePos';
+import { usePermission } from '../../hooks/usePermission';
 import { useUI } from '../ListComponents/useUI';
 import {
   selectColumn,
@@ -9,6 +10,7 @@ import {
   StatusBadge,
 } from '../ListComponents/columnHelpers';
 import { api } from '../../services/api';
+import { formatCurrency } from '@/lib/format';
 import ListPageLayout from '../ListComponents/ListPageLayout';
 import ListControlButtons from '../ListComponents/ListControlButtons';
 import SearchInput from '../ListComponents/SearchInput';
@@ -116,8 +118,7 @@ export default function InventoryList({ inventory = [], onRefresh }) {
   const [storeFilter, setStoreFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
   const [rowSelection, setRowSelection] = useState({});
-  const { currentUser } = usePos();
-  const isAdmin = currentUser?.role === 'admin';
+  const { hasPermission } = usePermission();
 
   // Derive unique store names for filter dropdown
   const storeOptions = useMemo(() => {
@@ -184,7 +185,7 @@ export default function InventoryList({ inventory = [], onRefresh }) {
       header: 'Price',
       size: 90,
       cell: ({ getValue }) =>
-        getValue() != null ? `PKR ${Number(getValue()).toLocaleString()}` : '—',
+        getValue() != null ? formatCurrency(getValue()) : '—',
     },
     {
       accessorKey: 'status',
@@ -193,7 +194,7 @@ export default function InventoryList({ inventory = [], onRefresh }) {
       cell: ({ getValue }) => <StatusBadge value={getValue()} />,
     },
     actionsColumn(['edit'], 70, {
-      isActionDisabled: () => !isAdmin,
+      isActionDisabled: () => !hasPermission('inventory', 'edit'),
     }),
   ];
 

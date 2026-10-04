@@ -3,6 +3,7 @@ import { useUI } from "../ListComponents/useUI";
 import { selectColumn, statusColumn, actionsColumn } from '../ListComponents/columnHelpers';
 import { api } from '../../services/api';
 import EditBillerForm from '../forms/EditBillerForm';
+import AddBillerForm from '../forms/AddBillerForm';
 
 // Reusable components
 import ListPageLayout from '../ListComponents/ListPageLayout';
@@ -10,7 +11,7 @@ import ListControlButtons from '../ListComponents/ListControlButtons';
 import SearchInput from '../ListComponents/SearchInput';
 import SelectFilters from '../ListComponents/SelectFilters';
 
-export default function BillerList({ billers = [], setShowForm, onRefresh }) {
+export default function BillerList({ billers = [], showForm, setShowForm, onRefresh }) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [rowSelection, setRowSelection] = useState({});
@@ -35,9 +36,10 @@ export default function BillerList({ billers = [], setShowForm, onRefresh }) {
     },
     {
       id: 'role',
-      accessorKey: 'role',
+      accessorFn: (row) => row.Role?.name || row.role,
       header: 'Role',
       size: 120,
+      cell: ({ getValue }) => <span className="capitalize font-medium">{getValue()}</span>,
     },
     statusColumn('status', 'Status'),
     actionsColumn(['view', 'edit', 'delete'])
@@ -47,7 +49,7 @@ export default function BillerList({ billers = [], setShowForm, onRefresh }) {
   const filteredData = useMemo(() => {
     return billers.filter(biller => 
       (statusFilter === 'All' || biller.status === statusFilter) &&
-      `${biller.name || ''} ${biller.email || ''} ${biller.role || ''}`
+      `${biller.name || ''} ${biller.email || ''} ${biller.Role?.name || biller.role || ''}`
         .toLowerCase()
         .includes(search.toLowerCase())
     );
@@ -60,7 +62,7 @@ export default function BillerList({ billers = [], setShowForm, onRefresh }) {
         onRefresh();
       }
     } catch (error) {
-      console.error('Error deleting biller:', error);
+      console.error('Error deleting user:', error);
     }
   };
 
@@ -77,7 +79,7 @@ export default function BillerList({ billers = [], setShowForm, onRefresh }) {
     primaryButtons,
     emptyState
   } = useUI({
-    moduleName: 'billers',
+    moduleName: 'users',
     filteredData,
     columns,
     rowSelection,
@@ -92,27 +94,37 @@ export default function BillerList({ billers = [], setShowForm, onRefresh }) {
   });
 
   return (
-    <ListPageLayout
-      title="Billers"
-      description="Manage your billers"
-      controlButtons={<ListControlButtons buttons={controlButtons} />}
-      primaryButtons={primaryButtons.map((btn, i) => (
-        <React.Fragment key={i}>{btn.element}</React.Fragment>
-      ))}
-      filters={
-        <>
-          <SearchInput search={search} setSearch={setSearch} placeholder="Search billers..." />
-          <SelectFilters
-            statusFilter={statusFilter}
-            setStatusFilter={setStatusFilter}
-            statusOptions={statusOptions}
-          />
-        </>
-      }
-      table={table}
-      emptyState={emptyState}
-      dataLength={filteredData.length}
-      tableProps={{ handleDelete, actionRenderers }}
-    />
+    <>
+      <ListPageLayout
+        title="Users"
+        description="Manage application users and assign custom roles"
+        controlButtons={<ListControlButtons buttons={controlButtons} />}
+        primaryButtons={primaryButtons.map((btn, i) => (
+          <React.Fragment key={i}>{btn.element}</React.Fragment>
+        ))}
+        filters={
+          <>
+            <SearchInput search={search} setSearch={setSearch} placeholder="Search users..." />
+            <SelectFilters
+              statusFilter={statusFilter}
+              setStatusFilter={setStatusFilter}
+              statusOptions={statusOptions}
+            />
+          </>
+        }
+        table={table}
+        emptyState={emptyState}
+        dataLength={filteredData.length}
+        tableProps={{ handleDelete, actionRenderers }}
+      />
+
+      {showForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl dark:bg-card">
+            <AddBillerForm onSaved={onRefresh} onCancel={() => setShowForm(false)} />
+          </div>
+        </div>
+      )}
+    </>
   );
 }

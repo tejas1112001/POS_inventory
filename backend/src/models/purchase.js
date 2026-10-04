@@ -19,6 +19,12 @@ Purchase.init(
     modelName: 'Purchase',
     tableName: 'purchases',
     timestamps: true,
+    indexes: [
+      { fields: ['reference'] },
+      { fields: ['status'] },
+      { fields: ['date'] },
+      { fields: ['supplier_id'] },
+    ],
   }
 );
 

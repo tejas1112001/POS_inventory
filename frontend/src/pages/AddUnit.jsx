@@ -4,13 +4,12 @@ import PageHeader from '../components/forms/PageHeader';
 import FormFooter from '../components/forms/FormFooter';
 import FormPageLayout, { FormCard, FormBody } from '../components/forms/FormPageLayout';
 import { useNavigate } from 'react-router-dom';
-import { usePos } from '../hooks/usePos';
+import { usePermission } from '../hooks/usePermission';
 import { api } from '../services/api';
 import { InformationCircleIcon } from '@heroicons/react/24/outline';
 
 const AddUnit = () => {
-  const { currentUser } = usePos();
-  const isAdmin = currentUser?.role === 'admin';
+  const { hasPermission } = usePermission();
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
@@ -89,7 +88,7 @@ const AddUnit = () => {
         <FormFooter 
           cancelPath="/units" 
           submitLabel="Add Unit"
-          disabled={!isAdmin}
+          disabled={!hasPermission('units', 'create')}
         />
         </FormCard>
       </form>

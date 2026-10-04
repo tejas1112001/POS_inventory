@@ -1,7 +1,7 @@
 import express from 'express';
 import { sequelize, Purchase, PurchaseItem, Inventory, Supplier, Product } from '../models/index.js';
 import { authenticateToken } from '../middleware/auth.js';
-import isAdmin from '../middleware/admin.js';
+import { requirePermission } from '../middleware/permission.js';
 
 const router = express.Router();
 
@@ -15,7 +15,7 @@ const purchaseIncludes = [
 ];
 
 // GET /purchases
-router.get('/', async (req, res) => {
+router.get('/', authenticateToken, requirePermission('purchases', 'view'), async (req, res) => {
   try {
     const purchases = await Purchase.findAll({
       include: purchaseIncludes,
@@ -29,7 +29,7 @@ router.get('/', async (req, res) => {
 });
 
 // POST /purchases
-router.post('/', authenticateToken, isAdmin, async (req, res) => {
+router.post('/', authenticateToken, requirePermission('purchases', 'create'), async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const { reference, date, status, payment_status, total, paid, due, supplierId, purchaseItems } = req.body;
@@ -63,8 +63,8 @@ router.post('/', authenticateToken, isAdmin, async (req, res) => {
           { transaction: t }
         );
 
-        // Update or create inventory
-        if (item.variantId && item.storeId) {
+        // Update or create inventory ONLY if status is 'Received'
+        if (status === 'Received' && item.variantId && item.storeId) {
           const existing = await Inventory.findOne({
             where: { variant_id: item.variantId, store_id: item.storeId },
             transaction: t,
@@ -89,6 +89,69 @@ router.post('/', authenticateToken, isAdmin, async (req, res) => {
   } catch (error) {
     await t.rollback();
     console.error('POST /purchases error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// PUT /purchases/:id — update status / payment_status
+router.put('/:id', authenticateToken, requirePermission('purchases', 'edit'), async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    const purchase = await Purchase.findByPk(req.params.id, {
+      include: [{ model: PurchaseItem, as: 'items' }],
+      transaction: t,
+    });
+    if (!purchase) throw new Error('Purchase not found');
+
+    const oldStatus = purchase.status;
+    const { status, payment_status, paid, due } = req.body;
+
+    const updates = {};
+    if (status !== undefined) updates.status = status;
+    if (payment_status !== undefined) updates.payment_status = payment_status;
+    if (paid !== undefined) updates.paid = parseFloat(paid) || 0;
+    if (due !== undefined) updates.due = parseFloat(due) || 0;
+
+    await purchase.update(updates, { transaction: t });
+
+    // Handle stock increment if status changes to 'Received'
+    if (oldStatus !== 'Received' && status === 'Received' && purchase.items) {
+      const storeId = req.body.storeId || 1;
+      for (const item of purchase.items) {
+        let variantId = item.variant_id;
+        if (!variantId && item.product_id) {
+          const { ProductVariant } = await import('../models/index.js');
+          const variant = await ProductVariant.findOne({
+            where: { product_id: item.product_id },
+            transaction: t,
+          });
+          if (variant) variantId = variant.id;
+        }
+
+        if (variantId && storeId) {
+          const existing = await Inventory.findOne({
+            where: { variant_id: variantId, store_id: storeId },
+            transaction: t,
+          });
+
+          if (existing) {
+            await existing.increment('qty', { by: item.quantity, transaction: t });
+          } else {
+            await Inventory.create(
+              { variant_id: variantId, store_id: storeId, qty: item.quantity, quantity_alert: 0 },
+              { transaction: t }
+            );
+          }
+        }
+      }
+    }
+
+    await t.commit();
+    const updated = await Purchase.findByPk(purchase.id, { include: purchaseIncludes });
+    res.json(updated.toJSON());
+  } catch (error) {
+    await t.rollback();
+    console.error('PUT /purchases/:id error:', error);
     res.status(500).json({ error: error.message });
   }
 });
