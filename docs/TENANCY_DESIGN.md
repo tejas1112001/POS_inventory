@@ -326,9 +326,9 @@ Channels: `tenant_changed`, `auth_changed`, `role_changed`, `impersonation_chang
 | 3 | `CREATE ROLE t_<id>_rw NOLOGIN`; `CREATE SCHEMA t_<id> AUTHORIZATION pos_owner` | `pg_namespace`/`pg_roles` lookup | `DROP SCHEMA … CASCADE`, `DROP ROLE` |
 | 4 | Run tenant migrations to latest (advisory lock `pg_advisory_lock(hashtextextended('migrate:'||id,0))`) | `goose_db_version` | Drop schema |
 | 5 | Grants (`USAGE` on `t_<id>` and `extensions`, DML, `audit_log` insert-only), default privileges (§5.3), tenant-bound trigger function `mark_outbox_pending()` with the validated tenant ID as a literal (EMAIL_AND_RECEIPTS §4.2), `GRANT t_<id>_rw TO pos_app, pos_jobs WITH INHERIT FALSE, SET TRUE` | `has_schema_privilege`, `pg_proc` lookup | Drop schema/role |
-| 6 | Seed **only** roles, permissions and settings: permission catalog copy, roles `owner/admin/biller`, `settings` (currency/number format/timezone from the request or defaults). No demo data | Unique keys + `ON CONFLICT DO NOTHING` | Drop schema |
+| 6 | Seed roles, permissions and settings: permission catalog copy, roles `owner/admin/biller`, `settings` (currency/number format/timezone from the request or defaults), plus two functional defaults (O-2): a "Walk-in Customer" (set as `settings.default_customer_id`) and one default store. No demo data | Unique keys + `ON CONFLICT DO NOTHING` | Drop schema |
 | 7 | Create owner user (`status=Active`, no password, `owner` role) + invite token (hashed) | Unique email | Drop schema |
-| 8 | Create trial subscription row (`trialing`, `trial_end = now + plan.trial_days`) | Unique `tenant_id` | Delete row |
+| 8 | Create trial subscription row (`trialing`, `trial_end = now + plan.trial_days`) on the hidden internal `trial` plan (O-3: `is_public=false`, price 0, 14 days, seeded by a platform migration; the owner's real plans replace it later) | Unique `tenant_id` | Delete row |
 | 9 | Status → `trialing`; invalidate slug cache | Status check | — |
 | 10 | Enqueue welcome + set-password email (platform SMTP), with the tenant URL `https://<slug>.<BASE_DOMAIN>` | Idempotency key `tenant:<id>:welcome` | Email failure never fails provisioning |
 

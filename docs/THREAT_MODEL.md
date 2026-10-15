@@ -127,7 +127,8 @@ The **malicious tenant** is the key adversary: authenticated, with full control 
 | Threat | Control |
 |---|---|
 | T: malicious upload (polyglot, SVG with script, decompression bomb) | Sniff with `mimetype`, allow png/jpeg/webp only, `image.DecodeConfig` dimension cap (e.g. 4096²) before full decode, re-encode (strips metadata/polyglots), size ≤ 2 MiB |
-| I: cross-tenant file access by URL guessing | Keys `tenants/<tenant_id>/<kind>/<uuid>`; served only through the app after host→tenant match + permission; no public bucket listing |
+| I: cross-tenant file access by URL guessing | Keys `tenants/<tenant_id>/<kind>/<uuid>`; served only through the app after host→tenant match; no public bucket listing |
+| I: private images or documents exposed by the public file route | `/files/t/` serves only tenant logo, store logo/banner and published product images (checked per request against `files.purpose` and the owning row). Customer/user images need login; receipts and exports are never served there | Route test per `purpose`, incl. unpublished product and soft-deleted rows |
 | I: path traversal (fs driver) | Keys generated server-side; `filepath.IsLocal`/`os.Root` (Go 1.24+) for the fs driver |
 
 ### 3.10 Public shop

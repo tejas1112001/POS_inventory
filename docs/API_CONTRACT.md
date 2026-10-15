@@ -253,7 +253,7 @@ All approved (Q-6, 2026-10-15). "FE" = frontend change needed.
 | POST | `/api/sales/:id/receipt/resend` | receipts:resend | `{email?}`; rate-limited; enqueues email |
 | GET | `/api/stock-movements` | inventory:view | Stock ledger (paginated) |
 | POST | `/api/files` | any create/edit permission on the target entity | Image upload |
-| GET | `/files/t/<key>` | images 🔓, others 🔑 | Serve a tenant file; the host must match the file's tenant. `kind='image'` (logos, banners, product images; random UUID keys) is served without auth, because the sign-in page and the public shop need it. `receipt`/`export` files require a token + permission (receipts go through `/api/sales/:id/receipt`) |
+| GET | `/files/t/<key>` | 🔓 allow-list only | **Public route, narrow allow-list** (decided round 2). Serves only: the tenant logo, store logos and banners, and images of **published** products (published in at least one store, not deleted). Decided per request from `files.purpose` plus the owning row; the host must match the file's tenant; anything else → the generic `404`. **Customer and user images** are served only behind login (`GET /api/files/:id`, 🔑 + permission on the owning entity). **Receipts and exports are never served on `/files/t/`** (receipts: `/api/sales/:id/receipt`; exports: platform only) |
 | GET | `/api/audit-log` | audit:view | Tenant audit log (paginated, filters) |
 | GET | `/api/notifications/banners` | 🔑 | Active platform banners + billing banner |
 | POST | `/api/notifications/:id/dismiss` | 🔑 | Per-user dismissal |
@@ -342,7 +342,7 @@ All approved (Q-6, 2026-10-15). "FE" = frontend change needed.
 | `src/pages/Settings.jsx` (+ new sub-pages) | Business profile/currency/tax, SMTP settings + test, receipt template | Settings |
 | `src/pages/Sales.jsx` / `SalesList.jsx` | Resend receipt / download actions | Receipts |
 | `src/components/layout/AppShell.jsx` | Banner area (billing + announcements + impersonation flag) | Billing |
-| new `admin-console/` Vite entry (separate bundle) | Super Admin console. Must work under the strict admin CSP (OPERATIONS §7): static JS/CSS only, no inline scripts or runtime-injected styles; tenant-supplied text rendered as plain text only (`react/no-danger` ESLint rule as an error, no HTML/Markdown rendering, no tenant-supplied URLs in `href`/`src`) | Platform, THREAT_MODEL §3.6 |
+| new `admin-console/` Vite entry (separate bundle) | Super Admin console, **built without MUI** (plain React + CSS Modules, decided round 2). Must work under the strict admin CSP (OPERATIONS §7): static JS/CSS only, no inline scripts or runtime-injected styles; tenant-supplied text rendered as plain text only (`react/no-danger` ESLint rule as an error, no HTML/Markdown rendering, no tenant-supplied URLs in `href`/`src`) | Platform, THREAT_MODEL §3.6 |
 | Electron leftovers (`frontend/electron.js`, `frontend/preload.js`, root `package.json` script `start:electron`) | Removed at cutover | Web only (Q-1) |
 | `vite.config.js` | Multi-page build (tenant app + admin console); dev proxy `/api` → Go; `server.allowedHosts: ['.localhost']` | Same-origin dev |
 | `frontend/.env*` | `VITE_API_URL` optional (empty = same origin) | No hard-coded domain |

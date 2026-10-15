@@ -70,7 +70,7 @@ Severity: **P0** = exploitable or loses money/stock/data now · **P1** = serious
 | P0-9 | Products | `PUT /api/products/:id` updates `findByPk(v.id)` **without checking `product_id`** → any variant (with its stock) can be moved into another product; omitted variants are hard-deleted **with their stock** and no record (`products.js:344-391`). | Ownership check, soft delete, refuse when stock > 0, ledger. |
 | P0-10 | Escalation | Any `users:edit` holder can assign the admin role to themselves (`billers.js:61`, `roles.js:171-194`); any `roles:edit` holder can grant their own role every permission and edit system roles (`roles.js:104-143`). | Subset rule, no self-change, immutable owner/admin, audit. |
 
-(P0-11, desktop LAN exposure of the Electron build, was removed: the product is web only, Q-1. The Go server sits on a private network behind Caddy and answers unknown hosts with `421`.)
+| P0-11 | Desktop/LAN | **Not applicable: web only (Q-1).** | — |
 
 ### 2.2 P1
 
@@ -198,7 +198,7 @@ backend-go/
 ├─ web/                # (optional) embedded SPA builds
 ├─ test/               # integration, isolation, search_path, migration, e2e helpers, k6 scripts
 ├─ tools/analyzers/    # constsql (go/analysis): SQL arguments must be constants
-├─ spikes/pdfshaping/  # throwaway Devanagari PDF spike (EMAIL_AND_RECEIPTS §5.6)
+├─ spikes/pdfshaping/  # throwaway Devanagari PDF spike, start of step 9 (EMAIL_AND_RECEIPTS §5.6)
 ├─ deploy/             # Dockerfile, docker-compose.yml (Caddy, Postgres 18, MinIO, Mailpit), Caddyfile(s), prometheus rules
 ├─ .github/            # CI workflow, dependabot.yml (repo root)
 ├─ Makefile  .env.example  README.md  go.mod
@@ -535,6 +535,9 @@ CREATE TABLE purchase_items (
 -- files, outbox, audit ---------------------------------------------------------
 CREATE TABLE files (
   id uuid PRIMARY KEY, kind text NOT NULL CHECK (kind IN ('image','receipt','export')),
+  purpose text NOT NULL CHECK (purpose IN ('tenant_logo','store_logo','store_banner','product_image',
+                                          'customer_image','user_image','receipt','export')),
+                                                          -- only the first four can ever be public (API_CONTRACT /files/t/)
   content_type text NOT NULL, size_bytes bigint NOT NULL, sha256 bytea NOT NULL,
   storage_key text NOT NULL UNIQUE, created_by bigint REFERENCES users(id),
   created_at timestamptz NOT NULL DEFAULT now(), deleted_at timestamptz
@@ -655,7 +658,7 @@ Each step is one or more small commits with tests. Nothing merges without `go ve
 
 | # | Step | Key outputs |
 |---|---|---|
-| 1 | Foundation | `backend-go/` module, config (fail-fast, leaked-secret hash deny list), slog + redaction, errors, httpx (strict JSON, body caps, timeouts, secure headers incl. the strict admin-host CSP, request id, recover), metrics, `/healthz` `/readyz`, graceful shutdown, Dockerfile (distroless nonroot), Makefile, CI (golangci-lint + `constsql`, gosec, govulncheck, gitleaks, goleak), Dependabot, docker-compose (Postgres 18, Caddy `tls internal`, MinIO, Mailpit). **Plus the PDF spike** (EMAIL_AND_RECEIPTS §5.6) as a separate throwaway folder, see open question |
+| 1 | Foundation | `backend-go/` module, config (fail-fast, leaked-secret hash deny list), slog + redaction, errors, httpx (strict JSON, body caps, timeouts, secure headers incl. the strict admin-host CSP, request id, recover), metrics, `/healthz` `/readyz`, graceful shutdown, Dockerfile (distroless nonroot), Makefile, CI (golangci-lint + `constsql`, gosec, govulncheck, gitleaks, goleak), Dependabot, docker-compose (Postgres 18, Caddy `tls internal`, MinIO, Mailpit). Untrack `frontend/.env` (O-8) |
 | 2 | Platform schema + registry | `extensions` + platform migrations (incl. `pg_stat_statements`), `tenancy` (SchemaName, host resolver, cache, Sessions with post-condition check, roles), change listener (TENANCY §5.5), `posctl db preflight`, **search_path and extensions tests** (TENANCY §5.4) |
 | 3 | Migration runner + provisioning | goose two tracks over startup-parameter connections (TENANCY §8, incl. the `NO TRANSACTION` + reconnect tests), dry run, resume, drift, default privileges + grant re-apply, tenant-bound `mark_outbox_pending()`, provisioning orchestrator + compensation |
 | 4 | Super Admin | platform auth with separate `PLATFORM_JWT_KEYS` (S3), TOTP, recovery codes, step-up, tenants admin, audit, bootstrap CLI |
@@ -664,7 +667,7 @@ Each step is one or more small commits with tests. Nothing merges without `go ve
 | 6 | Master data | stores (+ showcase admin), categories, sub-categories, brands, units, suppliers, customers, warehouses (Q-12), files/images |
 | 7 | Products/inventory | products, variants, barcode, POS list, POS locks, inventory, stock ledger (S1), **product CSV import** (Q-12) |
 | 8 | Sales/POS | pricing engine (S4 GST split), checkout with row locks, edit (original biller kept, `updated_by`), void, invoices, idempotency keys (S2) |
-| 9 | Receipts + email | settings, tenant SMTP (encrypted, SSRF-safe), outbox, dispatch, workers, templates, PDF (maroto or the spike's fallback), resend/download |
+| 9 | Receipts + email | **PDF spike first** (EMAIL_AND_RECEIPTS §5.6, O-5), then settings, tenant SMTP (encrypted, SSRF-safe), outbox, dispatch, workers, templates, PDF (maroto or the spike's fallback), resend/download |
 | 10 | Returns | cumulative checks |
 | 11 | Purchases | variant/store lines, approve, receive (`Received` terminal, Q-16) |
 | 12 | Stock adjustments | atomic, ledger |
@@ -785,7 +788,7 @@ Tools: Caddy, Mailpit, MinIO, `pg_stat_statements`, Dependabot and goleak are **
 | 10 | Razorpay test-mode checklist (halted revival = R1) | BILLING §10 |
 | 11 | Managed-Postgres preflight (`CREATEROLE`, many roles, PG16 grants, startup params, extensions) | OPERATIONS §8 |
 
-### 12.2 Open questions (round 2, with recommended defaults)
+### 12.2 Round-2 questions (answered, see 12.3)
 
 | # | Question | Recommended default |
 |---|---|---|
@@ -798,3 +801,18 @@ Tools: Caddy, Mailpit, MinIO, `pg_stat_statements`, Dependabot and goleak are **
 | O-7 | Managed Postgres provider (needed for the preflight)? | **AWS RDS for PostgreSQL 18, ap-south-1**, VM and S3 in the same region (matches SES Mumbai) |
 | O-8 | `frontend/.env` is tracked in git despite `.gitignore` (contains only `VITE_API_URL`, not secret). Untrack it in the step 1 commit (`git rm --cached`, no history rewrite)? | **Yes** |
 | O-9 | "Security item 16" was taken to mean the desktop LAN control (P0-11 + THREAT_MODEL "Electron LAN exposure"), both removed. Correct? | **Yes** |
+
+### 12.3 Round-2 answers (2026-10-15)
+
+| # | Answer | Applied in |
+|---|---|---|
+| O-1 | Yes. Outbox function created inside each tenant schema, own `search_path = pg_catalog, platform`, `EXECUTE` revoked from `PUBLIC`, granted only to that tenant's role | EMAIL §4.2 |
+| O-2 | Yes. Seed "Walk-in Customer" and one default store | TENANCY §6 step 6 |
+| O-3 | Yes. Hidden internal `trial` plan | TENANCY §6 step 8 |
+| O-4 | Yes, but **no automatic schema drop in v1**: warning emails, verified final export, Super Admin step-up confirmation | BILLING §3, OPERATIONS §6.4 |
+| O-5 | PDF spike at the **start of step 9** | §8, EMAIL §5.6 |
+| O-6 | Admin console built **without MUI** | API_CONTRACT §6 |
+| O-7 | Preflight target AWS RDS for PostgreSQL 18, ap-south-1 (PG 17 acceptable if 18 is unavailable) | OPERATIONS §8 M1 |
+| O-8 | Yes. Untrack `frontend/.env` in step 1 | §8 step 1 |
+| O-9 | Yes. One-line note kept: P0-11 not applicable (web only) | §2.1 |
+| Files | `/files/t/` serves only tenant logo, store logo/banner and published product images. Customer and user images stay behind login. Receipts and exports are never served there | API_CONTRACT §5.1, §5 `files.purpose`, THREAT_MODEL §3.9 |

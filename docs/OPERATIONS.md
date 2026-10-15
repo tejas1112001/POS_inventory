@@ -129,7 +129,12 @@ Retention: nightly export per tenant (staggered), keep 7 daily + 4 weekly; final
 **Weekly automated restore test** (job): pick a random active tenant + the oldest-tested one, restore into scratch, compare, record `pos_restore_test_last_success_timestamp_seconds`, drop scratch. Phase 3 test: export tenant A, restore into scratch, counts + checksums equal, and **no other schema's** `pg_stat_user_tables` write counters changed (proves isolation).
 
 ### 6.4 Deletion
-`pending_deletion` → at `RETENTION_DAYS` (90) after the restriction started (BILLING_DESIGN §3 timeline): final export → `DROP SCHEMA "t_<id>" CASCADE`, `DROP ROLE t_<id>_rw`, delete object-storage prefix `tenants/<id>/` (except the final export), status `deleted`, slug reserved for 1 year. Platform audit row. Billing records are kept (legal).
+**No automatic schema drop in v1** (decided O-4). At `RETENTION_DAYS` (90) after the restriction started (BILLING_DESIGN §3 timeline), the tenant only becomes *eligible* for deletion:
+1. Warning emails to the owner and billing contact before the eligibility date (14, 7 and 1 days before; deduplicated via `notification_log`).
+2. A final export is taken and **verified** (restore into scratch, counts and checksums match, §6.3). Without a verified final export, deletion is refused.
+3. A Super Admin deletes from the console with **step-up** and an explicit confirmation (typed slug). Only then: `DROP SCHEMA "t_<id>" CASCADE`, `DROP ROLE t_<id>_rw`, delete object-storage prefix `tenants/<id>/` (except the final export), status `deleted`, slug reserved for 1 year. Platform audit row. Billing records are kept (legal).
+
+The "Super Admin → eligible for deletion" list shows these tenants; nothing is dropped by a job.
 
 ## 7. Deployment & security posture
 - Image: multi-stage build → `gcr.io/distroless/static-debian12:nonroot`, `CGO_ENABLED=0`, `-trimpath -ldflags "-s -w"`, read-only root FS, no shell. Version via `-ldflags -X`. The image is scanned (Trivy/Grype) in CI.
@@ -146,7 +151,7 @@ Steps 1–5 are developed and tested against Postgres 18 in Docker (testcontaine
 
 | # | Requirement | Why | Check |
 |---|---|---|---|
-| M1 | PostgreSQL **≥ 16** (target 18) | `GRANT … WITH INHERIT FALSE, SET TRUE`, PG16 `CREATEROLE` semantics | `SHOW server_version_num` ≥ `160000` |
+| M1 | PostgreSQL **≥ 16**. Preflight target (decided O-7): **AWS RDS for PostgreSQL 18 in ap-south-1**; PG 17 acceptable if 18 is unavailable there | `GRANT … WITH INHERIT FALSE, SET TRUE`, PG16 `CREATEROLE` semantics | `SHOW server_version_num` ≥ `160000` |
 | M2 | The admin login can `CREATE ROLE … CREATEROLE` (no superuser needed) | Creates `pos_owner`, `pos_migrator` (with `CREATEROLE`), `pos_app`, `pos_platform`, `pos_jobs` | Create them in the scratch DB |
 | M3 | `pos_migrator` can create a role and then `GRANT` it to `pos_app WITH INHERIT FALSE, SET TRUE` | Provisioning step 3/5; on PG16 the creator gets `ADMIN OPTION` automatically | Create `t_preflight0_rw`, grant it, `SET ROLE` to it as `pos_app` |
 | M4 | `createrole_self_grant` is empty (or settable to empty) | Otherwise `pos_migrator` would inherit every tenant role | `SHOW createrole_self_grant` |

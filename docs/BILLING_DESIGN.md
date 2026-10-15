@@ -105,7 +105,7 @@ No card/UPI/bank details are ever stored. Razorpay's hosted checkout collects th
      └──(authenticated/activated)──┼────────────┘  └──(cancelled)──▶ [cancelled]──period end──▶ [read_only]
                                    │                                                                  │
                                    └───────────────── reactivated (charged / super admin) ◀────────────┘
- [read_only] ──READ_ONLY_DAYS──▶ [pending_deletion] ──RETENTION──▶ [deleted]  (DROP SCHEMA after final export)
+ [read_only] ──READ_ONLY_DAYS──▶ [pending_deletion] ──RETENTION──▶ [eligible] ──Super Admin step-up──▶ [deleted]
 ```
 \* Trial expiry without payment goes to `read_only` (data visible, writes blocked) instead of a hard lock, so owners can still subscribe. Configurable.
 
@@ -122,7 +122,7 @@ No card/UPI/bank details are ever stored. Razorpay's hosted checkout collects th
 
 The billing routes still need `billing:view` / `billing:manage` (owner by default), and they are blocked for impersonation sessions.
 
-**Timeline (Q-14; the starting point is my reading, see open question in PHASE1_DESIGN §12):** trial 14 days → if unpaid, `read_only`. Charge failure → `past_due`/`grace` for 7 days → `suspended`. Day 0 of the restriction clock is the day the tenant first becomes `read_only` **or** `suspended`. Day 30 (`READ_ONLY_DAYS`): → `pending_deletion` (no login; a final export is taken). Day 90 (`RETENTION_DAYS`, counted from day 0): schema dropped, status `deleted`. Paying at any point before day 90 returns the tenant to `active` (a Super Admin restores from `pending_deletion`).
+**Timeline (Q-14, starting point confirmed in O-4):** trial 14 days → if unpaid, `read_only`. Charge failure → `past_due`/`grace` for 7 days → `suspended`. Day 0 of the restriction clock is the day the tenant first becomes `read_only` **or** `suspended`. Day 30 (`READ_ONLY_DAYS`): → `pending_deletion` (no login; a final export is taken). Day 90 (`RETENTION_DAYS`, counted from day 0): **eligible for deletion only**. No automatic drop in v1 (O-4): warning emails, a verified final export, then a Super Admin deletes with step-up and typed confirmation (OPERATIONS §6.4). Paying at any point before day 90 returns the tenant to `active` (a Super Admin restores from `pending_deletion`).
 
 Event → transition mapping (applied only if `event.created_at >= subscriptions.last_event_at`, otherwise logged as `stale_ignored`):
 

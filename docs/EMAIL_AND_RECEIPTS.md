@@ -158,7 +158,7 @@ So the tenant identity is bound to the **role and schema** when the function is 
 -- current_user, app.tenant_id or any request value.
 CREATE OR REPLACE FUNCTION "t_ab12cd34ef".mark_outbox_pending() RETURNS trigger
   LANGUAGE plpgsql SECURITY DEFINER
-  SET search_path = pg_catalog, pg_temp
+  SET search_path = pg_catalog, platform
 AS $$
 BEGIN
   INSERT INTO platform.mail_dispatch (tenant_id) VALUES ('ab12cd34ef')
@@ -169,12 +169,13 @@ BEGIN
 END $$;
 ALTER FUNCTION "t_ab12cd34ef".mark_outbox_pending() OWNER TO pos_owner;
 REVOKE ALL ON FUNCTION "t_ab12cd34ef".mark_outbox_pending() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION "t_ab12cd34ef".mark_outbox_pending() TO "t_ab12cd34ef_rw";   -- that tenant's role only
 CREATE TRIGGER email_outbox_mark AFTER INSERT ON "t_ab12cd34ef".email_outbox
   FOR EACH STATEMENT EXECUTE FUNCTION "t_ab12cd34ef".mark_outbox_pending();
 ```
 
 - The function lives in the tenant's own schema, is owned by `pos_owner` (the tenant role cannot replace it, since it has no `CREATE` on its schema), and fires only from that schema's `email_outbox`. Only `t_<id>_rw` can write to that table, so in effect the tenant comes from the role, as the review intended, but enforced by grants instead of a run-time lookup.
-- Trigger functions cannot be called directly, and `EXECUTE` is revoked from `PUBLIC`.
+- Decided (O-1): the function lives in each tenant schema, pins its own `search_path = pg_catalog, platform` (table names are still schema-qualified), `EXECUTE` is revoked from `PUBLIC` and granted only to that tenant's role. Trigger functions cannot be called directly in any case.
 - Why a `SECURITY DEFINER` function instead of granting the tenant role `INSERT` on `platform.mail_dispatch`: the tenant role gets one narrowly scoped capability ("tell the platform I have pending mail") instead of a table privilege. Abuse is harmless: the function can only mark its own tenant, and a spurious mark just triggers an empty check.
 - Tests (step 3): an outbox insert in tenant A marks only A; tenant A's role cannot insert into `platform.mail_dispatch` or execute B's function; changing `search_path`/`app.tenant_id` inside the transaction has no effect on which tenant is marked; the drift check flags a function whose literal does not match its schema.
 
@@ -257,7 +258,7 @@ Tenant business name, logo, legal name, tax registration no. (GSTIN) and address
 - Transactional mail (receipts, password resets, billing) is exempt from marketing consent but kept **minimal**: no promotions in receipt emails.
 - Marketing-type mail (future "customer emails", promotions): requires `customers.marketing_consent = true`, includes `List-Unsubscribe` + `List-Unsubscribe-Post` (RFC 8058) and a one-click unsubscribe link (HMAC-signed token → sets consent false). Consent changes are audited. Platform announcements to tenant owners are service messages; owners can opt out of non-essential ones.
 
-### 5.6 PDF spike: Devanagari names with maroto (early, before step 9)
+### 5.6 PDF spike: Devanagari names with maroto (at the start of step 9, decided O-5)
 
 **Why.** Devanagari needs complex text shaping: conjuncts (`क्ष`, `ज्ञ`, `श्र`, `त्र`), the reph (`र्` above the next consonant, as in `धर्मेंद्र`), and the pre-base vowel sign `ि`, which is typed after its consonant but drawn before it (`कि`). maroto v2 draws text through a gofpdf-style engine, which as far as I can tell maps characters to glyphs one by one with no OpenType shaping. If so, conjuncts break apart and `ि` lands on the wrong side. Receipts are English, but customer names are tenant data and are often typed in Marathi or Hindi.
 
