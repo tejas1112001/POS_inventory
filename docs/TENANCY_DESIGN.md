@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Phase 1 design, awaiting approval |
+| Status | Phase 1 design, revised 2026-10-15 after review (decisions applied); awaiting approval |
 | Model | One PostgreSQL database (per cluster/shard), one `platform` schema, one `t_<id>` schema per tenant, one shared pgx pool |
 | Top property | Tenant A can never read, write or infer tenant B's data (S-req 17) |
 
@@ -89,9 +89,11 @@ Job queue tables live in their own schema `river` (River's own migrations), reac
 | Files | `files` (metadata; bytes in object storage under the tenant prefix) |
 | Messaging | `email_outbox`, `banner_dismissals` |
 | Audit | `audit_log` (append-only for the tenant role) |
-| Ops | `goose_db_version` (tenant migration track) |
+| Ops | `goose_db_version` (tenant migration track), trigger function `mark_outbox_pending()` (owned by `pos_owner`, see EMAIL_AND_RECEIPTS §4.2) |
 
-The legacy `reports` table (unused) is **not** migrated.
+The new system starts with an **empty database** (the old data is demo data; there is no legacy import). The old `reports` table has no equivalent.
+
+Shared schema `extensions` (owned by `pos_owner`, `CREATE` revoked from `PUBLIC`) holds `citext`, `pg_trgm` and `pg_stat_statements`. See §5.4.
 
 DDL for the tenant schema: PHASE1_DESIGN §5. DDL for `platform`: §3 below.
 
@@ -100,8 +102,13 @@ DDL for the tenant schema: PHASE1_DESIGN §5. DDL for `platform`: §3 below.
 ## 3. Platform schema DDL (key tables)
 
 ```sql
-CREATE SCHEMA platform;
-CREATE EXTENSION IF NOT EXISTS citext;   -- in schema "extensions", see §6.4
+CREATE SCHEMA IF NOT EXISTS extensions AUTHORIZATION pos_owner;   -- see §5.4
+REVOKE CREATE ON SCHEMA extensions FROM PUBLIC;
+CREATE EXTENSION IF NOT EXISTS citext  WITH SCHEMA extensions;
+CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA extensions;
+CREATE EXTENSION IF NOT EXISTS pg_stat_statements WITH SCHEMA extensions;  -- needs shared_preload_libraries
+CREATE SCHEMA platform AUTHORIZATION pos_owner;
+-- platform migrations run with search_path = platform, extensions (connection parameter, §8)
 
 CREATE TABLE platform.tenants (
   id                 text PRIMARY KEY CHECK (id ~ '^[a-z0-9]{10}$'),           -- server-generated, crypto/rand base32
@@ -164,7 +171,7 @@ CREATE TABLE platform.impersonation_sessions (
 
 - **Tenant ID**: 10 chars from `crypto/rand`, lowercase base32 alphabet `[a-z2-7]` (≈ 50 bits). Generated only by the provisioning service.
 - **Schema** `t_<id>`, **DB role** `t_<id>_rw`. Both derived from the ID, both re-validated by `^t_[a-z0-9]{6,20}$` at **every** use (`tenancy.SchemaName` is a Go type with an unexported field, constructible only through `tenancy.ParseSchemaName`, which validates).
-- Identifiers are always quoted with `pgx.Identifier{name}.Sanitize()`. Where Postgres accepts a parameter we use one (`set_config('search_path', $1, true)`); DDL that cannot be parameterized (`CREATE SCHEMA`, `SET LOCAL ROLE`, `GRANT`) uses the validated, quoted identifier only.
+- Identifiers are always quoted with `pgx.Identifier{name}.Sanitize()`. Where Postgres accepts a parameter we use one (`set_config('search_path', $1, true)`); DDL that cannot be parameterized (`CREATE SCHEMA`, `SET LOCAL ROLE`, `GRANT`) uses the validated, quoted identifier only, and is built only in `internal/db/ident.go` (the single exemption from the `constsql` lint rule).
 - **Never** derived from slug, company name, Host header, JWT claim text or request body. The Host gives a *slug*; the slug is looked up in `platform.tenants`; only the **stored** `schema_name` is used.
 - Tests (Phase 3): fuzz `ParseSchemaName`; injection strings in slug/Host/claims (`t_abc"; DROP SCHEMA`, unicode confusables, `public`, `platform`, `pg_catalog`, `information_schema`) never reach SQL.
 
@@ -178,10 +185,20 @@ Request ─▶ [1 TrustedHost] ─▶ [2 TenantResolve] ─▶ [3 Auth] ─▶ [
 ```
 
 1. **TrustedHost**: if `RemoteAddr` ∈ `TRUSTED_PROXY_CIDRS`, read the first `X-Forwarded-Host`/`X-Forwarded-Proto`; otherwise use `r.Host`. Lowercase, strip port, must be `admin.<BASE_DOMAIN>`, `<label>.<BASE_DOMAIN>` (one label), or `<BASE_DOMAIN>` itself. Anything else → `421 Misdirected Request` with the generic body. Never echo the host.
-2. **TenantResolve**: `admin` → platform router only (tenant routes not mounted there, and vice versa). `<label>` → slug lookup in a TTL cache (30 s, positive and **negative** entries, key `slug:<slug>`) backed by `platform.tenants`, with invalidation via `LISTEN tenant_changed`. Unknown/deleted/failed → same generic 404 (same body, same code path, negative cache keeps timing flat). Old slug → `308` to the new host for non-API GETs; `404` for API calls.
+2. **TenantResolve**: `admin` → platform router only (tenant routes not mounted there, and vice versa). `<label>` → slug lookup in a TTL cache (30 s, positive and **negative** entries, key `slug:<slug>`) backed by `platform.tenants`, with invalidation via `NOTIFY tenant_changed` (§5.5). Unknown/deleted/failed/provisioning → same generic 404 (same body, same code path, negative cache keeps timing flat). Old slug → `308` to the new host for non-API GETs; `404` for API calls.
 3. **Auth**: verify JWT (HS256, `kid`-selected key, `iss = <host>`, `aud = tenant`, `exp`, `nbf`, max 15 min). Claim `tid` must equal the resolved tenant ID, else `401` (logged as a security event: forged/mismatched tenant).
-4. **AuthState**: load `{status, role_id, token_version}` for `(tid, sub)` from a cache (key `auth:<tid>:<uid>`, TTL 30 s, invalidated via `NOTIFY auth_changed`). Inactive, deleted, or `token_version` newer than the token's `tv` → `401`. So deactivation and role change take effect within seconds, not at token expiry. Permissions are resolved from the **current** `role_id`, never from a claim.
-5. **TenantGate**: `suspended`/`pending_deletion` → `403 TENANT_SUSPENDED`; `read_only`/`cancelled` → writes `403 TENANT_READ_ONLY`; impersonation `read_only` → writes `403 IMPERSONATION_READ_ONLY`.
+4. **AuthState**: load `{status, role_id, token_version}` for `(tid, sub)` from a cache (key `auth:<tid>:<uid>`, TTL 30 s, invalidated via `NOTIFY auth_changed`, §5.5). Inactive, deleted, or `token_version` newer than the token's `tv` → `401`. So deactivation and role change take effect within seconds, not at token expiry. Permissions are resolved from the **current** `role_id`, never from a claim.
+5. **TenantGate** (one rule, the same table as BILLING_DESIGN §3):
+
+   | Tenant status | Login / refresh | Reads | Writes |
+   |---|---|---|---|
+   | `trialing`, `active`, `past_due`, `grace` | ✔ | ✔ | ✔ |
+   | `cancelled` (paid period still running) | ✔ | ✔ | ✔ until `current_period_end`; then the lifecycle job sets `read_only` |
+   | `read_only` | ✔ | ✔ | ✘ `403 TENANT_READ_ONLY`, **except billing routes** (below) |
+   | `suspended`, `pending_deletion` | ✘ `403 TENANT_SUSPENDED` (refresh tokens rejected too) | ✘ | ✘ |
+
+   **Billing exemption.** Routes marked `gate.AllowReadOnly` pass the `read_only` gate so a tenant can pay to get back: `GET /api/billing/subscription`, `POST /api/billing/checkout`, plus the session plumbing `POST /api/auth/refresh`, `POST /api/auth/logout`, `GET /api/auth/me`, `GET /api/notifications/banners`, `POST /api/notifications/:id/dismiss`. The marker is an allow-list in code; a router-walk test asserts that no other write route has it. The exemption never applies to `suspended`/`pending_deletion` (those tenants pay through the emailed link, Q-11) or to impersonation sessions.
+   Impersonation `read_only` → writes `403 IMPERSONATION_READ_ONLY`, billing routes included.
 6. **RBAC**: route declares `rbac.Require("sales","create")`; deny by default (a route without a declaration fails a startup self-check and a unit test that walks the router).
 7. **InTenantTx** (the only way to get a tenant DB handle):
 
@@ -192,22 +209,31 @@ func (s *Sessions) InTenantTx(ctx context.Context, t Tenant, mode TxMode, fn fun
     tx, err := pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted, AccessMode: mode.access()})
     if err != nil { return err }
     defer tx.Rollback(ctx)                                // no-op after commit
-    // 1 round trip, all LOCAL (transaction-scoped):
-    if _, err = tx.Exec(ctx, "SET LOCAL ROLE "+t.DBRole.Quoted()); err != nil { return err }
+    // All LOCAL (transaction-scoped). SET ROLE takes no bind parameter, so it is built only inside
+    // internal/db/ident.go from the validated RoleName (the single constsql exemption, THREAT_MODEL §3.2).
+    if err = db.SetLocalRole(ctx, tx, t.DBRole); err != nil { return err }
     if _, err = tx.Exec(ctx,
         `SELECT set_config('search_path', $1, true),
                 set_config('app.tenant_id', $2, true),
                 set_config('statement_timeout', $3, true),
                 set_config('lock_timeout', '3s', true)`,
-        t.Schema.Quoted(), t.ID, mode.statementTimeout()); err != nil { return err }
+        t.Schema.SearchPath(), // `"t_ab12cd34ef", extensions` (§5.4)
+        t.ID, mode.statementTimeout()); err != nil { return err }
     if err = fn(TenantTx{tx: tx, tenant: t}); err != nil { return err }
+    // Post-condition (cheap tripwire, THREAT_MODEL §4): the session must still be what we set.
+    var role, path string
+    if err = tx.QueryRow(ctx, `SELECT current_user, current_setting('search_path')`).Scan(&role, &path); err != nil { return err }
+    if role != t.DBRole.String() || path != t.Schema.SearchPath() {
+        return security.ErrSessionTampered // rollback via defer, 500, event=security.session_tampered
+    }
     return tx.Commit(ctx)
 }
 ```
 
-- **SET LOCAL only.** Nothing ever runs plain `SET`. A CI test greps the codebase for `SET search_path`/`SET ROLE` without `LOCAL`.
-- `search_path` is **only** the tenant schema (+ `pg_catalog` implicitly, + `extensions` for `citext`). **Challenge to the brief**: the brief proposes `"t_xxx", platform`. I recommend *not* putting `platform` on the tenant path. An unqualified name that is missing in the tenant schema would silently resolve to a platform table (e.g. `email_outbox`, `audit_log` exist in both), and the tenant role would need platform privileges. The data a tenant request needs from `platform` (status, plan limits, features) is read before the tenant transaction through the platform repository (cached).
+- **Request path: `SET LOCAL` / `set_config(…, true)` only.** The migration and restore path uses connection startup parameters and no `SET` statement at all (§8). CI rule (a `go/analysis` check plus a grep over `*.go` and `*.sql`, including migration files): no `SET search_path`, `SET ROLE`, `SET SESSION`, `RESET`, or `set_config('search_path'|'role', …, false)` anywhere. `RuntimeParams` keys `search_path` and `role` may appear **only** in `internal/migrate/conn.go` (the single carve-out, built from a validated `SchemaName`), which the export/restore code also uses.
+- `search_path` is the tenant schema **plus `extensions`** (+ `pg_catalog` implicitly). §5.4 explains why `extensions` must be on the path. **Challenge to the brief**: the brief proposes `"t_xxx", platform`. I recommend *not* putting `platform` on the tenant path. An unqualified name that is missing in the tenant schema would silently resolve to a platform table (e.g. `email_outbox`, `audit_log` exist in both), and the tenant role would need platform privileges. The data a tenant request needs from `platform` (status, plan limits, features) is read before the tenant transaction through the platform repository (cached).
 - `TenantTx` and `PlatformTx` are **distinct Go types**. Tenant repositories accept only `TenantTx`; platform repositories accept only `PlatformTx`. Mixing them is a compile error.
+- `InPlatformTx` does the same with `SET LOCAL ROLE pos_platform` and `search_path = extensions` (no `platform` on the path, so an unqualified table name in a platform query fails instead of resolving somewhere else).
 - GET handlers use `READ ONLY` transactions (cheap, safer, enables read-replica routing later).
 
 ### 5.1 Pool and "context leak impossible" (S-req 19)
@@ -216,7 +242,7 @@ func (s *Sessions) InTenantTx(ctx context.Context, t Tenant, mode TxMode, fn fun
 - The login role's **default `search_path` is empty** (`ALTER ROLE pos_app SET search_path = ''`) and it has **no table privileges at all**. Any query that escapes `InTenantTx`/`InPlatformTx` fails loudly (`relation does not exist` / `permission denied`) instead of hitting a wrong schema.
 - `SET LOCAL` state ends with the transaction, on commit **and** rollback. A pool `AfterRelease` hook destroys any connection that is returned while still in a transaction (`conn.PgConn().TxStatus() != 'I'`).
 - `pgx` is configured with `DefaultQueryExecMode = QueryExecModeExec` (see §5.2), so no per-connection prepared-statement state can survive between tenants.
-- Tests (Phase 3): pool size 1 and 2; 3+ tenants hammering the same queries concurrently; after every request assert `SHOW search_path` = `""` and `current_user = pos_app` on the released connection; panic and error paths; context cancellation mid-query.
+- Tests (step 2, re-run at scale in Phase 3): pool size 1 and 2; 3+ tenants hammering the same queries concurrently; after every request assert `SHOW search_path` = `""` and `current_user = pos_app` on the released connection; panic and error paths; context cancellation mid-query.
 
 ### 5.2 The pgx statement-cache decision
 
@@ -231,7 +257,7 @@ func (s *Sessions) InTenantTx(ctx context.Context, t Tenant, mode TxMode, fn fun
 | `QueryExecModeDescribeExec` | Safe, but 2 round trips per query |
 | Clear the statement cache on every acquire | Fragile; loses the benefit anyway |
 | **`QueryExecModeExec`** (chosen) | Unnamed statement, one round trip, parameter types inferred from Go types, text format. No cache, so nothing can bind to the wrong schema. Also compatible with PgBouncer transaction pooling |
-| `QueryExecModeSimpleProtocol` | Works too, but client-side parameter interpolation; less type-safe. Kept as a fallback |
+| `QueryExecModeSimpleProtocol` | **Rejected, and banned by a test that inspects the pool config.** Client-side interpolation, and the simple protocol accepts several statements in one string, so an injection could append `; SET ROLE …`. The extended protocol used by `Exec` mode allows exactly one statement per call |
 
 **Rules that make `Exec` mode robust**
 - **No per-schema custom types** in tenant schemas: `text` + `CHECK` instead of `ENUM`, no domains, no composite types. All OIDs are built-ins, so they are identical across tenants.
@@ -249,16 +275,43 @@ func (s *Sessions) InTenantTx(ctx context.Context, t Tenant, mode TxMode, fn fun
 | Role | Login | Privileges |
 |---|---|---|
 | `pos_owner` | no | Owns `platform`, `river`, every `t_*` schema and object. Never used by request traffic |
-| `pos_migrator` | yes | Member of `pos_owner` (SET). Used only by `posctl migrate`, provisioning DDL and restore |
+| `pos_migrator` | yes | `CREATEROLE`, member of `pos_owner` (`SET TRUE`, `INHERIT FALSE`). Creates the tenant roles, so on PG ≥ 16 it automatically holds `ADMIN OPTION` on them and can grant them to `pos_app`/`pos_jobs`. `createrole_self_grant` stays empty, so it does **not** inherit tenant privileges. Used only by `posctl migrate`, provisioning DDL and restore |
 | `pos_app` | yes | **No direct privileges**, empty default `search_path`. `GRANT pos_platform TO pos_app WITH INHERIT FALSE, SET TRUE`, and the same for each `t_<id>_rw` (PG ≥ 16 syntax) |
-| `pos_platform` | no | DML on `platform.*`, nothing on `t_*` |
-| `t_<id>_rw` | no | `USAGE` on `t_<id>`, DML on its tables (`INSERT, SELECT` only on `audit_log`), `EXECUTE` on `platform.mark_outbox_pending()` only. Nothing else |
+| `pos_platform` | no | DML on `platform.*`, `USAGE` on `extensions`, nothing on `t_*` |
+| `t_<id>_rw` | no | `USAGE` on `t_<id>` and `extensions`, DML on its tables (`INSERT, SELECT` only on `audit_log`). Nothing on `platform` (the outbox trigger function runs as its owner, EMAIL_AND_RECEIPTS §4.2). Nothing else |
 | `pos_jobs` | yes | `river` schema + `SET` membership like `pos_app` (workers open tenant sessions the same way) |
 | `pos_readonly_ops` | yes | Optional, for humans: `pg_read_all_stats`, no data |
 
-Effect: even if application code ran a tenant query with the wrong `search_path` or forgot the session, Postgres answers **permission denied**. It does **not** stop SQL injection that executes `SET ROLE` itself. Injection is prevented by parameterized sqlc queries only (S-req 7).
+Effect: even if application code ran a tenant query with the wrong `search_path` or forgot the session, Postgres answers **permission denied**. It does **not** stop SQL injection that switches role itself (`set_config('role', …)` fits inside one statement, and `pos_app` may `SET` to every tenant role). Injection is prevented by parameterized sqlc queries and the constant-SQL lint rule (THREAT_MODEL §3.2); the post-condition check in `InTenantTx` is a tripwire, not a guarantee. This is listed as a residual risk (THREAT_MODEL §4).
 
-Role count = tenant count; Postgres handles thousands of roles. `pg_dump -n` uses `--no-owner --no-privileges` for portability.
+**Grants on later tables.** Provisioning runs `ALTER DEFAULT PRIVILEGES FOR ROLE pos_owner IN SCHEMA "t_<id>" GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "t_<id>_rw"` (and `USAGE, SELECT ON SEQUENCES`), so tables added by later migrations are usable without a grant in every migration file. After each tenant migration the runner re-applies the grant set idempotently (`GRANT … ON ALL TABLES IN SCHEMA`, then `REVOKE UPDATE, DELETE ON audit_log`). A test compares `has_table_privilege` for every tenant table with the expected matrix.
+
+Role count = tenant count. Postgres has no hard role limit; managed providers are checked by the preflight (OPERATIONS §8). `pg_dump -n` uses `--no-owner --no-privileges` for portability.
+
+### 5.4 `search_path` and the `extensions` schema (decision)
+
+**Decision:** `citext` and `pg_trgm` are installed once, in the shared schema `extensions`, and the tenant `search_path` is exactly `"t_<id>", extensions`. The platform path is `extensions`, and migration connections use `"t_<id>", extensions` or `platform, extensions`.
+
+Why `extensions` must be on the path: Postgres resolves **operators and operator classes** through `search_path` just like tables. Without `extensions` on the path, `email = $1` on a `citext` column does not find the `citext = citext` operator and silently falls back to `text = text` through the implicit cast, so the comparison becomes **case-sensitive** with no error. Trigram search (`%`, `similarity()`, `gin_trgm_ops`) would need `OPERATOR(extensions.%)` in every query. Installing the extensions per tenant schema is also wrong: each tenant would get its own `citext` type OID, which breaks the "no per-schema custom types" rule that `Exec` mode relies on (§5.2).
+
+Why it is safe: the tenant schema comes first, so tenant objects always win. `extensions` holds only extension objects owned by `pos_owner`, and no application role can create anything in it, so it cannot be used to shadow a name. A table missing from the tenant schema still fails, because `extensions` contains no tables.
+
+**Tests (step 2):**
+1. Inside `InTenantTx`, `current_setting('search_path')` equals `t.Schema.SearchPath()` exactly, and on the released connection it is `""` again.
+2. `SELECT 'A@x.io'::citext = 'a@x.io'::citext` is true, and inserting `A@x.io` then `a@x.io` into `users` hits `users_email_uq` (the case-insensitive rule really applies).
+3. `EXPLAIN` of the product name search uses `products_name_trgm`.
+4. A tenant role cannot `CREATE` in `extensions` or `public`, and cannot see `platform`.
+5. With `extensions` left off the path (negative test), test 2 fails, which documents why the rule exists.
+
+### 5.5 Change notifications (`LISTEN/NOTIFY`)
+
+Channels: `tenant_changed`, `auth_changed`, `role_changed`, `impersonation_changed`, `mail_dispatch`. Payloads carry IDs only and are treated as **hints**: a listener only invalidates cache entries or wakes a worker, so a spoofed `NOTIFY` (any role can send one) costs at most an extra DB read.
+
+- **Dedicated direct connection.** Each process holds one `pgx.Conn` for `LISTEN`, opened with `LISTEN_DATABASE_URL` (defaults to `DATABASE_URL`). It is not taken from `pgxpool`, and it must never go through PgBouncer in transaction mode, where `LISTEN` does not work. When a pooler is added later, this URL points at the direct port.
+- **Reconnect.** Backoff 1 s → 30 s. After every (re)connect: `LISTEN` all channels, then **flush every cache** (tenant/slug, auth state, permissions, impersonation), because notifications sent while disconnected are lost. Only then is the listener marked healthy.
+- **TTL stays as the fallback.** Caches keep their TTL (30 s, 60 s for permissions) whether or not the listener is up, so staleness is bounded even if a notification is lost. While the listener is down, TTLs drop to 5 s.
+- Observability: `pos_listener_connected` gauge, `pos_listener_reconnects_total`, alert `ListenerDown` after 2 min (OPERATIONS §4). `/readyz` does **not** fail on it (the TTLs keep the app correct).
+- Test (step 2): kill the listener's backend with `pg_terminate_backend`, change a user's status while it is down, and assert the change is enforced within the reduced TTL and immediately after reconnect.
 
 ---
 
@@ -272,8 +325,8 @@ Role count = tenant count; Postgres handles thousands of roles. `pg_dump -n` use
 | 2 | Insert `platform.tenants` (status `provisioning`, new ID) + `provisioning_runs` | Row exists | Mark `failed` |
 | 3 | `CREATE ROLE t_<id>_rw NOLOGIN`; `CREATE SCHEMA t_<id> AUTHORIZATION pos_owner` | `pg_namespace`/`pg_roles` lookup | `DROP SCHEMA … CASCADE`, `DROP ROLE` |
 | 4 | Run tenant migrations to latest (advisory lock `pg_advisory_lock(hashtextextended('migrate:'||id,0))`) | `goose_db_version` | Drop schema |
-| 5 | Grants (`USAGE`, DML, `audit_log` insert-only, `EXECUTE mark_outbox_pending`), `GRANT t_<id>_rw TO pos_app, pos_jobs WITH INHERIT FALSE, SET TRUE` | `has_schema_privilege` | Drop schema/role |
-| 6 | Seed: permission catalog copy, roles `owner/admin/biller`, `settings` (currency/locale/timezone from the request or defaults), default "Walk-in Customer", default store | Unique keys + `ON CONFLICT DO NOTHING` | Drop schema |
+| 5 | Grants (`USAGE` on `t_<id>` and `extensions`, DML, `audit_log` insert-only), default privileges (§5.3), tenant-bound trigger function `mark_outbox_pending()` with the validated tenant ID as a literal (EMAIL_AND_RECEIPTS §4.2), `GRANT t_<id>_rw TO pos_app, pos_jobs WITH INHERIT FALSE, SET TRUE` | `has_schema_privilege`, `pg_proc` lookup | Drop schema/role |
+| 6 | Seed **only** roles, permissions and settings: permission catalog copy, roles `owner/admin/biller`, `settings` (currency/number format/timezone from the request or defaults). No demo data | Unique keys + `ON CONFLICT DO NOTHING` | Drop schema |
 | 7 | Create owner user (`status=Active`, no password, `owner` role) + invite token (hashed) | Unique email | Drop schema |
 | 8 | Create trial subscription row (`trialing`, `trial_end = now + plan.trial_days`) | Unique `tenant_id` | Delete row |
 | 9 | Status → `trialing`; invalidate slug cache | Status check | — |
@@ -282,7 +335,7 @@ Role count = tenant count; Postgres handles thousands of roles. `pg_dump -n` use
 - Steps 3–8 run as `pos_migrator`. Failure in 3–8 runs compensation in reverse, then sets `failed` with the error (sanitized) for the Super Admin to retry (`/provisioning/retry`) or discard. A periodic reaper finds runs stuck in `provisioning` for more than 15 minutes.
 - The **owner role is granted only here** (and by an audited ownership-transfer endpoint later). No client field can choose it.
 - New tenants start at the latest migration version.
-- Self-signup (if `SELF_SIGNUP_ENABLED=true`): apex host form → email verification (platform SMTP) + CAPTCHA (Cloudflare Turnstile or hCaptcha, server-verified) + rate limit per IP → the same orchestrator. Default **off**.
+- **Public self-signup is not built (Q-5).** Only the Super Admin creates tenants (`POST /api/platform/tenants`). If it is ever added, it would be an apex-host form → email verification + CAPTCHA + per-IP rate limit → the same orchestrator (Turnstile deferred).
 - Phase 3 test: inject a failure at every step; assert no orphan schema, role or tenant row in `provisioning`.
 
 ---
@@ -293,9 +346,9 @@ Role count = tenant count; Postgres handles thousands of roles. `pg_dump -n` use
 
 | Host | Serves |
 |---|---|
-| `<slug>.<BASE_DOMAIN>` | Tenant SPA (static) + `/api/*` tenant API + `/api/public/shop/*` + `/files/t/*` |
-| `admin.<BASE_DOMAIN>` | Admin console SPA + `/api/platform/*` only (incl. Razorpay webhook) |
-| `<BASE_DOMAIN>` (apex) | Landing / optional self-signup / "find my store" (sends an email; no enumeration) |
+| `<slug>.<BASE_DOMAIN>` | Tenant SPA (static) + `/api/*` tenant API + `/api/public/tenant-info` + `/api/public/shop/*` + `/files/t/*` |
+| `admin.<BASE_DOMAIN>` | Admin console SPA + `/api/platform/*` only (incl. Razorpay webhook). Strict CSP (OPERATIONS §7) |
+| `<BASE_DOMAIN>` (apex) | Static landing page only (no self-signup, Q-5; "find my store" deferred, S10) |
 | anything else | `421` |
 
 The Go binary serves the static SPA builds (from `STATIC_DIR` or embedded with `go:embed`). That keeps everything same-origin, lets the app do slug redirects, and leaves the proxy with only TLS and forwarding to do.
@@ -348,7 +401,13 @@ Tool: **goose v3** (Provider API) with plain SQL files (challenge to golang-migr
 `posctl migrate tenants up [--dry-run] [--parallelism 8] [--tenants id,..] [--resume RUN_ID]`:
 1. Create `migration_runs` row (target version = latest file).
 2. List tenants with status not in (`deleted`,`failed`), ordered by size ascending (small first, so failures show up cheaply).
-3. Worker pool (bounded parallelism). Per tenant: dedicated connection as `pos_migrator`, `pg_try_advisory_lock(hashtextextended('migrate:'||tenant_id,0))` (skip if locked, so an overlapping run can't double-apply), `SET search_path = "t_<id>"` on that **dedicated, discarded** connection, goose `Up` (each migration in its own transaction unless marked `NO TRANSACTION`, e.g. `CREATE INDEX CONCURRENTLY`), `lock_timeout = 5s` to avoid queueing behind POS traffic, update `tenants.schema_version`, record per-tenant item (from, to, ms, error).
+3. Worker pool (bounded parallelism). Per tenant:
+   - **Lock connection**: a separate `pgx.Conn` takes `pg_try_advisory_lock(hashtextextended('migrate:'||tenant_id,0))` (skip if locked, so an overlapping run can't double-apply) and holds it for the whole tenant run. If it drops, the tenant run aborts and is marked failed.
+   - **Migration connection**: built by `migrate.DedicatedConn(schema)` in `internal/migrate/conn.go`, the only place allowed to do this (§5 CI rule). It is a `*sql.DB` over pgx `stdlib.OpenDB` with `SetMaxOpenConns(1)`, logging in as `pos_migrator`, and the session settings are **connection startup parameters** in `ConnConfig.RuntimeParams`, not `SET` statements: `search_path = "t_<id>", extensions`, `role = pos_owner` (so objects are owned by `pos_owner`), `lock_timeout = 5s` (don't queue behind POS traffic), `statement_timeout = 0`, `application_name = posctl-migrate`. The server applies them before the first query, so they are simply the session defaults.
+   - goose `Up` on that `*sql.DB`. Each migration runs in its own transaction unless marked `-- +goose NO TRANSACTION` (e.g. `CREATE INDEX CONCURRENTLY`).
+   - **Why this works with `NO TRANSACTION`**: a `SET LOCAL` would vanish outside a transaction, and a plain `SET` would be lost on reconnect (and is banned). A startup parameter is part of every physical connection the `*sql.DB` opens, so a `NO TRANSACTION` statement, or a connection that goose re-dials after a network error, still sees the tenant path. Step 3 tests this: a `NO TRANSACTION` `CREATE INDEX CONCURRENTLY` lands in `t_<id>`; `pg_terminate_backend` between two migrations, then the next migration still lands in `t_<id>`; afterwards no new object exists in `public`, `platform`, `extensions` or another tenant schema. Fallback if a provider rejects `role` as a startup parameter: `ALTER ROLE pos_migrator SET role = 'pos_owner'` (a role default, still not a `SET` statement in code).
+   - Post-step: re-apply grants (§5.3) and `CREATE OR REPLACE` the tenant-bound `mark_outbox_pending()`.
+   - Update `tenants.schema_version`, record the per-tenant item (from, to, ms, error), close both connections.
 4. Failure of one tenant does not stop the others; the run ends `partial`. `--resume` reprocesses only failed/pending items.
 5. `--dry-run`: reports pending versions per tenant and runs the SQL inside a transaction that is **rolled back** (for transactional migrations). It never touches `NO TRANSACTION` migrations.
 6. **Drift report** (`posctl migrate drift` and `/api/platform/migrations/drift`): per tenant, the version vs latest, plus a structural fingerprint (hash of `information_schema.columns` + indexes + constraints for that schema) compared with the reference fingerprint of a freshly migrated scratch schema. Any difference is listed.
@@ -383,23 +442,11 @@ Cookies are host-scoped, so the admin console cannot log into a tenant host dire
 
 ---
 
-## 11. Existing single-tenant data → tenant #1
+## 11. Starting state (no legacy import)
 
-`posctl import-legacy --source-dsn … --slug <slug> [--dry-run]` (source = the old Sequelize tables, usually the `public` schema of the same DB):
+The old database holds demo data only, so there is **no legacy import** (former step 17 is dropped). The Go backend starts with an empty database:
+1. `posctl migrate platform up` creates `extensions`, `platform` and `river`, and seeds the permission catalog and platform roles.
+2. `posctl bootstrap-superadmin` creates the first Super Admin (PHASE1_DESIGN §7.3).
+3. Each tenant is provisioned from the console (§6) and gets only roles, permissions and settings.
 
-1. Provision tenant #1 normally (steps 1–9, no welcome email). The owner is chosen from existing admins (flag `--owner-email`).
-2. Copy tables in dependency order **preserving IDs** (receipts, references and URLs stay valid), then reset identity sequences to `max(id)+1`.
-3. Transform:
-   - `FLOAT` money → `round(x::numeric, 2)`. Rows where rounding changed the value by more than 0.005 are reported.
-   - ENUM → text (values validated). `Partial` is allowed.
-   - `sales.date IS NULL` (all POS sales) → `createdAt`. `payment_method` NULL stays NULL.
-   - `purchase_items` without variant/store → product's first variant + the purchase's inferred store, flagged `legacy_inferred=true` and listed in the report.
-   - Order/return items pointing at deleted products/variants (FK `SET NULL`) → kept, with `product_name_snapshot = 'Deleted product'`.
-   - Users: bcrypt hashes kept and verified by the bcrypt path, then **rehashed to argon2id on next login**. `role_id` NULL → mapped from the legacy `role`. Seeded `admin` user → `owner` if chosen. Inactive stays Inactive. All users get `token_version = 1` (old JWTs are invalid anyway, since the new secret is rotated).
-   - Base64 images → decoded, validated and re-encoded into object storage under the tenant prefix. Invalid ones are dropped and reported.
-   - Negative `inventories.qty` (possible from old races) → reported. Clamped to 0 with a `stock_movements` correction row, only with `--fix-negative-stock`.
-   - Stores without slug → generated slug. Duplicate SKUs/barcodes → reported. The migration fails unless `--dedupe-skus=suffix` is given.
-   - An `opening` stock movement per inventory row, so the new ledger reconciles.
-4. Verify: row counts per table, `SUM` of money columns per table, `SUM(qty)` per store. Source vs target must match (after documented transforms). The report is written to `import-report-<ts>.json`.
-5. `--dry-run` runs everything in a transaction that is rolled back and prints the report.
-6. The old tables are left untouched (read-only source). Dropping them is a separate, confirmed step after acceptance.
+Consequences: no bcrypt verify path (every password is argon2id from day one), no `legacy_inferred` columns, no slug backfill, and `OVERRIDING SYSTEM VALUE` is used only by per-tenant restore.

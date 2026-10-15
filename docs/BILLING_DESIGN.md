@@ -2,7 +2,8 @@
 
 | | |
 |---|---|
-| Status | Phase 1: full design. Phase 2 builds the minimum (§9) |
+| Status | Phase 1: full design, revised 2026-10-15 after review. Phase 2 builds the minimum (§9) |
+| Decided | Trial 14 d, grace 7 d, read-only 30 d, deletion 90 d (Q-14). Plans and prices are set later by the owner through the Super Admin console; none are hard-coded |
 | Provider | Razorpay Subscriptions API, INR, behind `BillingProvider` |
 | Rule | Only a **verified webhook** (or a server-side reconcile pull) changes subscription status. Client-side "payment done" is never trusted |
 | Separation | SaaS billing (platform ↔ tenant) is completely separate from POS payments (tenant ↔ shop customer) |
@@ -108,14 +109,20 @@ No card/UPI/bank details are ever stored. Razorpay's hosted checkout collects th
 ```
 \* Trial expiry without payment goes to `read_only` (data visible, writes blocked) instead of a hard lock, so owners can still subscribe. Configurable.
 
-| Tenant status | Login/refresh | Reads | Writes (POS, sales…) | Billing actions |
+**One access rule** (TENANCY §5 step 5 enforces exactly this table):
+
+| Tenant status | Login/refresh | Reads | Writes (POS, sales…) | Billing routes (`GET /api/billing/subscription`, `POST /api/billing/checkout`) |
 |---|---|---|---|---|
 | trialing, active | ✔ | ✔ | ✔ | ✔ |
 | past_due / grace | ✔ + banner | ✔ | ✔ | ✔ |
-| suspended | **✘** (`403 TENANT_SUSPENDED`), refresh tokens rejected | ✘ | ✘ | payment via emailed link (Q-11) |
-| cancelled (until period end) | ✔ | ✔ | ✔ | resubscribe |
-| read_only | ✔ + banner | ✔ | ✘ `403 TENANT_READ_ONLY` | resubscribe |
-| pending_deletion | ✘ | ✘ | ✘ | super admin can restore |
+| cancelled (paid period still running) | ✔ + banner | ✔ | ✔ until `current_period_end`, then the job sets `read_only` | ✔ (resubscribe) |
+| read_only | ✔ + banner | ✔ | ✘ `403 TENANT_READ_ONLY` | ✔ **exempt from the read-only gate**, so the owner can pay to return |
+| suspended | **✘** (`403 TENANT_SUSPENDED`), refresh tokens rejected | ✘ | ✘ | ✘ (no session). Payment via the Razorpay link in the email (Q-11, §10) |
+| pending_deletion | ✘ | ✘ | ✘ | ✘ (Super Admin can restore) |
+
+The billing routes still need `billing:view` / `billing:manage` (owner by default), and they are blocked for impersonation sessions.
+
+**Timeline (Q-14; the starting point is my reading, see open question in PHASE1_DESIGN §12):** trial 14 days → if unpaid, `read_only`. Charge failure → `past_due`/`grace` for 7 days → `suspended`. Day 0 of the restriction clock is the day the tenant first becomes `read_only` **or** `suspended`. Day 30 (`READ_ONLY_DAYS`): → `pending_deletion` (no login; a final export is taken). Day 90 (`RETENTION_DAYS`, counted from day 0): schema dropped, status `deleted`. Paying at any point before day 90 returns the tenant to `active` (a Super Admin restores from `pending_deletion`).
 
 Event → transition mapping (applied only if `event.created_at >= subscriptions.last_event_at`, otherwise logged as `stale_ignored`):
 
@@ -125,7 +132,7 @@ Event → transition mapping (applied only if `event.created_at >= subscriptions
 | `subscription.activated` | → `active`; set period |
 | `subscription.charged` | → `active`; extend `current_period_end`; clear grace; upsert invoice; "renewal success" notice (not on the first charge) |
 | `subscription.pending` | → `past_due`; `grace_end = now + GRACE_DAYS` (only set once per incident) → "payment failed" notice |
-| `subscription.halted` | → `suspended` if `now ≥ grace_end`, else stay `grace` (job suspends at `grace_end`) |
+| `subscription.halted` | → `suspended` if `now ≥ grace_end`, else stay `grace` (job suspends at `grace_end`). How a halted subscription comes back is unverified (§10) |
 | `subscription.cancelled` | → `cancelled`; `read_only` at period end (job) |
 | `subscription.completed` | → `expired` → `read_only` |
 | `subscription.paused` / `resumed` | → `read_only` / `active` |
@@ -155,7 +162,7 @@ Served only on the admin host (Razorpay is configured with `https://admin.<BASE_
 1. Owner (`billing:manage`) clicks Subscribe/Change plan → `POST /api/billing/checkout {planCode}`.
 2. Server (platform tx, tenant from host) creates the Razorpay customer if missing, then a subscription for `plans.razorpay_plan_id` (`notes: {tenant_id}`), stores `provider_subscription_id` + `short_url`, returns `{url: short_url}`.
 3. Browser goes to Razorpay hosted page. Returning to the app shows "processing". The SPA polls `GET /api/billing/subscription`; **status changes only when the webhook arrives**.
-4. For suspended tenants (no login), the "payment failed / suspended" emails contain the subscription `short_url` (Razorpay-hosted; no app session needed).
+4. For suspended tenants (no login, Q-11), the "payment failed / suspended" emails contain a Razorpay-hosted payment link (no app session needed). Which link that is (the existing subscription's link, the pending invoice's `short_url`, or a new subscription's `short_url`) depends on the test-mode result in §10.
 
 ## 6. Notifications (scheduled job, deduplicated)
 
@@ -187,4 +194,24 @@ Assign/change plan (provider `ChangePlan`, or local-only for comped plans), exte
 - Tests (Phase 3): bad/missing signature, body tampered after signing, duplicate event, out-of-order events, stale event, each lifecycle transition, grace → suspension job, notification dedupe across two workers, plan-limit races (parallel creates at the limit).
 
 ## 9. Phase 2 minimum
-Tables + migrations; `BillingProvider` interface + Razorpay create/fetch/cancel + `VerifyWebhook`; webhook endpoint with all checks; transition matrix; plan-limit enforcement (stores, users, products, emails/day); scheduled notifications (trial/subscription ending, payment failed, suspended, reactivated); Super Admin: assign plan, extend trial, expiring/past-due lists; tenant: subscription view + checkout link + banners. Deferred: proration UI, coupons, GST invoices for the SaaS itself (Razorpay invoices cover it initially), custom domains.
+Tables + migrations; `BillingProvider` interface + Razorpay create/fetch/cancel + `VerifyWebhook`; webhook endpoint with all checks; transition matrix; plan-limit enforcement (stores, users, products, emails/day); scheduled notifications (trial/subscription ending, payment failed, suspended, reactivated); Super Admin: create/edit plans (prices set by the owner), assign plan, extend trial, expiring/past-due lists; tenant: subscription view + checkout link + banners. Deferred: proration UI, coupons, GST invoices for the SaaS itself (Razorpay invoices cover it initially), custom domains.
+
+## 10. Verify in Razorpay test mode (before step 16 is built)
+
+These behaviours decide code paths, and I could not confirm them from the documentation alone. Each one is checked in a Razorpay test account, and the results go into `docs/spikes/RAZORPAY_TEST_MODE.md` before the billing step starts.
+
+| # | Question | Why it matters | Code path depending on it |
+|---|---|---|---|
+| R1 | **Can a `halted` subscription be revived by paying?** Pay the pending invoice's `short_url` (and separately the subscription's own link) from the emailed link. Does it go back to `active`, and which events fire (`subscription.charged`, `subscription.activated`, `subscription.resumed`, `invoice.paid`)? | Q-11: a suspended tenant cannot log in and must be able to pay from the email | **Revivable**: the suspended email carries that link and the webhook reactivates. **Not revivable**: the lifecycle job creates a **new** subscription for the same plan, cancels the halted one, emails the new `short_url`, and the first charge on it reactivates the tenant |
+| R2 | After revival (or a new subscription), what are `current_start`/`current_end`? Does the billing anchor reset? | Period dates drive `read_only` and reminders | Period mapping in `billing.Apply` |
+| R3 | How many retries happen, at what interval, before `pending` → `halted`? Can test mode trigger it (failure test cards, UPI failure VPA)? | Grace timing vs Razorpay's own retries | `GRACE_DAYS` default and the `halted` rule |
+| R4 | Does a trial created with a future `start_at` fire `subscription.authenticated` at mandate setup, and is there an authorisation charge or refund for cards, UPI Autopay and eMandate? | Trial → active transition | `authenticated` handling |
+| R5 | Is `x-razorpay-event-id` present on every webhook, and `created_at` in every payload, in test mode? | Dedupe and ordering guard | `billing_events` uniqueness, `last_event_at` |
+| R6 | Webhook retry behaviour after a `500` or timeout: how often, for how long, and is the webhook auto-disabled after repeated failures? | Our "return 500 to get a retry" rule | Alerting and reconcile frequency |
+| R7 | Are plan changes (`PATCH /subscriptions/:id`) allowed for UPI Autopay and eMandate, or only for cards? | Upgrade/downgrade path | `ChangePlan` vs cancel + new subscription |
+| R8 | `cancel_at_cycle_end=1`: which event fires and when; does the subscription stay `active` until the end? | `cancelled` state handling | Lifecycle job |
+| R9 | Does Razorpay send its own customer emails for the subscription (`notify_info`), and can they be turned off? | Avoid double emails next to ours | Notification set |
+| R10 | Shortest plan period usable in test mode (daily needs an interval of at least 7?) to watch real renewals | Practical renewal testing | Test plan |
+| R11 | Are `subscription.paused`/`resumed` available on our account? | Mapping to `read_only`/`active` | Transition matrix |
+
+R1 is the important one. Both branches are designed above; the test result picks one, and I will report it before building step 16.

@@ -2,8 +2,9 @@
 
 | | |
 |---|---|
-| Status | Phase 1 design, awaiting approval |
+| Status | Phase 1 design, revised 2026-10-15 after review; awaiting approval |
 | Principles | A failed email never fails or rolls back a sale · outbox row commits with the sale · at-least-once delivery, exactly-one *logical* receipt per sale · tenant data only from the tenant's own schema |
+| Language | **English only**: every email, template and receipt. No language setting, translation files or i18n libraries. Currency and number format come from tenant settings |
 
 ---
 
@@ -34,13 +35,13 @@ var (
 )
 ```
 
-Implementations: `smtpSender` (wneessen/go-mail) first. Provider-API senders (SES, Brevo, Postmark, Resend) can be added behind the same interface later. `fakeSender` for tests, `mailpit` in dev.
+Implementations: `smtpSender` (wneessen/go-mail) only. **Platform mail (Q-13)** goes over SMTP to Amazon SES in Mumbai (`email-smtp.ap-south-1.amazonaws.com:587`, STARTTLS) or Brevo (`smtp-relay.brevo.com:587`); switching is an env change. Provider-API senders can be added behind the same interface later. `fakeSender` for tests, Mailpit in dev and CI. The display name comes from `PLATFORM_NAME`; no product name is hard-coded.
 
 ## 2. Two sending identities
 
 | | Platform SMTP | Tenant SMTP |
 |---|---|---|
-| Configured by | Super Admin via env / secret manager | Tenant owner/admin in **their** dashboard (`email_settings:edit`) |
+| Configured by | Operator via env / secret manager (SES ap-south-1 or Brevo SMTP) | Tenant owner/admin in **their** dashboard (`email_settings:edit`) |
 | Stored | Env only | `t_<id>.tenant_email_settings`, password envelope-encrypted |
 | Used for | Welcome, email verification, invite/set password, password reset, trial ending, subscription ending/expired, payment failed, grace, suspension, reactivation, announcements, **fallback** for tenant receipts | That tenant's receipts, order confirmations, customer emails |
 | Never used for | — | Platform mail (never) |
@@ -112,7 +113,7 @@ CREATE TABLE tenant_email_settings (
 - Requires **2-Step Verification** and an **App Password** (the normal password fails with 535). Use `smtp.gmail.com:587` (STARTTLS) or `:465`.
 - Daily sending limits (consumer accounts far lower than Workspace); bursts trigger temporary blocks (421 / 5.4.5). We treat these as `ErrQuota`: back off and fall back to platform SMTP if enabled.
 - App Passwords are revoked when the Google password changes, so `status` flips to `failing` and the tenant sees it.
-- For the **platform** we recommend a transactional provider (Amazon SES, Brevo, Postmark, Resend) via SMTP first: higher limits, bounce/complaint handling, DKIM on the platform domain. It's a configuration detail behind `EmailSender`.
+- For the **platform** (decided, Q-13): Amazon SES (ap-south-1) or Brevo over SMTP. Both give higher limits, bounce/complaint handling and DKIM on the platform domain. SES starts in sandbox mode (verified recipients only) until production access is requested; the go-live checklist covers it (OPERATIONS §9).
 
 ## 4. Transactional outbox
 
@@ -144,17 +145,47 @@ Inside `POST /api/sales` (tenant tx):
 1. Insert sale + items + stock updates + ledger.
 2. Insert `receipts(sale_id, sale_version=1, status='pending')`.
 3. If `receipt_email` (customer email or cashier-entered) is set: `INSERT INTO email_outbox (idempotency_key='sale:<id>:receipt', …) ON CONFLICT (idempotency_key) DO NOTHING`.
-4. An `AFTER INSERT` trigger on `email_outbox` calls `platform.mark_outbox_pending()`, a `SECURITY DEFINER` function owned by `pos_owner`, `EXECUTE` granted to tenant roles. It derives the tenant ID from `current_schema()` (validated against `^t_[a-z0-9]{6,20}$` and looked up in `platform.tenants`) and upserts `platform.mail_dispatch(tenant_id)`, then `pg_notify('mail_dispatch', tenant_id)`. Both are transactional: they happen **only if the sale commits**.
+4. An `AFTER INSERT … FOR EACH STATEMENT` trigger on `email_outbox` runs `"t_<id>".mark_outbox_pending()`, which upserts `platform.mail_dispatch(tenant_id)` and calls `pg_notify('mail_dispatch', tenant_id)`. Both are transactional: they happen **only if the sale commits**.
 5. Commit. If the commit fails, sale, receipt and email all vanish together. If the commit succeeds, the email is durably queued even if the process crashes a millisecond later.
 
-Why a `SECURITY DEFINER` function instead of granting the tenant role `INSERT` on `platform.mail_dispatch`: the tenant role gets one narrowly scoped capability ("tell the platform I have pending mail") instead of a table privilege. Abuse is harmless: the function can only mark the *current* schema's tenant, and a spurious mark just triggers an empty check.
+**How the function knows the tenant (revised).** The first draft derived the tenant from `current_schema()`. That value comes from the caller's `search_path`, so it is caller-controlled; and a `SECURITY DEFINER` function must pin its own `search_path`, which would make `current_schema()` return `pg_catalog` anyway. The review asked for `current_user` instead. Inside a `SECURITY DEFINER` function, though, `current_user` is the **function owner** (`pos_owner`), not the caller. The caller's role (`t_<id>_rw`) is visible only to a `SECURITY INVOKER` function, and that function would then need write access to `platform.mail_dispatch`, which we don't want to grant.
+
+So the tenant identity is bound to the **role and schema** when the function is created, not read at run time:
+
+```sql
+-- Created by provisioning step 5 and re-applied by the migration runner's post-step, from the
+-- validated tenancy.TenantID (^[a-z2-7]{10}$) through internal/db/ident.go. Never from current_schema(),
+-- current_user, app.tenant_id or any request value.
+CREATE OR REPLACE FUNCTION "t_ab12cd34ef".mark_outbox_pending() RETURNS trigger
+  LANGUAGE plpgsql SECURITY DEFINER
+  SET search_path = pg_catalog, pg_temp
+AS $$
+BEGIN
+  INSERT INTO platform.mail_dispatch (tenant_id) VALUES ('ab12cd34ef')
+  ON CONFLICT (tenant_id) DO UPDATE
+    SET next_attempt_at = LEAST(platform.mail_dispatch.next_attempt_at, now());
+  PERFORM pg_notify('mail_dispatch', 'ab12cd34ef');
+  RETURN NULL;
+END $$;
+ALTER FUNCTION "t_ab12cd34ef".mark_outbox_pending() OWNER TO pos_owner;
+REVOKE ALL ON FUNCTION "t_ab12cd34ef".mark_outbox_pending() FROM PUBLIC;
+CREATE TRIGGER email_outbox_mark AFTER INSERT ON "t_ab12cd34ef".email_outbox
+  FOR EACH STATEMENT EXECUTE FUNCTION "t_ab12cd34ef".mark_outbox_pending();
+```
+
+- The function lives in the tenant's own schema, is owned by `pos_owner` (the tenant role cannot replace it, since it has no `CREATE` on its schema), and fires only from that schema's `email_outbox`. Only `t_<id>_rw` can write to that table, so in effect the tenant comes from the role, as the review intended, but enforced by grants instead of a run-time lookup.
+- Trigger functions cannot be called directly, and `EXECUTE` is revoked from `PUBLIC`.
+- Why a `SECURITY DEFINER` function instead of granting the tenant role `INSERT` on `platform.mail_dispatch`: the tenant role gets one narrowly scoped capability ("tell the platform I have pending mail") instead of a table privilege. Abuse is harmless: the function can only mark its own tenant, and a spurious mark just triggers an empty check.
+- Tests (step 3): an outbox insert in tenant A marks only A; tenant A's role cannot insert into `platform.mail_dispatch` or execute B's function; changing `search_path`/`app.tenant_id` inside the transaction has no effect on which tenant is marked; the drift check flags a function whose literal does not match its schema.
 
 ### 4.3 Cross-schema worker
 
 ```
 ┌─ LISTEN mail_dispatch ─┐   ┌─ sweeper (every 60 s) ───────────────┐
 │ instant wake-up        │   │ SELECT tenant_id FROM platform.mail_dispatch
-└──────────┬─────────────┘   │ WHERE next_attempt_at <= now()       │
+│ (dedicated connection, │   │ WHERE next_attempt_at <= now()       │
+│  TENANCY §5.5)         │   │                                      │
+└──────────┬─────────────┘   │                                      │
            └──────────┬──────┴──────────────────────────────────────┘
                       ▼
       River job  DeliverTenantMail{tenant_id}   (unique per tenant while pending/running)
@@ -212,10 +243,12 @@ Why a `SECURITY DEFINER` function instead of granting the tenant role `INSERT` o
 
 ### 5.3 Content
 Tenant business name, logo, legal name, tax registration no. (GSTIN) and address from `settings`; store name/address/phone; receipt/reference no., date/time in tenant timezone, cashier name, customer name (and email if provided); items: name, variant attributes, SKU, qty, unit price, discount, tax rate/amount (CGST/SGST or IGST split when configured), line total; subtotal, discount, tax total (per rate summary), shipping, **total**, paid, tendered, change, due; payment method; header/footer text; "Thank you" line; for void: watermark.
-- Currency and number formatting from `settings.currency`/`locale` (no hard-coded INR). Formatting uses `golang.org/x/text/currency` + `x/text/message`. Fonts embedded (Noto Sans + Noto Sans Devanagari) so `₹` and Indic names render; font licensing is SIL OFL.
+- All labels and fixed text are English. Currency and number formatting come from `settings.currency` and `settings.locale` (an English number-format tag such as `en-IN` or `en-US`, used only for grouping, decimal separator and date format; no hard-coded INR). Formatting uses `golang.org/x/text/currency` + `x/text/number`; no message catalogs.
+- Fonts embedded (Noto Sans + Noto Sans Devanagari, SIL OFL) so `₹` and **names that tenants type in Devanagari** (customers, products, stores) render. This is data, not translation. Whether maroto can render them correctly is the subject of the spike in §5.6.
 - All data from the tenant's own schema. The PDF function signature takes `TenantTx` + `receiptID` and nothing else.
 
 ### 5.4 Email templates
+- All templates are English only; there is one template per message, no per-language variants.
 - `receipt.html.tmpl` / `receipt.txt.tmpl`: minimal transactional body (business name, total, date, reference, store contact, "Your receipt is attached"). Tenant-editable header/footer text and logo, safely escaped.
 - Platform templates: welcome/set-password, verify email, reset password, trial ending (7/3/1), subscription ending (7/3/1), renewal success, payment failed, grace ending, suspended, reactivated, announcement.
 - Template data structs are typed. Template rendering is tested with golden files, including hostile inputs (`<script>`, `{{`, CR/LF, very long names).
@@ -223,6 +256,20 @@ Tenant business name, logo, legal name, tax registration no. (GSTIN) and address
 ### 5.5 Consent
 - Transactional mail (receipts, password resets, billing) is exempt from marketing consent but kept **minimal**: no promotions in receipt emails.
 - Marketing-type mail (future "customer emails", promotions): requires `customers.marketing_consent = true`, includes `List-Unsubscribe` + `List-Unsubscribe-Post` (RFC 8058) and a one-click unsubscribe link (HMAC-signed token → sets consent false). Consent changes are audited. Platform announcements to tenant owners are service messages; owners can opt out of non-essential ones.
+
+### 5.6 PDF spike: Devanagari names with maroto (early, before step 9)
+
+**Why.** Devanagari needs complex text shaping: conjuncts (`क्ष`, `ज्ञ`, `श्र`, `त्र`), the reph (`र्` above the next consonant, as in `धर्मेंद्र`), and the pre-base vowel sign `ि`, which is typed after its consonant but drawn before it (`कि`). maroto v2 draws text through a gofpdf-style engine, which as far as I can tell maps characters to glyphs one by one with no OpenType shaping. If so, conjuncts break apart and `ि` lands on the wrong side. Receipts are English, but customer names are tenant data and are often typed in Marathi or Hindi.
+
+**Spike** (`backend-go/spikes/pdfshaping/`, throwaway, about half a day):
+1. Render a one-page receipt with maroto v2.4.3 and embedded Noto Sans Devanagari, with customer names `क्षितिज ज्ञानेश्वर कुलकर्णी`, `श्रीकृष्ण त्रिपाठी`, `धर्मेंद्र सिंह`, `किरण पाटील` and a mixed line `Total ₹1,23,456.00`.
+2. Render the same names in an HTML page in Chromium as the reference.
+3. Compare them side by side (a person checks; text extraction cannot judge shaping). Result and screenshots go into `docs/spikes/PDF_SHAPING.md`.
+
+**Decision rule.**
+- maroto output matches the reference → keep maroto (as planned).
+- It does not → **fallback: HTML-to-PDF**. The receipt is rendered from an `html/template` (the same view-model as the email) by **Gotenberg** (Chromium behind an HTTP API) running as a separate container on the internal network only. It gets no internet egress, JavaScript is disabled, and every asset (fonts, logo) is sent inline with the request, so tenant content cannot make it fetch URLs. The Go app stays distroless; only the renderer container has Chromium. Cost: about 1 GB image, 200–500 ms per render (done in the worker, so POS is not affected), one more service to monitor.
+- Pure-Go shaping (`go-text/typesetting` v0.3.5, a HarfBuzz port, or `tdewolff/canvas`, which has no tagged releases) is noted as a later option, not part of the spike.
 
 ## 6. Logging & metrics
 - Logs: `outbox_id`, `tenant_id`, `kind`, `status`, `error_class`, attempt. **Never** bodies, attachments, SMTP credentials, full recipient lists (recipient domain only).

@@ -2,34 +2,36 @@
 
 | | |
 |---|---|
-| Status | **Awaiting approval.** No application code written. |
-| Baseline | Commit `94aeeb8`. Every file in `backend/src/**` was read; frontend auth, API client and every `api.*`/`fetch` call site were read. |
+| Status | **Revised 2026-10-15 after review: decisions Q-1…Q-16, extras and doc fixes applied (§12). Awaiting "approved".** No application code written. |
+| Baseline | Commit `94aeeb8` "Update POS inventory system". Every file in `backend/src/**` was read; frontend auth, API client and every `api.*`/`fetch` call site were read. (Commit hashes change if the history rewrite in Q-7 runs; the subjects stay.) |
 | Companion docs | [API_CONTRACT](./API_CONTRACT.md) · [TENANCY_DESIGN](./TENANCY_DESIGN.md) · [THREAT_MODEL](./THREAT_MODEL.md) · [EMAIL_AND_RECEIPTS](./EMAIL_AND_RECEIPTS.md) · [BILLING_DESIGN](./BILLING_DESIGN.md) · [OPERATIONS](./OPERATIONS.md) · [LIBRARIES](./LIBRARIES.md) |
 
 ---
 
 ## 1. Summary
 
-- Rewrite **only the backend** in Go. Keep the React SPA, PostgreSQL, and the existing routes and JSON shapes. 21 deliberate contract changes are listed in API_CONTRACT §4; most need no frontend change.
-- **Schema-per-tenant** in one database, one shared pgx pool, every request in a transaction with `SET LOCAL ROLE t_<id>_rw` + `set_config('search_path', '"t_<id>"', true)`, and pgx in **`QueryExecModeExec`** so no cached statement can bind to the wrong schema. Per-tenant DB roles make a wrong-schema bug a *permission error*, not a leak.
+- Rewrite **only the backend** in Go. Keep the React SPA, PostgreSQL, and the existing routes and JSON shapes. 21 deliberate contract changes are listed in API_CONTRACT §4 (all approved); most need no frontend change.
+- **Web application only**, **English only** (UI, API messages, emails, receipts; currency and number format from tenant settings). The new system starts with an **empty database**; there is no legacy import.
+- **Schema-per-tenant** in one database, one shared pgx pool, every request in a transaction with `SET LOCAL ROLE t_<id>_rw` + `set_config('search_path', '"t_<id>", extensions', true)`, and pgx in **`QueryExecModeExec`** so no cached statement can bind to the wrong schema. Per-tenant DB roles make a wrong-schema bug a *permission error*, not a leak.
 - Tenant from the **subdomain**, which must match the token's tenant claim. Same-origin SPA+API, so `__Host-` cookies and no CORS in production.
 - Platform **Super Admin** on `admin.<BASE_DOMAIN>`: separate identity, mandatory TOTP, step-up, audited, time-limited impersonation.
 - Email via a **transactional outbox** written in the sale transaction. Workers fan out across tenant schemas safely. Receipts as PDF (maroto) + HTML email. Tenant SMTP (encrypted, SSRF-hardened) or platform fallback.
 - **Razorpay** subscriptions behind a `BillingProvider`: verified, idempotent webhooks; lifecycle trial → active → past_due → grace → suspended → read_only → deleted.
-- Found **11 P0 issues** in the old backend, including two the brief did not list: **client-controlled prices** (a biller can sell anything for ₹0) and a **committed JWT secret + DB password in the public git history**.
+- Found **10 P0 issues** in the old backend (an 11th, desktop LAN exposure, no longer applies because desktop is dropped), including two the brief did not list: **client-controlled prices** (a biller can sell anything for ₹0) and a **committed JWT secret + DB password in the public git history**.
 
 ### 1.1 Assumptions (explicit)
 
 | # | Assumption | If wrong |
 |---|---|---|
-| A1 | Production Postgres is **≥ 16** (we target 18) | Per-tenant role design needs `GRANT … WITH INHERIT FALSE, SET TRUE` (PG16). On PG 14/15 roles still work with `NOINHERIT` on `pos_app` |
+| A1 | Production Postgres is **≥ 16** (we target 18) on a managed provider that allows `CREATEROLE`, thousands of roles and PG16 grant syntax | Confirmed per provider by the preflight (OPERATIONS §8) before a managed instance is used. On PG 14/15 roles still work with `NOINHERIT` on `pos_app` |
 | A2 | Early scale is ≤ 1,000 tenants per DB | See TENANCY §1 for ceiling and triggers |
-| A3 | The Go backend lives in a new folder `backend-go/` next to the old `backend/` until cutover | Q-8 |
+| A3 | The Go backend lives in `backend-go/` next to the old `backend/` until cutover | **Decided** (Q-8) |
 | A4 | Quantities stay integers (contract) | Weight-based selling needs `numeric` qty later (expand migration) |
 | A5 | One currency per tenant; GST-style tax config by default but country-agnostic | Multi-currency per tenant is out of scope |
-| A6 | Desktop (Electron) is a single local tenant and needs a local Postgres | Q-1 |
 | A7 | Go 1.27.2 (current stable, checked on go.dev) instead of the "1.23+" floor | 1.23 is out of security support; we pin `go 1.27` + `toolchain go1.27.2` and follow patch releases |
-| A8 | Hosting: one VM / small cluster with docker-compose, managed Postgres with PITR | Q-15 |
+| A8 | Hosting: one VM with docker-compose, managed Postgres with PITR, S3-compatible storage | **Decided** (Q-15) |
+| A9 | Web application only; English only | **Decided** (Q-1, language decision). No desktop build, no i18n |
+| A10 | Old data is demo data; the new system starts empty and seeds only roles, permissions and settings | **Decided**. No legacy import, no bcrypt path |
 
 ### 1.2 Challenges to the brief and to `SAAS_ARCHITECTURE.md`
 
@@ -41,8 +43,8 @@
 | Migrations | golang-migrate | **goose v3** (Provider API) | Per-migration transactions, `NO TRANSACTION` annotation, Go migrations for backfills, no global "dirty" flag that blocks every later run, easy per-schema table. SQL files stay portable (LIBRARIES) |
 | TOTP lib | pquerna/otp | stdlib RFC 6238 implementation (~80 lines + RFC test vectors) | pquerna/otp: last release Dec 2024 (> 12 months), fails the library rule |
 | CORS | own tenant origin + admin origin | Same-origin, no CORS in prod | Admin console never calls tenant APIs (code-exchange impersonation) |
-| Suspended tenants | SAAS_ARCHITECTURE: "allow login + billing page"; brief: "blocked at login" | Blocked at login (brief), with payment by emailed Razorpay link | Q-11 |
-| Desktop | SAAS_ARCHITECTURE: Electron = thin client of SaaS | Brief: sidecar + single local tenant | Q-1. Both are possible; offline POS favours the sidecar |
+| Suspended tenants | SAAS_ARCHITECTURE: "allow login + billing page"; brief: "blocked at login" | Blocked from all logins, payment by emailed Razorpay link | **Decided** (Q-11) |
+| `search_path` vs extensions | (not covered) | `"t_xxx", extensions` | Operators (`citext =`, trigram `%`) resolve through `search_path`; without `extensions` the `citext` comparison silently becomes case-sensitive (TENANCY §5.4) |
 | Token lifetime | SAAS_ARCHITECTURE: 1 h access; old code: 30 d | 10 min access + rotated refresh with reuse detection | S-req 26 |
 | Billing | SAAS_ARCHITECTURE: Stripe | Razorpay (brief) behind `BillingProvider` | INR/UPI market |
 | POS lock | Brief: "in-memory POS lock" | **Correction:** the old lock is DB columns on `products` (`is_locked/locked_at/locked_by`), but it is racy (read-then-write), global across stores, and not enforced at checkout | Replace with `pos_locks` (store, product) + row locks at checkout |
@@ -57,9 +59,9 @@ Severity: **P0** = exploitable or loses money/stock/data now · **P1** = serious
 
 | # | Area | Finding (file:line) | Fix in Go backend |
 |---|---|---|---|
-| P0-1 | Secrets | **Real `backend/.env` committed** in `63b1c9b`/`9cff503` (deleted in `94aeeb8`, still in history, **pushed to `github.com/tejas1112001/POS_inventory`**): `JWT_SECRET=***REMOVED***…`, `DB_PASSWORD=***REMOVED***`. Anyone can forge admin JWTs for any deployment that used it. | **Rotate now** (independent of the rewrite). New secrets via env only, fail-fast on weak values. History rewrite needs your OK (Q-7). gitleaks in CI. |
+| P0-1 | Secrets | **Real `backend/.env` committed** in "Initial commit", "first commit" and "changes in UI" (deleted in "Update POS inventory system", still in history, **pushed to `github.com/tejas1112001/POS_inventory`**): a real `JWT_SECRET` (64-byte hex) and a weak dictionary-word `DB_PASSWORD`. Values deliberately not repeated here. Anyone can forge admin JWTs for any deployment that used it. | **Owner is rotating both** (Q-7). New secrets via env only, fail-fast on weak values, SHA-256 of the leaked secret on a startup deny list. History rewrite prepared (exact commands handed over; runs only after the owner confirms). gitleaks in CI. |
 | P0-2 | Auth | Public `/api/auth/signup` accepts `role`/`role_id` → anyone registers as admin; `...rest` mass-assigned into `User.create` (`auth.js:72-100`). PRD G1. | Endpoint removed on tenant hosts; owner only via provisioning; `POST /api/users` guarded. |
-| P0-3 | Sales | **Client-controlled prices/totals**: `unitPrice`, line `total`, `discount`, `tax`, `shipping` taken from the request (`sales.js:96-110,155`). A biller can sell any item for 0 or give unlimited discount. | Server price/tax engine; `409 PRICE_CHANGED`; discount permission + cap. |
+| P0-3 | Sales | **Client-controlled prices/totals**: `unitPrice`, line `total`, `discount`, `tax`, `shipping` taken from the request (`sales.js:96-110,155`). A biller can sell any item for 0 or give unlimited discount. | Server price/tax engine; `409 PRICE_CHANGED` unless the user has `sales:price_override` (Q-3, audited); discount permission + cap. |
 | P0-4 | Stock | Oversell race: stock read without `FOR UPDATE`, unconditional `decrement` (`sales.js:114-124,161-167`); same in sale edit and stock-adjustment subtraction (`stockAdjustments.js:72-84`); no `CHECK (qty >= 0)`. PRD G4. | `SELECT … FOR UPDATE` in `variant_id` order + `UPDATE … WHERE qty >= n`; DB `CHECK`; concurrency tests. |
 | P0-5 | Purchases | Status toggling **re-stocks every time**: `Received → Pending → Received` adds stock again (`purchases.js:118`). Later receive uses first variant + **store 1** default (`:119-128`). Per-line variant/store from creation are never stored (`purchase_items` lacks the columns). PRD G6. | `Received` terminal; `purchase_items.variant_id/store_id NOT NULL`; `purchases:approve`. |
 | P0-6 | Returns | Return qty only checked vs this return (repeat returns unlimited); **negative qty accepted** → stock *decremented* and negative refund; refund `unitPrice` from client (can exceed sold price); store/customer not checked vs sale (`salesReturns.js:96-143`). PRD G7 (partially). | Cumulative check under row lock, qty > 0, sold price, matching store/customer. |
@@ -67,7 +69,8 @@ Severity: **P0** = exploitable or loses money/stock/data now · **P1** = serious
 | P0-8 | Mass assignment | `Sale.create({...saleData})`, `originalSale.update({...saleData})`, `SaleReturn.create({...saleReturnData})`, `User.create({...rest})`: client can set `total`, `paid`, `due`, `status`, `createdAt`, `id`… (`sales.js:127,247`, `salesReturns.js:120`). | Explicit DTOs, strict decoding, allow-listed fields only. |
 | P0-9 | Products | `PUT /api/products/:id` updates `findByPk(v.id)` **without checking `product_id`** → any variant (with its stock) can be moved into another product; omitted variants are hard-deleted **with their stock** and no record (`products.js:344-391`). | Ownership check, soft delete, refuse when stock > 0, ledger. |
 | P0-10 | Escalation | Any `users:edit` holder can assign the admin role to themselves (`billers.js:61`, `roles.js:171-194`); any `roles:edit` holder can grant their own role every permission and edit system roles (`roles.js:104-143`). | Subset rule, no self-change, immutable owner/admin, audit. |
-| P0-11 | Desktop/LAN | Server binds `0.0.0.0` by default (`index.js:114`) and allows requests **without `Origin`**; in Electron mode the full API (with P0-2 signup) is exposed to the local network. | Desktop sidecar binds `127.0.0.1:<random>` + per-launch token. |
+
+(P0-11, desktop LAN exposure of the Electron build, was removed: the product is web only, Q-1. The Go server sits on a private network behind Caddy and answers unknown hosts with `421`.)
 
 ### 2.2 P1
 
@@ -100,13 +103,13 @@ Severity: **P0** = exploitable or loses money/stock/data now · **P1** = serious
 
 | # | Finding |
 |---|---|
-| P2-1 | `/api/warehouses` not mounted; WarehouseModal → 404 (PRD G11) |
-| P2-2 | `ImportProduct` posts to `/products`; no backend (PRD G12) |
+| P2-1 | `/api/warehouses` not mounted; WarehouseModal → 404 (PRD G11). **Mounted in step 6** (Q-12) |
+| P2-2 | `ImportProduct` posts to `/products`; no backend (PRD G12). **CSV import built in step 7** (Q-12, API_CONTRACT §5.1.1) |
 | P2-3 | Stock adjustments have no UI (PRD G13) |
 | P2-4 | `PublicShopPage` hard-codes `http://localhost:3000` (PRD G14) |
 | P2-5 | Dashboard chart: earliest 100 sales, month names merge years (PRD G15); `totalUnpaid` ignores Partial |
 | P2-6 | Docs mismatch: README says MongoDB; PERMISSIONS.md lists unseeded actions (PRD G17); `utils/mongoose.js` shim |
-| P2-7 | Electron scripts/dependency missing; preload IPC channels without handlers; `executeScript` interpolates `err.message` into JS (PRD G18) |
+| P2-7 | Electron scripts/dependency missing; preload IPC channels without handlers; `executeScript` interpolates `err.message` into JS (PRD G18). Web only (Q-1): the Electron files are deleted at cutover |
 | P2-8 | Root `index.js` is stale dead code with `isDev = true ||` and imports of missing files; `services/concurrencycontrol.js` unused and references a missing `version` column |
 | P2-9 | `PUT /api/users/:id` without `email` sets email to `''`; `PUT /api/stores/:id` writes `undefined` for missing fields |
 | P2-10 | Reports `stockQty` always 0; invoice `dueDate` is sale date formatted `en-GB` server-side |
@@ -128,22 +131,23 @@ Browser ──HTTPS──▶  <slug>.BASE_DOMAIN   admin.BASE_DOMAIN   BASE_DOMA
 │ chi router                                                                              │
 │  ├─ host classifier ─┬─ tenant router: SPA static + /api/* + /api/public/shop/* + /files │
 │  │                   ├─ platform router: admin SPA + /api/platform/*                     │
-│  │                   └─ apex router: landing/signup (optional)                           │
+│  │                   └─ apex router: static landing page only (no self-signup, Q-5)      │
 │  ├─ middleware: request-id → recover → slog → secure headers → body limit → timeout     │
 │  │              → rate limit → host/tenant resolve → auth → auth-state → gate → RBAC    │
 │  ├─ modules: handler → service → repository (sqlc)                                      │
 │  ├─ tenancy.Sessions (InTenantTx / InPlatformTx)  ── pgxpool (Exec mode) ──┐            │
+│  ├─ change listener (LISTEN, own direct pgx.Conn, cache flush on reconnect) ┤            │
 │  ├─ River client (jobs: outbox fan-out, receipts, notifications, billing, migrations,  │
 │  │                 exports, provisioning)  ── jobs pool ──────────────────┤            │
 │  └─ metrics listener :9090 (/metrics, /internal/*)                         │            │
 └─────────────────────────────────────────────────────────────────────────────┼───────────┘
                                                                               ▼
-   PostgreSQL 18: platform │ river │ t_ab12cd34ef │ t_… (one per tenant)      Object storage (S3/MinIO/FS)
+   PostgreSQL 18: extensions │ platform │ river │ t_ab12cd34ef │ t_…            Object storage (S3/MinIO/FS)
                                                                               SMTP (platform + per-tenant)
                                                                               Razorpay API + webhooks
 ```
 
-The same binary runs API + workers (`POSD_MODE=all|api|worker`) so it can be split later without code changes. `posctl` is the operator CLI.
+The same binary runs API + workers (`POSD_MODE=all|api|worker`) so it can be split later without code changes. There is no desktop mode. `posctl` is the operator CLI.
 
 ### 3.1 Folder structure
 
@@ -151,25 +155,26 @@ The same binary runs API + workers (`POSD_MODE=all|api|worker`) so it can be spl
 backend-go/
 ├─ cmd/
 │  ├─ posd/            # HTTP API + workers (mode flag)
-│  └─ posctl/          # migrate, bootstrap-superadmin, provision, import-legacy, export, restore, drift
+│  └─ posctl/          # migrate, db preflight, bootstrap-superadmin, provision, export, restore, drift
 ├─ internal/
 │  ├─ app/             # wiring, lifecycle, graceful shutdown
 │  ├─ config/          # env parsing + validation (fail fast on missing/weak secrets)
 │  ├─ httpx/           # router, middleware, JSON decode/encode, error mapping, pagination
 │  ├─ obs/             # slog setup, Prometheus metrics, OTel (optional)
-│  ├─ db/              # pool config (Exec mode, hooks), tx helpers, pg error mapping
-│  ├─ tenancy/         # SchemaName type, host resolver, registry cache, Sessions, cluster resolver
-│  ├─ migrate/         # two-track runner, dry run, drift fingerprint
+│  ├─ db/              # pool config (Exec mode, hooks), tx helpers, pg error mapping, ident.go (only non-constant SQL)
+│  ├─ tenancy/         # SchemaName type, host resolver, registry cache, Sessions, cluster resolver, change listener
+│  ├─ migrate/         # two-track runner, dry run, drift fingerprint, conn.go (startup-param connections)
+│  ├─ tenantio/        # per-tenant export / restore (streamed checksums, age)
 │  ├─ provisioning/    # orchestrator + steps + compensation
 │  ├─ platform/        # super admin auth/MFA, tenants admin, impersonation, announcements, platform audit
 │  ├─ auth/            # tenant login, refresh rotation, password reset/invite, lockout
 │  ├─ rbac/            # permission catalog, middleware, cached resolver, anti-escalation
 │  ├─ audit/           # tenant audit writer
-│  ├─ settings/        # tenant settings (currency, locale, tax, receipt template)
+│  ├─ settings/        # tenant settings (currency, number format, timezone, tax, receipt template)
 │  ├─ catalog/         # categories, sub-categories, brands, units, suppliers, warehouses
 │  ├─ customers/
 │  ├─ stores/          # stores + showcase admin
-│  ├─ products/        # products, variants, barcode, import
+│  ├─ products/        # products, variants, barcode, CSV import
 │  ├─ inventory/       # inventory, adjustments, stock ledger, POS locks
 │  ├─ pricing/         # tax/discount/rounding engine (pure functions, heavily tested)
 │  ├─ sales/           # sales, invoices view
@@ -184,7 +189,7 @@ backend-go/
 │  ├─ files/           # Storage interface (fs, s3), image validation/re-encode
 │  ├─ jobs/            # River setup, periodic jobs
 │  ├─ secrets/         # envelope encryption, key ring
-│  ├─ security/        # argon2id, bcrypt legacy verify, TOTP, token hashing, password policy
+│  ├─ security/        # argon2id, TOTP, token hashing, password policy, leaked-secret deny list (hashes)
 │  └─ money/           # decimal helpers, currency exponents, rounding
 ├─ db/
 │  ├─ migrations/{platform,tenant}/NNNN_name.sql
@@ -192,7 +197,10 @@ backend-go/
 │  └─ sqlc.yaml        # two packages: internal/db/platformdb, internal/db/tenantdb
 ├─ web/                # (optional) embedded SPA builds
 ├─ test/               # integration, isolation, search_path, migration, e2e helpers, k6 scripts
-├─ deploy/             # Dockerfile, docker-compose.yml, Caddyfile(s), prometheus rules, grafana
+├─ tools/analyzers/    # constsql (go/analysis): SQL arguments must be constants
+├─ spikes/pdfshaping/  # throwaway Devanagari PDF spike (EMAIL_AND_RECEIPTS §5.6)
+├─ deploy/             # Dockerfile, docker-compose.yml (Caddy, Postgres 18, MinIO, Mailpit), Caddyfile(s), prometheus rules
+├─ .github/            # CI workflow, dependabot.yml (repo root)
 ├─ Makefile  .env.example  README.md  go.mod
 └─ pkg/                # intentionally empty: nothing is meant for external import yet
 ```
@@ -213,7 +221,7 @@ Errors flow as typed domain errors (`apperr.Validation{Fields}`, `apperr.NotFoun
 ## 4. Auth, RBAC, money, stock (key designs)
 
 ### 4.1 Tenant authentication
-- **Passwords**: argon2id (`m=46 MiB, t=1, p=1`, OWASP), PHC string format, constant-time compare, global semaphore limiting concurrent hashes (memory-DoS guard). Legacy bcrypt hashes verified then rehashed on login. Policy: ≥ 12 chars, ≤ 128, blocklist of common/breached passwords (embedded list), not equal to email/business name; no composition rules (NIST 800-63B).
+- **Passwords**: argon2id (`m=46 MiB, t=1, p=1`, OWASP), PHC string format, constant-time compare, global semaphore limiting concurrent hashes (memory-DoS guard). No bcrypt path (empty start, no legacy hashes). Policy: ≥ 12 chars, ≤ 128, blocklist of common/breached passwords (embedded list), not equal to email/business name; no composition rules (NIST 800-63B).
 - **Login**: `POST /api/auth/login` on the tenant host. Rate limits: 5/min per (IP, email), 20/min per IP, 100/min per tenant. Progressive lockout: after 5 failures `locked_until = now + 2^n min` (max 1 h). Dummy hash on unknown email (timing). Generic `401`.
 - **Tokens**: access JWT HS256, 10 min, claims `iss=<host>`, `aud=tenant`, `tid`, `sub`, `tv` (token_version), `sid` (refresh family), `imp?`. Keys `JWT_KEYS="kid:base64,..."`, first signs, all verify (rotation). Refresh: 32 random bytes, SHA-256 stored in `refresh_tokens` with `family_id`, rotated on every use; reuse of a rotated token → revoke the whole family + audit event. Remember-me 30 d sliding, else 12 h absolute.
 - **Revocation**: logout (family), password change/reset (all families + `token_version++`), role/status change (`token_version++` + all families), admin "sign out everywhere".
@@ -221,14 +229,14 @@ Errors flow as typed domain errors (`apperr.Validation{Fields}`, `apperr.NotFoun
 ### 4.2 RBAC
 - Permission catalog in code (`rbac.Catalog`) → synced to `platform.permission_catalog` and each tenant's `permissions` table by migration/seed (keeps integer `permissionIds` contract).
 - Route declarations; startup self-check that every tenant route has a requirement or an explicit `rbac.Public`/`rbac.Authenticated` marker.
-- Resolver: `perm:<tenant>:<role_id>` cache, TTL 60 s, invalidated via `NOTIFY role_changed` (multi-node safe; fixes the per-process cache).
+- Resolver: `perm:<tenant>:<role_id>` cache, TTL 60 s, invalidated via `NOTIFY role_changed` on the dedicated listener connection, all caches flushed on reconnect (TENANCY §5.5; multi-node safe; fixes the per-process cache).
 - Object-level rules live in services: own-sales scope, store scope (future `user_stores`), receipts, returns.
 - Anti-escalation: grantable set ⊆ actor's set; `owner`/`admin` immutable; no self role/status change; last owner protected.
 
 ### 4.3 Money & tax
 - DB: `NUMERIC(18,4)` for unit prices/costs, `NUMERIC(18,2)`-equivalent rounding for line and document totals (stored as `NUMERIC(18,4)` rounded to the currency exponent, so 3-decimal currencies work). Go: `decimal.Decimal`; JSON as numbers.
 - Currency exponent from ISO 4217 table (`INR`=2, `JPY`=0, `KWD`=3), tenant `settings.currency`.
-- `pricing.Quote(lines, cartDiscount, settings)`: per line `gross = price × qty`; cart discount allocated pro-rata to lines (largest-remainder to the minor unit) **before tax** (Q-2); exclusive tax `tax = round(net × rate)`; inclusive tax `tax = net − net / (1 + rate)`, not added again; per-line rounding half-up; document totals = sums. GST split (CGST/SGST vs IGST) stored per line for receipts.
+- `pricing.Quote(lines, cartDiscount, settings)`: per line `gross = price × qty`; cart discount allocated pro-rata to lines (largest-remainder to the minor unit) **before tax** (Q-2, decided); price override only with `sales:price_override` (Q-3, decided), audited; exclusive tax `tax = round(net × rate)`; inclusive tax `tax = net − net / (1 + rate)`, not added again; per-line rounding half-up; document totals = sums. GST split (CGST/SGST vs IGST) stored per line for receipts.
 - Shipping not taxed by default (setting).
 
 ### 4.4 Stock safety
@@ -240,7 +248,7 @@ Errors flow as typed domain errors (`apperr.Validation{Fields}`, `apperr.NotFoun
 
 ## 5. Tenant schema (DDL sketch)
 
-Conventions: `bigint GENERATED ALWAYS AS IDENTITY` PKs (IDs preserved on import via `OVERRIDING SYSTEM VALUE`), `timestamptz`, `text` + `CHECK` (no ENUMs, see TENANCY §5.2), `citext` from schema `extensions`, `deleted_at` soft delete, FKs `ON DELETE RESTRICT`. Columns used by JSON keep their old names so the contract mapping stays trivial (`createdAt` is mapped in SQL `AS "createdAt"`; DB columns are snake_case).
+Conventions: `bigint GENERATED ALWAYS AS IDENTITY` PKs (`OVERRIDING SYSTEM VALUE` only in per-tenant restore), `timestamptz`, `text` + `CHECK` (no ENUMs, see TENANCY §5.2), `citext`/`pg_trgm` from the shared schema `extensions`, which is on the tenant `search_path` (TENANCY §5.4), `deleted_at` soft delete, FKs `ON DELETE RESTRICT`. Columns used by JSON keep their old names so the contract mapping stays trivial (`createdAt` is mapped in SQL `AS "createdAt"`; DB columns are snake_case).
 
 ```sql
 -- identity -------------------------------------------------------------------
@@ -305,7 +313,8 @@ CREATE TABLE settings (
   business_name text NOT NULL, legal_name text, address text, phone text, email citext,
   logo_file_id uuid,
   currency char(3) NOT NULL DEFAULT 'INR' CHECK (currency ~ '^[A-Z]{3}$'),
-  locale text NOT NULL DEFAULT 'en-IN', timezone text NOT NULL DEFAULT 'Asia/Kolkata',
+  locale text NOT NULL DEFAULT 'en-IN' CHECK (locale ~ '^en-[A-Z]{2}$'),  -- number/date format only; all text is English
+  timezone text NOT NULL DEFAULT 'Asia/Kolkata',
   tax_label text NOT NULL DEFAULT 'GST', tax_registration_no text,   -- e.g. GSTIN
   tax_split text NOT NULL DEFAULT 'cgst_sgst' CHECK (tax_split IN ('none','cgst_sgst','igst')),
   prices_include_tax_default boolean NOT NULL DEFAULT false,
@@ -353,7 +362,7 @@ CREATE TABLE products (
   product_type text NOT NULL CHECK (product_type IN ('single','variable')),
   tax_type text CHECK (tax_type IN ('Exclusive','Inclusive')),
   tax_rate numeric(6,3) CHECK (tax_rate BETWEEN 0 AND 100),
-  hsn_code text,                                          -- SUGGESTION (GST)
+  hsn_code text,                                          -- S4 (GST)
   discount_type text CHECK (discount_type IN ('Percentage','Fixed')),
   discount_value numeric(18,4) CHECK (discount_value >= 0),
   warranties text, barcode_symbology text,
@@ -457,6 +466,7 @@ CREATE TABLE order_items (
   product_name text NOT NULL, sku text,                   -- snapshots for receipts/history
   quantity integer NOT NULL CHECK (quantity > 0),
   unit_price numeric(18,4) NOT NULL CHECK (unit_price >= 0),
+  catalog_price numeric(18,4) NOT NULL,                   -- differs from unit_price only on a price override (Q-3)
   discount numeric(18,4) NOT NULL DEFAULT 0, tax_type text, tax_rate numeric(6,3) NOT NULL DEFAULT 0,
   tax_amount numeric(18,4) NOT NULL DEFAULT 0, cgst numeric(18,4), sgst numeric(18,4), igst numeric(18,4),
   subtotal numeric(18,4) NOT NULL,
@@ -493,7 +503,7 @@ CREATE TABLE receipts (
   UNIQUE (sale_id, sale_version)
 );
 
-CREATE TABLE idempotency_keys (                           -- SUGGESTION: safe POS retries
+CREATE TABLE idempotency_keys (                           -- S2: safe POS retries
   key text NOT NULL, user_id bigint NOT NULL, request_hash bytea NOT NULL,
   status int, response jsonb, created_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (user_id, key)
@@ -519,8 +529,7 @@ CREATE TABLE purchase_items (
   variant_id bigint NOT NULL REFERENCES product_variants(id),
   store_id bigint NOT NULL REFERENCES stores(id),
   quantity integer NOT NULL CHECK (quantity > 0), unit_price numeric(18,4) NOT NULL CHECK (unit_price >= 0),
-  discount numeric(18,4) NOT NULL DEFAULT 0, subtotal numeric(18,4) NOT NULL,
-  legacy_inferred boolean NOT NULL DEFAULT false
+  discount numeric(18,4) NOT NULL DEFAULT 0, subtotal numeric(18,4) NOT NULL
 );
 
 -- files, outbox, audit ---------------------------------------------------------
@@ -530,7 +539,7 @@ CREATE TABLE files (
   storage_key text NOT NULL UNIQUE, created_by bigint REFERENCES users(id),
   created_at timestamptz NOT NULL DEFAULT now(), deleted_at timestamptz
 );
--- email_outbox: EMAIL_AND_RECEIPTS §4
+-- email_outbox + tenant-bound trigger function mark_outbox_pending(): EMAIL_AND_RECEIPTS §4
 
 CREATE TABLE audit_log (                                  -- tenant role: INSERT + SELECT only
   id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -552,8 +561,9 @@ Audited actions (S-req 12): login success/failure/lockout, logout-all, password 
 
 | Variable | Required | Default | Notes |
 |---|---|---|---|
-| `POSD_MODE` | | `all` | `api`, `worker`, `all`, `desktop` |
-| `HTTP_ADDR` | | `:8080` | Public listener |
+| `POSD_MODE` | | `all` | `api`, `worker`, `all` |
+| `HTTP_ADDR` | | `:8080` | Listener on the private network behind Caddy |
+| `STATIC_DIR` | | embedded | Tenant SPA and admin console builds (same-origin, S5) |
 | `METRICS_ADDR` | | `127.0.0.1:9090` | `/metrics`, `/internal/*`, never proxied |
 | `BASE_DOMAIN` | ✔ | `localhost` in dev | No domain is hard-coded anywhere |
 | `PUBLIC_SCHEME` | | `https` | `http` only allowed with `APP_ENV=development` |
@@ -563,32 +573,36 @@ Audited actions (S-req 12): login success/failure/lockout, logout-all, password 
 | `DATABASE_URL` | ✔ | — | `pos_app` login (sslmode=verify-full in prod) |
 | `DATABASE_MIGRATOR_URL` | ✔ for posctl | — | `pos_migrator` |
 | `DATABASE_JOBS_URL` | ✔ | — | `pos_jobs` |
+| `LISTEN_DATABASE_URL` | | = `DATABASE_URL` | Dedicated `LISTEN` connection; must be a **direct** endpoint, never a transaction pooler (TENANCY §5.5) |
 | `DB_CLUSTERS` | | — | `name=dsn;...` for dedicated tenant DBs (secret) |
 | `DB_POOL_MAX` / `DB_POOL_MIN` | | `4×CPU` / `2` | |
 | `DB_STATEMENT_TIMEOUT` | | `5s` (reports `30s`) | Per tx via `set_config` |
 | `JWT_KEYS` | ✔ | — | `kid:base64(≥32 bytes)` list; startup fails if any key < 32 bytes or looks like a placeholder |
+| `PLATFORM_JWT_KEYS` | ✔ | — | Same format, separate keys for platform tokens (S3); startup fails if any key equals a `JWT_KEYS` key |
 | `ACCESS_TOKEN_TTL` / `PLATFORM_ACCESS_TOKEN_TTL` | | `10m` / `5m` | |
 | `REFRESH_TTL_REMEMBER` / `REFRESH_TTL_SESSION` | | `720h` / `12h` | |
 | `PLATFORM_SESSION_MAX` / `PLATFORM_IDLE_TIMEOUT` | | `8h` / `30m` | |
 | `MASTER_KEYS` | ✔ | — | Envelope KEKs `kid:base64(32)`; first encrypts |
 | `PLATFORM_IP_ALLOWLIST` | | — | CIDRs for admin host (optional) |
-| `SELF_SIGNUP_ENABLED` | | `false` | |
-| `CAPTCHA_PROVIDER` / `CAPTCHA_SECRET` | if signup | — | Turnstile/hCaptcha |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_TLS_MODE`, `MAIL_FROM_ADDRESS`, `MAIL_FROM_NAME` | ✔ prod | Mailpit in dev | Platform SMTP |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_TLS_MODE`, `MAIL_FROM_ADDRESS`, `MAIL_FROM_NAME` | ✔ prod | Mailpit in dev | Platform SMTP: SES `email-smtp.ap-south-1.amazonaws.com:587` or Brevo `smtp-relay.brevo.com:587` (Q-13). `MAIL_FROM_NAME` defaults to `PLATFORM_NAME` |
 | `TENANT_SMTP_ALLOW_PORTS` | | `465,587` | |
 | `TENANT_MAIL_DAILY_CAP_DEFAULT` | | `300` | Plan can override |
 | `STORAGE_DRIVER` | | `fs` | `fs` or `s3` |
 | `STORAGE_FS_ROOT` / `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_REGION` | per driver | — | |
 | `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET` | ✔ when `BILLING_ENABLED` | — | Never logged/returned |
 | `BILLING_ENABLED` | | `false` in dev | |
-| `GRACE_DAYS`, `READ_ONLY_DAYS`, `RETENTION_DAYS` | | `7`, `30`, `90` | Q-14 |
-| `MAX_UNPAGED_ROWS` | | `5000` | |
+| `GRACE_DAYS`, `READ_ONLY_DAYS`, `RETENTION_DAYS` | | `7`, `30`, `90` | Q-14 decided (trial length 14 d is `plans.trial_days`) |
+| `EXPORT_AGE_RECIPIENT` | ✔ when exports run | — | age public key for tenant exports (S7) |
+| `EXPORT_AGE_IDENTITY` | posctl restore only | — | age private key; never given to the API process |
+| `EXPORT_MANIFEST_KEY` | ✔ when exports run | — | HMAC key for export manifests |
+| `MAX_UNPAGED_ROWS` | | `5000` | Q-4 decided |
 | `LOG_LEVEL`, `LOG_FORMAT` | | `info`, `json` | |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | | — | Tracing off if unset |
 | `BOOTSTRAP_ADMIN_EMAIL`, `BOOTSTRAP_ADMIN_PASSWORD` | posctl only | — | One-time; refuses if a platform user exists |
-| `DESKTOP_TOKEN` | desktop | — | Per-launch, from Electron |
 
-Fail-fast rules: missing required var → exit 1 with the variable name (never its value). Weak secrets: length < 32 bytes, or a known placeholder (`your_jwt_secret_here`, `changeme`, the leaked secret from P0-1) → exit 1. `APP_ENV=production` additionally requires `PUBLIC_SCHEME=https`, non-empty `TRUSTED_PROXY_CIDRS`, DB TLS, and S3 storage.
+Not configurable on purpose: language (English only), self-signup (not built, Q-5), desktop mode (dropped, Q-1).
+
+Fail-fast rules: missing required var → exit 1 with the variable name (never its value). Weak secrets: length < 32 bytes, or a known placeholder (`your_jwt_secret_here`, `changeme`), or a value whose SHA-256 is on the deny list (the leaked secret from P0-1; only its hash is in the code) → exit 1. `APP_ENV=production` additionally requires `PUBLIC_SCHEME=https`, non-empty `TRUSTED_PROXY_CIDRS`, DB TLS, and S3 storage.
 
 ---
 
@@ -612,12 +626,13 @@ Fail-fast rules: missing required var → exit 1 with the variable name (never i
 | audit:view | ✔ | own actions | own actions |
 | platform_users:manage | ✔ | — | — |
 
-Rationale: support must see and diagnose but not change money or data. Billing staff must fix subscriptions but not read tenant business data. Only super_admin can destroy data. **SUGGESTION:** a fourth `auditor` role (read-only audit log + tenant list) for external reviews.
+Rationale: support must see and diagnose but not change money or data. Billing staff must fix subscriptions but not read tenant business data. Only super_admin can destroy data. A fourth `auditor` role is **deferred**.
 
 ### 7.2 Security
-- Separate table `platform_users`, separate cookie, separate JWT `aud=platform`, `iss=admin.<BASE_DOMAIN>`, separate signing key (`kid` from a distinct `PLATFORM_JWT_KEYS`, **SUGGESTION**: so a tenant-key leak cannot mint platform tokens). Platform routes are mounted only on the admin host, and tenant tokens are rejected there by `aud`.
+- Separate table `platform_users`, separate cookie, separate JWT `aud=platform`, `iss=admin.<BASE_DOMAIN>`, separate signing key (`kid` from a distinct `PLATFORM_JWT_KEYS`, S3 **included**: a tenant-key leak cannot mint platform tokens). Platform routes are mounted only on the admin host, and tenant tokens are rejected there by `aud`.
 - Password ≥ 14 chars + blocklist; argon2id `m=64 MiB, t=3, p=2`.
-- **MFA mandatory**: TOTP (RFC 6238, SHA-1, 6 digits, 30 s, ±1 step, replay guard: last used step stored). Secret encrypted with the envelope keys. 10 single-use recovery codes (SHA-256 hashed, shown once). **SUGGESTION**: WebAuthn/passkeys (go-webauthn) as a phishing-resistant second factor in a later phase.
+- **MFA mandatory**: TOTP (RFC 6238, SHA-1, 6 digits, 30 s, ±1 step, replay guard: last used step stored). Secret encrypted with the envelope keys. 10 single-use recovery codes (SHA-256 hashed, shown once). WebAuthn/passkeys (S6) **deferred**.
+- **Strict CSP on the admin host** from step 4 (S13): no `'unsafe-inline'`, tenant text rendered as plain text only (OPERATIONS §7, THREAT_MODEL §3.6).
 - Session: access 5 min, refresh 8 h absolute, 30 min idle; refresh rotated with reuse detection.
 - Step-up: `POST /auth/step-up` with TOTP → session gets `stepup_until = now+5m`. Required for suspend, delete, restore, slug change, impersonate, export, migrations run, platform user changes.
 - Optional per-user and global IP allowlists; rate limits 5/min/IP on login and 5 attempts per MFA challenge; lockout after 10 failures (manual unlock by another super_admin).
@@ -634,30 +649,40 @@ TENANCY §9. 15 min max, written reason, read-only default (read-write = super_a
 
 ## 8. Delivery order (Phase 2) and commits
 
-Each step is one or more small commits with tests. Nothing merges without `go vet`, `staticcheck`, `gosec`, `govulncheck`, unit tests, and (from step 2 on) integration tests on testcontainers Postgres.
+Each step is one or more small commits with tests. Nothing merges without `go vet`, `staticcheck`, `gosec`, `govulncheck`, the `constsql` analyzer, gitleaks, unit tests with `goleak`, and (from step 2 on) integration tests on testcontainers Postgres 18.
+
+**Prerequisite:** Go 1.27.2 and Docker are installed on the dev machine (Q-9; not installed as of 2026-10-15).
 
 | # | Step | Key outputs |
 |---|---|---|
-| 1 | Foundation | config, slog, errors, httpx (strict JSON, body caps, timeouts, secure headers, request id, recover), metrics, `/healthz` `/readyz`, graceful shutdown, Dockerfile (distroless nonroot), Makefile, CI |
-| 2 | Platform schema + registry | platform migrations, `tenancy` (SchemaName, host resolver, cache, Sessions, roles), search_path safety tests |
-| 3 | Migration runner + provisioning | goose two tracks, dry run, resume, drift, provisioning orchestrator + compensation |
-| 4 | Super Admin | platform auth, TOTP, recovery codes, step-up, tenants admin, audit, bootstrap CLI |
-| 5 | Tenant auth + RBAC | login, refresh rotation, lockout, invite/reset, RBAC middleware, anti-escalation, users/roles endpoints |
-| 6 | Master data | stores (+ showcase admin), categories, sub-categories, brands, units, suppliers, customers, warehouses, files/images |
-| 7 | Products/inventory | products, variants, barcode, POS list, POS locks, inventory, stock ledger |
-| 8 | Sales/POS | pricing engine, checkout with row locks, edit, void, invoices, idempotency keys |
-| 9 | Receipts + email | settings, tenant SMTP (encrypted, SSRF-safe), outbox, dispatch, workers, templates, PDF, resend/download |
+| 1 | Foundation | `backend-go/` module, config (fail-fast, leaked-secret hash deny list), slog + redaction, errors, httpx (strict JSON, body caps, timeouts, secure headers incl. the strict admin-host CSP, request id, recover), metrics, `/healthz` `/readyz`, graceful shutdown, Dockerfile (distroless nonroot), Makefile, CI (golangci-lint + `constsql`, gosec, govulncheck, gitleaks, goleak), Dependabot, docker-compose (Postgres 18, Caddy `tls internal`, MinIO, Mailpit). **Plus the PDF spike** (EMAIL_AND_RECEIPTS §5.6) as a separate throwaway folder, see open question |
+| 2 | Platform schema + registry | `extensions` + platform migrations (incl. `pg_stat_statements`), `tenancy` (SchemaName, host resolver, cache, Sessions with post-condition check, roles), change listener (TENANCY §5.5), `posctl db preflight`, **search_path and extensions tests** (TENANCY §5.4) |
+| 3 | Migration runner + provisioning | goose two tracks over startup-parameter connections (TENANCY §8, incl. the `NO TRANSACTION` + reconnect tests), dry run, resume, drift, default privileges + grant re-apply, tenant-bound `mark_outbox_pending()`, provisioning orchestrator + compensation |
+| 4 | Super Admin | platform auth with separate `PLATFORM_JWT_KEYS` (S3), TOTP, recovery codes, step-up, tenants admin, audit, bootstrap CLI |
+| 5 | Tenant auth + RBAC | login, refresh rotation, lockout, invite/reset, RBAC middleware, anti-escalation, users/roles endpoints, tenant gate (one status rule incl. the billing exemption), `GET /api/public/tenant-info`, **tenant-isolation suite** |
+| — | **Stop for review** | After step 5, before step 6 (see gate below) |
+| 6 | Master data | stores (+ showcase admin), categories, sub-categories, brands, units, suppliers, customers, warehouses (Q-12), files/images |
+| 7 | Products/inventory | products, variants, barcode, POS list, POS locks, inventory, stock ledger (S1), **product CSV import** (Q-12) |
+| 8 | Sales/POS | pricing engine (S4 GST split), checkout with row locks, edit (original biller kept, `updated_by`), void, invoices, idempotency keys (S2) |
+| 9 | Receipts + email | settings, tenant SMTP (encrypted, SSRF-safe), outbox, dispatch, workers, templates, PDF (maroto or the spike's fallback), resend/download |
 | 10 | Returns | cumulative checks |
-| 11 | Purchases | variant/store lines, approve, receive |
+| 11 | Purchases | variant/store lines, approve, receive (`Received` terminal, Q-16) |
 | 12 | Stock adjustments | atomic, ledger |
 | 13 | Reports/exports | sales/purchase reports, Excel/PDF export, scoped |
 | 14 | Dashboard | filtered aggregates |
 | 15 | Public shop | host → tenant → store, published only, rate limits, caching headers |
-| 16 | Billing | plans/subscriptions tables, BillingProvider/Razorpay, webhook, lifecycle, limits, notifications |
-| 17 | Legacy import | `posctl import-legacy` + verification |
-| 18 | Per-tenant export/restore | export, restore into scratch, compare |
-| 19 | Frontend changes | API_CONTRACT §6 list; admin console |
-| 20 | Electron sidecar | desktop mode |
+| 16 | Billing | after the Razorpay test-mode checks (BILLING_DESIGN §10): BillingProvider/Razorpay, webhook, lifecycle, limits, notifications |
+| 18 | Per-tenant export/restore | streamed checksums, `age` encryption (S7), restore into scratch, compare, session revocation |
+| 19 | Frontend changes | API_CONTRACT §6 list; admin console (strict CSP) |
+
+Steps 17 (legacy import: old data is demo data) and 20 (Electron: web only) were **dropped**. Numbers are kept stable so earlier references stay valid.
+
+**Gate after step 5.** Phase 2 first builds only steps 1–5, then stops for review. Exit criteria:
+1. CI green with every gate above, on Linux runners.
+2. **search_path suite** passes: TENANCY §5.1 (pool size 1 and 2, concurrent tenants, released-connection checks, panic/cancel paths), §5.2 (version skew on one connection, the documented `CacheStatement` failure), §5.4 (extensions tests 1–5), §8 (`NO TRANSACTION` and reconnect tests).
+3. **Tenant-isolation suite** passes with 3+ tenants: every step-5 endpoint with swapped host/token (`401`), `has_table_privilege` matrix for every role, a tenant role cannot read `platform` or another `t_*`, forged `X-Forwarded-Host`, generic 404 for unknown/deleted/provisioning hosts (including `/api/public/tenant-info`).
+4. Provisioning fault injection at every step leaves no orphan schema, role or tenant row.
+5. A short report of what was built, test counts, and anything that differed from this design.
 
 ---
 
@@ -674,28 +699,30 @@ Each step is one or more small commits with tests. Nothing merges without `go ve
 
 Measured in Phase 3 with k6 (50+ tenants, 500-schema smoke test), pprof, `pg_stat_statements`, pool-wait metrics. Before/after numbers come from the old Node backend running the same k6 scripts.
 
-Other levers: gzip/brotli at Caddy, HTTP/2, `pgx` batch for multi-statement steps, `COPY` for bulk inserts (import, ledger backfill), `GOMEMLIMIT` set from the container limit, connection-count budget (pool max ≤ 40 per node; PgBouncer in transaction mode works with this design if more nodes are added).
+Other levers: gzip/brotli at Caddy, HTTP/2, `pgx` batch for multi-statement steps, `COPY` for bulk inserts (CSV import, restore), `GOMEMLIMIT` set from the container limit, connection-count budget (pool max ≤ 40 per node). PgBouncer is **deferred**; transaction mode works with this design if more nodes are added later, with `LISTEN` kept on its own direct connection.
 
 ---
 
 ## 10. Suggestions (not requested)
 
-| # | SUGGESTION | Trade-off |
-|---|---|---|
-| S1 | **Stock ledger** (`stock_movements`) for every qty change, plus a nightly reconciliation job (sum of movements = inventory) | ~1 extra insert per line; makes stock disputes provable |
-| S2 | **Idempotency-Key** on `POST /api/sales` (and returns, purchases) | Small table; prevents double sales on double-click/retry over flaky shop Wi-Fi |
-| S3 | Separate platform JWT signing keys | One more secret to manage |
-| S4 | `hsn_code` on products + proper GST tax-invoice fields (CGST/SGST/IGST split) | Small schema/UI work; legally relevant for Indian B2B invoices |
-| S5 | Same-origin SPA served by the Go binary | Removes CORS/cookie complexity; static assets served by Go (cache headers + gzip at Caddy are enough) |
-| S6 | Passkeys (WebAuthn) for Super Admin | Extra flow; phishing-resistant |
-| S7 | Per-tenant export encrypted with `age` (filippo.io/age) | One dependency; exports safe at rest outside the DB |
-| S8 | Store-scoped users (`user_stores`) so billers see only their store | Schema + UI; PRD roadmap item |
-| S9 | Read replica for reports/dashboard later (READ ONLY tx already in place) | Replica lag on dashboards |
-| S10 | "Find my store" on the apex host: email in → email out with the tenant URL(s) | Needs platform-level email→tenant index (hash of email only) |
-| S11 | Have-I-Been-Pwned k-anonymity check on password set | External call (optional, fail-open) |
-| S12 | Server-side pagination migration for all FE lists | FE work; removes the 5,000-row cap |
-| S13 | CSP with nonces for the SPA, `Trusted Types` | Requires checking MUI/Emotion inline styles |
-| S14 | Partition `audit_log` and `stock_movements` by month once they exceed ~10M rows | Not needed at launch |
+| # | SUGGESTION | Trade-off | Decision (2026-10-15) |
+|---|---|---|---|
+| S1 | **Stock ledger** (`stock_movements`) for every qty change, plus a nightly reconciliation job (sum of movements = inventory) | ~1 extra insert per line; makes stock disputes provable | **Phase 2** (step 7) |
+| S2 | **Idempotency-Key** on `POST /api/sales` (and returns, purchases) | Small table; prevents double sales on double-click/retry over flaky shop Wi-Fi | **Phase 2** (step 8) |
+| S3 | Separate platform JWT signing keys | One more secret to manage | **Phase 2** (step 4) |
+| S4 | `hsn_code` on products + proper GST tax-invoice fields (CGST/SGST/IGST split) | Small schema/UI work; legally relevant for Indian B2B invoices | **Phase 2** (steps 7–9) |
+| S5 | Same-origin SPA served by the Go binary | Removes CORS/cookie complexity; static assets served by Go (cache headers + gzip at Caddy are enough) | **Phase 2** (step 1) |
+| S6 | Passkeys (WebAuthn) for Super Admin | Extra flow; phishing-resistant | Deferred |
+| S7 | Per-tenant export encrypted with `age` (filippo.io/age) | One dependency; exports safe at rest outside the DB | **Phase 2** (step 18) |
+| S8 | Store-scoped users (`user_stores`) so billers see only their store | Schema + UI; PRD roadmap item | Deferred |
+| S9 | Read replica for reports/dashboard later (READ ONLY tx already in place) | Replica lag on dashboards | Deferred |
+| S10 | "Find my store" on the apex host: email in → email out with the tenant URL(s) | Needs platform-level email→tenant index (hash of email only) | Deferred |
+| S11 | Have-I-Been-Pwned k-anonymity check on password set | External call (optional, fail-open) | Deferred |
+| S12 | Server-side pagination migration for all FE lists | FE work; removes the 5,000-row cap | Deferred |
+| S13 | Strict CSP (no `'unsafe-inline'`), later nonces and Trusted Types | Requires checking MUI/Emotion inline styles | **Split:** strict CSP on the **admin host now** (step 4); nonce work for the **tenant app deferred** |
+| S14 | Partition `audit_log` and `stock_movements` by month once they exceed ~10M rows | Not needed at launch | Deferred |
+
+Tools: Caddy, Mailpit, MinIO, `pg_stat_statements`, Dependabot and goleak are **in Phase 2**; PgBouncer, Turnstile and the `auditor` platform role are **deferred** (LIBRARIES §4).
 
 ---
 
@@ -703,36 +730,71 @@ Other levers: gzip/brotli at Caddy, HTTP/2, `pgx` batch for multi-statement step
 
 | Risk | Impact | Mitigation |
 |---|---|---|
-| Leaked JWT secret/DB password (P0-1) is live in any deployment | Full takeover | Rotate immediately; new backend rejects the leaked value at startup |
+| Leaked JWT secret/DB password (P0-1) is live in any deployment | Full takeover | Owner rotating now (Q-7); new backend rejects the leaked value at startup; history rewrite after confirmation |
 | Catalog bloat beyond ~1–5k tenants | Slow dumps/migrations, memory | Ceiling monitoring, sharding via `db_cluster`, exit to RLS for small tenants |
 | `Exec` mode overhead | Slightly higher latency | Benchmarks; DescribeExec/salted statement names as fallback |
 | Contract drift breaking the SPA | Broken UI | Contract tests generated from recorded old-backend responses (golden JSON) for every route |
 | Frontend still keeps tokens in storage during transition | XSS exposure | FE change ships with the backend (step 19) |
-| No Go/Docker on the dev machine | Can't build/test Phase 2 | Q-9 |
+| No Go/Docker on the dev machine (**confirmed 2026-10-15**) | Can't build/test Phase 2 | Install list handed over (Q-9); Phase 2 waits for it |
 | Gmail SMTP limits for tenants | Receipt failures | Outbox retries, platform fallback, status indicator |
 | Razorpay event ordering/duplicates | Wrong subscription state | Event-id dedupe, `created_at` ordering, reconcile job |
-| Electron needs a local Postgres | Desktop install friction | Q-1 |
-| Data import surprises (negative stock, duplicate SKUs, NULL dates) | Migration delays | Dry-run report first; explicit flags |
+| A halted Razorpay subscription may not be revivable by paying a link | Suspended tenant can't pay from the email | Test-mode check R1 before step 16; both code paths designed (BILLING_DESIGN §10) |
+| maroto cannot shape Devanagari | Broken customer names on receipts | Early spike; Gotenberg HTML-to-PDF fallback (EMAIL_AND_RECEIPTS §5.6) |
+| Managed Postgres restricts `CREATEROLE`, role counts or startup parameters | Design doesn't run on that provider | Preflight M1–M14 before a managed instance is used (OPERATIONS §8) |
+| Injected SQL switching role inside a tenant tx | Cross-tenant read | No injectable SQL (sqlc + `constsql`), `Exec` mode, commit tripwire; accepted residual risk (THREAT_MODEL §4) |
 
 ---
 
-## 12. Decisions needed (one batch, with recommended defaults)
+## 12. Decisions (resolved 2026-10-15)
+
+| # | Decision | Applied in |
+|---|---|---|
+| Q-1 | **Web application only.** Desktop/Electron dropped: no step 20, no `POSD_MODE=desktop`, no `DESKTOP_TOKEN`, no desktop section in OPERATIONS, no assumption A6, no desktop security control (P0-11, THREAT_MODEL "Electron LAN exposure") | All docs |
+| Q-2 | Cart discount allocated pro-rata **before tax** | §4.3, API_CONTRACT C-04 |
+| Q-3 | Price override allowed with `sales:price_override` (audited, `catalog_price` kept on the line) | §4.3, §5, C-04 |
+| Q-4 | Bare-array lists kept, capped at 5,000 rows | API_CONTRACT §1 |
+| Q-5 | Public self-signup **off**; the Super Admin creates tenants. Not built | TENANCY §6, §7.1, §6 config |
+| Q-6 | Contract changes C-01…C-21 **approved** | API_CONTRACT §4 |
+| Q-7 | Owner rotates the JWT secret and DB password. History rewrite: exact commands handed over; nothing destructive runs until the owner confirms | P0-1 |
+| Q-8 | Code in `backend-go/` next to `backend/` | A3, §3.1 |
+| Q-9 | Checked 2026-10-15: **Go and Docker are not installed**. Install list handed over; Phase 2 waits | §8 prerequisite, LIBRARIES |
+| Q-10 | Sale edit keeps the original biller; `updated_by` recorded | C-04, §5 |
+| Q-11 | Suspended tenant blocked from **all** logins; pays through the Razorpay link sent by email | TENANCY §5, BILLING §3, §5, §10 |
+| Q-12 | Warehouse API mounted (step 6); product CSV import built (step 7) | API_CONTRACT §2.11, §5.1.1 |
+| Q-13 | Platform mail via SES (ap-south-1) or Brevo over SMTP; `PLATFORM_NAME` from env, no hard-coded name | EMAIL §1–3, §6 config |
+| Q-14 | Trial 14 d, grace 7 d, read-only 30 d, deletion after 90 d; plans and prices set later by the owner | BILLING §3, §6 config |
+| Q-15 | Single VM with docker-compose, managed Postgres with PITR, S3-compatible storage | OPERATIONS |
+| Q-16 | Purchase `Received` is terminal | C-09, step 11 |
+| Language | English only everywhere; no language setting, translation files or i18n libraries; currency and number format from tenant settings | API_CONTRACT §1, EMAIL, LIBRARIES, §5 `settings.locale` |
+| Data | Old data is demo data: no legacy import (step 17 dropped); empty start, seeds only roles, permissions and settings | TENANCY §6, §11 |
+| Extras | Phase 2: S1, S2, S3, S4, S5, S7, Caddy, Mailpit, MinIO, `pg_stat_statements`, Dependabot, goleak. Deferred: S6, S8–S12, S14, PgBouncer, Turnstile, `auditor` role. S13: strict CSP on the admin host now, tenant-app nonces deferred | §10, LIBRARIES §4, OPERATIONS §7 |
+
+### 12.1 Review doc fixes (where each one landed)
+
+| # | Fix | Where |
+|---|---|---|
+| 1 | One tenant-status rule; `cancelled` keeps access until period end; billing routes exempt from `read_only` | TENANCY §5 step 5, BILLING §3, C-21 |
+| 2 | `GET /api/public/tenant-info` | API_CONTRACT §5.1 |
+| 3 | Migration `search_path` as a connection startup parameter; CI-rule carve-out; works with `NO TRANSACTION` | TENANCY §5, §8 |
+| 4 | `mark_outbox_pending()` no longer uses `current_schema()`; see open question 1 on `current_user` | EMAIL §4.2 |
+| 5 | Dedicated direct `LISTEN` connection, cache flush on reconnect, TTL fallback | TENANCY §5.5 |
+| 6 | `search_path` = `"t_<id>", extensions`; sketch and text agree; tests | TENANCY §5, §5.4 |
+| 7 | Streamed checksums, `refresh_tokens`/`auth_tokens` excluded, sessions revoked after restore | OPERATIONS §6.2–6.3 |
+| 8 | Devanagari PDF spike + HTML-to-PDF fallback | EMAIL §5.6 |
+| 9 | Admin-console XSS and injected `SET ROLE` as residual risks; `constsql` lint rule | THREAT_MODEL §3.2, §3.6, §4 |
+| 10 | Razorpay test-mode checklist (halted revival = R1) | BILLING §10 |
+| 11 | Managed-Postgres preflight (`CREATEROLE`, many roles, PG16 grants, startup params, extensions) | OPERATIONS §8 |
+
+### 12.2 Open questions (round 2, with recommended defaults)
 
 | # | Question | Recommended default |
 |---|---|---|
-| Q-1 | Desktop/Electron: (a) Go sidecar + **embedded Postgres** binaries bundled (single local tenant), (b) sidecar + user-installed Postgres (as today), or (c) desktop is a thin client of the SaaS (no local backend)? | **(a)** for offline POS; (c) is cheapest if offline isn't needed |
-| Q-2 | Cart-level discount: allocate pro-rata **before tax** (GST-correct) or flat after tax (today's math)? | **Pro-rata before tax** |
-| Q-3 | Price override at POS/back-office: allowed with `sales:price_override`, otherwise `409 PRICE_CHANGED`? | **Yes** |
-| Q-4 | Unpaginated list endpoints: keep bare arrays capped at 5,000 rows (FE unchanged) and migrate the FE to server paging later? | **Yes** |
-| Q-5 | Public self-signup at launch? | **Off** (Super Admin creates tenants) |
-| Q-6 | Approve contract changes C-01…C-21 (API_CONTRACT §4)? | **Approve all** |
-| Q-7 | Leaked secrets: rotate now (you), and rewrite git history (`git filter-repo` + force-push, destructive, invalidates clones)? | **Rotate now: yes. History rewrite: yes, once you confirm**, since the secret is public anyway after rotation |
-| Q-8 | Code location `backend-go/` beside `backend/`, module path `github.com/tejas1112001/POS_inventory/backend-go`? Old backend deleted only at cutover. | **Yes** |
-| Q-9 | Install **Go 1.27.2** and **Docker Desktop** (testcontainers, Postgres 18, Caddy, MinIO, Mailpit) on this machine? Phase 2 cannot run tests without them. | **Yes, before Phase 2** |
-| Q-10 | Sale edit: keep original biller as `user_id` and record `updated_by` (today the editor takes over)? | **Keep original** |
-| Q-11 | Suspended tenant: block **all** logins and pay through an emailed Razorpay link, or allow an owner-only billing session? | **Block all + emailed link** (matches the brief) |
-| Q-12 | Warehouses and product CSV import: build both, or hide the dead UI? | **Mount warehouses (cheap); build CSV import in Phase 2 step 7** |
-| Q-13 | Production mail provider for platform SMTP (SES, Brevo, Resend, Postmark), and the platform display name? | **SES or Brevo via SMTP**; name `PLATFORM_NAME` env |
-| Q-14 | Plans/prices, trial length, grace / read-only / retention windows? | **Trial 14 d, grace 7 d, read-only 30 d, deletion 90 d after cancellation**; plans TBD by you |
-| Q-15 | Hosting target: single VM + docker-compose + managed Postgres (PITR), or Kubernetes? Object storage provider? | **Single VM + managed Postgres + S3-compatible (R2/S3)** |
-| Q-16 | Purchase `Received` terminal (corrections only via stock adjustment / future purchase return)? | **Yes** |
+| O-1 | `mark_outbox_pending()` and `current_user`: inside a `SECURITY DEFINER` function `current_user` is the owner (`pos_owner`), so it cannot identify the tenant. Accept the per-tenant function with the validated tenant ID written in at provisioning (EMAIL §4.2)? | **Yes** |
+| O-2 | "Seed only roles, permissions and settings" leaves no store and no customer, but `sales.customer_id` is required and POS needs a store. Also seed a "Walk-in Customer" and one default store (functional defaults, not demo data)? | **Yes, seed both** |
+| O-3 | Provisioning (step 3) creates a trial subscription, but plans are yours to define and billing is step 16. Seed one non-public internal `trial` plan (price 0, 14 days, generous limits) that you replace later? | **Yes** |
+| O-4 | Retention clock: day 0 = first day `read_only` **or** `suspended`; `pending_deletion` at day 30; schema dropped at day 90 counted from day 0 (BILLING §3)? | **Yes, as written** |
+| O-5 | Run the PDF spike inside the first batch (steps 1–5), or at the start of step 9? | **First batch** (about half a day; the result may add a container) |
+| O-6 | Admin console under the strict CSP: build it **without** runtime CSS-in-JS (plain React + CSS Modules), or with MUI + per-request nonces? | **Without MUI** (no nonce plumbing needed) |
+| O-7 | Managed Postgres provider (needed for the preflight)? | **AWS RDS for PostgreSQL 18, ap-south-1**, VM and S3 in the same region (matches SES Mumbai) |
+| O-8 | `frontend/.env` is tracked in git despite `.gitignore` (contains only `VITE_API_URL`, not secret). Untrack it in the step 1 commit (`git rm --cached`, no history rewrite)? | **Yes** |
+| O-9 | "Security item 16" was taken to mean the desktop LAN control (P0-11 + THREAT_MODEL "Electron LAN exposure"), both removed. Correct? | **Yes** |

@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| Status | Phase 1 design, awaiting approval |
-| Baseline | Node/Express backend at commit `94aeeb8` (code read in full; the code wins over PRD/TRD) |
+| Status | Phase 1 design, revised 2026-10-15 after review. Contract changes C-01…C-21 **approved** (Q-6) |
+| Baseline | Node/Express backend at commit `94aeeb8` "Update POS inventory system" (code read in full; the code wins over PRD/TRD) |
 | Goal | Keep routes and JSON shapes so the React SPA keeps working. Every deliberate change is listed in §4 with a reason. |
 
 ---
@@ -19,7 +19,8 @@
 | IDs | Integer IDs as today (`BIGINT` identity per tenant schema). IDs are only meaningful inside one tenant. |
 | Money | JSON **numbers** (as today), produced from `NUMERIC` / `decimal.Decimal`, rounded to the tenant currency's minor units. Never computed with floats on the server. |
 | Dates | RFC 3339 timestamps in UTC. Date-only inputs (`YYYY-MM-DD`) are read in the tenant's timezone. |
-| Lists | Existing list endpoints keep returning a **bare array** when `page`/`limit` are absent (contract), capped at `MAX_UNPAGED_ROWS` (default 5000) with `X-Total-Count` and `X-Truncated: true` headers when capped. `page`+`limit` (limit ≤ 200) returns `{data, pagination{total,page,limit,totalPages}}` as today. |
+| Language | **English only.** Every `error` message, email and receipt is English. No `Accept-Language` handling, no language setting, no translation files. Currency and number format come from tenant settings (`currency`, `locale` = an English number-format tag such as `en-IN`) |
+| Lists | Existing list endpoints keep returning a **bare array** when `page`/`limit` are absent (contract, Q-4 decided), capped at `MAX_UNPAGED_ROWS` (5,000) with `X-Total-Count` and `X-Truncated: true` headers when capped. `page`+`limit` (limit ≤ 200) returns `{data, pagination{total,page,limit,totalPages}}` as today. |
 | Errors | Always `{"error": "<human message>", "code": "<MACHINE_CODE>"}`; validation adds `"fields": {"field": "message"}`. No stack traces, SQL text or internal IDs. |
 | Request ID | Every response carries `X-Request-Id` (also accepted inbound from the trusted proxy only). |
 
@@ -141,7 +142,7 @@ Legend: 🔓 public · 🔑 any valid token · `mod:act` = permission required b
 | POST | `/api/stores` | stores:create (**never seeded** → admins blocked) | `{name,address,status}` | stores:create + plan limit | F |
 | PUT | `/api/stores/:id` | stores:edit | Missing fields overwrite with `undefined` | stores:edit | F |
 | DELETE | `/api/stores/:id` | stores:delete | Hard delete → `{message}` | stores:delete | C-12 |
-| GET | `/api/stores/:id/showcase` | 🔑 | **Mutates** (auto-creates slug) on GET | stores:view (slugs backfilled by migration) | C-08 |
+| GET | `/api/stores/:id/showcase` | 🔑 | **Mutates** (auto-creates slug) on GET | stores:view (every store gets a slug at creation) | C-08 |
 | PUT | `/api/stores/:id/showcase` | stores:edit | `{slug,logo,banner,description,phone,openingHours,isPublicEnabled}` | stores:edit | F (slug rules, images C-17) |
 | POST | `/api/stores/:id/showcase/toggle-product` | products:edit | Also writes global `products.is_published` (cross-store side effect) | products:edit | F |
 | POST | `/api/stores/:id/showcase/batch-publish` | products:edit | `{publishAll}` or `{productIds,action}`; N+1 upserts; global flag side effect | products:edit | F |
@@ -161,8 +162,8 @@ Legend: 🔓 public · 🔑 any valid token · `mod:act` = permission required b
 | Method | Path | Old | New | Status |
 |---|---|---|---|---|
 | GET | `/health` | `OK` text | Kept as alias of `/healthz` | U |
-| — | `/api/warehouses` (GET public, POST isAdmin) | **Not mounted**; frontend `WarehouseModal` gets 404 | Mounted with `stores:*` permissions (decision Q-12) | C-19 |
-| — | `POST /products` (frontend `ImportProduct`) | No such route (404) | `POST /api/products/import` (CSV) in Phase 2 or the button is hidden (decision Q-12) | C-19 |
+| — | `/api/warehouses` (GET public, POST isAdmin) | **Not mounted**; frontend `WarehouseModal` gets 404 | Mounted with `stores:*` permissions (Q-12 decided: build) | C-19 |
+| — | `POST /products` (frontend `ImportProduct`) | No such route (404) | `POST /api/products/import` (CSV), built in step 7 (Q-12 decided: build) | C-19 |
 
 Count: **78** mounted method+path pairs in the old backend (incl. the `/api/billers` aliases), plus 2 dead frontend calls.
 
@@ -201,18 +202,18 @@ New permissions are added to the catalog; seeded system roles: **owner** (all, i
 
 ## 4. Deliberate contract changes
 
-Each needs your approval (Q-6). "FE" = frontend change needed.
+All approved (Q-6, 2026-10-15). "FE" = frontend change needed.
 
 | ID | Change | Why | FE impact |
 |---|---|---|---|
 | C-01 | Login: unknown email and wrong password both return `401 INVALID_CREDENTIALS` (was 404 / 401). Inactive users → `401` same body. Suspended tenant → `403 TENANT_SUSPENDED`. Lockout → `429 ACCOUNT_LOCKED`. | No user enumeration; S-req 2, 8 | None (shows `error` text) |
 | C-02 | Session model: login/refresh still return `{user, token, remember, permissions}` but `token` is a **10-min** access token. Refresh token is set as `__Host-rt` cookie (30 d sliding if `remember`, else browser-session cookie with 12 h absolute cap). `POST /api/auth/refresh` reads the cookie (no Bearer needed), rotates it, returns the same body. Reuse of an old refresh token revokes the whole family. New `POST /api/auth/logout`. | S-req 26; removes 30-day bearer tokens from `localStorage` | `services/api.js`, `context/PosContext.jsx`, `lib/authStorage.js`: keep token in memory, call refresh with `credentials:'include'`, call logout |
 | C-03 | Expired/invalid access token → `401 TOKEN_EXPIRED/UNAUTHENTICATED` (was **403**). | Correct semantics; the frontend's retry-on-401 logic finally works | None (fixes existing FE logic) |
-| C-04 | `POST/PUT /api/sales`: server is the only source of prices, tax, discount and totals. Client `unitPrice` is compared with the catalog price: different and no `sales:price_override` → `409 PRICE_CHANGED` (with current prices) instead of silently charging the client's number. Client `subtotal/tax/total/due/payment_status` are accepted but **ignored**. `discount` validated against permission/cap. `paid: 0` respected; `payment_status` computed (`Paid/Partial/Unpaid`). Accepted POS aliases: `method`→`payment_method`, `paymentNote`, `saleNote`→`note`, `receivedAmount`/`amountTendered`→`tendered`; other PayForm keys (`payingAmount`, `change`, `paymentType`, `quickCash`) are on an explicit ignore list, so strict decoding does not break POS. `date` defaults to now. Response shape unchanged (+ `receiptUrl`). PUT keeps the original `user_id`, records `updated_by`. Optional `Idempotency-Key` header. | P0 price tampering, G3, G5, NULL date bug, double-submit | `AddSales.jsx` must send `storeId` (it never did → back-office sales always failed). POS label "Tax (8%)" → "Tax". |
+| C-04 | `POST/PUT /api/sales`: server is the only source of prices, tax, discount and totals. Client `unitPrice` is compared with the catalog price: different and no `sales:price_override` → `409 PRICE_CHANGED` (with current prices) instead of silently charging the client's number. With `sales:price_override` (Q-3) the client price is used, and the line stores both prices and is audited (`sale.price_override`). Cart discount is allocated pro-rata to lines **before tax** (Q-2). Client `subtotal/tax/total/due/payment_status` are accepted but **ignored**. `discount` validated against permission/cap. `paid: 0` respected; `payment_status` computed (`Paid/Partial/Unpaid`). Accepted POS aliases: `method`→`payment_method`, `paymentNote`, `saleNote`→`note`, `receivedAmount`/`amountTendered`→`tendered`; other PayForm keys (`payingAmount`, `change`, `paymentType`, `quickCash`) are on an explicit ignore list, so strict decoding does not break POS. `date` defaults to now. Response shape unchanged (+ `receiptUrl`). PUT keeps the original `user_id`, records `updated_by`. Optional `Idempotency-Key` header. | P0 price tampering, G3, G5, NULL date bug, double-submit | `AddSales.jsx` must send `storeId` (it never did → back-office sales always failed). POS label "Tax (8%)" → "Tax". |
 | C-05 | `POST /api/auth/signup` removed on tenant hosts. New `POST /api/users` (users:create) `{name,email,password?,role_id,status}`; with no password an invite email is sent. Public business signup (if enabled) is a platform flow. | G1/S1, S-req 3 | `AddBillerForm.jsx` → `/api/users`; `SignUp.jsx` route removed on tenant hosts |
 | C-06 | `GET /api/auth/permissions` never returns `["*"]` | Legacy path removed | None |
 | C-07 | Anti-escalation: an actor can only grant roles/permissions that are a subset of their own; nobody can change their own role or status, delete themselves, or remove the last owner; `owner` and `admin` roles are immutable; `owner` cannot be assigned via these endpoints. Role/status change revokes the target's sessions. Missing `email` on PUT no longer blanks it. | Privilege escalation found in code | Error toasts only |
-| C-08 | Previously unguarded routes get permissions (`stores:view`, `categories:view`, `products:edit`, `categories:create`). `GET /api/stores/:id/showcase` no longer writes. | G10 | None for seeded roles (biller gets `stores:view`) |
+| C-08 | Previously unguarded routes get permissions (`stores:view`, `categories:view`, `products:edit`, `categories:create`). `GET /api/stores/:id/showcase` no longer writes (every store gets a slug at creation). | G10 | None for seeded roles (biller gets `stores:view`) |
 | C-09 | Purchases: `purchase_items` store `variant_id` + `store_id`; stock-in uses them. `Received` is **terminal** (any change away from it → `409 INVALID_STATE`; corrections via stock adjustment). Setting `Received` needs `purchases:approve`. `storeId` in PUT body ignored. Totals recomputed server-side. | G6, double stock-in bug | AddPurchase already sends `variantId/storeId` per line; status dropdown should hide `Received` without approve |
 | C-10 | Object-level visibility: users without `sales:view_all` see only their own sales in `/api/sales`, `/api/invoices`, `/api/sales/report`, dashboard, receipts. Today's rule (`role === 'biller'`) restricts *every* custom role and none of the reports. | IDOR / data leak | None |
 | C-11 | `DELETE /api/sales/:id` → **void** (status `Void`, stock restored, kept for audit), still `204`. Voided sales hidden from lists/reports unless `?includeVoided=true`. | Financial records must not be hard-deleted | None |
@@ -222,10 +223,10 @@ Each needs your approval (Q-6). "FE" = frontend change needed.
 | C-15 | POS lock is per (store, product) in a `pos_locks` table, atomic, 2-min TTL, `storeId` required. Product JSON keeps `isLocked/lockedAt/locked_by` (derived for the requested store). Lock never blocks back-office edits of other fields; checkout itself is protected by row locks, not by the soft lock. | Racy global lock | None |
 | C-16 | Dashboard accepts `storeId,startDate,endDate,userId` and honors own-only scope; `revenueData[].month` becomes `"Mon YYYY"` grouped by calendar month in tenant timezone, latest 12 months. Same keys. | G15, global dashboard | Chart labels only |
 | C-17 | Image fields (`image`, `logo`, `banner`) still accept a **data URI** (png/jpeg/webp ≤ 2 MiB) for compatibility; the server decodes, validates, re-encodes, stores it as a file and saves a tenant-scoped URL. Responses return URLs, not base64. New `POST /api/files` (multipart) for the FE to migrate to later. SVG rejected. | S-req 14, payload size | None now; later FE upload |
-| C-18 | Public shop: tenant from host; numeric-id store lookup removed (slugs backfilled); dev-mode unpublished bypass removed; `limit` ≤ 48; rate limited. | Enumeration, info leak, DoS | `PublicShopPage.jsx` must use relative URLs (it hard-codes `http://localhost:3000`) |
-| C-19 | `/api/warehouses` mounted (or WarehouseModal removed); product import endpoint added (or button hidden). | Dead UI | Depends on Q-12 |
+| C-18 | Public shop: tenant from host; numeric-id store lookup removed (every store has a slug); dev-mode unpublished bypass removed; `limit` ≤ 48; rate limited. | Enumeration, info leak, DoS | `PublicShopPage.jsx` must use relative URLs (it hard-codes `http://localhost:3000`) |
+| C-19 | `/api/warehouses` mounted (`{name,address,status}`, same shape as the unmounted old route) and `POST /api/products/import` added (§5.1.1). | Dead UI (Q-12: build both) | `ImportProduct.jsx` posts to `/api/products/import` instead of `/products`; "Download Sample File" uses the template endpoint |
 | C-20 | `GET /api/stores` (and selectors) unaffected, but stores beyond plan limit cannot be created (`403 PLAN_LIMIT_REACHED`); same for users and products. | Billing | Toast |
-| C-21 | Login on a suspended tenant blocked; read-only tenant: all writes → `403 TENANT_READ_ONLY`. | Billing lifecycle | Banner (new) |
+| C-21 | Login on a suspended or pending-deletion tenant blocked (`403 TENANT_SUSPENDED`); read-only tenant: all writes → `403 TENANT_READ_ONLY` **except the billing routes** (`GET /api/billing/subscription`, `POST /api/billing/checkout`) so the owner can pay. A cancelled tenant keeps full access until its paid period ends. One rule: BILLING_DESIGN §3. | Billing lifecycle | Banner (new) |
 
 ---
 
@@ -235,15 +236,16 @@ Each needs your approval (Q-6). "FE" = frontend change needed.
 
 | Method | Path | Guard | Purpose |
 |---|---|---|---|
+| GET | `/api/public/tenant-info` | 🔓 rate-limited (30/min per IP, 300/min per tenant) | Sign-in page branding. Returns **only** `{"name": "<business name>", "logoUrl": "/files/t/<key>" \| null}`. Unknown, deleted, failed or provisioning host → the **same generic `404`** (same body, same code path, negative-cached) as any unknown tenant host, so it adds no enumeration signal. Answers for `suspended`/`read_only` tenants too (the name is shown on the sign-in page anyway). `Cache-Control: public, max-age=300` + `ETag`. No status, plan, slug history or contact data |
 | POST | `/api/auth/logout` | cookie | Revoke refresh family, clear cookie |
-| GET | `/api/auth/me` | 🔑 | User, permissions, tenant (name, currency, locale), impersonation flag, banners count |
+| GET | `/api/auth/me` | 🔑 | User, permissions, tenant (name, currency, number-format locale), impersonation flag, banners count |
 | POST | `/api/auth/password/forgot` | 🔓 rate-limited | Always `202`; emails a reset link if the account exists (platform SMTP) |
 | POST | `/api/auth/password/reset` | 🔓 token | `{token,password}`; revokes all sessions |
 | POST | `/api/auth/invite/accept` | 🔓 token | Owner/user sets first password |
 | POST | `/api/auth/password/change` | 🔑 | `{currentPassword,newPassword}`; revokes other sessions |
 | POST | `/api/auth/impersonation/exchange` | 🔓 one-time code | Platform impersonation hand-off (TENANCY §9) |
 | POST | `/api/users` | users:create | Replaces signup-as-create |
-| GET/PUT | `/api/settings` | settings:view / settings:edit | Business profile, currency, locale, timezone, tax config, receipt template |
+| GET/PUT | `/api/settings` | settings:view / settings:edit | Business profile, currency, number format (`locale`, English tags only, `^en-[A-Z]{2}$`), timezone, tax config, receipt template. No language field |
 | GET/PUT/DELETE | `/api/settings/email` | email_settings:* | Tenant SMTP (password write-only; GET returns `passwordSet: true`) |
 | POST | `/api/settings/email/test` | email_settings:edit | Send test email to `{to}` |
 | GET | `/api/sales/:id` | sales:view (+ own-only) | Single sale (receipt page reload) |
@@ -251,14 +253,25 @@ Each needs your approval (Q-6). "FE" = frontend change needed.
 | POST | `/api/sales/:id/receipt/resend` | receipts:resend | `{email?}`; rate-limited; enqueues email |
 | GET | `/api/stock-movements` | inventory:view | Stock ledger (paginated) |
 | POST | `/api/files` | any create/edit permission on the target entity | Image upload |
-| GET | `/files/t/<key>` | 🔑 or signed URL | Serve tenant file (host must match tenant) |
+| GET | `/files/t/<key>` | images 🔓, others 🔑 | Serve a tenant file; the host must match the file's tenant. `kind='image'` (logos, banners, product images; random UUID keys) is served without auth, because the sign-in page and the public shop need it. `receipt`/`export` files require a token + permission (receipts go through `/api/sales/:id/receipt`) |
 | GET | `/api/audit-log` | audit:view | Tenant audit log (paginated, filters) |
 | GET | `/api/notifications/banners` | 🔑 | Active platform banners + billing banner |
 | POST | `/api/notifications/:id/dismiss` | 🔑 | Per-user dismissal |
 | GET | `/api/billing/subscription` | billing:view | Plan, status, usage vs limits, invoices |
 | POST | `/api/billing/checkout` | billing:manage | Creates/returns Razorpay subscription link (`short_url`) |
-| POST | `/api/products/import` | products:import | CSV import (if Q-12 = build) |
-| GET | `/api/warehouses`, POST, PUT/:id, DELETE/:id | stores:* | If Q-12 = mount |
+| POST | `/api/products/import` | products:import (+ plan limit) | CSV import, see §5.1.1 |
+| GET | `/api/products/import/template` | products:import | Sample CSV (header row + one example row) |
+| GET | `/api/warehouses`, POST, PUT/:id, DELETE/:id | stores:view / create / edit / delete | `{name,address,status}`; DELETE is a soft delete (C-12) |
+
+#### 5.1.1 Product CSV import (`POST /api/products/import`)
+
+- `multipart/form-data`, file field **`csvFile`** (what `ImportProduct.jsx` already sends; its extra `product` field is ignored). UTF-8 (BOM allowed), comma-separated, ≤ 5 MiB, ≤ 5,000 data rows, header row required. Query `?dryRun=true` validates everything and writes nothing.
+- Columns (header names, case-insensitive): `name`*, `sku`*, `price`*, `cost`, `barcode`, `category`, `sub_category`, `brand`, `unit`, `tax_type` (`Exclusive`/`Inclusive`), `tax_rate`, `hsn_code`, `store`, `opening_qty`, `quantity_alert`, `status`. `*` = required. One row = one single-variant product; rows sharing a `name` with different `sku`s become variants of one variable product.
+- Lookups by name (category, brand, unit, store slug) must already exist; unknown → row error (no silent creation).
+- **Create-only**: an existing SKU or barcode is a row error (no updates in v1).
+- **All or nothing**: one tenant transaction; any row error → nothing is written. Response `200 {"created": n, "variants": n, "errors": []}` or `400 VALIDATION_FAILED` with `{"errors": [{"row": 12, "field": "price", "message": "must be ≥ 0"}]}` (max 200 errors listed).
+- Opening stock writes `stock_movements` rows with reason `import`. Audited (`products.import`, counts only).
+- Cells starting with `=`, `+`, `-`, `@` are stored as text and prefixed with `'` on any later spreadsheet export (CSV/formula injection).
 
 ### 5.2 Platform host (`admin.<BASE_DOMAIN>`, prefix `/api/platform`) — never routed on tenant hosts
 
@@ -321,13 +334,15 @@ Each needs your approval (Q-6). "FE" = frontend change needed.
 | `src/components/forms/AddBillerForm.jsx` | POST `/api/users` | C-05 |
 | `src/pages/AddSales.jsx` | Add store selector, send `storeId` | Existing bug |
 | `src/pages/PublicShopPage.jsx` | Relative URLs | G14 |
-| `src/lib/format.js` | `formatCurrency` uses tenant currency/locale from `/api/auth/me` | INR hard-coded |
+| `src/lib/format.js` | `formatCurrency` uses tenant currency and number-format locale from `/api/auth/me` (`Intl.NumberFormat`); all UI text stays English, no i18n library | INR hard-coded |
+| `src/components/ImportProduct.jsx` | POST `/api/products/import`; sample file from `/api/products/import/template`; show row errors | C-19 |
 | `src/pages/AddSales.jsx`, `AddSalesReturn.jsx`, `Dashboard.jsx` | Replace literal `₹` with currency symbol helper | INR hard-coded |
 | `src/pages/POS.jsx` | "Tax" label; handle `409 PRICE_CHANGED`; show receipt email field | G5, C-04, receipts |
 | `src/components/Receipt.jsx` | Tenant business name/logo/address from settings; "Download PDF"/"Resend" | Receipts |
 | `src/pages/Settings.jsx` (+ new sub-pages) | Business profile/currency/tax, SMTP settings + test, receipt template | Settings |
 | `src/pages/Sales.jsx` / `SalesList.jsx` | Resend receipt / download actions | Receipts |
 | `src/components/layout/AppShell.jsx` | Banner area (billing + announcements + impersonation flag) | Billing |
-| new `admin-console/` Vite entry (separate bundle) | Super Admin console | Platform |
+| new `admin-console/` Vite entry (separate bundle) | Super Admin console. Must work under the strict admin CSP (OPERATIONS §7): static JS/CSS only, no inline scripts or runtime-injected styles; tenant-supplied text rendered as plain text only (`react/no-danger` ESLint rule as an error, no HTML/Markdown rendering, no tenant-supplied URLs in `href`/`src`) | Platform, THREAT_MODEL §3.6 |
+| Electron leftovers (`frontend/electron.js`, `frontend/preload.js`, root `package.json` script `start:electron`) | Removed at cutover | Web only (Q-1) |
 | `vite.config.js` | Multi-page build (tenant app + admin console); dev proxy `/api` → Go; `server.allowedHosts: ['.localhost']` | Same-origin dev |
 | `frontend/.env*` | `VITE_API_URL` optional (empty = same origin) | No hard-coded domain |

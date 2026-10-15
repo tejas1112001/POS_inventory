@@ -2,7 +2,8 @@
 
 | | |
 |---|---|
-| Status | Phase 1 design, awaiting approval |
+| Status | Phase 1 design, revised 2026-10-15 after review; awaiting approval |
+| Scope | Web application only (Q-1). The desktop/Electron surface is out of scope and removed |
 | Top property | **Tenant isolation**: tenant A cannot read, write or infer tenant B's data |
 | Method | Assets → trust boundaries → STRIDE per component → controls → tests (Phase 3) |
 
@@ -55,7 +56,8 @@ The **malicious tenant** is the key adversary: authenticated, with full control 
 | I | Cached prepared statement bound to the wrong schema | `QueryExecModeExec`; no custom types | Version-skew test (TENANCY §5.2) |
 | E | Code path forgets the tenant session | `pos_app` has no privileges and an empty path → hard failure | Startup self-test + negative test |
 | T | Schema-name injection | Server-generated IDs, `ParseSchemaName` regex, `Identifier.Sanitize` | Fuzz + injection corpus |
-| T | SQL injection | sqlc/parameters only; no string-built SQL except validated identifiers; `gosec` G201/G202 | gosec, sqlmap-style payloads in the API suite |
+| T | SQL injection | sqlc/parameters only. **Lint rule `constsql`** (a small `go/analysis` analyzer in `tools/analyzers/constsql`, run by `golangci-lint` in CI from step 1): the SQL argument of every pgx/`database/sql` `Exec`, `Query`, `QueryRow`, `SendBatch`/`Queue`, `CopyFrom` and goose call must be a **compile-time constant**. String concatenation, `fmt.Sprintf`, `strings.Builder` or any variable as SQL fails the build. The only exemption is `internal/db/ident.go`, whose functions take the validated types `SchemaName`/`RoleName`/`TenantID` and quote with `pgx.Identifier.Sanitize()`. Also `gosec` G201/G202 and a `forbidigo` ban on `QueryExecModeSimpleProtocol` | Analyzer unit tests (positive/negative cases); gosec; sqlmap-style payloads in the API suite |
+| E | Injected SQL switches role (`SET ROLE t_other_rw`, or `set_config('role', …)` inside a single statement) | Prevented by the row above (no injectable SQL). Limited by `Exec` mode: one statement per call, so no stacked `; SET ROLE`. Tripwire: `InTenantTx` checks `current_user` and `search_path` before `COMMIT`; a mismatch rolls back, returns 500, raises `SessionTampered` (TENANCY §5) | Test that runs a deliberately tampered tx and expects rollback + alert. **Residual risk**, §4 |
 | I | Tenant role reads `platform` or other `t_*` | Grants per TENANCY §5.3 | `has_table_privilege` matrix test |
 | D | Long query blocking others | `statement_timeout`, `lock_timeout`, pool limits, per-tenant rate limits | Load test |
 
@@ -95,8 +97,10 @@ The **malicious tenant** is the key adversary: authenticated, with full control 
 | E: support staff modifies tenant data | Role matrix; read-only impersonation default; read-write super_admin + step-up |
 | R: undisclosed access to tenant data | Reason required; tenant-visible audit entries; platform audit; banner |
 | S: impersonation token replay | One-time code (60 s, hashed, burned); 15-min token; revocable; no refresh |
-| E: tenant token used on platform API | Different `aud`, `iss` and signing keys; host routing |
+| E: tenant token used on platform API | Different `aud`, `iss` and signing keys (`PLATFORM_JWT_KEYS`, S3); host routing |
 | I: platform staff see secrets | No API surface returns secrets; console shows only `passwordSet` flags |
+| **E: stored XSS in the admin console.** A malicious tenant puts script into text the Super Admin will view (business name, owner name, store names, user agent in audit rows, impersonation reason, error text). Script running on `admin.<BASE_DOMAIN>` acts with Super Admin rights over every tenant | (1) **Strict CSP on the admin host now** (S13): `script-src 'self'`, `style-src 'self'`, no `'unsafe-inline'`/`'unsafe-eval'`, `object-src 'none'`, `base-uri 'none'`, `frame-ancestors 'none'` (OPERATIONS §7). (2) **Tenant text is rendered as plain text only**: React text nodes; `dangerouslySetInnerHTML` banned (`react/no-danger` as an ESLint error in `admin-console/`); no HTML or Markdown rendering of tenant data; no tenant-supplied URL in `href`/`src` (logos are served from the app's own `/files` path). (3) The platform API returns tenant strings as JSON with `nosniff`; nothing on the admin host serves tenant HTML. (4) Step-up for destructive actions limits what a hijacked session can do silently |
+| E: admin-console XSS via a dependency | Pinned npm deps, Dependabot, `npm audit` in CI, small admin bundle (no rich-text/Markdown libraries) |
 
 ### 3.7 Email (platform + tenant SMTP)
 | Threat | Control |
@@ -139,14 +143,15 @@ The **malicious tenant** is the key adversary: authenticated, with full control 
 | T: vulnerable/compromised dependency | Minimal deps, pinned versions + `go.sum`, `govulncheck` in CI (fail on reachable vulns), Dependabot/Renovate, `GOFLAGS=-mod=readonly`, `GOPROXY` default + checksum DB |
 | I: secrets in git (already happened: P0-1) | Rotate, gitleaks pre-commit + CI on full history, `.env` in `.gitignore`, `.env.example` only |
 | E: container escape / lateral movement | Distroless nonroot, read-only FS, no shell, dropped capabilities |
-| I: DB insider/backup theft | Encrypted backups, tenant exports encrypted (age), SMTP secrets encrypted with KEK outside the DB |
-| E: Electron LAN exposure | Loopback bind, per-launch token, no CORS |
+| I: DB insider/backup theft | Encrypted backups, tenant exports encrypted (age, S7), live credentials (`refresh_tokens`, `auth_tokens`) never exported, SMTP secrets encrypted with KEK outside the DB |
 
 ## 4. Residual risks (accepted or deferred)
 - SMTP is at-least-once: a crash between SMTP acceptance and DB update can cause one duplicate receipt (mitigated by Message-ID).
 - Row-level isolation inside a tenant (e.g. store-scoped billers) is not in scope v1 (S8).
 - A superuser/insider with DB credentials can read everything. Mitigated by access control, auditing and encrypted secrets, not eliminated.
-- `'unsafe-inline'` styles in CSP until MUI/Emotion inline styles are addressed.
+- **Injected `SET ROLE`.** `pos_app` must be able to `SET ROLE` to every tenant role, so if any SQL injection ever reached a tenant transaction, it could switch to another tenant's role (`set_config('role', …)` fits inside one statement) and read that tenant's data. Defenses: sqlc + the `constsql` lint rule (no injectable SQL), `Exec` mode (no stacked statements), and the pre-commit tripwire (catches a role still switched at commit, not one switched and reset inside one statement). Removing it fully would need one login role per tenant and one pool per tenant, which does not scale with connections. Accepted, and revisited if the design moves to dedicated DBs for large tenants.
+- **Admin-console XSS.** Strict CSP and plain-text rendering make it hard, but a bug in a dependency or a future feature that renders tenant HTML could reopen it. Any feature that would render tenant-supplied markup on the admin host needs a security review first.
+- `'unsafe-inline'` styles in the **tenant app's** CSP until MUI/Emotion styles move to nonces (S13 tenant part, deferred). The admin host has no `'unsafe-inline'`.
 - Tenant SMTP is a feature that intentionally connects to tenant-chosen hosts. Defenses reduce SSRF, but an egress firewall is the strong control in production.
 
 ## 5. Phase 3 verification map
