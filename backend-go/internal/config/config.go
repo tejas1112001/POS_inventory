@@ -65,7 +65,13 @@ type Config struct {
 	PlatformIPAllowlistRaw string         `env:"PLATFORM_IP_ALLOWLIST"`
 	PlatformIPAllowlist    []netip.Prefix `env:"-"`
 
-	StorageDriver string `env:"STORAGE_DRIVER" envDefault:"fs"`
+	StorageDriver string         `env:"STORAGE_DRIVER" envDefault:"fs"`
+	StorageFSRoot string         `env:"STORAGE_FS_ROOT" envDefault:"data/files"`
+	S3Endpoint    string         `env:"S3_ENDPOINT"`
+	S3Bucket      string         `env:"S3_BUCKET"`
+	S3AccessKey   secrets.Secret `env:"S3_ACCESS_KEY"`
+	S3SecretKey   secrets.Secret `env:"S3_SECRET_KEY"`
+	S3Region      string         `env:"S3_REGION" envDefault:"us-east-1"`
 
 	MaxUnpagedRows int `env:"MAX_UNPAGED_ROWS" envDefault:"5000"`
 
@@ -242,7 +248,17 @@ func (c *Config) validate() error {
 	}
 
 	switch c.StorageDriver {
-	case "fs", "s3":
+	case "fs":
+		if c.StorageFSRoot == "" {
+			add("STORAGE_FS_ROOT is required with STORAGE_DRIVER=fs")
+		}
+	case "s3":
+		if c.S3Endpoint == "" || c.S3Bucket == "" || c.S3AccessKey.IsZero() || c.S3SecretKey.IsZero() {
+			add("STORAGE_DRIVER=s3 needs S3_ENDPOINT, S3_BUCKET, S3_ACCESS_KEY and S3_SECRET_KEY")
+		}
+		if u, err := url.Parse(c.S3Endpoint); err == nil && c.IsProduction() && u.Scheme != "https" {
+			add("S3_ENDPOINT must use https in production")
+		}
 	default:
 		add("STORAGE_DRIVER must be fs or s3")
 	}

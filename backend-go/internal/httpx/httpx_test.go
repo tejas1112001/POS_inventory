@@ -232,7 +232,7 @@ func TestStrictJSON(t *testing.T) {
 
 func TestBodyLimit(t *testing.T) {
 	h := newHarness(t, nil)
-	big := `{"name":"` + strings.Repeat("a", int(DefaultBodyLimit)) + `"}`
+	big := `{"name":"` + strings.Repeat("a", int(UploadBodyLimit)) + `"}`
 	hdr := map[string]string{"Content-Type": "application/json"}
 	rec := h.do(t, "POST", "acme.pos.test", "/api/echo", strings.NewReader(big), hdr)
 	require.Equal(t, http.StatusRequestEntityTooLarge, rec.Code)

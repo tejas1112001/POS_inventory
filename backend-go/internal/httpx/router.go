@@ -25,6 +25,9 @@ type RouterDeps struct {
 	Tenant   func(r chi.Router)
 	Platform func(r chi.Router)
 
+	// TenantRoot registers non-API routes on tenant hosts (/files/t/...).
+	TenantRoot func(r chi.Router)
+
 	// TenantResolver runs first on every tenant-host request (step 2).
 	TenantResolver func(http.Handler) http.Handler
 
@@ -47,12 +50,12 @@ func NewRouter(d RouterDeps) http.Handler {
 	root.Get("/health", d.Health.Live)
 	root.Get("/readyz", d.Health.Ready)
 
-	tenant := hostRouter(d, d.Tenant, d.TenantSPA)
+	tenant := hostRouter(d, d.Tenant, d.TenantSPA, d.TenantRoot)
 	if d.TenantResolver != nil {
 		tenant = d.TenantResolver(tenant)
 	}
-	platform := hostRouter(d, d.Platform, d.AdminSPA)
-	apex := hostRouter(d, nil, d.LandingSPA)
+	platform := hostRouter(d, d.Platform, d.AdminSPA, nil)
+	apex := hostRouter(d, nil, d.LandingSPA, nil)
 
 	root.Group(func(r chi.Router) {
 		r.Use(RejectUnknownHost)
@@ -72,9 +75,10 @@ func NewRouter(d RouterDeps) http.Handler {
 	return root
 }
 
-func hostRouter(d RouterDeps, mount func(chi.Router), spa http.Handler) http.Handler {
+func hostRouter(d RouterDeps, mount func(chi.Router), spa http.Handler, root func(chi.Router)) http.Handler {
 	r := chi.NewRouter()
-	r.Use(BodyLimit(DefaultBodyLimit), Timeout(d.RequestTimeout), CORS(d.CORSDevOrigins))
+	// Outer cap; each API route applies its own (1 MiB default, 8 MiB uploads).
+	r.Use(BodyLimit(UploadBodyLimit), Timeout(d.RequestTimeout), CORS(d.CORSDevOrigins))
 	notFound := func(w http.ResponseWriter, req *http.Request) { WriteError(w, req, apperr.NotFound()) }
 	r.Route("/api", func(api chi.Router) {
 		if mount != nil {
@@ -83,6 +87,9 @@ func hostRouter(d RouterDeps, mount func(chi.Router), spa http.Handler) http.Han
 		api.NotFound(notFound)
 		api.MethodNotAllowed(notFound)
 	})
+	if root != nil {
+		root(r)
+	}
 	if spa != nil {
 		r.NotFound(spa.ServeHTTP)
 	} else {

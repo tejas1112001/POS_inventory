@@ -8,6 +8,8 @@ import (
 	"sync"
 
 	"github.com/go-chi/chi/v5"
+
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/httpx"
 )
 
 // Kind is the access level a route requires.
@@ -25,7 +27,8 @@ const (
 type Requirement struct {
 	Kind          Kind
 	Perm          string
-	AllowReadOnly bool // passes the read_only tenant gate (billing exemption)
+	AllowReadOnly bool  // passes the read_only tenant gate (billing exemption)
+	BodyLimit     int64 // 0 = httpx.DefaultBodyLimit (1 MiB)
 }
 
 // Public marks an unauthenticated route.
@@ -38,6 +41,10 @@ func Authenticated() Requirement { return Requirement{Kind: KindAuthenticated} }
 func Require(module, action string) Requirement {
 	return Requirement{Kind: KindPermission, Perm: module + ":" + action}
 }
+
+// Uploads raises the body limit to httpx.UploadBodyLimit (8 MiB) for routes
+// that accept images.
+func (r Requirement) Uploads() Requirement { r.BodyLimit = httpx.UploadBodyLimit; return r }
 
 // ReadOnlyOK returns r with the read_only gate exemption. Only the routes on
 // AllowReadOnlyList may use it (checked by a router-walk test).
@@ -76,7 +83,11 @@ func (rt *Router) Handle(method, pattern string, req Requirement, h http.Handler
 	rt.mu.Lock()
 	rt.decl[method+" "+rt.prefix+pattern] = req
 	rt.mu.Unlock()
-	rt.r.With(rt.guard(req)).Method(method, pattern, h)
+	limit := req.BodyLimit
+	if limit <= 0 {
+		limit = httpx.DefaultBodyLimit
+	}
+	rt.r.With(httpx.BodyLimit(limit), rt.guard(req)).Method(method, pattern, h)
 }
 
 // Declarations returns every registered route and requirement.

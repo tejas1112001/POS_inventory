@@ -148,6 +148,10 @@ func TestProductionRules(t *testing.T) {
 	v["BASE_DOMAIN"] = "pos.example.com"
 	v["TRUSTED_PROXY_CIDRS"] = "10.0.0.0/8, 172.16.0.1"
 	v["STORAGE_DRIVER"] = "s3"
+	v["S3_ENDPOINT"] = "https://s3.ap-south-1.amazonaws.com"
+	v["S3_BUCKET"] = "pos-files"
+	v["S3_ACCESS_KEY"] = "test-access-key"
+	v["S3_SECRET_KEY"] = "s3-secret-access-key-value-long-enough"
 	v["DATABASE_URL"] = "postgres://pos_app:" + pw + "@db:5432/pos?sslmode=verify-full"
 	v["DATABASE_JOBS_URL"] = "postgres://pos_jobs:" + pw + "@db:5432/pos?sslmode=verify-full"
 	c, err := LoadFrom(v)
@@ -191,4 +195,11 @@ func TestCORSDevOriginsOnlyInDevelopment(t *testing.T) {
 	v["APP_ENV"] = "test"
 	_, err = LoadFrom(v)
 	require.ErrorContains(t, err, "CORS_DEV_ORIGINS is only allowed")
+}
+
+func TestS3SettingsRequired(t *testing.T) {
+	v := validVars(t)
+	v["STORAGE_DRIVER"] = "s3"
+	_, err := LoadFrom(v)
+	require.ErrorContains(t, err, "S3_ENDPOINT, S3_BUCKET")
 }

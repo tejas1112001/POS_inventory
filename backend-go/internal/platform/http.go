@@ -61,7 +61,7 @@ func (h *HTTP) byIP(r *http.Request) string { return h.net.ClientIP(r).String() 
 // Mount registers /api/platform/* on the admin-host router.
 func (h *HTTP) Mount(api chi.Router) {
 	api.Route("/platform", func(r chi.Router) {
-		r.Use(h.ipAllowlist)
+		r.Use(httpx.BodyLimit(httpx.DefaultBodyLimit), h.ipAllowlist)
 		r.Group(func(pub chi.Router) {
 			pub.With(h.limiter("platform_login", 5, time.Minute, h.byIP)).Post("/auth/login", h.login)
 			mfa := h.limiter("platform_mfa", 10, time.Minute, h.byIP)

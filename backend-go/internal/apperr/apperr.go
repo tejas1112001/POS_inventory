@@ -66,6 +66,11 @@ const (
 	CodeTenantSuspended    = "TENANT_SUSPENDED"
 	CodeTenantReadOnly     = "TENANT_READ_ONLY"
 	CodeImpersonationRO    = "IMPERSONATION_READ_ONLY"
+	CodePlanLimit          = "PLAN_LIMIT_REACHED"
+	CodeFeatureNotInPlan   = "FEATURE_NOT_IN_PLAN"
+	CodeInsufficientStock  = "INSUFFICIENT_STOCK"
+	CodePriceChanged       = "PRICE_CHANGED"
+	CodeProductLocked      = "PRODUCT_LOCKED"
 	CodeNotFound           = "NOT_FOUND"
 	CodeConflict           = "CONFLICT"
 	CodeInvalidState       = "INVALID_STATE"
@@ -81,6 +86,12 @@ const (
 // Validation reports field errors.
 func Validation(fields map[string]string) *Error {
 	return &Error{Kind: KindValidation, Code: CodeValidationFailed, Message: "Validation failed", Fields: fields}
+}
+
+// Invalid reports one field error and uses it as the message, so clients
+// that show only "error" still say what is wrong.
+func Invalid(field, msg string) *Error {
+	return &Error{Kind: KindValidation, Code: CodeValidationFailed, Message: msg, Fields: map[string]string{field: msg}}
 }
 
 // InvalidJSON reports a malformed body.
