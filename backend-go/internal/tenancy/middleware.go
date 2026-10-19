@@ -24,7 +24,9 @@ func WithTenant(ctx context.Context, t Tenant) context.Context {
 // Resolve looks up the tenant for a tenant host. Unknown, deleted, failed and
 // provisioning tenants all get the same 404 body through the same code path.
 // The tenant comes only from the stored registry row, never from the request.
-func Resolve(reg *Registry) func(http.Handler) http.Handler {
+// An old slug (renamed tenant) redirects page loads with 308; API calls get
+// the generic 404 (TENANCY §5 step 2).
+func Resolve(reg *Registry, n httpx.Network, baseDomain string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			h := httpx.HostFrom(r.Context())
@@ -34,6 +36,13 @@ func Resolve(reg *Registry) func(http.Handler) http.Handler {
 			}
 			t, err := reg.BySlug(r.Context(), h.Slug)
 			if err != nil {
+				if e, ok := apperr.As(err); ok && e.Kind == apperr.KindNotFound && r.Method == http.MethodGet && !httpx.IsAPIPath(r.URL.Path) {
+					if newSlug, ok := reg.RedirectSlug(r.Context(), h.Slug); ok {
+						target := n.Scheme(r) + "://" + newSlug + "." + baseDomain + r.URL.RequestURI()
+						http.Redirect(w, r, target, http.StatusPermanentRedirect)
+						return
+					}
+				}
 				httpx.WriteError(w, r, err)
 				return
 			}

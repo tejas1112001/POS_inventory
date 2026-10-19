@@ -584,7 +584,7 @@ func TestResolveMiddlewareGeneric404(t *testing.T) {
 	h := httpx.NewRouter(httpx.RouterDeps{
 		Logger: slog.New(slog.DiscardHandler), Network: httpx.Network{BaseDomain: "pos.test"},
 		Health: httpx.NewHealth(time.Second), RequestTimeout: time.Second,
-		TenantResolver: tenancy.Resolve(reg),
+		TenantResolver: tenancy.Resolve(reg, httpx.Network{BaseDomain: "pos.test"}, "pos.test"),
 		Tenant: func(r chi.Router) {
 			r.Get("/whoami", func(w http.ResponseWriter, r *http.Request) {
 				tn, _ := tenancy.TenantFrom(r.Context())

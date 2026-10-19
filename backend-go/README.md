@@ -11,7 +11,19 @@ Phase 2, built in order (PHASE1_DESIGN §8).
 
 - Step 3 (migration runner + provisioning): tenant migrations with per-tenant advisory locks, dry run, resume and a drift report; post-step grants, tenant-bound outbox trigger and permission sync; provisioning with compensation and retry.
 
-Steps 4–5 follow, then a review stop.
+- Step 4 (Super Admin): platform users with argon2id, mandatory TOTP (RFC 6238, replay guard), recovery codes, rotating refresh cookie with reuse detection, step-up for destructive actions, tenant administration, append-only platform audit log, `posctl bootstrap-superadmin`.
+
+Step 5 follows, then a review stop.
+
+## First Super Admin (dev)
+
+```sh
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env run --rm --no-deps \
+  -e BOOTSTRAP_ADMIN_EMAIL=you@example.com -e BOOTSTRAP_ADMIN_PASSWORD='<14+ chars>' \
+  --entrypoint /usr/local/bin/posctl app bootstrap-superadmin
+```
+
+Then `POST https://admin.localhost:8443/api/platform/auth/login`. The first sign-in forces a new password and TOTP enrolment, and shows 10 recovery codes once.
 
 ## Tenants (dev)
 

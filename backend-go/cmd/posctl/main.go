@@ -20,8 +20,10 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/config"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/migrate"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/obs"
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/platform"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/provisioning"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/secrets"
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/security"
 )
 
 const usage = `usage: posctl <command>
@@ -42,6 +44,9 @@ commands:
                    [--currency INR] [--locale en-IN] [--timezone Asia/Kolkata]
   tenant retry <tenant_id> resume a failed provisioning run
   tenant reap [--older-than 15m]  fail and compensate runs stuck in provisioning
+  bootstrap-superadmin     create the first super_admin from BOOTSTRAP_ADMIN_EMAIL,
+                           BOOTSTRAP_ADMIN_PASSWORD (and optional BOOTSTRAP_ADMIN_NAME);
+                           refuses if any platform user exists
 
 Every command that touches the database reads DATABASE_MIGRATOR_URL unless
 noted. Output never includes connection strings or secrets.
@@ -88,6 +93,8 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		err = tenantRetry(ctx, cmd(2), stdout)
 	case cmd(0) == "tenant" && cmd(1) == "reap":
 		err = tenantReap(ctx, args[2:], stdout)
+	case cmd(0) == "bootstrap-superadmin":
+		err = bootstrapSuperAdmin(ctx, stdout)
 	default:
 		fmt.Fprint(stderr, usage)
 		return 2
@@ -358,5 +365,24 @@ func migratePlatformStatus(ctx context.Context, stdout io.Writer) error {
 		return err
 	}
 	fmt.Fprintf(stdout, "platform: current %d, latest %d\n", cur, latest)
+	return nil
+}
+
+func bootstrapSuperAdmin(ctx context.Context, stdout io.Writer) error {
+	dsn, err := dsnEnv("DATABASE_MIGRATOR_URL")
+	if err != nil {
+		return err
+	}
+	email, pw := os.Getenv("BOOTSTRAP_ADMIN_EMAIL"), os.Getenv("BOOTSTRAP_ADMIN_PASSWORD")
+	if email == "" || pw == "" {
+		return errors.New("BOOTSTRAP_ADMIN_EMAIL and BOOTSTRAP_ADMIN_PASSWORD are required")
+	}
+	id, err := platform.BootstrapSuperAdmin(ctx, dsn, email, os.Getenv("BOOTSTRAP_ADMIN_NAME"), pw,
+		security.NewHasher(security.PlatformArgon2, 1))
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(stdout, "super_admin created (id %d). Sign in at admin.<BASE_DOMAIN>: you will set a new password and enrol TOTP.\n", id)
+	fmt.Fprintln(stdout, "Remove BOOTSTRAP_ADMIN_PASSWORD from the environment now.")
 	return nil
 }

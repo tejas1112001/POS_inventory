@@ -14,12 +14,19 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/go-chi/chi/v5"
+
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/authtoken"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/buildinfo"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/config"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/db"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/httpx"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/migrate"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/obs"
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/platform"
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/provisioning"
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/secrets"
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/security"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/tenancy"
 )
 
@@ -113,6 +120,12 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 	}
 
 	network := httpx.Network{BaseDomain: cfg.BaseDomain, TrustedProxies: cfg.TrustedProxies}
+
+	platformHTTP, err := a.platformAPI(cfg, log, network)
+	if err != nil {
+		a.closePools()
+		return nil, err
+	}
 	handler := httpx.NewRouter(httpx.RouterDeps{
 		Logger:         log,
 		Metrics:        a.metrics,
@@ -121,7 +134,8 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 		HSTS:           cfg.HSTSEnabled,
 		RequestTimeout: cfg.RequestTimeout,
 		CORSDevOrigins: cfg.CORSDevOrigins,
-		TenantResolver: tenancy.Resolve(a.registry),
+		TenantResolver: tenancy.Resolve(a.registry, network, cfg.BaseDomain),
+		Platform:       func(r chi.Router) { platformHTTP.Mount(r) },
 		TenantSPA:      spas["tenant"],
 		AdminSPA:       spas["admin"],
 		LandingSPA:     spas["landing"],
@@ -150,6 +164,33 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 		MaxHeaderBytes:    maxHeaderBytes,
 	}
 	return a, nil
+}
+
+func (a *App) platformAPI(cfg *config.Config, log *slog.Logger, network httpx.Network) (*platform.HTTP, error) {
+	keks := make([]secrets.KEK, 0, len(cfg.MasterKeys))
+	for _, k := range cfg.MasterKeys {
+		keks = append(keks, secrets.KEK{ID: k.ID, Key: k.Bytes()})
+	}
+	env, err := secrets.NewEnvelope(keks)
+	if err != nil {
+		return nil, err
+	}
+	signer, err := authtoken.NewSigner(cfg.PlatformJWTKeys, authtoken.AudPlatform, cfg.PlatformAccessTokenTTL)
+	if err != nil {
+		return nil, err
+	}
+	var prov *provisioning.Orchestrator
+	if !cfg.DatabaseMigratorURL.IsZero() {
+		prov = provisioning.New(cfg.DatabaseMigratorURL, cfg.PublicScheme, cfg.BaseDomain, log)
+	}
+	svc := platform.NewService(platform.Config{
+		BaseDomain: cfg.BaseDomain, PlatformName: cfg.PlatformName,
+		SessionMax: cfg.PlatformSessionMax, IdleTimeout: cfg.PlatformIdleTimeout, SecureCookies: true,
+		Provisioner: prov, Registry: a.registry, Log: log,
+		Hasher:   security.NewHasher(security.PlatformArgon2, 4),
+		Envelope: env, Signer: signer, Sessions: a.sessions,
+	})
+	return platform.NewHTTP(svc, network, cfg.PlatformIPAllowlist, a.metrics, cfg.PublicScheme), nil
 }
 
 // Handler exposes the public HTTP handler (tests).

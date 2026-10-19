@@ -153,6 +153,36 @@ func (r *Registry) load(ctx context.Context, kind lookupKind, arg string) (regEn
 	return regEntry{t: t, found: true}, nil
 }
 
+const qSlugRedirect = `SELECT t.slug::text FROM platform.tenant_slug_history h
+	JOIN platform.tenants t ON t.id = h.tenant_id
+	WHERE h.old_slug = $1 AND h.redirect_until > now()
+	  AND t.status IN ('trialing','active','past_due','grace','cancelled','read_only','suspended','pending_deletion')`
+
+// RedirectSlug returns the current slug for a renamed tenant's old slug.
+// Misses are cached like tenant lookups.
+func (r *Registry) RedirectSlug(ctx context.Context, old string) (string, bool) {
+	if !validSlug(old) {
+		return "", false
+	}
+	key := "redirect:" + old
+	if e, ok := r.cache.Get(key); ok {
+		return e.t.Slug, e.found
+	}
+	var e regEntry
+	err := r.sessions.InPlatformTx(ctx, TxOptions{Access: ReadOnly}, func(tx PlatformTx) error {
+		return tx.QueryRow(ctx, qSlugRedirect, old).Scan(&e.t.Slug)
+	})
+	switch {
+	case err == nil:
+		e.found = true
+	case errors.Is(err, pgx.ErrNoRows):
+	default:
+		return "", false // transient error: no redirect, not cached
+	}
+	r.cache.Set(key, e, r.ttl())
+	return e.t.Slug, e.found
+}
+
 // Flush drops every cached entry (on tenant_changed and after a listener
 // reconnect).
 func (r *Registry) Flush() { r.cache.Flush() }
