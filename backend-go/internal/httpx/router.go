@@ -25,6 +25,9 @@ type RouterDeps struct {
 	Tenant   func(r chi.Router)
 	Platform func(r chi.Router)
 
+	// TenantResolver runs first on every tenant-host request (step 2).
+	TenantResolver func(http.Handler) http.Handler
+
 	// Optional static builds (STATIC_DIR/tenant, /admin, /landing).
 	TenantSPA, AdminSPA, LandingSPA http.Handler
 }
@@ -45,6 +48,9 @@ func NewRouter(d RouterDeps) http.Handler {
 	root.Get("/readyz", d.Health.Ready)
 
 	tenant := hostRouter(d, d.Tenant, d.TenantSPA)
+	if d.TenantResolver != nil {
+		tenant = d.TenantResolver(tenant)
+	}
 	platform := hostRouter(d, d.Platform, d.AdminSPA)
 	apex := hostRouter(d, nil, d.LandingSPA)
 

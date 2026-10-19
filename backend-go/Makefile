@@ -13,7 +13,7 @@ LDFLAGS := -s -w -X github.com/tejas1112001/POS_inventory/backend-go/internal/bu
 BIN := bin
 CONSTSQL := $(BIN)/constsql
 
-.PHONY: help build test test-race test-integration lint vet constsql staticcheck gosec vuln gitleaks gitleaks-history check fmt tidy docker up down clean
+.PHONY: db-init help build test test-race test-integration lint vet constsql staticcheck gosec vuln gitleaks gitleaks-history check fmt tidy docker up down clean
 
 help: ## List targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-18s %s\n", $$1, $$2}'
@@ -44,7 +44,7 @@ $(CONSTSQL): $(shell find tools/analyzers -name '*.go' -not -path '*/testdata/*'
 	go build -o $(CONSTSQL) ./tools/analyzers/constsql/cmd/constsql
 
 constsql: $(CONSTSQL) ## SQL arguments must be constants (TENANCY §4)
-	go vet -vettool=$(abspath $(CONSTSQL)) ./...
+	go vet -tags integration -vettool=$(abspath $(CONSTSQL)) ./...
 
 lint: ## golangci-lint (includes gosec, errcheck, staticcheck, revive, ...)
 	go run $(GOLANGCI_LINT) run ./...
@@ -73,6 +73,10 @@ docker: ## Build the posd image
 
 up: ## Start the dev stack (Postgres 18, Caddy, S3 gateway, Mailpit, posd)
 	docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --build
+
+db-init: ## Dev stack: create roles/schemas and apply platform migrations
+	docker compose -f deploy/docker-compose.yml --env-file deploy/.env run --rm --no-deps --entrypoint /usr/local/bin/posctl app db bootstrap
+	docker compose -f deploy/docker-compose.yml --env-file deploy/.env run --rm --no-deps --entrypoint /usr/local/bin/posctl app migrate platform up
 
 down: ## Stop the dev stack
 	docker compose -f deploy/docker-compose.yml --env-file deploy/.env down

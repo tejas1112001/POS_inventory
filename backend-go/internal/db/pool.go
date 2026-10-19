@@ -42,8 +42,13 @@ func NewPool(ctx context.Context, dsn secrets.Secret, o PoolOptions) (*pgxpool.P
 	if o.MinConns >= 0 && o.MinConns <= cfg.MaxConns {
 		cfg.MinConns = o.MinConns
 	}
-	cfg.MaxConnLifetime = time.Hour
-	cfg.MaxConnIdleTime = 15 * time.Minute
+	// A connection returned while still inside a transaction would carry its
+	// SET LOCAL role and search_path to the next caller. Destroy it instead.
+	cfg.AfterRelease = func(c *pgx.Conn) bool { return c.PgConn().TxStatus() == 'I' }
+	// Shorter lifetimes bound relcache growth across many tenant schemas
+	// (TENANCY §1.1).
+	cfg.MaxConnLifetime = 30 * time.Minute
+	cfg.MaxConnIdleTime = 5 * time.Minute
 	cfg.HealthCheckPeriod = 30 * time.Second
 	cfg.ConnConfig.ConnectTimeout = 5 * time.Second
 

@@ -4,7 +4,12 @@ The Go rewrite of the POS backend. Design: [`docs/PHASE1_DESIGN.md`](../docs/PHA
 
 ## Status
 
-Phase 2, built in order (PHASE1_DESIGN §8). Step 1 (foundation) is done: config, logging, errors, the HTTP layer, health checks, metrics, graceful shutdown, Docker, CI. Steps 2–5 follow, then a review stop.
+Phase 2, built in order (PHASE1_DESIGN §8).
+
+- Step 1 (foundation): config, logging, errors, HTTP layer, health, metrics, graceful shutdown, Docker, CI.
+- Step 2 (platform schema + registry): DB roles and bootstrap, platform migrations (goose), tenant registry with negative caching, `InTenantTx`/`InPlatformTx` with a tamper tripwire, LISTEN/NOTIFY cache invalidation, `posctl db preflight`.
+
+Steps 3–5 follow, then a review stop.
 
 ## Requirements
 
@@ -28,6 +33,7 @@ make up / down     # dev stack: Postgres 18, Caddy, S3 gateway, Mailpit, posd
 cp deploy/.env.example deploy/.env      # fill every value; generate secrets:
 openssl rand -base64 32                 # one per key, never reuse values
 make up
+make db-init                            # roles, schemas, platform migrations
 curl -k https://acme.localhost:8443/healthz
 ```
 
@@ -53,6 +59,19 @@ Environment variables only; see [`.env.example`](.env.example) and PHASE1_DESIGN
 - Production also requires https, `TRUSTED_PROXY_CIDRS`, `sslmode=verify-full`, generated DB passwords (≥ 16 chars), S3 storage and a real domain.
 
 `posctl config check` validates the environment without starting the server.
+
+## Database roles (TENANCY §5.3)
+
+| Role | Login | Use |
+|---|---|---|
+| `pos_owner` | no | Owns every schema and object |
+| `pos_migrator` | yes | Migrations and provisioning (`SET ROLE pos_owner` via startup parameter) |
+| `pos_app` | yes | Request traffic; no privileges of its own, empty `search_path` |
+| `pos_platform` | no | DML on `platform.*`; entered with `SET LOCAL ROLE` |
+| `t_<id>_rw` | no | One per tenant; DML on its own schema only |
+| `pos_jobs` | yes | Background jobs |
+
+`posctl db bootstrap` (as the admin login) creates them idempotently and sets the login passwords from `DATABASE_MIGRATOR_URL`, `DATABASE_URL` and `DATABASE_JOBS_URL`. Passwords are sent as SCRAM verifiers, never in clear. Re-run it to rotate them. `posctl db preflight` checks a managed Postgres against OPERATIONS §8 in a scratch database.
 
 ## Layout
 

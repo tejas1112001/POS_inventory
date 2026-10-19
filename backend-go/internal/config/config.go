@@ -189,7 +189,7 @@ func (c *Config) validate() error {
 		if s.IsZero() {
 			continue
 		}
-		if msg := checkDSN(s.Reveal(), c.IsProduction()); msg != "" {
+		if msg := CheckDSN(s.Reveal(), c.IsProduction()); msg != "" {
 			add("%s %s", name, msg)
 		}
 	}
@@ -300,8 +300,8 @@ func (c *Config) validate() error {
 	return nil
 }
 
-// checkDSN validates a Postgres URL without ever returning its contents.
-func checkDSN(dsn string, production bool) string {
+// CheckDSN validates a Postgres URL without ever returning its contents.
+func CheckDSN(dsn string, production bool) string {
 	u, err := url.Parse(dsn)
 	if err != nil || (u.Scheme != "postgres" && u.Scheme != "postgresql") || u.Host == "" {
 		return "must be a postgres:// URL"

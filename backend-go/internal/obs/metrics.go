@@ -16,6 +16,8 @@ type Metrics struct {
 	HTTPDuration    *prometheus.HistogramVec
 	RateLimited     *prometheus.CounterVec
 	SessionTampered prometheus.Counter
+	ListenerUp      prometheus.Gauge
+	ListenerRetries prometheus.Counter
 }
 
 // NewMetrics registers the metrics on a fresh registry.
@@ -40,11 +42,20 @@ func NewMetrics() *Metrics {
 			Name: "pos_session_tampered_total",
 			Help: "Tenant transactions whose role or search_path changed unexpectedly.",
 		}),
+		ListenerUp: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "pos_listener_connected",
+			Help: "1 while the LISTEN connection is up and subscribed.",
+		}),
+		ListenerRetries: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "pos_listener_reconnects_total",
+			Help: "LISTEN connection reconnects.",
+		}),
 	}
 	reg.MustRegister(
 		collectors.NewGoCollector(),
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 		m.HTTPRequests, m.HTTPDuration, m.RateLimited, m.SessionTampered,
+		m.ListenerUp, m.ListenerRetries,
 	)
 	return m
 }

@@ -35,37 +35,83 @@ var queryMethods = map[string]bool{
 // exemptFile is the one file allowed to build SQL from quoted identifiers.
 const exemptFile = "internal/db/ident.go"
 
+// exemptTestDir holds integration-test helpers (build tag "integration",
+// never compiled into a binary). They run DDL supplied by tests.
+const exemptTestDir = "internal/testdb/"
+
 func run(pass *analysis.Pass) (any, error) {
 	insp := pass.ResultOf[inspect.Analyzer].(*inspector.Inspector)
-	insp.Preorder([]ast.Node{(*ast.CallExpr)(nil)}, func(n ast.Node) {
-		call := n.(*ast.CallExpr)
-		sel, ok := call.Fun.(*ast.SelectorExpr)
-		if !ok || !queryMethods[sel.Sel.Name] {
-			return
+	insp.WithStack([]ast.Node{(*ast.CallExpr)(nil)}, func(n ast.Node, push bool, stack []ast.Node) bool {
+		if push {
+			check(pass, n.(*ast.CallExpr), stack)
 		}
-		fn, ok := pass.TypesInfo.Uses[sel.Sel].(*types.Func)
-		if !ok {
-			return
-		}
-		sig, ok := fn.Type().(*types.Signature)
-		if !ok || sig.Recv() == nil {
-			return
-		}
-		idx := sqlParamIndex(sig)
-		if idx < 0 || idx >= len(call.Args) {
-			return
-		}
-		if isExempt(pass, call) {
-			return
-		}
-		tv, ok := pass.TypesInfo.Types[call.Args[idx]]
-		if ok && tv.Value != nil {
-			return // constant
-		}
-		pass.Reportf(call.Args[idx].Pos(),
-			"constsql: SQL passed to %s must be a constant; build identifiers only in %s", sel.Sel.Name, exemptFile)
+		return true
 	})
 	return nil, nil
+}
+
+func check(pass *analysis.Pass, call *ast.CallExpr, stack []ast.Node) {
+	sel, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok || !queryMethods[sel.Sel.Name] {
+		return
+	}
+	fn, ok := pass.TypesInfo.Uses[sel.Sel].(*types.Func)
+	if !ok {
+		return
+	}
+	sig, ok := fn.Type().(*types.Signature)
+	if !ok || sig.Recv() == nil {
+		return
+	}
+	idx := sqlParamIndex(sig)
+	if idx < 0 || idx >= len(call.Args) {
+		return
+	}
+	if isExempt(pass, call) {
+		return
+	}
+	tv, ok := pass.TypesInfo.Types[call.Args[idx]]
+	if ok && tv.Value != nil {
+		return // constant
+	}
+	if isPassThrough(pass, call.Args[idx], stack) {
+		return
+	}
+	pass.Reportf(call.Args[idx].Pos(),
+		"constsql: SQL passed to %s must be a constant; build identifiers only in %s", sel.Sel.Name, exemptFile)
+}
+
+// isPassThrough allows a wrapper method that is itself a query method (for
+// example TenantTx.Exec(ctx, sql, args...)) to forward its own SQL parameter
+// unchanged. Calls to the wrapper are checked like any other query method.
+func isPassThrough(pass *analysis.Pass, arg ast.Expr, stack []ast.Node) bool {
+	id, ok := arg.(*ast.Ident)
+	if !ok {
+		return false
+	}
+	var fd *ast.FuncDecl
+	for i := len(stack) - 1; i >= 0; i-- {
+		if f, ok := stack[i].(*ast.FuncDecl); ok {
+			fd = f
+			break
+		}
+	}
+	if fd == nil || fd.Recv == nil || !queryMethods[fd.Name.Name] {
+		return false
+	}
+	fn, ok := pass.TypesInfo.Defs[fd.Name].(*types.Func)
+	if !ok {
+		return false
+	}
+	sig, ok := fn.Type().(*types.Signature)
+	if !ok {
+		return false
+	}
+	i := sqlParamIndex(sig)
+	if i < 0 {
+		return false
+	}
+	return pass.TypesInfo.Uses[id] == sig.Params().At(i)
 }
 
 // sqlParamIndex returns the index of the SQL string parameter, or -1.
@@ -98,5 +144,7 @@ func isContext(t types.Type) bool {
 
 func isExempt(pass *analysis.Pass, call *ast.CallExpr) bool {
 	name := filepath.ToSlash(pass.Fset.Position(call.Pos()).Filename)
-	return strings.HasSuffix(name, "/"+exemptFile)
+	// Test files never reach a binary and sometimes probe with dynamic SQL.
+	return strings.HasSuffix(name, "/"+exemptFile) || strings.Contains(name, "/"+exemptTestDir) ||
+		strings.HasSuffix(name, "_test.go")
 }
