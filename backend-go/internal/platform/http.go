@@ -87,6 +87,7 @@ func (h *HTTP) Mount(api chi.Router) {
 			p.With(h.need(PermTenantsDelete), h.stepUpRequired).Delete("/tenants/{id}", h.deleteTenant)
 			p.With(h.need(PermTenantsDelete), h.stepUpRequired).Post("/tenants/{id}/restore", h.restore)
 			p.With(h.need(PermTenantsCreate)).Post("/tenants/{id}/provisioning/retry", h.retry)
+			p.With(h.need(PermTenantsEdit), h.stepUpRequired).Post("/tenants/{id}/owner-invite", h.ownerInvite)
 			p.With(h.needAny(PermAuditViewAll, PermAuditViewOwn)).Get("/audit", h.audit)
 		})
 	})
@@ -494,4 +495,13 @@ func (h *HTTP) audit(w http.ResponseWriter, r *http.Request) {
 func validEmail(s string) bool {
 	a, err := mail.ParseAddress(s)
 	return err == nil && a.Address == s && len(s) <= 254
+}
+
+func (h *HTTP) ownerInvite(w http.ResponseWriter, r *http.Request) {
+	url, exp, err := h.svc.OwnerInvite(r.Context(), actorFrom(r.Context()), chi.URLParam(r, "id"), h.meta(r))
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"inviteUrl": url, "expiresAt": exp})
 }

@@ -13,7 +13,9 @@ Phase 2, built in order (PHASE1_DESIGN §8).
 
 - Step 4 (Super Admin): platform users with argon2id, mandatory TOTP (RFC 6238, replay guard), recovery codes, rotating refresh cookie with reuse detection, step-up for destructive actions, tenant administration, append-only platform audit log, `posctl bootstrap-superadmin`.
 
-Step 5 follows, then a review stop.
+- Step 5 (tenant auth + RBAC): login with lockout and rate limits, rotating `__Host-rt` refresh with reuse detection, logout, me, password change/forgot/reset, invite accept; per-request auth state and permissions (cached, NOTIFY-invalidated); tenant status gate; users and roles with anti-escalation; `GET /api/public/tenant-info`; tenant audit log; route self-check (deny by default); tenant-isolation suite.
+
+**Stopped for review after step 5** (PHASE1_DESIGN §8 gate).
 
 ## First Super Admin (dev)
 

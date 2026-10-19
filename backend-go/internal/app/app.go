@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/auth"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/authtoken"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/buildinfo"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/config"
@@ -25,9 +27,12 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/obs"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/platform"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/provisioning"
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/rbac"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/secrets"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/security"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/tenancy"
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/tenantapi"
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/users"
 )
 
 // Server hardening (OPERATIONS §5).
@@ -53,6 +58,7 @@ type App struct {
 	sessions *tenancy.Sessions
 	registry *tenancy.Registry
 	listener *tenancy.Listener
+	tenant   *tenantapi.API
 }
 
 // New builds the app. It does not open network listeners.
@@ -121,11 +127,23 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 
 	network := httpx.Network{BaseDomain: cfg.BaseDomain, TrustedProxies: cfg.TrustedProxies}
 
-	platformHTTP, err := a.platformAPI(cfg, log, network)
+	env, err := envelope(cfg)
 	if err != nil {
 		a.closePools()
 		return nil, err
 	}
+	tenantAPI, authSvc, err := a.tenantAPI(cfg, log, network, env)
+	if err != nil {
+		a.closePools()
+		return nil, err
+	}
+	a.tenant = tenantAPI
+	platformHTTP, err := a.platformAPI(cfg, log, network, env, authSvc)
+	if err != nil {
+		a.closePools()
+		return nil, err
+	}
+	var mountErr error
 	handler := httpx.NewRouter(httpx.RouterDeps{
 		Logger:         log,
 		Metrics:        a.metrics,
@@ -136,10 +154,20 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 		CORSDevOrigins: cfg.CORSDevOrigins,
 		TenantResolver: tenancy.Resolve(a.registry, network, cfg.BaseDomain),
 		Platform:       func(r chi.Router) { platformHTTP.Mount(r) },
-		TenantSPA:      spas["tenant"],
-		AdminSPA:       spas["admin"],
-		LandingSPA:     spas["landing"],
+		Tenant: func(r chi.Router) {
+			if err := tenantAPI.Mount(r); err != nil {
+				mountErr = err
+			}
+		},
+		TenantSPA:  spas["tenant"],
+		AdminSPA:   spas["admin"],
+		LandingSPA: spas["landing"],
 	})
+
+	if mountErr != nil {
+		a.closePools()
+		return nil, mountErr // a tenant route without an RBAC requirement
+	}
 
 	a.http = &http.Server{
 		Addr:              cfg.HTTPAddr,
@@ -166,15 +194,37 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 	return a, nil
 }
 
-func (a *App) platformAPI(cfg *config.Config, log *slog.Logger, network httpx.Network) (*platform.HTTP, error) {
+func envelope(cfg *config.Config) (*secrets.Envelope, error) {
 	keks := make([]secrets.KEK, 0, len(cfg.MasterKeys))
 	for _, k := range cfg.MasterKeys {
 		keks = append(keks, secrets.KEK{ID: k.ID, Key: k.Bytes()})
 	}
-	env, err := secrets.NewEnvelope(keks)
+	return secrets.NewEnvelope(keks)
+}
+
+func (a *App) tenantAPI(cfg *config.Config, log *slog.Logger, network httpx.Network, env *secrets.Envelope) (*tenantapi.API, *auth.Service, error) {
+	signer, err := authtoken.NewSigner(cfg.JWTKeys, authtoken.AudTenant, cfg.AccessTokenTTL)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
+	states := auth.NewStates(a.sessions, a.listener.Healthy, log)
+	a.listener.On(tenancy.ChanAuthChanged, states.InvalidateUser)
+	a.listener.On(tenancy.ChanRoleChanged, states.InvalidateRole)
+	a.listener.OnReconnect(states.Flush)
+	hasher := security.NewHasher(security.TenantArgon2, max(4, runtime.NumCPU()))
+	authSvc := auth.NewService(auth.Config{
+		Sessions: a.sessions, States: states, Signer: signer, Hasher: hasher, Envelope: env,
+		RefreshRemember: cfg.RefreshTTLRemember, RefreshSession: cfg.RefreshTTLSession,
+		PublicScheme: cfg.PublicScheme, BaseDomain: cfg.BaseDomain, Log: log,
+	})
+	api := tenantapi.New(tenantapi.Deps{
+		Auth: authSvc, Users: users.NewService(a.sessions, authSvc, hasher, cfg.MaxUnpagedRows),
+		States: states, Signer: signer, Sessions: a.sessions, Network: network, Metrics: a.metrics, MaxRows: cfg.MaxUnpagedRows,
+	})
+	return api, authSvc, nil
+}
+
+func (a *App) platformAPI(cfg *config.Config, log *slog.Logger, network httpx.Network, env *secrets.Envelope, authSvc *auth.Service) (*platform.HTTP, error) {
 	signer, err := authtoken.NewSigner(cfg.PlatformJWTKeys, authtoken.AudPlatform, cfg.PlatformAccessTokenTTL)
 	if err != nil {
 		return nil, err
@@ -189,6 +239,13 @@ func (a *App) platformAPI(cfg *config.Config, log *slog.Logger, network httpx.Ne
 		Provisioner: prov, Registry: a.registry, Log: log,
 		Hasher:   security.NewHasher(security.PlatformArgon2, 4),
 		Envelope: env, Signer: signer, Sessions: a.sessions,
+		IssueOwnerInvite: func(ctx context.Context, id string, m platform.Meta) (string, time.Time, error) {
+			t, err := a.registry.ByID(ctx, id)
+			if err != nil {
+				return "", time.Time{}, err
+			}
+			return authSvc.OwnerInviteLink(ctx, t, auth.Meta{IP: m.IP, UserAgent: m.UserAgent, RequestID: m.RequestID})
+		},
 	})
 	return platform.NewHTTP(svc, network, cfg.PlatformIPAllowlist, a.metrics, cfg.PublicScheme), nil
 }
@@ -198,6 +255,13 @@ func (a *App) Handler() http.Handler { return a.http.Handler }
 
 // Health exposes the health state (tests).
 func (a *App) Health() *httpx.Health { return a.health }
+
+// TenantRoutes lists every declared tenant route and its requirement
+// (isolation tests walk them all).
+func (a *App) TenantRoutes() map[string]rbac.Requirement { return a.tenant.Router().Declarations() }
+
+// ListenerHealthy reports whether the LISTEN connection is up (tests).
+func (a *App) ListenerHealthy() bool { return a.listener.Healthy() }
 
 // Sessions exposes the session factory (tests, later steps).
 func (a *App) Sessions() *tenancy.Sessions { return a.sessions }

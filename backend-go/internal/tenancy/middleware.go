@@ -39,7 +39,9 @@ func Resolve(reg *Registry, n httpx.Network, baseDomain string) func(http.Handle
 				if e, ok := apperr.As(err); ok && e.Kind == apperr.KindNotFound && r.Method == http.MethodGet && !httpx.IsAPIPath(r.URL.Path) {
 					if newSlug, ok := reg.RedirectSlug(r.Context(), h.Slug); ok {
 						target := n.Scheme(r) + "://" + newSlug + "." + baseDomain + r.URL.RequestURI()
-						http.Redirect(w, r, target, http.StatusPermanentRedirect)
+						// The host is always <stored slug>.<BASE_DOMAIN>; only path and
+						// query come from the request, so this cannot leave our domain.
+						http.Redirect(w, r, target, http.StatusPermanentRedirect) //nolint:gosec // G710: host fixed, see above
 						return
 					}
 				}

@@ -487,3 +487,24 @@ func (s *Service) AuditLog(ctx context.Context, a Actor, tenantID string, before
 	})
 	return out, err
 }
+
+// OwnerInvite returns a one-time link the Super Admin hands to the tenant
+// owner so they can set a password. The token is stored only as a hash;
+// the link is shown once and audited.
+func (s *Service) OwnerInvite(ctx context.Context, a Actor, id string, m Meta) (string, time.Time, error) {
+	if s.cfg.IssueOwnerInvite == nil {
+		return "", time.Time{}, apperr.Unavailable()
+	}
+	if !tenancy.ValidTenantID(id) {
+		return "", time.Time{}, apperr.NotFound()
+	}
+	url, exp, err := s.cfg.IssueOwnerInvite(ctx, id, m)
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	_ = s.rw(context.WithoutCancel(ctx), func(tx tenancy.PlatformTx) error {
+		return writeAudit(ctx, tx, AuditEntry{ActorID: a.UserID, ActorEmail: a.Email, Action: "tenant.owner_invite",
+			TargetTenant: id, After: map[string]any{"expiresAt": exp}, IP: m.IP, UserAgent: m.UserAgent, RequestID: m.RequestID})
+	})
+	return url, exp, nil
+}

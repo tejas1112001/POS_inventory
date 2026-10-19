@@ -47,6 +47,9 @@ type Config struct {
 	Signer        *authtoken.Signer
 	Sessions      *tenancy.Sessions
 	Now           func() time.Time
+	// IssueOwnerInvite creates a one-time invite link for a tenant's owner
+	// (until the email worker of step 9 sends it). Nil disables the action.
+	IssueOwnerInvite func(ctx context.Context, tenantID string, m Meta) (url string, expires time.Time, err error)
 }
 
 // Service implements the platform API.
