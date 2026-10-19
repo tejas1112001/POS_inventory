@@ -9,7 +9,18 @@ Phase 2, built in order (PHASE1_DESIGN §8).
 - Step 1 (foundation): config, logging, errors, HTTP layer, health, metrics, graceful shutdown, Docker, CI.
 - Step 2 (platform schema + registry): DB roles and bootstrap, platform migrations (goose), tenant registry with negative caching, `InTenantTx`/`InPlatformTx` with a tamper tripwire, LISTEN/NOTIFY cache invalidation, `posctl db preflight`.
 
-Steps 3–5 follow, then a review stop.
+- Step 3 (migration runner + provisioning): tenant migrations with per-tenant advisory locks, dry run, resume and a drift report; post-step grants, tenant-bound outbox trigger and permission sync; provisioning with compensation and retry.
+
+Steps 4–5 follow, then a review stop.
+
+## Tenants (dev)
+
+```sh
+P="docker compose -f deploy/docker-compose.yml --env-file deploy/.env run --rm --no-deps --entrypoint /usr/local/bin/posctl app"
+$P tenant provision --slug demo-shop --name "Demo Shop" --owner-email owner@demo.test
+$P migrate tenants up --dry-run     # then without --dry-run
+$P migrate drift
+```
 
 ## Requirements
 

@@ -80,6 +80,10 @@ func Start(ctx context.Context) (*DB, error) {
 		_ = c.Terminate(ctx)
 		return nil, fmt.Errorf("testdb: platform migrations: %w", err)
 	}
+	if err := migrate.SyncPlatformCatalog(ctx, d.MigratorDSN); err != nil {
+		_ = c.Terminate(ctx)
+		return nil, fmt.Errorf("testdb: catalog: %w", err)
+	}
 	return d, nil
 }
 

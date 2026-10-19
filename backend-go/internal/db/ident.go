@@ -7,12 +7,16 @@ package db
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"regexp"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 )
+
+// tenantIDPattern guards the tenant ID literal in the outbox trigger.
+var tenantIDPattern = regexp.MustCompile(`^[a-z0-9]{10}$`)
 
 // identPattern is a final guard on every identifier that reaches this file:
 // lowercase letters, digits and underscores, starting with a letter.
@@ -108,6 +112,21 @@ func DropRole(ctx context.Context, c Execer, role string) error {
 	return err
 }
 
+// RevokeSchemaUsage removes every privilege a role holds on a schema
+// (needed before DROP ROLE; run as the schema owner).
+func RevokeSchemaUsage(ctx context.Context, c Execer, schema, role string) error {
+	s, err := quote(schema)
+	if err != nil {
+		return err
+	}
+	r, err := quote(role)
+	if err != nil {
+		return err
+	}
+	_, err = c.Exec(ctx, "REVOKE ALL ON SCHEMA "+s+" FROM "+r)
+	return err
+}
+
 // GrantRoleSet grants role to member WITH INHERIT FALSE, SET TRUE (PG ≥ 16):
 // the member may SET ROLE to it but does not inherit its privileges.
 func GrantRoleSet(ctx context.Context, c Execer, role, member string) error {
@@ -177,4 +196,55 @@ func queryRowScan(ctx context.Context, c Execer, sql string, args []any, dst ...
 		return errors.New("db: connection cannot query")
 	}
 	return q.QueryRow(ctx, sql, args...).Scan(dst...)
+}
+
+// CreateOutboxTrigger creates (or replaces) the tenant-bound function
+// mark_outbox_pending() in the tenant's schema and its trigger on
+// email_outbox (EMAIL_AND_RECEIPTS §4.2, O-1). The tenant ID is a literal
+// fixed at creation, never read at run time. Must run as pos_owner.
+func CreateOutboxTrigger(ctx context.Context, c Execer, schema, role, tenantID string) error {
+	if !tenantIDPattern.MatchString(tenantID) || schema != "t_"+tenantID || role != "t_"+tenantID+"_rw" {
+		return ErrBadIdentifier
+	}
+	s, err := quote(schema)
+	if err != nil {
+		return err
+	}
+	r, err := quote(role)
+	if err != nil {
+		return err
+	}
+	lit := "'" + tenantID + "'" // validated [a-z0-9]{10}: safe as a literal
+	stmts := []string{
+		"CREATE OR REPLACE FUNCTION " + s + `.mark_outbox_pending() RETURNS trigger
+  LANGUAGE plpgsql SECURITY DEFINER
+  SET search_path = pg_catalog, platform
+AS $fn$
+BEGIN
+  INSERT INTO platform.mail_dispatch (tenant_id) VALUES (` + lit + `)
+  ON CONFLICT (tenant_id) DO UPDATE
+    SET next_attempt_at = LEAST(platform.mail_dispatch.next_attempt_at, now());
+  PERFORM pg_notify('mail_dispatch', ` + lit + `);
+  RETURN NULL;
+END $fn$`,
+		"ALTER FUNCTION " + s + ".mark_outbox_pending() OWNER TO pos_owner",
+		"REVOKE ALL ON FUNCTION " + s + ".mark_outbox_pending() FROM PUBLIC",
+		"GRANT EXECUTE ON FUNCTION " + s + ".mark_outbox_pending() TO " + r,
+		"DROP TRIGGER IF EXISTS email_outbox_mark ON " + s + ".email_outbox",
+		"CREATE TRIGGER email_outbox_mark AFTER INSERT ON " + s + ".email_outbox FOR EACH STATEMENT EXECUTE FUNCTION " + s + ".mark_outbox_pending()",
+	}
+	for _, q := range stmts {
+		if _, err := c.Exec(ctx, q); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ExecEmbeddedMigration runs one statement from a migration file embedded in
+// the binary (db/migrations). Used only by the tenant runner's --dry-run,
+// inside a transaction that is rolled back. Never pass request data here.
+func ExecEmbeddedMigration(ctx context.Context, tx *sql.Tx, stmt string) error {
+	_, err := tx.ExecContext(ctx, stmt)
+	return err
 }

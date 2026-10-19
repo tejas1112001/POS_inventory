@@ -131,6 +131,9 @@ func TestPlatformObjectsOwnedByOwnerAndPrivileges(t *testing.T) {
 func TestTenantsTableConstraints(t *testing.T) {
 	ctx := context.Background()
 	admin := tdb.Admin(t)
+	t.Cleanup(func() {
+		_, _ = admin.Exec(ctx, `DELETE FROM platform.tenants WHERE id IN ('abcdefghij', 'bcdefghijk')`)
+	})
 	insert := func(id, schema, role, slug string) error {
 		_, err := admin.Exec(ctx, `INSERT INTO platform.tenants (id, schema_name, db_role, slug, name, status, owner_email)
 			VALUES ($1, $2, $3, $4, 'x', 'active', 'o@x.test')`, id, schema, role, slug)
