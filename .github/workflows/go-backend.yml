@@ -1,0 +1,74 @@
+name: go-backend
+
+on:
+  push:
+    branches: [main]
+    paths: ["backend-go/**", ".github/workflows/go-backend.yml"]
+  pull_request:
+    paths: ["backend-go/**", ".github/workflows/go-backend.yml"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: go-backend-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: backend-go
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: backend-go/go.mod
+          cache-dependency-path: backend-go/go.sum
+      - name: gofmt
+        run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
+      - name: go mod tidy is clean
+        run: go mod tidy -diff
+      - name: go vet
+        run: go vet ./...
+      - name: constsql
+        run: make constsql
+      - name: golangci-lint (gosec, staticcheck, errcheck, revive, ...)
+        run: make lint
+      - name: govulncheck
+        run: make vuln
+      - name: unit tests (race, goleak)
+        run: make test-race
+      - name: integration tests (testcontainers, Postgres 18)
+        run: make test-integration
+      - name: build image
+        run: make docker
+
+  gitleaks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: backend-go/go.mod
+          cache-dependency-path: backend-go/go.sum
+      # Scans only the commits in this push/PR. The full-history scan
+      # (`make gitleaks-history`) fails until the P0-1 history rewrite runs;
+      # switch to it after the rewrite.
+      - name: gitleaks (new commits)
+        working-directory: .
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          range="${BASE}..HEAD"
+          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then range="HEAD~1..HEAD"; fi
+          go run github.com/zricethezav/gitleaks/v8@v8.30.1 git --redact --log-opts="$range" .

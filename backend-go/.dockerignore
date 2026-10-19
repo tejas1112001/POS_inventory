@@ -1,0 +1,6 @@
+bin/
+.env
+deploy/.env
+*.test
+*.out
+.git
