@@ -19,6 +19,7 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/apperr"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/audit"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/auth"
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/plans"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/security"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/tenancy"
 )
@@ -28,12 +29,13 @@ type Service struct {
 	sessions *tenancy.Sessions
 	auth     *auth.Service
 	hasher   *security.Hasher
+	plans    *plans.Service
 	maxRows  int
 }
 
 // NewService creates the service. maxRows caps unpaged lists (Q-4).
-func NewService(s *tenancy.Sessions, a *auth.Service, h *security.Hasher, maxRows int) *Service {
-	return &Service{sessions: s, auth: a, hasher: h, maxRows: maxRows}
+func NewService(s *tenancy.Sessions, a *auth.Service, h *security.Hasher, p *plans.Service, maxRows int) *Service {
+	return &Service{sessions: s, auth: a, hasher: h, plans: p, maxRows: maxRows}
 }
 
 func (s *Service) rw(ctx context.Context, t tenancy.Tenant, fn func(tenancy.TenantTx) error) error {
@@ -250,6 +252,11 @@ func (s *Service) Create(ctx context.Context, t tenancy.Tenant, actor auth.Princ
 		}
 		if err := grantable(actor, role); err != nil {
 			return err
+		}
+		if s.plans != nil {
+			if err := s.plans.Check(ctx, tx, plans.Users); err != nil {
+				return err
+			}
 		}
 		var id int64
 		err = tx.QueryRow(ctx, `INSERT INTO users (name, email, password_hash, status, role_id) VALUES ($1, $2, NULLIF($3, ''), $4, $5) RETURNING id`,

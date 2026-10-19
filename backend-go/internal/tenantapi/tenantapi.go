@@ -39,6 +39,8 @@ type Deps struct {
 	Network  httpx.Network
 	Metrics  *obs.Metrics
 	MaxRows  int
+	// Modules register their routes on the same rbac router (steps 6+).
+	Modules []interface{ Mount(*rbac.Router) }
 }
 
 // API holds the handlers.
@@ -131,6 +133,9 @@ func (a *API) Mount(api chi.Router) error {
 	// Tenant audit log (§5.1)
 	rt.Handle(http.MethodGet, "/audit-log", rbac.Require("audit", "view"), a.auditLog)
 
+	for _, m := range a.d.Modules {
+		m.Mount(rt)
+	}
 	return rt.SelfCheck()
 }
 

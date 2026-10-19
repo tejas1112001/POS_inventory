@@ -373,7 +373,10 @@ func TestRunTenantsDryRunLockAndResume(t *testing.T) {
 
 	extra := fstest.MapFS{}
 	copyEmbedded(t, extra)
-	extra["00002_add_marker.sql"] = &fstest.MapFile{Data: []byte(`-- +goose Up
+	latest, err := migrate.LatestTenantVersion()
+	require.NoError(t, err)
+	next := latest + 1
+	extra[fmt.Sprintf("%05d_add_marker.sql", next)] = &fstest.MapFile{Data: []byte(`-- +goose Up
 CREATE TABLE marker (id int);
 -- +goose Down
 DROP TABLE marker;
@@ -387,7 +390,7 @@ DROP TABLE marker;
 	require.NoError(t, err)
 	require.Equal(t, "succeeded", rep.Status)
 	for _, it := range rep.Items {
-		require.Equal(t, []int64{2}, it.Pending)
+		require.Equal(t, []int64{next}, it.Pending)
 	}
 	require.Zero(t, count(t, admin, `SELECT count(*) FROM pg_tables WHERE tablename = 'marker'`))
 
@@ -415,7 +418,7 @@ DROP TABLE marker;
 	require.Equal(t, a.TenantID, rep2.Items[0].TenantID)
 	require.Equal(t, 2, count(t, admin, `SELECT count(*) FROM pg_tables WHERE tablename = 'marker' AND schemaname = ANY($1)`,
 		[]string{"t_" + a.TenantID, "t_" + b.TenantID}))
-	require.Equal(t, 2, count(t, admin, `SELECT count(*) FROM platform.tenants WHERE id = ANY($1) AND schema_version = 2`, ids))
+	require.Equal(t, 2, count(t, admin, `SELECT count(*) FROM platform.tenants WHERE id = ANY($1) AND schema_version = $2`, ids, next))
 	require.Equal(t, "succeeded", func() string {
 		var s string
 		require.NoError(t, admin.QueryRow(ctx, `SELECT status FROM platform.migration_runs WHERE id = $1`, rep.RunID).Scan(&s))
@@ -431,13 +434,15 @@ func TestNoTransactionMigrationAndReconnectStayInTenantSchema(t *testing.T) { //
 
 	files := fstest.MapFS{}
 	copyEmbedded(t, files)
-	files["00002_concurrent_index.sql"] = &fstest.MapFile{Data: []byte(`-- +goose NO TRANSACTION
+	latest, err := migrate.LatestTenantVersion()
+	require.NoError(t, err)
+	files[fmt.Sprintf("%05d_concurrent_index.sql", latest+1)] = &fstest.MapFile{Data: []byte(`-- +goose NO TRANSACTION
 -- +goose Up
 CREATE INDEX CONCURRENTLY users_name_idx ON users (name);
 -- +goose Down
 DROP INDEX CONCURRENTLY users_name_idx;
 `)}
-	files["00003_after_reconnect.sql"] = &fstest.MapFile{Data: []byte(`-- +goose Up
+	files[fmt.Sprintf("%05d_after_reconnect.sql", latest+2)] = &fstest.MapFile{Data: []byte(`-- +goose Up
 CREATE TABLE after_reconnect (id int);
 -- +goose Down
 DROP TABLE after_reconnect;
@@ -450,7 +455,7 @@ DROP TABLE after_reconnect;
 	defer func() { _ = conn.Close() }()
 	p, err := migrate.NewTenantProvider(conn)
 	require.NoError(t, err)
-	_, err = p.UpByOne(ctx) // 00002, outside a transaction
+	_, err = p.UpByOne(ctx) // the NO TRANSACTION migration
 	require.NoError(t, err)
 
 	admin := tdb.Admin(t)

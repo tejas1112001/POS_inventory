@@ -41,6 +41,7 @@ func testConfig(t *testing.T) *config.Config {
 		"PLATFORM_JWT_KEYS":    "p1:" + key(t),
 		"MASTER_KEYS":          "m1:" + key(t),
 		"SHUTDOWN_DRAIN_DELAY": "300ms",
+		"STORAGE_FS_ROOT":      t.TempDir(),
 		"SHUTDOWN_TIMEOUT":     "2s",
 	})
 	require.NoError(t, err)

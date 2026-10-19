@@ -20,11 +20,14 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/auth"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/authtoken"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/buildinfo"
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/catalog"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/config"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/db"
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/files"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/httpx"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/migrate"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/obs"
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/plans"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/platform"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/provisioning"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/rbac"
@@ -59,6 +62,7 @@ type App struct {
 	registry *tenancy.Registry
 	listener *tenancy.Listener
 	tenant   *tenantapi.API
+	catalog  *catalog.API
 }
 
 // New builds the app. It does not open network listeners.
@@ -154,6 +158,10 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error
 		CORSDevOrigins: cfg.CORSDevOrigins,
 		TenantResolver: tenancy.Resolve(a.registry, network, cfg.BaseDomain),
 		Platform:       func(r chi.Router) { platformHTTP.Mount(r) },
+		TenantRoot: func(r chi.Router) {
+			r.Get("/files/t/{id}", a.catalog.PublicFile)
+			r.Head("/files/t/{id}", a.catalog.PublicFile)
+		},
 		Tenant: func(r chi.Router) {
 			if err := tenantAPI.Mount(r); err != nil {
 				mountErr = err
@@ -202,6 +210,15 @@ func envelope(cfg *config.Config) (*secrets.Envelope, error) {
 	return secrets.NewEnvelope(keks)
 }
 
+func newStorage(ctx context.Context, cfg *config.Config) (files.Storage, error) {
+	if cfg.StorageDriver == "s3" {
+		return files.NewS3Storage(ctx, files.S3Config{
+			Endpoint: cfg.S3Endpoint, Bucket: cfg.S3Bucket, AccessKey: cfg.S3AccessKey, SecretKey: cfg.S3SecretKey, Region: cfg.S3Region,
+		})
+	}
+	return files.NewFSStorage(cfg.StorageFSRoot)
+}
+
 func (a *App) tenantAPI(cfg *config.Config, log *slog.Logger, network httpx.Network, env *secrets.Envelope) (*tenantapi.API, *auth.Service, error) {
 	signer, err := authtoken.NewSigner(cfg.JWTKeys, authtoken.AudTenant, cfg.AccessTokenTTL)
 	if err != nil {
@@ -217,9 +234,17 @@ func (a *App) tenantAPI(cfg *config.Config, log *slog.Logger, network httpx.Netw
 		RefreshRemember: cfg.RefreshTTLRemember, RefreshSession: cfg.RefreshTTLSession,
 		PublicScheme: cfg.PublicScheme, BaseDomain: cfg.BaseDomain, Log: log,
 	})
+	storage, err := newStorage(context.Background(), cfg)
+	if err != nil {
+		return nil, nil, err
+	}
+	planSvc := plans.NewService(a.sessions)
+	fileSvc := files.NewService(storage, a.sessions, planSvc, log)
+	a.catalog = catalog.New(catalog.Deps{Sessions: a.sessions, Files: fileSvc, Plans: planSvc, MaxRows: cfg.MaxUnpagedRows})
 	api := tenantapi.New(tenantapi.Deps{
-		Auth: authSvc, Users: users.NewService(a.sessions, authSvc, hasher, cfg.MaxUnpagedRows),
+		Auth: authSvc, Users: users.NewService(a.sessions, authSvc, hasher, planSvc, cfg.MaxUnpagedRows),
 		States: states, Signer: signer, Sessions: a.sessions, Network: network, Metrics: a.metrics, MaxRows: cfg.MaxUnpagedRows,
+		Modules: []interface{ Mount(*rbac.Router) }{a.catalog},
 	})
 	return api, authSvc, nil
 }

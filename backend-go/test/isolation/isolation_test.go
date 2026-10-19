@@ -62,8 +62,15 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
+var storageDir string
+
 func run(m *testing.M) (int, error) {
 	ctx := context.Background()
+	var err0 error
+	if storageDir, err0 = os.MkdirTemp("", "posd-files-"); err0 != nil {
+		return 0, err0
+	}
+	defer func() { _ = os.RemoveAll(storageDir) }()
 	var err error
 	if tdb, err = testdb.Start(ctx); err != nil {
 		return 0, err
@@ -76,6 +83,7 @@ func run(m *testing.M) (int, error) {
 		"DATABASE_MIGRATOR_URL": tdb.MigratorDSN.Reveal(),
 		"JWT_KEYS":              "k1:" + rk(), "PLATFORM_JWT_KEYS": "p1:" + rk(), "MASTER_KEYS": "m1:" + rk(),
 		"TRUSTED_PROXY_CIDRS": "127.0.0.1/32", "SHUTDOWN_DRAIN_DELAY": "0s",
+		"STORAGE_FS_ROOT": storageDir,
 	})
 	if err != nil {
 		return 0, err
