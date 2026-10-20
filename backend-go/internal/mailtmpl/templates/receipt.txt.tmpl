@@ -1,0 +1,18 @@
+{{.BusinessName}}
+{{range .Header}}{{.}}
+{{end}}{{if .Void}}
+This sale was voided. The attached receipt is marked VOID.
+{{end}}
+Hello {{.CustomerName}},
+
+Thank you for your purchase.
+
+Receipt: {{.Reference}}
+Date:    {{.Date}}
+Total:   {{.Total}}
+
+{{if .Attached}}Your receipt is attached as a PDF.{{else}}Your receipt could not be attached. Please ask the store for a copy.{{end}}
+
+{{.StoreName}}{{if .StoreAddress}}, {{.StoreAddress}}{{end}}{{if .StorePhone}} · {{.StorePhone}}{{end}}
+{{range .Footer}}{{.}}
+{{end}}

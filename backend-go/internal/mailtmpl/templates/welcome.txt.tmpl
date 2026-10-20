@@ -1,0 +1,12 @@
+Welcome to {{.PlatformName}}
+
+Hello {{.Name}},
+
+Your shop {{.TenantName}} is ready at {{.TenantURL}}
+{{if .Link}}
+Set your password: {{.Link}}
+
+This link expires in {{.Expires}}.
+{{else}}
+Sign in with the password you already set.
+{{end}}
