@@ -34,6 +34,7 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/products"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/provisioning"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/rbac"
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/receipts"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/sales"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/secrets"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/security"
@@ -265,6 +266,8 @@ func (a *App) tenantAPI(cfg *config.Config, log *slog.Logger, network httpx.Netw
 	fileSvc := files.NewService(storage, a.sessions, planSvc, log)
 	productAPI := products.New(products.Deps{Sessions: a.sessions, Files: fileSvc, Plans: planSvc, MaxRows: cfg.MaxUnpagedRows})
 	salesAPI := sales.New(sales.Deps{Sessions: a.sessions, MaxRows: cfg.MaxUnpagedRows})
+	receiptSvc := receipts.NewService(a.sessions, storage, log)
+	receiptAPI := receipts.NewAPI(receiptSvc, a.sessions)
 	settingsAPI := settings.New(settings.Deps{Sessions: a.sessions, Files: fileSvc, Plans: planSvc, Envelope: env,
 		Guard: a.tenantMailGuard(), RootCAs: a.opts.mailRoots, MailDomain: cfg.MailDomain()})
 	a.catalog = catalog.New(catalog.Deps{Sessions: a.sessions, Files: fileSvc, Plans: planSvc, MaxRows: cfg.MaxUnpagedRows,
@@ -272,7 +275,7 @@ func (a *App) tenantAPI(cfg *config.Config, log *slog.Logger, network httpx.Netw
 	api := tenantapi.New(tenantapi.Deps{
 		Auth: authSvc, Users: users.NewService(a.sessions, authSvc, hasher, planSvc, cfg.MaxUnpagedRows),
 		States: states, Signer: signer, Sessions: a.sessions, Network: network, Metrics: a.metrics, MaxRows: cfg.MaxUnpagedRows,
-		Modules: []interface{ Mount(*rbac.Router) }{a.catalog, productAPI, salesAPI, settingsAPI},
+		Modules: []interface{ Mount(*rbac.Router) }{a.catalog, productAPI, salesAPI, settingsAPI, receiptAPI},
 	})
 	return api, authSvc, nil
 }

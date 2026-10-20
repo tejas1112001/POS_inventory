@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -24,7 +25,10 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/files"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/httpx"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/inventory"
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/mailer"
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/outbox"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/rbac"
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/receipts"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/tenancy"
 )
 
@@ -33,6 +37,9 @@ type Deps struct {
 	Sessions *tenancy.Sessions
 	MaxRows  int
 	Now      func() time.Time // tests; default time.Now
+	// OnReceipt runs after a sale change commits, with the new receipt
+	// (the worker renders it ahead of time). Optional.
+	OnReceipt func(ctx context.Context, t tenancy.Tenant, receiptID int64)
 }
 
 // API holds the handlers.
@@ -373,9 +380,10 @@ func (a *API) create(w http.ResponseWriter, r *http.Request) {
 	p := principal(r)
 	now := a.d.Now()
 	var (
-		out    SaleJSON
-		stored []byte
-		again  *replay
+		out       SaleJSON
+		stored    []byte
+		again     *replay
+		receiptID int64
 	)
 	err = a.rw(r.Context(), tenant(r), func(tx tenancy.TenantTx) error {
 		ctx := r.Context()
@@ -423,11 +431,21 @@ func (a *API) create(w http.ResponseWriter, r *http.Request) {
 		if status == "" {
 			status = "Completed"
 		}
+		var custName string
+		var custEmail *string
+		if err := tx.QueryRow(ctx, `SELECT name, email::text FROM customers WHERE id = $1`, cust).Scan(&custName, &custEmail); err != nil {
+			return err
+		}
+		// Receipt email: the address the cashier typed, else the customer's.
+		receiptTo := deref(c.receiptEmail)
+		if receiptTo == "" && custEmail != nil && mailer.ValidEmail(*custEmail) {
+			receiptTo = *custEmail
+		}
 		pm := pay(pr.quote.Total, c.paid, c.tendered, s.currency)
 		var id int64
 		if err := tx.QueryRow(ctx, qInsertSale, ref, date, status, pm.status, deref(c.paymentMethod), deref(c.paymentNote),
 			deref(c.note), pr.quote.Subtotal, pr.quote.Discount, pr.quote.Tax, pr.quote.Shipping, pr.quote.Total,
-			pm.paid, pm.due, pm.tendered, pm.chg, s.currency, cust, c.storeID, p.UserID, deref(c.receiptEmail)).Scan(&id); err != nil {
+			pm.paid, pm.due, pm.tendered, pm.chg, s.currency, cust, c.storeID, p.UserID, receiptTo).Scan(&id); err != nil {
 			return err
 		}
 		if err := insertItems(ctx, tx, id, pr); err != nil {
@@ -435,6 +453,16 @@ func (a *API) create(w http.ResponseWriter, r *http.Request) {
 		}
 		if err := moveStock(ctx, tx, keys, deltas, inventory.ReasonSale, inventory.Ref{Type: "sale", ID: id}, p.UserID); err != nil {
 			return err
+		}
+		if receiptID, err = receipts.Create(ctx, tx, id, 1); err != nil {
+			return err
+		}
+		if receiptTo != "" {
+			if _, err := outbox.Enqueue(ctx, tx, outbox.Item{Key: fmt.Sprintf("sale:%d:receipt", id), Kind: outbox.KindReceipt,
+				To: receiptTo, ToName: custName, Template: "receipt", ReceiptID: receiptID,
+				Data: map[string]any{"sale_id": id, "receipt_id": receiptID}}); err != nil {
+				return err
+			}
 		}
 		if len(pr.overrides) > 0 {
 			if err := audit.Write(ctx, tx, audit.Entry{ActorID: p.UserID, Action: "sale.price_override", Entity: "sale",
@@ -466,7 +494,14 @@ func (a *API) create(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteJSON(w, again.status, json.RawMessage(again.body))
 		return
 	}
+	a.afterCommit(r, receiptID)
 	httpx.WriteJSON(w, http.StatusCreated, out)
+}
+
+func (a *API) afterCommit(r *http.Request, receiptID int64) {
+	if a.d.OnReceipt != nil && receiptID > 0 {
+		a.d.OnReceipt(context.WithoutCancel(r.Context()), tenant(r), receiptID)
+	}
 }
 
 func deref(s *string) string {
@@ -551,7 +586,7 @@ const qUpdateSale = `UPDATE sales SET date = $2, status = $3, payment_status = $
 		payment_note = NULLIF($6, ''), note = NULLIF($7, ''), subtotal = $8, discount = $9, tax = $10, shipping = $11,
 		total = $12, paid = $13, due = $14, tendered = $15, change_due = $16, customer_id = $17, store_id = $18,
 		receipt_email = NULLIF($19, ''), updated_by = $20, version = version + 1, updated_at = now()
-	WHERE id = $1`
+	WHERE id = $1 RETURNING version`
 
 // update replaces a sale's lines and recomputes it. The original biller
 // stays on the sale and the editor is recorded in updated_by (Q-10).
@@ -573,7 +608,10 @@ func (a *API) update(w http.ResponseWriter, r *http.Request) {
 	}
 	p := principal(r)
 	now := a.d.Now()
-	var out SaleJSON
+	var (
+		out       SaleJSON
+		receiptID int64
+	)
 	err = a.rw(r.Context(), tenant(r), func(tx tenancy.TenantTx) error {
 		ctx := r.Context()
 		old, err := lockSale(ctx, tx, id, p)
@@ -643,10 +681,14 @@ func (a *API) update(w http.ResponseWriter, r *http.Request) {
 			tendered = old.tendered
 		}
 		pm := pay(pr.quote.Total, paid, tendered, s.currency)
-		if _, err := tx.Exec(ctx, qUpdateSale, id, date, status, pm.status, keep(c.paymentMethod, old.method),
+		var version int
+		if err := tx.QueryRow(ctx, qUpdateSale, id, date, status, pm.status, keep(c.paymentMethod, old.method),
 			keep(c.paymentNote, old.pnote), keep(c.note, old.note), pr.quote.Subtotal, pr.quote.Discount, pr.quote.Tax,
 			pr.quote.Shipping, pr.quote.Total, pm.paid, pm.due, pm.tendered, pm.chg, cust, c.storeID,
-			keep(c.receiptEmail, old.email), p.UserID); err != nil {
+			keep(c.receiptEmail, old.email), p.UserID).Scan(&version); err != nil {
+			return err
+		}
+		if receiptID, err = receipts.Create(ctx, tx, id, version); err != nil {
 			return err
 		}
 		meta := audit.Entry{ActorID: p.UserID, Entity: "sale", EntityID: strconv.FormatInt(id, 10),
@@ -676,6 +718,7 @@ func (a *API) update(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
+	a.afterCommit(r, receiptID)
 	httpx.WriteJSON(w, http.StatusOK, out)
 }
 
@@ -695,6 +738,7 @@ func (a *API) void(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p := principal(r)
+	var receiptID int64
 	err = a.rw(r.Context(), tenant(r), func(tx tenancy.TenantTx) error {
 		ctx := r.Context()
 		old, err := lockSale(ctx, tx, id, p)
@@ -714,8 +758,13 @@ func (a *API) void(w http.ResponseWriter, r *http.Request) {
 		if err := applyStock(ctx, tx, deltas, nil, inventory.ReasonSaleVoid, inventory.Ref{Type: "sale", ID: id}, p.UserID); err != nil {
 			return err
 		}
-		if _, err := tx.Exec(ctx, `UPDATE sales SET status = 'Void', voided_at = now(), voided_by = $2, void_reason = NULLIF($3, ''),
-			updated_by = $2, version = version + 1, updated_at = now() WHERE id = $1`, id, p.UserID, reason); err != nil {
+		var version int
+		if err := tx.QueryRow(ctx, `UPDATE sales SET status = 'Void', voided_at = now(), voided_by = $2, void_reason = NULLIF($3, ''),
+			updated_by = $2, version = version + 1, updated_at = now() WHERE id = $1 RETURNING version`, id, p.UserID, reason).Scan(&version); err != nil {
+			return err
+		}
+		// The void gets its own receipt version, rendered with a VOID mark.
+		if receiptID, err = receipts.Create(ctx, tx, id, version); err != nil {
 			return err
 		}
 		return audit.Write(ctx, tx, audit.Entry{ActorID: p.UserID, Action: "sale.void", Entity: "sale",
@@ -726,6 +775,7 @@ func (a *API) void(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
+	a.afterCommit(r, receiptID)
 	w.WriteHeader(http.StatusNoContent)
 }
 

@@ -3,6 +3,7 @@ package sales
 import (
 	"context"
 	"encoding/json"
+	"strconv"
 	"time"
 
 	"github.com/shopspring/decimal"
@@ -87,6 +88,7 @@ type SaleJSON struct {
 	User          *NameRef         `json:"user"`
 	Store         *NameRef         `json:"Store"`
 	Items         []ItemJSON       `json:"items"`
+	ReceiptURL    string           `json:"receiptUrl"`
 }
 
 const (
@@ -127,6 +129,7 @@ func load(ctx context.Context, tx tenancy.TenantTx, ids []int64) ([]SaleJSON, er
 			return nil, err
 		}
 		s.Customer, s.User, s.Store = ref(cust), ref(user), ref(store)
+		s.ReceiptURL = "/api/sales/" + strconv.FormatInt(s.ID, 10) + "/receipt"
 		byID[s.ID] = s
 	}
 	rows.Close()
