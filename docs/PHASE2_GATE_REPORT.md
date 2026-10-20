@@ -1,3 +1,70 @@
+# Phase 2 — Gate report after step 8
+
+| | |
+|---|---|
+| Date | 2026-10-20 |
+| Branch | `go-backend/phase2` (local, not pushed) |
+| Commits | `16d1e9d` files/images/plan limits · `6dd8030` step 6 · `dc7fbae` money + ledger · `ba8bab4` step 7 · `1ca0ad3` pricing · `656aac0` step 8 |
+| Status | **Stopped after step 8** as asked. Nothing from step 9 on is built |
+
+## 1. What was built
+
+| Step | Outputs |
+|---|---|
+| 6 Master data | Tenant migration 00002; stores (+ showcase admin), categories, sub-categories, brands, units, suppliers, customers, warehouses; files: FS (`os.Root`) and S3 drivers, image pipeline (sniff, size/pixel caps, re-encode), upload/attach/serve; plan limits (stores, users, products, storage) |
+| 7 Products/inventory | Tenant migration 00003; products + variants (unique SKU/barcode), per-store publication, POS list, barcode lookup, atomic POS locks, inventory set, append-only stock ledger (S1) with reconcile, CSV import (dry run, all or nothing) |
+| 8 Sales/POS | Tenant migration 00004; pricing engine (pro-rata discount before tax, inclusive/exclusive tax, CGST/SGST/IGST, half-up per line, currency exponents); checkout with ordered row locks; `409 PRICE_CHANGED` / `INSUFFICIENT_STOCK` with details; price override and discount cap by permission; POS aliases and ignore list; gapless references from `invoice_prefix`; Idempotency-Key (S2); edit keeps the biller; void restocks; own-only sales and invoices (C-10) |
+
+## 2. Checks
+
+- **Gate commands, all green:** gofmt, `go mod tidy -diff`, vet, `constsql`, golangci-lint (both build modes), `make lint`, govulncheck, unit and integration tests. **244 test cases pass, 0 fail, 0 skipped.** govulncheck reports one advisory in `golang.org/x/crypto/openpgp` (no fix exists); our code doesn't call it.
+- **Isolation:** every authenticated tenant route (**73**) rejects another tenant's token on 2 foreign hosts. Each new module has ID-based cross-tenant tests (read, edit, delete and use of another tenant's IDs give 404/400 and leave the data untouched).
+- **Stock safety:** a 20-way race on 5 units sells exactly 5, and their references are consecutive. 24 concurrent carts with opposite line order produce no deadlock. 6 concurrent submits with one Idempotency-Key create one sale. The ledger reconciles after every stock test.
+- **Dev stack smoke:** `migrate tenants up` moved `demo-shop` from version 2 to 4, and drift reports a match. Over HTTPS through Caddy: login, product, POS sale (server totals, GST split), price override (audited), oversell 409, void and restock all worked.
+- **Not shown:** CI has never run (nothing pushed). The race detector can't run on this machine (no C compiler).
+
+## 3. Differences from the design (please confirm)
+
+| Topic | Built | Why |
+|---|---|---|
+| Old-form extras | `createdBy` (all forms) and the showcase form's name/address are accepted and ignored | Strict decoding without breaking today's frontend |
+| Image purposes | Added category/brand/supplier images; private (served from `/api/files/…`) | The old forms upload them |
+| Product images | Public URL only while published in some store; otherwise `/api/files/…` (signed-in) | No public access to unpublished products |
+| Product delete | Refused (`409 INVALID_STATE`) while any stock remains | Stock never disappears silently |
+| Product edit | `productType` cannot change | Avoids orphaning variants and stock |
+| Plan limits | Users, stores, products and storage are enforced now (step 16 adds billing) | The limits table already exists; the isolation suite raises the trial `max_users` |
+| Sale reference | Client `reference` ignored; the server issues `<invoice_prefix>-000001` from a gapless counter | GST needs consecutive numbers. The counter row serialises the end of each checkout per tenant (a few ms) |
+| `paid` | Missing means paid in full (POS sends none); `0` is kept; above the total it is capped | POS compatibility, C-04 |
+| Line discount | A non-zero line `discount` is refused (400), not ignored | Silently dropping a discount would change the charged price |
+| Missing `variantId` | Allowed for single-variant products | `AddSales.jsx` sends only `productId` |
+| Sale edit | A price already on the sale is not an override, even if the catalog changed since | Editing old sales must not need override rights |
+| Sales filters | `startDate`/`endDate` filter the sale `date` as whole days in the tenant's time zone (end inclusive) | `createdAt` and UTC midnight cut off the last day |
+| Void | Optional `?reason=`; voiding twice returns 204 | Idempotent DELETE |
+| Pending sales | Still take stock, as before | Unchanged behaviour |
+| Receipts | `receiptEmail` is accepted and stored; `receiptUrl` arrives with step 9 | Receipts are step 9 |
+| Error body | Optional `details` (current prices, stock shortfalls) | The `409` responses need data |
+| Idempotency keys | Expire after 24 h when the key is reused; no cleanup job yet | No worker until step 9 |
+
+## 4. Deferred
+
+- No worker yet (step 9), so these jobs don't run: nightly ledger reconcile (`inventory.Reconcile` exists), the expired POS lock sweep (expired locks are ignored, not deleted) and idempotency key cleanup.
+- `impersonation_id` on sales and stock movements stays empty until impersonation is built.
+- A sale that contains a since-deleted product can be voided but not edited.
+- Frontend changes (step 19): `AddSales.jsx` must send `storeId`; POS should handle `409 PRICE_CHANGED` and send an Idempotency-Key.
+
+## 5. Bugs found and fixed while building
+
+`FOR UPDATE` inside read-only transactions; pgx rows not scanned; a `citext` parameter compared as text; `decimal.Decimal` used as a map key (it never matched); `[]byte` sent to a `jsonb` column; a planned ledger `UPDATE` that the append-only grant would have refused (caught in review, before it ran).
+
+## 6. Open items for the owner
+
+1. Push and CI still wait on the history rewrite (`20cdb92`).
+2. Confirm the differences in §3.
+3. Say "approved" for step 9 (receipts and email, PDF spike first) when ready.
+4. Dev only: for the smoke test I set the `owner@demo.test` password on the local stack to `smoke-test-pass-2026`. The demo shop also now has a "Smoke Tea" product and 3 sales (one void).
+
+---
+
 # Phase 2 — Gate report after step 5
 
 | | |
