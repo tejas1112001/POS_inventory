@@ -33,6 +33,7 @@ type Error struct {
 	Code       string
 	Message    string
 	Fields     map[string]string
+	Details    any // extra client data, e.g. current prices on PRICE_CHANGED
 	RetryAfter time.Duration
 	Cause      error
 }
@@ -118,6 +119,13 @@ func NotFound() *Error {
 // Conflict reports a uniqueness or state conflict.
 func Conflict(code, msg string) *Error {
 	return &Error{Kind: KindConflict, Code: code, Message: msg}
+}
+
+// WithDetails returns a copy of e that carries client-safe details.
+func (e *Error) WithDetails(d any) *Error {
+	c := *e
+	c.Details = d
+	return &c
 }
 
 // TooLarge reports a body over the cap.

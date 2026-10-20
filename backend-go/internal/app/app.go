@@ -32,6 +32,7 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/products"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/provisioning"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/rbac"
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/sales"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/secrets"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/security"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/tenancy"
@@ -242,12 +243,13 @@ func (a *App) tenantAPI(cfg *config.Config, log *slog.Logger, network httpx.Netw
 	planSvc := plans.NewService(a.sessions)
 	fileSvc := files.NewService(storage, a.sessions, planSvc, log)
 	productAPI := products.New(products.Deps{Sessions: a.sessions, Files: fileSvc, Plans: planSvc, MaxRows: cfg.MaxUnpagedRows})
+	salesAPI := sales.New(sales.Deps{Sessions: a.sessions, MaxRows: cfg.MaxUnpagedRows})
 	a.catalog = catalog.New(catalog.Deps{Sessions: a.sessions, Files: fileSvc, Plans: planSvc, MaxRows: cfg.MaxUnpagedRows,
 		ShowcaseProducts: products.ShowcaseProducts(cfg.MaxUnpagedRows)})
 	api := tenantapi.New(tenantapi.Deps{
 		Auth: authSvc, Users: users.NewService(a.sessions, authSvc, hasher, planSvc, cfg.MaxUnpagedRows),
 		States: states, Signer: signer, Sessions: a.sessions, Network: network, Metrics: a.metrics, MaxRows: cfg.MaxUnpagedRows,
-		Modules: []interface{ Mount(*rbac.Router) }{a.catalog, productAPI},
+		Modules: []interface{ Mount(*rbac.Router) }{a.catalog, productAPI, salesAPI},
 	})
 	return api, authSvc, nil
 }

@@ -91,9 +91,10 @@ func WriteJSON(w http.ResponseWriter, status int, v any) {
 }
 
 type errorBody struct {
-	Error  string            `json:"error"`
-	Code   string            `json:"code"`
-	Fields map[string]string `json:"fields,omitempty"`
+	Error   string            `json:"error"`
+	Code    string            `json:"code"`
+	Fields  map[string]string `json:"fields,omitempty"`
+	Details any               `json:"details,omitempty"`
 }
 
 var statusByKind = map[apperr.Kind]int{
@@ -132,5 +133,5 @@ func WriteError(w http.ResponseWriter, r *http.Request, err error) {
 		}
 		w.Header().Set("Retry-After", fmt.Sprint(secs))
 	}
-	WriteJSON(w, status, errorBody{Error: e.Message, Code: e.Code, Fields: e.Fields})
+	WriteJSON(w, status, errorBody{Error: e.Message, Code: e.Code, Fields: e.Fields, Details: e.Details})
 }

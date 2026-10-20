@@ -88,7 +88,11 @@ func run(m *testing.M) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	theApp, err = app.New(ctx, cfg, slog.New(slog.DiscardHandler))
+	log := slog.New(slog.DiscardHandler)
+	if os.Getenv("ISO_LOG") != "" { // debug aid: ISO_LOG=1 go test -tags integration ./test/isolation
+		log = slog.New(slog.NewTextHandler(os.Stderr, nil))
+	}
+	theApp, err = app.New(ctx, cfg, log)
 	if err != nil {
 		return 0, err
 	}
