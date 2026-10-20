@@ -40,6 +40,7 @@ type Options struct {
 	User, Pass string   // empty: no AUTH required
 	Names      []string // certificate DNS names (default smtp.example.test)
 	NoStartTLS bool     // StartTLS mode, but the extension is not offered
+	Host       string   // listen address, default 127.0.0.1 (127.0.0.2 keeps 127.0.0.1 blocked in SSRF tests)
 }
 
 // Received is one accepted message.
@@ -65,25 +66,75 @@ type Server struct {
 	conns    int
 }
 
-// Start runs a server on 127.0.0.1 until the test ends.
+// Start runs a server on opt.Host (default 127.0.0.1) until the test ends.
 func Start(t testing.TB, opt Options) *Server {
 	t.Helper()
+	s, err := New(opt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(s.Close)
+	return s
+}
+
+// New runs a server until Close (for TestMain).
+func New(opt Options) (*Server, error) {
 	if len(opt.Names) == 0 {
 		opt.Names = []string{"smtp.example.test"}
 	}
 	s := &Server{opt: opt, fail: map[string]string{}}
-	s.cert, s.RootCAs = selfSigned(t, opt.Names)
+	var err error
+	if s.cert, s.RootCAs, err = selfSigned(opt.Names); err != nil {
+		return nil, err
+	}
 	var lc net.ListenConfig
-	ln, err := lc.Listen(context.Background(), "tcp", "127.0.0.1:0")
+	host := opt.Host
+	if host == "" {
+		host = "127.0.0.1"
+	}
+	ln, err := lc.Listen(context.Background(), "tcp", net.JoinHostPort(host, "0"))
 	if err != nil {
-		t.Fatal(err)
+		return nil, err
 	}
 	s.ln = ln
 	s.Addr = netip.MustParseAddrPort(ln.Addr().String())
 	s.Port = int(s.Addr.Port())
 	go s.serve()
-	t.Cleanup(func() { _ = ln.Close() })
-	return s
+	return s, nil
+}
+
+// Close stops the server.
+func (s *Server) Close() { _ = s.ln.Close() }
+
+// Reset forgets received messages and scripted failures.
+func (s *Server) Reset() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.messages, s.fail = nil, map[string]string{}
+}
+
+// StaticResolver answers DNS lookups from a map (tests).
+type StaticResolver map[string][]netip.Addr
+
+// LookupNetIP implements mailer.Resolver.
+func (r StaticResolver) LookupNetIP(_ context.Context, _, host string) ([]netip.Addr, error) {
+	if a, ok := r[host]; ok {
+		return a, nil
+	}
+	return nil, &net.DNSError{Err: "no such host", Name: host, IsNotFound: true}
+}
+
+// PortDialer dials the checked address but with the given port, so tenant
+// settings can say 587 while the server listens on a high port.
+func PortDialer(port int) func(ctx context.Context, network, addr string) (net.Conn, error) {
+	return func(ctx context.Context, network, addr string) (net.Conn, error) {
+		host, _, err := net.SplitHostPort(addr)
+		if err != nil {
+			return nil, err
+		}
+		var d net.Dialer
+		return d.DialContext(ctx, network, net.JoinHostPort(host, strconv.Itoa(port)))
+	}
 }
 
 // FailAt makes the server answer cmd ("AUTH", "MAIL", "RCPT", "DATA" for
@@ -272,11 +323,10 @@ func addr(line string) string {
 	return line[i+1 : j]
 }
 
-func selfSigned(t testing.TB, names []string) (tls.Certificate, *x509.CertPool) {
-	t.Helper()
+func selfSigned(names []string) (tls.Certificate, *x509.CertPool, error) {
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
-		t.Fatal(err)
+		return tls.Certificate{}, nil, err
 	}
 	tmpl := &x509.Certificate{
 		SerialNumber:          big.NewInt(time.Now().UnixNano()),
@@ -291,13 +341,13 @@ func selfSigned(t testing.TB, names []string) (tls.Certificate, *x509.CertPool) 
 	}
 	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
 	if err != nil {
-		t.Fatal(err)
+		return tls.Certificate{}, nil, err
 	}
 	leaf, err := x509.ParseCertificate(der)
 	if err != nil {
-		t.Fatal(err)
+		return tls.Certificate{}, nil, err
 	}
 	pool := x509.NewCertPool()
 	pool.AddCert(leaf)
-	return tls.Certificate{Certificate: [][]byte{der}, PrivateKey: key, Leaf: leaf}, pool
+	return tls.Certificate{Certificate: [][]byte{der}, PrivateKey: key, Leaf: leaf}, pool, nil
 }

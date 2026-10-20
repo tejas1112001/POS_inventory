@@ -3,6 +3,7 @@ package app
 
 import (
 	"context"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -25,6 +26,7 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/db"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/files"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/httpx"
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/mailer"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/migrate"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/obs"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/plans"
@@ -35,6 +37,7 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/sales"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/secrets"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/security"
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/settings"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/tenancy"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/tenantapi"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/users"
@@ -49,8 +52,23 @@ const (
 	maxHeaderBytes    = 32 << 10
 )
 
+// Option adjusts how the app is built (tests).
+type Option func(*options)
+
+type options struct {
+	mailGuard *mailer.Guard
+	mailRoots *x509.CertPool
+}
+
+// WithMailTesting replaces the tenant SMTP guard and the trusted CA roots,
+// so tests can reach an in-process SMTP server. Never used by posd.
+func WithMailTesting(g mailer.Guard, roots *x509.CertPool) Option {
+	return func(o *options) { o.mailGuard, o.mailRoots = &g, roots }
+}
+
 // App is the running process.
 type App struct {
+	opts     options
 	cfg      *config.Config
 	log      *slog.Logger
 	metrics  *obs.Metrics
@@ -68,8 +86,11 @@ type App struct {
 }
 
 // New builds the app. It does not open network listeners.
-func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*App, error) {
+func New(ctx context.Context, cfg *config.Config, log *slog.Logger, opts ...Option) (*App, error) {
 	a := &App{cfg: cfg, log: log, metrics: obs.NewMetrics(), health: httpx.NewHealth(time.Second)}
+	for _, o := range opts {
+		o(&a.opts)
+	}
 
 	var err error
 	a.pool, err = db.NewPool(ctx, cfg.DatabaseURL, db.PoolOptions{
@@ -244,14 +265,24 @@ func (a *App) tenantAPI(cfg *config.Config, log *slog.Logger, network httpx.Netw
 	fileSvc := files.NewService(storage, a.sessions, planSvc, log)
 	productAPI := products.New(products.Deps{Sessions: a.sessions, Files: fileSvc, Plans: planSvc, MaxRows: cfg.MaxUnpagedRows})
 	salesAPI := sales.New(sales.Deps{Sessions: a.sessions, MaxRows: cfg.MaxUnpagedRows})
+	settingsAPI := settings.New(settings.Deps{Sessions: a.sessions, Files: fileSvc, Plans: planSvc, Envelope: env,
+		Guard: a.tenantMailGuard(), RootCAs: a.opts.mailRoots, MailDomain: cfg.MailDomain()})
 	a.catalog = catalog.New(catalog.Deps{Sessions: a.sessions, Files: fileSvc, Plans: planSvc, MaxRows: cfg.MaxUnpagedRows,
 		ShowcaseProducts: products.ShowcaseProducts(cfg.MaxUnpagedRows)})
 	api := tenantapi.New(tenantapi.Deps{
 		Auth: authSvc, Users: users.NewService(a.sessions, authSvc, hasher, planSvc, cfg.MaxUnpagedRows),
 		States: states, Signer: signer, Sessions: a.sessions, Network: network, Metrics: a.metrics, MaxRows: cfg.MaxUnpagedRows,
-		Modules: []interface{ Mount(*rbac.Router) }{a.catalog, productAPI, salesAPI},
+		Modules: []interface{ Mount(*rbac.Router) }{a.catalog, productAPI, salesAPI, settingsAPI},
 	})
 	return api, authSvc, nil
+}
+
+// tenantMailGuard is the SSRF guard for tenant SMTP servers.
+func (a *App) tenantMailGuard() mailer.Guard {
+	if a.opts.mailGuard != nil {
+		return *a.opts.mailGuard
+	}
+	return mailer.Guard{Deny: a.cfg.SMTPDenyCIDRs}
 }
 
 func (a *App) platformAPI(cfg *config.Config, log *slog.Logger, network httpx.Network, env *secrets.Envelope, authSvc *auth.Service) (*platform.HTTP, error) {

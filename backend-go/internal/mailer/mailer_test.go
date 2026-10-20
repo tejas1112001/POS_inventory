@@ -137,6 +137,13 @@ func TestGuardResolve(t *testing.T) {
 	ok, err := Guard{Resolver: r, AllowPrivate: true}.Resolve(context.Background(), "localhost.evil.com")
 	require.NoError(t, err, "operator relays may be private")
 	require.Equal(t, "127.0.0.1", ok.String())
+
+	// The test allow list exempts exact addresses only.
+	g = Guard{Resolver: r, Allow: []netip.Addr{netip.MustParseAddr("127.0.0.2")}}
+	_, err = g.Resolve(context.Background(), "127.0.0.2")
+	require.NoError(t, err)
+	_, err = g.Resolve(context.Background(), "127.0.0.1")
+	require.ErrorIs(t, err, ErrBlockedAddress)
 }
 
 // DNS rebinding: the first answer is public, every later one is internal.
@@ -144,7 +151,7 @@ func TestGuardResolve(t *testing.T) {
 func TestGuardDialsTheCheckedAddressOnly(t *testing.T) {
 	r := &fakeResolver{answers: map[string][][]string{"rebind.test": {{"142.250.4.108"}, {"127.0.0.1"}}}}
 	var dialled []string
-	g := Guard{Resolver: r, dial: func(_ context.Context, _, addr string) (net.Conn, error) {
+	g := Guard{Resolver: r, DialFunc: func(_ context.Context, _, addr string) (net.Conn, error) {
 		dialled = append(dialled, addr)
 		return nil, errors.New("stop")
 	}}

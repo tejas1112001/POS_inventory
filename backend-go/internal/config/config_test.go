@@ -154,6 +154,13 @@ func TestProductionRules(t *testing.T) {
 	v["S3_SECRET_KEY"] = "s3-secret-access-key-value-long-enough"
 	v["DATABASE_URL"] = "postgres://pos_app:" + pw + "@db:5432/pos?sslmode=verify-full"
 	v["DATABASE_JOBS_URL"] = "postgres://pos_jobs:" + pw + "@db:5432/pos?sslmode=verify-full"
+	_, err = LoadFrom(v)
+	require.ErrorContains(t, err, "SMTP_HOST")
+	v["SMTP_HOST"] = "email-smtp.ap-south-1.amazonaws.com"
+	v["SMTP_TLS"] = "none"
+	_, err = LoadFrom(v)
+	require.ErrorContains(t, err, "SMTP_TLS=none")
+	v["SMTP_TLS"] = "starttls"
 	c, err := LoadFrom(v)
 	require.NoError(t, err)
 	require.Len(t, c.TrustedProxies, 2)
@@ -202,4 +209,33 @@ func TestS3SettingsRequired(t *testing.T) {
 	v["STORAGE_DRIVER"] = "s3"
 	_, err := LoadFrom(v)
 	require.ErrorContains(t, err, "S3_ENDPOINT, S3_BUCKET")
+}
+
+func TestMailSettings(t *testing.T) {
+	c, err := LoadFrom(validVars(t))
+	require.NoError(t, err)
+	require.Equal(t, "no-reply@localhost", c.MailFromAddress, "default sender")
+	require.Equal(t, "localhost", c.MailDomain())
+	require.Equal(t, 587, c.SMTPPort)
+
+	for name, kv := range map[string][2]string{
+		"tls mode":   {"SMTP_TLS", "ssl"},
+		"port":       {"SMTP_PORT", "70000"},
+		"from":       {"MAIL_FROM_ADDRESS", "POS <no-reply@pos.test>"},
+		"from crlf":  {"MAIL_FROM_ADDRESS", "a@b.test\r\nBcc: x@y.test"},
+		"deny cidrs": {"SMTP_DENY_CIDRS", "10.0.0.0/33"},
+		"host":       {"SMTP_HOST", "smtp host"},
+		"user only":  {"SMTP_USERNAME", "apikey"},
+	} {
+		v := validVars(t)
+		v[kv[0]] = kv[1]
+		_, err := LoadFrom(v)
+		require.ErrorContains(t, err, kv[0], name)
+	}
+	v := validVars(t)
+	v["SMTP_HOST"], v["SMTP_TLS"], v["SMTP_PORT"] = "mailpit", "none", "1025"
+	v["SMTP_DENY_CIDRS"] = "10.20.0.0/16, 172.31.0.0/16"
+	c, err = LoadFrom(v)
+	require.NoError(t, err, "plain relay is fine in development")
+	require.Len(t, c.SMTPDenyCIDRs, 2)
 }

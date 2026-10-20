@@ -5,6 +5,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net/mail"
 	"net/netip"
 	"net/url"
 	"reflect"
@@ -74,6 +75,18 @@ type Config struct {
 	S3Region      string         `env:"S3_REGION" envDefault:"us-east-1"`
 
 	MaxUnpagedRows int `env:"MAX_UNPAGED_ROWS" envDefault:"5000"`
+
+	// Platform SMTP (EMAIL_AND_RECEIPTS §2, Q-13): Amazon SES ap-south-1 or
+	// Brevo, or Mailpit in development. Without SMTP_HOST (allowed outside
+	// production) platform mail stays queued.
+	SMTPHost         string         `env:"SMTP_HOST"`
+	SMTPPort         int            `env:"SMTP_PORT" envDefault:"587"`
+	SMTPTLS          string         `env:"SMTP_TLS" envDefault:"starttls"`
+	SMTPUsername     string         `env:"SMTP_USERNAME"`
+	SMTPPassword     secrets.Secret `env:"SMTP_PASSWORD"`
+	MailFromAddress  string         `env:"MAIL_FROM_ADDRESS"`
+	SMTPDenyCIDRsRaw string         `env:"SMTP_DENY_CIDRS"`
+	SMTPDenyCIDRs    []netip.Prefix `env:"-"`
 
 	LogLevel  string `env:"LOG_LEVEL" envDefault:"info"`
 	LogFormat string `env:"LOG_FORMAT" envDefault:"json"`
@@ -288,6 +301,8 @@ func (c *Config) validate() error {
 		}
 	}
 
+	c.validateMail(add)
+
 	if !c.BootstrapAdminPasswd.IsZero() && security.IsLeakedSecret(c.BootstrapAdminPasswd.Reveal()) {
 		add("BOOTSTRAP_ADMIN_PASSWORD was leaked and must not be used")
 	}
@@ -314,6 +329,50 @@ func (c *Config) validate() error {
 		return errors.New("config: " + strings.Join(errs, "; "))
 	}
 	return nil
+}
+
+func (c *Config) validateMail(add func(string, ...any)) {
+	switch c.SMTPTLS {
+	case "starttls", "implicit":
+	case "none":
+		if c.IsProduction() {
+			add("SMTP_TLS=none is not allowed in production")
+		}
+	default:
+		add("SMTP_TLS must be starttls, implicit or none")
+	}
+	if c.SMTPPort < 1 || c.SMTPPort > 65535 {
+		add("SMTP_PORT must be a TCP port")
+	}
+	c.SMTPHost = strings.ToLower(strings.TrimSpace(c.SMTPHost))
+	if c.SMTPHost != "" && !validDomain(c.SMTPHost) {
+		if _, err := netip.ParseAddr(c.SMTPHost); err != nil {
+			add("SMTP_HOST must be a host name or IP address")
+		}
+	}
+	if c.IsProduction() && c.SMTPHost == "" {
+		add("production requires SMTP_HOST (platform mail)")
+	}
+	if (c.SMTPUsername == "") != c.SMTPPassword.IsZero() {
+		add("SMTP_USERNAME and SMTP_PASSWORD must be set together")
+	}
+	if c.MailFromAddress == "" {
+		c.MailFromAddress = "no-reply@" + c.BaseDomain
+	}
+	if a, err := mail.ParseAddress(c.MailFromAddress); err != nil || a.Address != c.MailFromAddress || !strings.Contains(c.MailFromAddress, "@") {
+		add("MAIL_FROM_ADDRESS must be a bare email address")
+	}
+	var err error
+	if c.SMTPDenyCIDRs, err = parseCIDRs(c.SMTPDenyCIDRsRaw); err != nil {
+		add("SMTP_DENY_CIDRS: %v", err)
+	}
+}
+
+// MailDomain is the domain of MAIL_FROM_ADDRESS, used for Message-IDs and
+// EHLO.
+func (c *Config) MailDomain() string {
+	_, d, _ := strings.Cut(c.MailFromAddress, "@")
+	return d
 }
 
 // CheckDSN validates a Postgres URL without ever returning its contents.

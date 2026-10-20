@@ -17,6 +17,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"os"
 	"strings"
 	"sync/atomic"
@@ -28,6 +29,8 @@ import (
 
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/app"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/config"
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/mailer"
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/mailer/smtptest"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/provisioning"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/rbac"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/security"
@@ -39,7 +42,27 @@ var (
 	theApp  *app.App
 	baseURL string
 	tenants = map[string]tenantInfo{} // by letter
+	smtpSrv *smtptest.Server          // tenant SMTP target (127.0.0.2, STARTTLS)
 )
+
+// SMTP test identity and the names the test resolver knows. Every other
+// name fails to resolve; the hostile ones point at blocked addresses.
+const (
+	smtpHost = "smtp.example.test"
+	smtpUser = "shop@iso-b.test"
+	smtpPass = "smtp-app-password-123"
+)
+
+func testResolver() smtptest.StaticResolver {
+	a := netip.MustParseAddr
+	return smtptest.StaticResolver{
+		smtpHost:             {a("127.0.0.2")},
+		"metadata.evil.test": {a("169.254.169.254")},
+		"private.evil.test":  {a("10.0.0.5")},
+		"mapped.evil.test":   {a("::ffff:127.0.0.1")},
+		"mixed.evil.test":    {a("127.0.0.2"), a("192.168.1.10")},
+	}
+}
 
 type tenantInfo struct {
 	ID, Slug, Host, OwnerEmail string
@@ -92,7 +115,12 @@ func run(m *testing.M) (int, error) {
 	if os.Getenv("ISO_LOG") != "" { // debug aid: ISO_LOG=1 go test -tags integration ./test/isolation
 		log = slog.New(slog.NewTextHandler(os.Stderr, nil))
 	}
-	theApp, err = app.New(ctx, cfg, log)
+	if smtpSrv, err = smtptest.New(smtptest.Options{Mode: smtptest.StartTLS, Host: "127.0.0.2", User: smtpUser, Pass: smtpPass}); err != nil {
+		return 0, err
+	}
+	defer smtpSrv.Close()
+	guard := mailer.Guard{Resolver: testResolver(), Allow: []netip.Addr{netip.MustParseAddr("127.0.0.2")}, DialFunc: smtptest.PortDialer(smtpSrv.Port)}
+	theApp, err = app.New(ctx, cfg, log, app.WithMailTesting(guard, smtpSrv.RootCAs))
 	if err != nil {
 		return 0, err
 	}

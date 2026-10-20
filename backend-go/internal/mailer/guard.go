@@ -65,12 +65,26 @@ type Resolver interface {
 type Guard struct {
 	Resolver     Resolver       // nil: net.DefaultResolver
 	Deny         []netip.Prefix // extra ranges (SMTP_DENY_CIDRS)
-	AllowPrivate bool           // operator-configured relays (platform SMTP, Mailpit) and tests
+	AllowPrivate bool           // operator-configured relays (platform SMTP, Mailpit)
+	Allow        []netip.Addr   // exact addresses exempt from the block list; tests only
 	DialTimeout  time.Duration  // default 10 s
 	TLSTimeout   time.Duration  // default 10 s
 
-	// dial is replaced in tests to observe the dialled address.
-	dial func(ctx context.Context, network, addr string) (net.Conn, error)
+	// DialFunc replaces the network dial (tests only). It receives the
+	// checked address, after resolution and the block-list check.
+	DialFunc func(ctx context.Context, network, addr string) (net.Conn, error)
+}
+
+func (g Guard) refused(ip netip.Addr) bool {
+	if g.AllowPrivate {
+		return false
+	}
+	for _, a := range g.Allow {
+		if a == ip.Unmap().WithZone("") {
+			return false
+		}
+	}
+	return Blocked(ip, g.Deny)
 }
 
 // Resolve returns the address to dial. A literal IP is checked as is. If
@@ -78,7 +92,7 @@ type Guard struct {
 // a public and an internal answer.
 func (g Guard) Resolve(ctx context.Context, host string) (netip.Addr, error) {
 	if ip, err := netip.ParseAddr(host); err == nil {
-		if !g.AllowPrivate && Blocked(ip, g.Deny) {
+		if g.refused(ip) {
 			return netip.Addr{}, ErrBlockedAddress
 		}
 		return ip.Unmap(), nil
@@ -94,11 +108,9 @@ func (g Guard) Resolve(ctx context.Context, host string) (netip.Addr, error) {
 	if len(ips) == 0 {
 		return netip.Addr{}, &net.DNSError{Err: "no addresses", Name: host, IsNotFound: true}
 	}
-	if !g.AllowPrivate {
-		for _, ip := range ips {
-			if Blocked(ip, g.Deny) {
-				return netip.Addr{}, ErrBlockedAddress
-			}
+	for _, ip := range ips {
+		if g.refused(ip) {
+			return netip.Addr{}, ErrBlockedAddress
 		}
 	}
 	return ips[0].Unmap().WithZone(""), nil
@@ -118,7 +130,7 @@ func (g Guard) Dialer(host string, port int, tlsCfg *tls.Config) func(ctx contex
 		if dt <= 0 {
 			dt = 10 * time.Second
 		}
-		dial := g.dial
+		dial := g.DialFunc
 		if dial == nil {
 			d := net.Dialer{Timeout: dt}
 			dial = d.DialContext
