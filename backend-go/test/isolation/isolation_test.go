@@ -105,6 +105,17 @@ func run(m *testing.M) (int, error) {
 		time.Sleep(50 * time.Millisecond)
 	}
 
+	// The suite creates many users per tenant; the trial plan's 10-user cap
+	// (tested by the plan-limit code) would get in the way. Stores keep 3.
+	adm, err := pgx.Connect(ctx, tdb.AdminDSN.Reveal())
+	if err != nil {
+		return 0, err
+	}
+	if _, err := adm.Exec(ctx, `UPDATE platform.plans SET limits = jsonb_set(limits, '{max_users}', '1000') WHERE code = 'trial'`); err != nil {
+		return 0, err
+	}
+	_ = adm.Close(ctx)
+
 	o := provisioning.New(tdb.MigratorDSN, "http", "pos.test", slog.New(slog.DiscardHandler))
 	for _, l := range []string{"a", "b", "c"} {
 		slug := "iso-" + l

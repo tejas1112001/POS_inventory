@@ -143,7 +143,8 @@ func TestGrantMatrix(t *testing.T) {
 	require.NotEmpty(t, tables)
 	for _, tbl := range tables {
 		for _, priv := range []string{"SELECT", "INSERT", "UPDATE", "DELETE"} {
-			want := tbl != "audit_log" || (priv != "UPDATE" && priv != "DELETE")
+			appendOnly := tbl == "audit_log" || tbl == "stock_movements"
+			want := !appendOnly || (priv != "UPDATE" && priv != "DELETE")
 			var got bool
 			require.NoError(t, admin.QueryRow(ctx, `SELECT has_table_privilege($1, $2, $3)`, role, schema+"."+tbl, priv).Scan(&got))
 			require.Equal(t, want, got, "%s %s on %s", role, priv, tbl)

@@ -161,7 +161,7 @@ func (s *Service) Prepare(ctx context.Context, t tenancy.Tenant, field string, v
 		c.keep = true
 	case *v == "":
 		c.clear, c.keep = current != nil, current == nil
-	case current != nil && *v == URL(*current, purpose):
+	case current != nil && sameFile(*v, *current):
 		c.keep = true
 	case strings.HasPrefix(*v, "data:"):
 		raw, err := ParseDataURI(*v)
@@ -187,17 +187,24 @@ func (s *Service) Prepare(ctx context.Context, t tenancy.Tenant, field string, v
 	return c, nil
 }
 
-func parseFileURL(v, purpose string) (uuid.UUID, bool) {
-	prefix := "/api/files/"
-	if PublicPurposes[purpose] {
-		prefix = "/files/t/"
-	}
-	rest, ok := strings.CutPrefix(v, prefix)
+// parseFileURL accepts either URL form ("/files/t/<id>" or "/api/files/<id>");
+// whether the file may be used for the purpose is checked in the DB.
+func parseFileURL(v, _ string) (uuid.UUID, bool) {
+	rest, ok := strings.CutPrefix(v, "/files/t/")
 	if !ok {
-		return uuid.Nil, false
+		if rest, ok = strings.CutPrefix(v, "/api/files/"); !ok {
+			return uuid.Nil, false
+		}
 	}
 	id, err := uuid.Parse(rest)
 	return id, err == nil
+}
+
+// sameFile reports whether a URL (either form) points at id. Product images
+// switch between the public and the private form as they are published.
+func sameFile(v string, id uuid.UUID) bool {
+	got, ok := parseFileURL(v, "")
+	return ok && got == id
 }
 
 // Apply runs inside the entity's transaction. It records a new upload,
@@ -246,7 +253,8 @@ func fileInUse(ctx context.Context, tx tenancy.TenantTx, id uuid.UUID) (bool, er
 		OR EXISTS (SELECT 1 FROM suppliers WHERE image_file_id = $1)
 		OR EXISTS (SELECT 1 FROM customers WHERE image_file_id = $1)
 		OR EXISTS (SELECT 1 FROM stores WHERE logo_file_id = $1 OR banner_file_id = $1)
-		OR EXISTS (SELECT 1 FROM settings WHERE logo_file_id = $1)`, id).Scan(&used)
+		OR EXISTS (SELECT 1 FROM settings WHERE logo_file_id = $1)
+		OR EXISTS (SELECT 1 FROM products WHERE image_file_id = $1)`, id).Scan(&used)
 	return used, err
 }
 
@@ -296,6 +304,13 @@ func publiclyVisible(ctx context.Context, tx tenancy.TenantTx, id uuid.UUID, pur
 		err = tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM stores WHERE logo_file_id = $1 AND deleted_at IS NULL)`, id).Scan(&ok)
 	case PurposeStoreBanner:
 		err = tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM stores WHERE banner_file_id = $1 AND deleted_at IS NULL)`, id).Scan(&ok)
+	case PurposeProductImage:
+		// Published in at least one live store, product not deleted.
+		err = tx.QueryRow(ctx, `SELECT EXISTS (
+			SELECT 1 FROM products p
+			JOIN store_products sp ON sp.product_id = p.id AND sp.is_published
+			JOIN stores s ON s.id = sp.store_id AND s.deleted_at IS NULL
+			WHERE p.image_file_id = $1 AND p.deleted_at IS NULL)`, id).Scan(&ok)
 	}
 	return ok, err
 }

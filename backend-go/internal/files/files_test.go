@@ -118,6 +118,7 @@ func TestURLs(t *testing.T) {
 	got, ok := parseFileURL(URL(id, PurposeCategoryImage), PurposeCategoryImage)
 	require.True(t, ok)
 	require.Equal(t, [16]byte(got), id)
-	_, ok = parseFileURL(URL(id, PurposeCategoryImage), PurposeStoreLogo)
-	require.False(t, ok, "URL of another purpose family")
+	require.True(t, sameFile("/api/files/01000000-0000-0000-0000-000000000000", id))
+	require.True(t, sameFile("/files/t/01000000-0000-0000-0000-000000000000", id), "either URL form")
+	require.False(t, sameFile("https://evil.example/files/t/01000000-0000-0000-0000-000000000000", id))
 }
