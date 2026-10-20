@@ -18,6 +18,15 @@ type Metrics struct {
 	SessionTampered prometheus.Counter
 	ListenerUp      prometheus.Gauge
 	ListenerRetries prometheus.Counter
+
+	// Mail and receipts (EMAIL_AND_RECEIPTS §6). No tenant labels.
+	EmailSent      *prometheus.CounterVec
+	EmailFailed    *prometheus.CounterVec
+	EmailDead      prometheus.Counter
+	OutboxDepth    *prometheus.GaugeVec
+	ReceiptRender  prometheus.Histogram
+	LedgerMismatch prometheus.Counter
+	JobsFailed     *prometheus.CounterVec
 }
 
 // NewMetrics registers the metrics on a fresh registry.
@@ -50,12 +59,42 @@ func NewMetrics() *Metrics {
 			Name: "pos_listener_reconnects_total",
 			Help: "LISTEN connection reconnects.",
 		}),
+		EmailSent: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "pos_email_sent_total",
+			Help: "Emails accepted by an SMTP server.",
+		}, []string{"via", "kind"}),
+		EmailFailed: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "pos_email_failed_total",
+			Help: "Email send attempts that failed, by error class.",
+		}, []string{"class"}),
+		EmailDead: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "pos_email_dead_total",
+			Help: "Emails given up on (dead letter).",
+		}),
+		OutboxDepth: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "pos_email_outbox_depth",
+			Help: "Emails waiting to be sent, summed over tenants.",
+		}, []string{"scope"}),
+		ReceiptRender: prometheus.NewHistogram(prometheus.HistogramOpts{
+			Name:    "pos_receipt_render_seconds",
+			Help:    "Time to render and store one receipt PDF.",
+			Buckets: []float64{.01, .025, .05, .1, .25, .5, 1, 2.5, 5},
+		}),
+		LedgerMismatch: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "pos_ledger_mismatch_total",
+			Help: "Inventory rows whose quantity differs from the stock ledger (nightly check).",
+		}),
+		JobsFailed: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "pos_jobs_failed_total",
+			Help: "Background job runs that returned an error.",
+		}, []string{"kind"}),
 	}
 	reg.MustRegister(
 		collectors.NewGoCollector(),
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 		m.HTTPRequests, m.HTTPDuration, m.RateLimited, m.SessionTampered,
 		m.ListenerUp, m.ListenerRetries,
+		m.EmailSent, m.EmailFailed, m.EmailDead, m.OutboxDepth, m.ReceiptRender, m.LedgerMismatch, m.JobsFailed,
 	)
 	return m
 }

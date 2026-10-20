@@ -19,6 +19,7 @@ import (
 	"net/http/httptest"
 	"net/netip"
 	"os"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -43,6 +44,7 @@ var (
 	baseURL string
 	tenants = map[string]tenantInfo{} // by letter
 	smtpSrv *smtptest.Server          // tenant SMTP target (127.0.0.2, STARTTLS)
+	platSrv *smtptest.Server          // platform relay (plain, like Mailpit)
 )
 
 // SMTP test identity and the names the test resolver knows. Every other
@@ -100,17 +102,6 @@ func run(m *testing.M) (int, error) {
 	}
 	defer func() { _ = tdb.Stop(ctx) }()
 
-	cfg, err := config.LoadFrom(map[string]string{
-		"BASE_DOMAIN": "pos.test", "PLATFORM_NAME": "Test", "APP_ENV": "test", "PUBLIC_SCHEME": "http",
-		"DATABASE_URL": tdb.AppDSN.Reveal(), "DATABASE_JOBS_URL": tdb.JobsDSN.Reveal(),
-		"DATABASE_MIGRATOR_URL": tdb.MigratorDSN.Reveal(),
-		"JWT_KEYS":              "k1:" + rk(), "PLATFORM_JWT_KEYS": "p1:" + rk(), "MASTER_KEYS": "m1:" + rk(),
-		"TRUSTED_PROXY_CIDRS": "127.0.0.1/32", "SHUTDOWN_DRAIN_DELAY": "0s",
-		"STORAGE_FS_ROOT": storageDir,
-	})
-	if err != nil {
-		return 0, err
-	}
 	log := slog.New(slog.DiscardHandler)
 	if os.Getenv("ISO_LOG") != "" { // debug aid: ISO_LOG=1 go test -tags integration ./test/isolation
 		log = slog.New(slog.NewTextHandler(os.Stderr, nil))
@@ -119,8 +110,25 @@ func run(m *testing.M) (int, error) {
 		return 0, err
 	}
 	defer smtpSrv.Close()
+	if platSrv, err = smtptest.New(smtptest.Options{Mode: smtptest.Plain, Host: "127.0.0.2"}); err != nil {
+		return 0, err
+	}
+	defer platSrv.Close()
+	cfg, err := config.LoadFrom(map[string]string{
+		"BASE_DOMAIN": "pos.test", "PLATFORM_NAME": "Test", "APP_ENV": "test", "PUBLIC_SCHEME": "http",
+		"DATABASE_URL": tdb.AppDSN.Reveal(), "DATABASE_JOBS_URL": tdb.JobsDSN.Reveal(),
+		"DATABASE_MIGRATOR_URL": tdb.MigratorDSN.Reveal(),
+		"JWT_KEYS":              "k1:" + rk(), "PLATFORM_JWT_KEYS": "p1:" + rk(), "MASTER_KEYS": "m1:" + rk(),
+		"TRUSTED_PROXY_CIDRS": "127.0.0.1/32", "SHUTDOWN_DRAIN_DELAY": "0s",
+		"STORAGE_FS_ROOT": storageDir,
+		"SMTP_HOST":       "127.0.0.2", "SMTP_PORT": strconv.Itoa(platSrv.Port), "SMTP_TLS": "none",
+	})
+	if err != nil {
+		return 0, err
+	}
+
 	guard := mailer.Guard{Resolver: testResolver(), Allow: []netip.Addr{netip.MustParseAddr("127.0.0.2")}, DialFunc: smtptest.PortDialer(smtpSrv.Port)}
-	theApp, err = app.New(ctx, cfg, log, app.WithMailTesting(guard, smtpSrv.RootCAs))
+	theApp, err = app.New(ctx, cfg, log, app.WithMailTesting(guard, smtpSrv.RootCAs), app.WithSweepInterval(time.Second))
 	if err != nil {
 		return 0, err
 	}
@@ -157,7 +165,33 @@ func run(m *testing.M) (int, error) {
 		}
 		tenants[l] = tenantInfo{ID: res.TenantID, Slug: slug, Host: slug + ".pos.test", OwnerEmail: "owner@" + slug + ".test"}
 	}
+	// The welcome emails issue owner invite tokens (which replace earlier
+	// ones); let them go out before tests create their own tokens.
+	if err := theApp.Worker().EnqueueMail(ctx, nil, true); err != nil {
+		return 0, err
+	}
+	deadline = time.Now().Add(45 * time.Second)
+	for len(platSrv.Messages()) < 3 {
+		if time.Now().After(deadline) {
+			return 0, fmt.Errorf("welcome emails not delivered: %d of 3; %s", len(platSrv.Messages()), jobDiagnostics(ctx))
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
 	return m.Run(), nil
+}
+
+// jobDiagnostics describes the outbox and River state when setup stalls.
+func jobDiagnostics(ctx context.Context) string {
+	adm, err := pgx.Connect(ctx, tdb.AdminDSN.Reveal())
+	if err != nil {
+		return err.Error()
+	}
+	defer func() { _ = adm.Close(ctx) }()
+	var outbox, jobs, leader string
+	_ = adm.QueryRow(ctx, `SELECT coalesce(string_agg(status || '/' || attempts || '/' || coalesce(last_error, ''), '; '), 'none') FROM platform.email_outbox`).Scan(&outbox)
+	_ = adm.QueryRow(ctx, `SELECT coalesce(string_agg(kind || ':' || state || ':' || coalesce(errors::text, ''), '; '), 'none') FROM river.river_job`).Scan(&jobs)
+	_ = adm.QueryRow(ctx, `SELECT coalesce(string_agg(leader_id, ','), 'none') FROM river.river_leader`).Scan(&leader)
+	return fmt.Sprintf("outbox=[%s] jobs=[%s] leader=%s started=%v", outbox, jobs, leader, theApp.Worker().Started())
 }
 
 // ------------------------------------------------------------- HTTP helper

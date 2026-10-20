@@ -42,6 +42,7 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/tenancy"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/tenantapi"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/users"
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/worker"
 )
 
 // Server hardening (OPERATIONS §5).
@@ -57,8 +58,14 @@ const (
 type Option func(*options)
 
 type options struct {
-	mailGuard *mailer.Guard
-	mailRoots *x509.CertPool
+	mailGuard     *mailer.Guard
+	mailRoots     *x509.CertPool
+	sweepInterval time.Duration
+}
+
+// WithSweepInterval shortens the mail safety-net sweep (tests).
+func WithSweepInterval(d time.Duration) Option {
+	return func(o *options) { o.sweepInterval = d }
 }
 
 // WithMailTesting replaces the tenant SMTP guard and the trusted CA roots,
@@ -84,6 +91,7 @@ type App struct {
 	listener *tenancy.Listener
 	tenant   *tenantapi.API
 	catalog  *catalog.API
+	worker   *worker.Worker
 }
 
 // New builds the app. It does not open network listeners.
@@ -160,8 +168,17 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger, opts ...Opti
 		a.closePools()
 		return nil, err
 	}
-	tenantAPI, authSvc, err := a.tenantAPI(cfg, log, network, env)
+	storage, err := newStorage(ctx, cfg)
 	if err != nil {
+		a.closePools()
+		return nil, err
+	}
+	tenantAPI, authSvc, err := a.tenantAPI(cfg, log, network, env, storage)
+	if err != nil {
+		a.closePools()
+		return nil, err
+	}
+	if a.worker, err = a.newWorker(cfg, log, env, storage, authSvc); err != nil {
 		a.closePools()
 		return nil, err
 	}
@@ -243,7 +260,7 @@ func newStorage(ctx context.Context, cfg *config.Config) (files.Storage, error) 
 	return files.NewFSStorage(cfg.StorageFSRoot)
 }
 
-func (a *App) tenantAPI(cfg *config.Config, log *slog.Logger, network httpx.Network, env *secrets.Envelope) (*tenantapi.API, *auth.Service, error) {
+func (a *App) tenantAPI(cfg *config.Config, log *slog.Logger, network httpx.Network, env *secrets.Envelope, storage files.Storage) (*tenantapi.API, *auth.Service, error) {
 	signer, err := authtoken.NewSigner(cfg.JWTKeys, authtoken.AudTenant, cfg.AccessTokenTTL)
 	if err != nil {
 		return nil, nil, err
@@ -258,15 +275,17 @@ func (a *App) tenantAPI(cfg *config.Config, log *slog.Logger, network httpx.Netw
 		RefreshRemember: cfg.RefreshTTLRemember, RefreshSession: cfg.RefreshTTLSession,
 		PublicScheme: cfg.PublicScheme, BaseDomain: cfg.BaseDomain, Log: log,
 	})
-	storage, err := newStorage(context.Background(), cfg)
-	if err != nil {
-		return nil, nil, err
-	}
 	planSvc := plans.NewService(a.sessions)
 	fileSvc := files.NewService(storage, a.sessions, planSvc, log)
 	productAPI := products.New(products.Deps{Sessions: a.sessions, Files: fileSvc, Plans: planSvc, MaxRows: cfg.MaxUnpagedRows})
-	salesAPI := sales.New(sales.Deps{Sessions: a.sessions, MaxRows: cfg.MaxUnpagedRows})
+	salesAPI := sales.New(sales.Deps{Sessions: a.sessions, MaxRows: cfg.MaxUnpagedRows,
+		OnReceipt: func(ctx context.Context, t tenancy.Tenant, receiptID int64) {
+			if a.worker != nil {
+				a.worker.ReceiptChanged(ctx, t, receiptID)
+			}
+		}})
 	receiptSvc := receipts.NewService(a.sessions, storage, log)
+	receiptSvc.Rendered = func(d time.Duration) { a.metrics.ReceiptRender.Observe(d.Seconds()) }
 	receiptAPI := receipts.NewAPI(receiptSvc, a.sessions)
 	settingsAPI := settings.New(settings.Deps{Sessions: a.sessions, Files: fileSvc, Plans: planSvc, Envelope: env,
 		Guard: a.tenantMailGuard(), RootCAs: a.opts.mailRoots, MailDomain: cfg.MailDomain()})
@@ -279,6 +298,57 @@ func (a *App) tenantAPI(cfg *config.Config, log *slog.Logger, network httpx.Netw
 	})
 	return api, authSvc, nil
 }
+
+// newWorker builds the job runner. It uses the pos_jobs pool for its own
+// sessions; in POSD_MODE=api it only inserts jobs.
+func (a *App) newWorker(cfg *config.Config, log *slog.Logger, env *secrets.Envelope, storage files.Storage, authSvc *auth.Service) (*worker.Worker, error) {
+	jobs := tenancy.NewSessions(a.jobsPool, cfg.DBStatementTimeout, a.metrics.SessionTampered, log)
+	rcpt := receipts.NewService(jobs, storage, log)
+	rcpt.Rendered = func(d time.Duration) { a.metrics.ReceiptRender.Observe(d.Seconds()) }
+	var platformSender mailer.Sender
+	if cfg.SMTPHost != "" {
+		// Operator-configured relay: private addresses are allowed (Mailpit,
+		// an internal relay), TLS as configured.
+		platformSender = mailer.NewSMTP(mailer.Server{Host: cfg.SMTPHost, Port: cfg.SMTPPort, TLS: mailer.TLSMode(cfg.SMTPTLS),
+			Username: cfg.SMTPUsername, Password: cfg.SMTPPassword},
+			mailer.Options{Guard: mailer.Guard{AllowPrivate: true}, HELO: cfg.MailDomain()})
+	} else {
+		log.Warn("SMTP_HOST is not set: platform mail stays queued")
+	}
+	guard, roots := a.tenantMailGuard(), a.opts.mailRoots
+	w, err := worker.New(worker.Config{
+		Pool: a.jobsPool, Registry: a.registry, Receipts: rcpt, Log: log,
+		RunJobs: cfg.Mode != "api", SweepInterval: a.opts.sweepInterval,
+		Mail: worker.MailConfig{
+			Jobs: jobs, Registry: a.registry, Envelope: env, Receipts: rcpt, Plans: plans.NewService(jobs),
+			Platform: platformSender,
+			TenantSender: func(s mailer.Server) mailer.Sender {
+				return mailer.NewSMTP(s, mailer.Options{Guard: guard, RootCAs: roots, HELO: cfg.MailDomain()})
+			},
+			OwnerInvite: func(ctx context.Context, t tenancy.Tenant) (string, time.Time, error) {
+				return authSvc.OwnerInviteLink(ctx, t, auth.Meta{RequestID: "worker"})
+			},
+			PublicScheme: cfg.PublicScheme, BaseDomain: cfg.BaseDomain, PlatformName: cfg.PlatformName,
+			MailFrom: cfg.MailFromAddress, MailDomain: cfg.MailDomain(), Metrics: a.metrics, Log: log,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	a.listener.On(tenancy.ChanMailDispatch, w.MailDispatched)
+	if cfg.Mode != "api" {
+		a.health.Add("jobs", func(context.Context) error {
+			if w.Started() {
+				return nil
+			}
+			return errors.New("job runner not started")
+		})
+	}
+	return w, nil
+}
+
+// Worker exposes the job runner (tests).
+func (a *App) Worker() *worker.Worker { return a.worker }
 
 // tenantMailGuard is the SSRF guard for tenant SMTP servers.
 func (a *App) tenantMailGuard() mailer.Guard {
@@ -361,6 +431,8 @@ func (a *App) Serve(ctx context.Context, ln, internalLn net.Listener) error {
 	lctx, stopListener := context.WithCancel(context.WithoutCancel(ctx))
 	var lwg sync.WaitGroup
 	lwg.Go(func() { a.listener.Run(lctx) })
+	wctx, stopWorkerStart := context.WithCancel(context.WithoutCancel(ctx))
+	lwg.Go(func() { a.worker.Run(wctx) })
 
 	errc := make(chan error, 2)
 	go func() { errc <- serve(a.http, ln) }()
@@ -372,7 +444,7 @@ func (a *App) Serve(ctx context.Context, ln, internalLn net.Listener) error {
 	case serveErr = <-errc:
 		a.log.Error("server stopped unexpectedly", slog.Any("err", serveErr))
 	}
-	shutdownErr := a.shutdown(func() { stopListener(); lwg.Wait() })
+	shutdownErr := a.shutdown(func() { stopWorkerStart(); stopListener(); lwg.Wait() })
 	return errors.Join(serveErr, shutdownErr)
 }
 
@@ -394,7 +466,9 @@ func (a *App) shutdown(stopListener func()) error {
 	if err := a.http.Shutdown(ctx); err != nil {
 		errs = append(errs, fmt.Errorf("http shutdown: %w", err))
 	}
-	// River (step 3+) stops here.
+	if err := a.worker.Stop(ctx); err != nil {
+		errs = append(errs, fmt.Errorf("job runner shutdown: %w", err))
+	}
 	stopListener()
 	if err := a.internal.Shutdown(ctx); err != nil {
 		errs = append(errs, fmt.Errorf("metrics shutdown: %w", err))

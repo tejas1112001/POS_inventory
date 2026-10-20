@@ -7,8 +7,11 @@ import (
 	"io/fs"
 	"log/slog"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/pressly/goose/v3"
 	"github.com/pressly/goose/v3/lock"
+	"github.com/riverqueue/river/riverdriver/riverpgxv5"
+	"github.com/riverqueue/river/rivermigrate"
 
 	"github.com/tejas1112001/POS_inventory/backend-go/db"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/secrets"
@@ -47,6 +50,41 @@ func PlatformUp(ctx context.Context, migratorDSN secrets.Secret, log *slog.Logge
 	}
 	if err != nil {
 		return out, fmt.Errorf("migrate platform: %w", err)
+	}
+	river, err := RiverUp(ctx, migratorDSN)
+	out = append(out, river...)
+	if err != nil {
+		return out, fmt.Errorf("migrate river: %w", err)
+	}
+	return out, nil
+}
+
+// RiverSchema holds River's job tables.
+const RiverSchema = "river"
+
+// RiverUp applies River's migrations in the river schema as pos_owner.
+// pos_jobs reaches the tables through the schema's default privileges.
+func RiverUp(ctx context.Context, migratorDSN secrets.Secret) ([]Result, error) {
+	cfg, err := ownerPoolConfig(migratorDSN.Reveal(), RiverSchema, "posctl-migrate-river")
+	if err != nil {
+		return nil, err
+	}
+	pool, err := pgxpool.NewWithConfig(ctx, cfg)
+	if err != nil {
+		return nil, err
+	}
+	defer pool.Close()
+	m, err := rivermigrate.New(riverpgxv5.New(pool), &rivermigrate.Config{Schema: RiverSchema})
+	if err != nil {
+		return nil, err
+	}
+	res, err := m.Migrate(ctx, rivermigrate.DirectionUp, nil)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Result, 0, len(res.Versions))
+	for _, v := range res.Versions {
+		out = append(out, Result{Version: int64(v.Version), Name: "river/" + v.Name, Duration: v.Duration.String()})
 	}
 	return out, nil
 }

@@ -6,6 +6,7 @@ import (
 	"errors"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
 
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/secrets"
@@ -55,6 +56,20 @@ func dedicated(dsn secrets.Secret, searchPath, app string) (*sql.DB, error) {
 
 // startupParamConfig builds a pgx config whose session role and search_path
 // are startup parameters (preflight M6 check).
+// ownerPoolConfig is a small pool that runs as pos_owner with a fixed
+// search_path (River's migrations).
+func ownerPoolConfig(dsn, searchPath, app string) (*pgxpool.Config, error) {
+	cfg, err := pgxpool.ParseConfig(dsn)
+	if err != nil {
+		return nil, errors.New("migrate: invalid connection string")
+	}
+	cfg.ConnConfig.RuntimeParams["role"] = OwnerRole
+	cfg.ConnConfig.RuntimeParams["search_path"] = searchPath
+	cfg.ConnConfig.RuntimeParams["application_name"] = app
+	cfg.MaxConns = 2
+	return cfg, nil
+}
+
 func startupParamConfig(dsn, role, searchPath string) (*pgx.ConnConfig, error) {
 	cfg, err := pgx.ParseConfig(dsn)
 	if err != nil {
