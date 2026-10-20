@@ -173,14 +173,16 @@ func GrantTenantPrivileges(ctx context.Context, c Execer, schema, role, owner st
 			return err
 		}
 	}
-	// audit_log is append-only for the tenant role.
-	var hasAudit bool
-	if err := queryRowScan(ctx, c, `SELECT to_regclass($1) IS NOT NULL`, []any{schema + ".audit_log"}, &hasAudit); err != nil {
-		return err
-	}
-	if hasAudit {
-		if _, err := c.Exec(ctx, "REVOKE UPDATE, DELETE, TRUNCATE ON "+s+".audit_log FROM "+r); err != nil {
+	// The audit log and the stock ledger are append-only for the tenant role.
+	for _, table := range []string{"audit_log", "stock_movements"} {
+		var exists bool
+		if err := queryRowScan(ctx, c, `SELECT to_regclass($1) IS NOT NULL`, []any{schema + "." + table}, &exists); err != nil {
 			return err
+		}
+		if exists {
+			if _, err := c.Exec(ctx, "REVOKE UPDATE, DELETE, TRUNCATE ON "+s+"."+table+" FROM "+r); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
