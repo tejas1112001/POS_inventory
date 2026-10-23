@@ -621,6 +621,9 @@ func (a *API) update(w http.ResponseWriter, r *http.Request) {
 		if old.status == "Void" {
 			return apperr.Conflict(apperr.CodeInvalidState, "A voided sale cannot be edited.")
 		}
+		if err := refuseIfReturned(ctx, tx, id, "edited"); err != nil {
+			return err
+		}
 		s, err := loadSettings(ctx, tx)
 		if err != nil {
 			return err
@@ -722,6 +725,21 @@ func (a *API) update(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, out)
 }
 
+// refuseIfReturned stops an edit or void of a sale with returns: an edit
+// would replace the lines the returns point to, and a void would restock
+// goods that already came back. The caller holds the sale's row lock,
+// which every return takes first.
+func refuseIfReturned(ctx context.Context, tx tenancy.TenantTx, saleID int64, action string) error {
+	var returned bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM sale_returns WHERE sale_id = $1)`, saleID).Scan(&returned); err != nil {
+		return err
+	}
+	if returned {
+		return apperr.Conflict(apperr.CodeInvalidState, "This sale has returns and cannot be "+action+".")
+	}
+	return nil
+}
+
 // ------------------------------------------------------------------- void
 
 // void is DELETE /api/sales/{id}: the sale is kept with status Void and its
@@ -743,6 +761,9 @@ func (a *API) void(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		old, err := lockSale(ctx, tx, id, p)
 		if err != nil || old.status == "Void" {
+			return err
+		}
+		if err := refuseIfReturned(ctx, tx, id, "voided"); err != nil {
 			return err
 		}
 		items, err := oldItems(ctx, tx, id)
@@ -781,10 +802,12 @@ func (a *API) void(w http.ResponseWriter, r *http.Request) {
 
 // ------------------------------------------------------------------ mount
 
-// Mount registers the sales and invoice routes.
+// Mount registers the sales, returns and invoice routes.
 func (a *API) Mount(rt *rbac.Router) {
 	req := rbac.Require
 	rt.Handle(http.MethodGet, "/sales", req("sales", "view"), a.list)
+	rt.Handle(http.MethodGet, "/sales/returns", req("sales_returns", "view"), a.listReturns)
+	rt.Handle(http.MethodPost, "/sales/returns", req("sales_returns", "create"), a.createReturn)
 	rt.Handle(http.MethodGet, "/sales/{id}", req("sales", "view"), a.get)
 	rt.Handle(http.MethodPost, "/sales", req("sales", "create"), a.create)
 	rt.Handle(http.MethodPut, "/sales/{id}", req("sales", "edit"), a.update)

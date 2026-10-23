@@ -71,6 +71,7 @@ const (
 	CodeFeatureNotInPlan   = "FEATURE_NOT_IN_PLAN"
 	CodeInsufficientStock  = "INSUFFICIENT_STOCK"
 	CodePriceChanged       = "PRICE_CHANGED"
+	CodeReturnExceedsSold  = "RETURN_EXCEEDS_SOLD"
 	CodeProductLocked      = "PRODUCT_LOCKED"
 	CodeNotFound           = "NOT_FOUND"
 	CodeConflict           = "CONFLICT"

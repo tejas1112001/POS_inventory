@@ -47,6 +47,7 @@ type ItemJSON struct {
 	SGST         *decimal.Decimal `json:"sgst"`
 	IGST         *decimal.Decimal `json:"igst"`
 	Subtotal     decimal.Decimal  `json:"subtotal"`
+	ReturnedQty  int              `json:"returnedQty"` // returned so far, over all returns of the sale
 	CreatedAt    time.Time        `json:"createdAt"`
 	Product      NameRef          `json:"product"`
 	Variant      *VariantRef      `json:"variant"`
@@ -103,7 +104,8 @@ const (
 		WHERE s.id = ANY($1)`
 	qLoadItems = `SELECT i.id, i.sale_id, i.product_id, i.variant_id, i.product_name, i.sku, i.quantity, i.unit_price,
 			i.catalog_price, i.discount, i.tax_type, i.tax_rate, i.tax_amount, i.cgst, i.sgst, i.igst, i.subtotal,
-			i.created_at, v.attributes
+			i.created_at, v.attributes,
+			coalesce((SELECT sum(r.quantity) FROM return_items r WHERE r.order_item_id = i.id), 0)
 		FROM order_items i LEFT JOIN product_variants v ON v.id = i.variant_id
 		WHERE i.sale_id = ANY($1) ORDER BY i.sale_id, i.id`
 )
@@ -146,7 +148,7 @@ func load(ctx context.Context, tx tenancy.TenantTx, ids []int64) ([]SaleJSON, er
 		var attrs []byte
 		if err := rows.Scan(&it.ID, &it.SaleID, &it.ProductID, &it.VariantID, &it.ProductName, &it.SKU, &it.Quantity, &it.UnitPrice,
 			&it.CatalogPrice, &it.Discount, &it.TaxType, &it.TaxRate, &it.TaxAmount, &it.CGST, &it.SGST, &it.IGST, &it.Subtotal,
-			&it.CreatedAt, &attrs); err != nil {
+			&it.CreatedAt, &attrs, &it.ReturnedQty); err != nil {
 			rows.Close()
 			return nil, err
 		}

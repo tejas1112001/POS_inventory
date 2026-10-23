@@ -32,7 +32,7 @@
 | 401 | `UNAUTHENTICATED`, `INVALID_CREDENTIALS`, `TOKEN_EXPIRED`, `MFA_REQUIRED` | Missing/invalid token, bad login, expired access token (**was 403 before**, see C-03) |
 | 403 | `FORBIDDEN`, `STEP_UP_REQUIRED`, `TENANT_SUSPENDED`, `TENANT_READ_ONLY`, `PLAN_LIMIT_REACHED`, `FEATURE_NOT_IN_PLAN`, `IMPERSONATION_READ_ONLY` | Permission or state denies the action |
 | 404 | `NOT_FOUND` | Unknown route, unknown ID **in this tenant**, unknown tenant host (same body for all) |
-| 409 | `CONFLICT`, `INSUFFICIENT_STOCK`, `PRICE_CHANGED`, `PRODUCT_LOCKED`, `INVALID_STATE` | Uniqueness, stock, stale price, POS lock, illegal state change |
+| 409 | `CONFLICT`, `INSUFFICIENT_STOCK`, `PRICE_CHANGED`, `PRODUCT_LOCKED`, `INVALID_STATE`, `RETURN_EXCEEDS_SOLD` | Uniqueness, stock, stale price, POS lock, illegal state change, return above the quantity sold (C-13) |
 | 413 | `BODY_TOO_LARGE` | Over the body cap |
 | 415 | `UNSUPPORTED_MEDIA_TYPE` | Non-JSON body on a JSON endpoint, bad upload type |
 | 429 | `RATE_LIMITED`, `ACCOUNT_LOCKED` | Rate limit or brute-force lockout (with `Retry-After`) |
