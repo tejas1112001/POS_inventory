@@ -142,6 +142,11 @@ func GrantRoleSet(ctx context.Context, c Execer, role, member string) error {
 	return err
 }
 
+// AppendOnlyTables are tenant tables the tenant role may read and insert
+// into but never update or delete: the audit log, the stock ledger and
+// return lines (a deleted return line would allow returning more than sold).
+var AppendOnlyTables = []string{"audit_log", "stock_movements", "return_items"}
+
 // GrantTenantPrivileges gives a tenant role exactly what TENANCY §5.3 lists:
 // USAGE on its schema and extensions, DML on its tables, sequence use,
 // default privileges for tables created later by owner, and insert/select
@@ -173,8 +178,9 @@ func GrantTenantPrivileges(ctx context.Context, c Execer, schema, role, owner st
 			return err
 		}
 	}
-	// The audit log and the stock ledger are append-only for the tenant role.
-	for _, table := range []string{"audit_log", "stock_movements"} {
+	// The audit log, the stock ledger and return lines are append-only for
+	// the tenant role.
+	for _, table := range AppendOnlyTables {
 		var exists bool
 		if err := queryRowScan(ctx, c, `SELECT to_regclass($1) IS NOT NULL`, []any{schema + "." + table}, &exists); err != nil {
 			return err

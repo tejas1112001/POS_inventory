@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"sync/atomic"
 	"testing"
 	"testing/fstest"
@@ -18,6 +19,7 @@ import (
 
 	dbfiles "github.com/tejas1112001/POS_inventory/backend-go/db"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/apperr"
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/db"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/migrate"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/provisioning"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/rbac"
@@ -143,7 +145,7 @@ func TestGrantMatrix(t *testing.T) {
 	require.NotEmpty(t, tables)
 	for _, tbl := range tables {
 		for _, priv := range []string{"SELECT", "INSERT", "UPDATE", "DELETE"} {
-			appendOnly := tbl == "audit_log" || tbl == "stock_movements"
+			appendOnly := slices.Contains(db.AppendOnlyTables, tbl)
 			want := !appendOnly || (priv != "UPDATE" && priv != "DELETE")
 			var got bool
 			require.NoError(t, admin.QueryRow(ctx, `SELECT has_table_privilege($1, $2, $3)`, role, schema+"."+tbl, priv).Scan(&got))
