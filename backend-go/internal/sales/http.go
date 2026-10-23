@@ -3,12 +3,8 @@
 package sales
 
 import (
-	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -22,8 +18,10 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/apperr"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/audit"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/auth"
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/docdate"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/files"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/httpx"
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/idempotency"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/inventory"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/mailer"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/outbox"
@@ -285,72 +283,6 @@ func (a *API) invoices(w http.ResponseWriter, r *http.Request) {
 
 // ----------------------------------------------------------------- create
 
-// hashingBody hashes the request body as the JSON decoder reads it.
-type hashingBody struct {
-	io.Reader
-	io.Closer
-}
-
-func idempotencyKey(r *http.Request) (string, error) {
-	k := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
-	if k == "" {
-		return "", nil
-	}
-	if len(k) > 100 {
-		return "", apperr.Invalid("Idempotency-Key", "Idempotency-Key must be at most 100 characters.")
-	}
-	for _, c := range k {
-		if c < 0x21 || c > 0x7e {
-			return "", apperr.Invalid("Idempotency-Key", "Idempotency-Key must be printable ASCII.")
-		}
-	}
-	return k, nil
-}
-
-type replay struct {
-	status int
-	body   []byte
-}
-
-const (
-	qExpireKey = `DELETE FROM idempotency_keys WHERE user_id = $1 AND key = $2 AND created_at < now() - interval '24 hours'`
-	qClaimKey  = `INSERT INTO idempotency_keys (user_id, key, request_hash) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`
-	qReadKey   = `SELECT request_hash, status, response FROM idempotency_keys WHERE user_id = $1 AND key = $2`
-	qStoreKey  = `UPDATE idempotency_keys SET status = $3, response = $4 WHERE user_id = $1 AND key = $2`
-)
-
-// claimKey records the key in the sale's transaction. A concurrent request
-// with the same key waits on the primary key until this transaction ends;
-// a completed one is replayed. Failed requests roll back, so only
-// successful responses are stored (S2).
-func claimKey(ctx context.Context, tx tenancy.TenantTx, userID int64, key string, sum []byte) (*replay, error) {
-	if _, err := tx.Exec(ctx, qExpireKey, userID, key); err != nil {
-		return nil, err
-	}
-	tag, err := tx.Exec(ctx, qClaimKey, userID, key, sum)
-	if err != nil {
-		return nil, err
-	}
-	if tag.RowsAffected() == 1 {
-		return nil, nil
-	}
-	var (
-		h      []byte
-		status *int
-		body   []byte
-	)
-	if err := tx.QueryRow(ctx, qReadKey, userID, key).Scan(&h, &status, &body); err != nil {
-		return nil, err
-	}
-	if !bytes.Equal(h, sum) {
-		return nil, apperr.Conflict(apperr.CodeConflict, "This Idempotency-Key was already used for a different request.")
-	}
-	if status == nil {
-		return nil, apperr.Conflict(apperr.CodeConflict, "A request with this Idempotency-Key is still in progress.")
-	}
-	return &replay{status: *status, body: body}, nil
-}
-
 const qInsertSale = `INSERT INTO sales (reference, date, status, payment_status, payment_method, payment_note, note,
 		subtotal, discount, tax, shipping, total, paid, due, tendered, change_due, currency,
 		customer_id, store_id, user_id, receipt_email)
@@ -359,19 +291,18 @@ const qInsertSale = `INSERT INTO sales (reference, date, status, payment_status,
 	RETURNING id`
 
 func (a *API) create(w http.ResponseWriter, r *http.Request) {
-	key, err := idempotencyKey(r)
+	key, err := idempotency.Key(r)
 	if err != nil {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	h := sha256.New()
-	r.Body = hashingBody{io.TeeReader(r.Body, h), r.Body}
+	hash := idempotency.Hash(r, "")
 	var in saleIn
 	if err := httpx.DecodeJSON(r, &in); err != nil {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	sum := h.Sum(nil)
+	sum := hash()
 	c, err := validate(in)
 	if err != nil {
 		httpx.WriteError(w, r, err)
@@ -381,15 +312,14 @@ func (a *API) create(w http.ResponseWriter, r *http.Request) {
 	now := a.d.Now()
 	var (
 		out       SaleJSON
-		stored    []byte
-		again     *replay
+		again     *idempotency.Replay
 		receiptID int64
 	)
 	err = a.rw(r.Context(), tenant(r), func(tx tenancy.TenantTx) error {
 		ctx := r.Context()
 		if key != "" {
 			var err error
-			if again, err = claimKey(ctx, tx, p.UserID, key, sum); err != nil || again != nil {
+			if again, err = idempotency.Claim(ctx, tx, p.UserID, key, sum); err != nil || again != nil {
 				return err
 			}
 		}
@@ -397,7 +327,7 @@ func (a *API) create(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
-		date, err := parseDate(c.date, s.loc, now)
+		date, err := docdate.Parse(c.date, s.loc, now)
 		if err != nil {
 			return err
 		}
@@ -413,13 +343,13 @@ func (a *API) create(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
-		deltas := map[stockKey]int{}
+		deltas := map[inventory.Key]int{}
 		for _, l := range pr.lines {
-			deltas[stockKey{c.storeID, l.v.id}] -= int(l.qty)
+			deltas[inventory.Key{Store: c.storeID, Variant: l.v.id}] -= int(l.qty)
 		}
 		// Lock stock first, then the counter: the counter row serialises
 		// checkouts, so it is held for the shortest time.
-		keys, err := lockStock(ctx, tx, deltas, skuMap(pr))
+		keys, _, err := inventory.Lock(ctx, tx, deltas, skuMap(pr))
 		if err != nil {
 			return err
 		}
@@ -451,7 +381,7 @@ func (a *API) create(w http.ResponseWriter, r *http.Request) {
 		if err := insertItems(ctx, tx, id, pr); err != nil {
 			return err
 		}
-		if err := moveStock(ctx, tx, keys, deltas, inventory.ReasonSale, inventory.Ref{Type: "sale", ID: id}, p.UserID); err != nil {
+		if err := inventory.Apply(ctx, tx, keys, deltas, inventory.ReasonSale, inventory.Ref{Type: "sale", ID: id}, p.UserID); err != nil {
 			return err
 		}
 		if receiptID, err = receipts.Create(ctx, tx, id, 1); err != nil {
@@ -476,12 +406,7 @@ func (a *API) create(w http.ResponseWriter, r *http.Request) {
 			return orInternal(err)
 		}
 		if key != "" {
-			if stored, err = json.Marshal(out); err != nil {
-				return err
-			}
-			if _, err := tx.Exec(ctx, qStoreKey, p.UserID, key, http.StatusCreated, string(stored)); err != nil {
-				return err
-			}
+			return idempotency.Store(ctx, tx, p.UserID, key, http.StatusCreated, out)
 		}
 		return nil
 	})
@@ -490,8 +415,7 @@ func (a *API) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if again != nil {
-		w.Header().Set("Idempotent-Replayed", "true")
-		httpx.WriteJSON(w, again.status, json.RawMessage(again.body))
+		idempotency.Write(w, again)
 		return
 	}
 	a.afterCommit(r, receiptID)
@@ -630,7 +554,7 @@ func (a *API) update(w http.ResponseWriter, r *http.Request) {
 		}
 		date := old.date
 		if c.date != "" {
-			if date, err = parseDate(c.date, s.loc, now); err != nil {
+			if date, err = docdate.Parse(c.date, s.loc, now); err != nil {
 				return err
 			}
 		}
@@ -643,11 +567,11 @@ func (a *API) update(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		prior := map[priorPrice]decimal.Decimal{}
-		deltas := map[stockKey]int{}
+		deltas := map[inventory.Key]int{}
 		for _, o := range items {
 			if o.variantID != nil {
 				prior[priorPrice{*o.variantID, o.unit.String()}] = o.catalog
-				deltas[stockKey{old.storeID, *o.variantID}] += o.qty
+				deltas[inventory.Key{Store: old.storeID, Variant: *o.variantID}] += o.qty
 			}
 		}
 		byID, err := resolve(ctx, tx, c.lines)
@@ -659,9 +583,9 @@ func (a *API) update(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		for _, l := range pr.lines {
-			deltas[stockKey{c.storeID, l.v.id}] -= int(l.qty)
+			deltas[inventory.Key{Store: c.storeID, Variant: l.v.id}] -= int(l.qty)
 		}
-		if err := applyStock(ctx, tx, deltas, skuMap(pr), inventory.ReasonSaleEdit, inventory.Ref{Type: "sale", ID: id}, p.UserID); err != nil {
+		if err := inventory.LockAndApply(ctx, tx, deltas, skuMap(pr), inventory.ReasonSaleEdit, inventory.Ref{Type: "sale", ID: id}, p.UserID); err != nil {
 			return err
 		}
 		if _, err := tx.Exec(ctx, `DELETE FROM order_items WHERE sale_id = $1`, id); err != nil {
@@ -770,13 +694,13 @@ func (a *API) void(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
-		deltas := map[stockKey]int{}
+		deltas := map[inventory.Key]int{}
 		for _, o := range items {
 			if o.variantID != nil {
-				deltas[stockKey{old.storeID, *o.variantID}] += o.qty
+				deltas[inventory.Key{Store: old.storeID, Variant: *o.variantID}] += o.qty
 			}
 		}
-		if err := applyStock(ctx, tx, deltas, nil, inventory.ReasonSaleVoid, inventory.Ref{Type: "sale", ID: id}, p.UserID); err != nil {
+		if err := inventory.LockAndApply(ctx, tx, deltas, nil, inventory.ReasonSaleVoid, inventory.Ref{Type: "sale", ID: id}, p.UserID); err != nil {
 			return err
 		}
 		var version int

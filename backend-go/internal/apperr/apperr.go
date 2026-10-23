@@ -90,6 +90,20 @@ func Validation(fields map[string]string) *Error {
 	return &Error{Kind: KindValidation, Code: CodeValidationFailed, Message: "Validation failed", Fields: fields}
 }
 
+// Fields reports collected field errors: nil when there are none, Invalid
+// for exactly one (its message becomes the error text), else Validation.
+func Fields(f map[string]string) error {
+	switch len(f) {
+	case 0:
+		return nil
+	case 1:
+		for k, v := range f {
+			return Invalid(k, v)
+		}
+	}
+	return Validation(f)
+}
+
 // Invalid reports one field error and uses it as the message, so clients
 // that show only "error" still say what is wrong.
 func Invalid(field, msg string) *Error {

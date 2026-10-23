@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/mail"
-	"sort"
 	"strings"
 	"time"
 
@@ -15,17 +14,15 @@ import (
 
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/apperr"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/auth"
-	"github.com/tejas1112001/POS_inventory/backend-go/internal/inventory"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/money"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/pricing"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/tenancy"
 )
 
 const (
-	maxLines    = 500
-	maxQty      = 1_000_000
-	maxNoteLen  = 1000
-	maxFutureBy = 24 * time.Hour
+	maxLines   = 500
+	maxQty     = 1_000_000
+	maxNoteLen = 1000
 )
 
 // ----------------------------------------------------------------- input
@@ -105,17 +102,7 @@ type cleanSale struct {
 
 type fieldErrs map[string]string
 
-func (f fieldErrs) err() error {
-	if len(f) == 0 {
-		return nil
-	}
-	if len(f) == 1 {
-		for k, v := range f {
-			return apperr.Invalid(k, v)
-		}
-	}
-	return apperr.Validation(f)
-}
+func (f fieldErrs) err() error { return apperr.Fields(f) }
 
 func firstStr(vals ...*string) *string {
 	for _, v := range vals {
@@ -249,30 +236,6 @@ func loadSettings(ctx context.Context, tx tenancy.TenantTx) (settings, error) {
 		s.loc = time.UTC
 	}
 	return s, nil
-}
-
-// parseDate reads a sale date: RFC 3339, or YYYY-MM-DD in the tenant's
-// time zone (today means now). Empty means now. Far-future dates are
-// refused.
-func parseDate(v string, loc *time.Location, now time.Time) (time.Time, error) {
-	if v == "" {
-		return now, nil
-	}
-	var t time.Time
-	if d, err := time.ParseInLocation("2006-01-02", v, loc); err == nil {
-		if d.Format("2006-01-02") == now.In(loc).Format("2006-01-02") {
-			return now, nil
-		}
-		t = d
-	} else if d, err := time.Parse(time.RFC3339, v); err == nil {
-		t = d
-	} else {
-		return time.Time{}, apperr.Invalid("date", "Date must be YYYY-MM-DD or an RFC 3339 timestamp.")
-	}
-	if t.After(now.Add(maxFutureBy)) {
-		return time.Time{}, apperr.Invalid("date", "Date cannot be in the future.")
-	}
-	return t, nil
 }
 
 // --------------------------------------------------------------- variants
@@ -514,86 +477,6 @@ func pay(total decimal.Decimal, paid, tendered *decimal.Decimal, currency string
 		p.tendered, p.chg = &t, &chg
 	}
 	return p
-}
-
-// ------------------------------------------------------------------ stock
-
-type stockKey struct{ store, variant int64 }
-
-// StockShortage is one entry of the INSUFFICIENT_STOCK details.
-type StockShortage struct {
-	VariantID int64  `json:"variantId"`
-	SKU       string `json:"sku"`
-	Available int    `json:"available"`
-	Requested int    `json:"requested"`
-}
-
-// lockStock locks every touched inventory row in (store, variant) order
-// and checks that no decrement goes below zero. Deterministic lock order
-// keeps concurrent checkouts and edits deadlock-free (PHASE1_DESIGN §4.4).
-// It returns the keys to move, in lock order.
-func lockStock(ctx context.Context, tx tenancy.TenantTx, deltas map[stockKey]int, skus map[int64]string) ([]stockKey, error) {
-	keys := make([]stockKey, 0, len(deltas))
-	for k, d := range deltas {
-		if d != 0 {
-			keys = append(keys, k)
-		}
-	}
-	sort.Slice(keys, func(a, b int) bool {
-		if keys[a].store != keys[b].store {
-			return keys[a].store < keys[b].store
-		}
-		return keys[a].variant < keys[b].variant
-	})
-	have := map[stockKey]int{}
-	for i := 0; i < len(keys); {
-		j := i
-		var vids []int64
-		for ; j < len(keys) && keys[j].store == keys[i].store; j++ {
-			vids = append(vids, keys[j].variant)
-		}
-		q, err := inventory.LockRows(ctx, tx, keys[i].store, vids)
-		if err != nil {
-			return nil, err
-		}
-		for v, n := range q {
-			have[stockKey{keys[i].store, v}] = n
-		}
-		i = j
-	}
-	var short []StockShortage
-	for _, k := range keys {
-		if d := deltas[k]; d < 0 && have[k]+d < 0 {
-			short = append(short, StockShortage{VariantID: k.variant, SKU: skus[k.variant], Available: have[k], Requested: -d})
-		}
-	}
-	if len(short) > 0 {
-		msg := fmt.Sprintf("Insufficient stock for %s. Available: %d, requested: %d.", short[0].SKU, short[0].Available, short[0].Requested)
-		return nil, apperr.Conflict(apperr.CodeInsufficientStock, msg).WithDetails(map[string]any{"items": short})
-	}
-	return keys, nil
-}
-
-// moveStock applies locked deltas and writes one ledger row per key.
-func moveStock(ctx context.Context, tx tenancy.TenantTx, keys []stockKey, deltas map[stockKey]int, reason string, ref inventory.Ref, userID int64) error {
-	for _, k := range keys {
-		if _, err := inventory.Move(ctx, tx, k.store, k.variant, deltas[k], reason, ref, userID); err != nil {
-			if errors.Is(err, inventory.ErrInsufficient) {
-				return apperr.Conflict(apperr.CodeInsufficientStock, "Insufficient stock.")
-			}
-			return err
-		}
-	}
-	return nil
-}
-
-// applyStock is lockStock followed by moveStock.
-func applyStock(ctx context.Context, tx tenancy.TenantTx, deltas map[stockKey]int, skus map[int64]string, reason string, ref inventory.Ref, userID int64) error {
-	keys, err := lockStock(ctx, tx, deltas, skus)
-	if err != nil {
-		return err
-	}
-	return moveStock(ctx, tx, keys, deltas, reason, ref, userID)
 }
 
 // --------------------------------------------------------------- helpers

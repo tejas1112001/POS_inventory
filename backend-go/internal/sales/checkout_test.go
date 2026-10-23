@@ -113,33 +113,6 @@ func TestPay(t *testing.T) {
 	require.Equal(t, "Paid", p.status, "a free sale is paid")
 }
 
-func TestParseDate(t *testing.T) {
-	loc, err := time.LoadLocation("Asia/Kolkata")
-	require.NoError(t, err)
-	now := time.Date(2026, 10, 20, 20, 0, 0, 0, time.UTC) // 01:30 on the 21st in Kolkata
-
-	got, err := parseDate("", loc, now)
-	require.NoError(t, err)
-	require.Equal(t, now, got)
-
-	got, err = parseDate("2026-10-21", loc, now)
-	require.NoError(t, err)
-	require.Equal(t, now, got, "today in the tenant's zone means now")
-
-	got, err = parseDate("2026-10-01", loc, now)
-	require.NoError(t, err)
-	require.Equal(t, time.Date(2026, 10, 1, 0, 0, 0, 0, loc), got)
-
-	got, err = parseDate("2026-10-20T10:00:00Z", loc, now)
-	require.NoError(t, err)
-	require.True(t, got.Equal(time.Date(2026, 10, 20, 10, 0, 0, 0, time.UTC)))
-
-	_, err = parseDate("2026-12-01", loc, now)
-	require.Error(t, err, "future")
-	_, err = parseDate("01/10/2026", loc, now)
-	require.Error(t, err)
-}
-
 func TestBound(t *testing.T) {
 	loc := time.UTC
 	from, err := bound("2026-10-01", loc, false)

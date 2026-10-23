@@ -9,10 +9,8 @@ package sales
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -22,7 +20,9 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/apperr"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/audit"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/auth"
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/docdate"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/httpx"
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/idempotency"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/inventory"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/money"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/tenancy"
@@ -31,9 +31,9 @@ import (
 const (
 	maxReturnLines = 500
 	maxReasonLen   = 500
-	// returnHashPrefix keeps an Idempotency-Key used for a sale from
+	// returnHashScope keeps an Idempotency-Key used for a sale from
 	// replaying as a return (both share the idempotency_keys table).
-	returnHashPrefix = "POST /api/sales/returns\n"
+	returnHashScope = "POST /api/sales/returns\n"
 )
 
 // returnItemIn is one line of AddSalesReturn.jsx. orderItemId is new and
@@ -489,20 +489,18 @@ const (
 
 // createReturn is POST /api/sales/returns.
 func (a *API) createReturn(w http.ResponseWriter, r *http.Request) {
-	key, err := idempotencyKey(r)
+	key, err := idempotency.Key(r)
 	if err != nil {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	h := sha256.New()
-	_, _ = io.WriteString(h, returnHashPrefix)
-	r.Body = hashingBody{io.TeeReader(r.Body, h), r.Body}
+	hash := idempotency.Hash(r, returnHashScope)
 	var in returnIn
 	if err := httpx.DecodeJSON(r, &in); err != nil {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	sum := h.Sum(nil)
+	sum := hash()
 	c, err := validateReturn(in)
 	if err != nil {
 		httpx.WriteError(w, r, err)
@@ -515,15 +513,14 @@ func (a *API) createReturn(w http.ResponseWriter, r *http.Request) {
 	}
 	now := a.d.Now()
 	var (
-		out    ReturnJSON
-		stored []byte
-		again  *replay
+		out   ReturnJSON
+		again *idempotency.Replay
 	)
 	err = a.rw(r.Context(), tenant(r), func(tx tenancy.TenantTx) error {
 		ctx := r.Context()
 		if key != "" {
 			var err error
-			if again, err = claimKey(ctx, tx, p.UserID, key, sum); err != nil || again != nil {
+			if again, err = idempotency.Claim(ctx, tx, p.UserID, key, sum); err != nil || again != nil {
 				return err
 			}
 		}
@@ -531,7 +528,7 @@ func (a *API) createReturn(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
-		date, err := parseDate(c.date, s.loc, now)
+		date, err := docdate.Parse(c.date, s.loc, now)
 		if err != nil {
 			return err
 		}
@@ -572,13 +569,13 @@ func (a *API) createReturn(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		total, tax := decimal.Zero, decimal.Zero
-		deltas := map[stockKey]int{}
+		deltas := map[inventory.Key]int{}
 		for _, x := range rows {
 			total, tax = total.Add(x.subtotal), tax.Add(x.tax)
-			deltas[stockKey{storeID, x.variantID}] += int(x.qty)
+			deltas[inventory.Key{Store: storeID, Variant: x.variantID}] += int(x.qty)
 		}
 		pm := pay(total, c.paid, nil, currency)
-		keys, err := lockStock(ctx, tx, deltas, nil)
+		keys, _, err := inventory.Lock(ctx, tx, deltas, nil)
 		if err != nil {
 			return err
 		}
@@ -597,7 +594,7 @@ func (a *API) createReturn(w http.ResponseWriter, r *http.Request) {
 				return err
 			}
 		}
-		if err := moveStock(ctx, tx, keys, deltas, inventory.ReasonReturn, inventory.Ref{Type: "sale_return", ID: id}, p.UserID); err != nil {
+		if err := inventory.Apply(ctx, tx, keys, deltas, inventory.ReasonReturn, inventory.Ref{Type: "sale_return", ID: id}, p.UserID); err != nil {
 			return err
 		}
 		after := map[string]any{"reference": ref, "total": total, "lines": len(rows), "store_id": storeID}
@@ -614,12 +611,7 @@ func (a *API) createReturn(w http.ResponseWriter, r *http.Request) {
 		}
 		out = l[0]
 		if key != "" {
-			if stored, err = json.Marshal(out); err != nil {
-				return err
-			}
-			if _, err := tx.Exec(ctx, qStoreKey, p.UserID, key, http.StatusCreated, string(stored)); err != nil {
-				return err
-			}
+			return idempotency.Store(ctx, tx, p.UserID, key, http.StatusCreated, out)
 		}
 		return nil
 	})
@@ -628,8 +620,7 @@ func (a *API) createReturn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if again != nil {
-		w.Header().Set("Idempotent-Replayed", "true")
-		httpx.WriteJSON(w, again.status, json.RawMessage(again.body))
+		idempotency.Write(w, again)
 		return
 	}
 	httpx.WriteJSON(w, http.StatusCreated, out)
