@@ -288,6 +288,95 @@ func TestPermanentAndTransientFailures(t *testing.T) {
 	require.Equal(t, 2, st.Attempts)
 }
 
+// TestLimitWaitsDoNotUseAttempts: mail held back by a daily limit waits
+// without using attempts, so it never goes dead while it waits, and goes
+// out once the rolling 24-hour window has room again.
+func TestLimitWaitsDoNotUseAttempts(t *testing.T) {
+	ctx := context.Background()
+	adm := admin(t)
+	// fill adds n already-sent rows (sent via `via`) to tenant l's outbox.
+	fill := func(t *testing.T, l, via string, n int) {
+		_, err := adm.Exec(ctx, `INSERT INTO `+schema(l)+`.email_outbox
+			(idempotency_key, kind, to_addr, template, template_data, status, attempts, sent_via, sent_at)
+			SELECT 'test:limit:' || g, 'test', 'filler@example.test', 'test', '{}', 'sent', 1, $1, now()
+			FROM generate_series(1, $2) g`, via, n)
+		require.NoError(t, err)
+		t.Cleanup(func() {
+			_, _ = adm.Exec(ctx, `DELETE FROM `+schema(l)+`.email_outbox WHERE idempotency_key LIKE 'test:limit:%'`)
+		})
+	}
+	// clearWindow moves every sent row of tenant l out of the 24-hour window.
+	clearWindow := func(t *testing.T, l string) {
+		_, err := adm.Exec(ctx, `UPDATE `+schema(l)+`.email_outbox SET sent_at = now() - interval '25 hours' WHERE status = 'sent'`)
+		require.NoError(t, err)
+	}
+	dueNow := func(t *testing.T, l, to string) {
+		_, err := adm.Exec(ctx, `UPDATE `+schema(l)+`.email_outbox SET next_retry_at = now() WHERE to_addr = $1`, to)
+		require.NoError(t, err)
+		_, err = adm.Exec(ctx, `UPDATE platform.mail_dispatch SET next_attempt_at = now() WHERE tenant_id = $1`, tenants[l].ID)
+		require.NoError(t, err)
+	}
+	waiting := func(s outboxState) bool {
+		return s.Status == "failed" && s.NextRetry.After(time.Now().Add(30*time.Minute))
+	}
+	// held sells with a receipt email and checks that the row waits for
+	// the limit three times over without using an attempt.
+	held := func(t *testing.T, l, tok string, p stocked, store float64, to string) {
+		t.Helper()
+		body := posSale(store, line(p, 1))
+		body["receiptEmail"] = to
+		require.Equal(t, 201, sell(t, l, tok, body, nil).Code)
+		for range 3 {
+			st := waitOutbox(t, l, to, waiting)
+			require.Equal(t, "quota", st.Class)
+			require.Equal(t, 0, st.Attempts, "a wait for a limit uses no attempt")
+			dueNow(t, l, to)
+		}
+		require.False(t, gotMail(platSrv, to))
+		require.False(t, gotMail(smtpSrv, to))
+	}
+
+	t.Run("plan limit for platform mail", func(t *testing.T) {
+		tok, _ := ownerLogin(t, "c")
+		store := storeIDs(t, "c", tok)[0]
+		p := stockedProduct(t, "c", tok, "MAIL-PLANCAP", store, 5)
+		var limit int
+		require.NoError(t, adm.QueryRow(ctx, `SELECT (p.limits->>'max_emails_per_day')::int FROM platform.plans p
+			JOIN platform.tenants t ON t.plan_id = p.id WHERE t.id = $1`, tenants["c"].ID).Scan(&limit))
+		require.Positive(t, limit)
+		fill(t, "c", "platform", limit)
+
+		to := uniqueAddr("plancap")
+		held(t, "c", tok, p, store, to)
+
+		clearWindow(t, "c")
+		dueNow(t, "c", to)
+		waitMail(t, platSrv, to)
+		st := waitOutbox(t, "c", to, func(s outboxState) bool { return s.Status == "sent" })
+		require.Equal(t, "platform", st.Via)
+		require.Equal(t, 1, st.Attempts, "only the send counts")
+	})
+
+	t.Run("tenant mailbox cap without fallback", func(t *testing.T) {
+		tok, _ := ownerLogin(t, "b")
+		prepareTenantSMTP(t, tok, map[string]any{"dailyCap": 5, "fallbackToPlatform": false})
+		t.Cleanup(func() { prepareTenantSMTP(t, tok, map[string]any{"dailyCap": 300, "fallbackToPlatform": true}) })
+		store := storeIDs(t, "b", tok)[0]
+		p := stockedProduct(t, "b", tok, "MAIL-OWNCAP", store, 5)
+		fill(t, "b", "tenant", 5)
+
+		to := uniqueAddr("owncap")
+		held(t, "b", tok, p, store, to)
+
+		clearWindow(t, "b")
+		dueNow(t, "b", to)
+		waitMail(t, smtpSrv, to)
+		st := waitOutbox(t, "b", to, func(s outboxState) bool { return s.Status == "sent" })
+		require.Equal(t, "tenant", st.Via)
+		require.Equal(t, 1, st.Attempts)
+	})
+}
+
 func linkToken(t *testing.T, m parsed, path string) string {
 	t.Helper()
 	re := regexp.MustCompile(regexp.QuoteMeta(path) + `#token=([A-Za-z0-9_-]+)`)

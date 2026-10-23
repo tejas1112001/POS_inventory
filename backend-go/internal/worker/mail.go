@@ -44,6 +44,7 @@ const (
 	attachAfterTries  = 3 // after this many attempts a receipt goes out without the PDF
 	tenantFailoverAt  = 3 // consecutive transient tenant-SMTP failures before falling back
 	platformRetryWait = time.Hour
+	limitWait         = time.Hour // re-check a daily limit; the wait uses no attempt
 )
 
 // MailConfig wires the mail jobs.
@@ -113,6 +114,13 @@ const (
 	tRetry = `UPDATE email_outbox` + retrySet
 	pRetry = `UPDATE platform.email_outbox` + retrySet
 
+	// A wait for a daily limit gives back the attempt the lease took, so
+	// held mail never runs out of attempts while it waits.
+	waitSet = ` SET status = 'failed', attempts = attempts - 1, next_retry_at = $3, last_error_class = $4, last_error = $5,
+		lease_until = NULL, leased_by = NULL WHERE id = $1 AND leased_by = $2 AND status = 'sending'`
+	tWait = `UPDATE email_outbox` + waitSet
+	pWait = `UPDATE platform.email_outbox` + waitSet
+
 	deadSet = ` SET status = 'dead', last_error_class = $3, last_error = $4, lease_until = NULL, leased_by = NULL
 		WHERE id = $1 AND leased_by = $2 AND status = 'sending'`
 	tDead = `UPDATE email_outbox` + deadSet
@@ -174,7 +182,7 @@ func lease(ctx context.Context, q querier, s scope, workerID string) ([]row, err
 
 // outcome is what happens to a row after one attempt.
 type outcome struct {
-	status     string // sent, retry, dead, cancel
+	status     string // sent, retry, wait (for a limit; no attempt used), dead, cancel
 	via        string
 	providerID string
 	class      string
@@ -228,6 +236,12 @@ func (m *Mailer) finish(ctx context.Context, q querier, s scope, r row, o outcom
 			_, err = q.Exec(ctx, tRetry, r.id, m.c.WorkerID, o.retryAt, o.class, o.detail)
 		}
 		m.c.Metrics.EmailFailed.WithLabelValues(o.class).Inc()
+	case "wait":
+		if p {
+			_, err = q.Exec(ctx, pWait, r.id, m.c.WorkerID, o.retryAt, o.class, o.detail)
+		} else {
+			_, err = q.Exec(ctx, tWait, r.id, m.c.WorkerID, o.retryAt, o.class, o.detail)
+		}
 	case "dead":
 		if p {
 			_, err = q.Exec(ctx, pDead, r.id, m.c.WorkerID, o.class, o.detail)
@@ -418,7 +432,12 @@ func (m *Mailer) deliverTenantRow(ctx context.Context, st *tenantState, r row) o
 			return errOutcome(r, err)
 		}
 	} else if r.policy == outbox.PolicyTenantThenPlatform && st.smtp != nil && st.smtpErr == nil && !st.smtp.Fallback {
-		// The tenant asked for its own mailbox only, and it is not usable.
+		// The tenant asked for its own mailbox only, and it is not usable:
+		// either its daily cap is used up (wait) or it is not ready (retry).
+		if st.smtp.Enabled && st.smtp.Status == "ok" {
+			return outcome{status: "wait", class: "quota", detail: "daily cap of the tenant mailbox reached",
+				retryAt: time.Now().Add(limitWait)}
+		}
 		return outcome{status: "retry", class: "auth", detail: "tenant SMTP is not ready and fallback is off",
 			retryAt: time.Now().Add(platformRetryWait)}
 	}
@@ -432,7 +451,7 @@ func (m *Mailer) sendPlatform(ctx context.Context, st *tenantState, r row, msg m
 		return outcome{status: "retry", class: "transient", detail: "platform SMTP is not configured", retryAt: time.Now().Add(platformRetryWait)}
 	}
 	if st.platformCap > 0 && int64(st.sentPlat) >= st.platformCap {
-		return outcome{status: "retry", class: "quota", detail: "platform email limit of the plan reached for today", retryAt: time.Now().Add(platformRetryWait)}
+		return outcome{status: "wait", class: "quota", detail: "platform email limit of the plan reached (last 24 hours)", retryAt: time.Now().Add(limitWait)}
 	}
 	msg.From = mailer.Address{Name: mailer.SanitizeName(st.biz.Name + " via " + m.c.PlatformName), Email: m.c.MailFrom}
 	if st.biz.Email != nil && mailer.ValidEmail(*st.biz.Email) {
