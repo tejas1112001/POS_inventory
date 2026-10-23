@@ -1,3 +1,73 @@
+# Phase 2 — Gate report after step 9
+
+| | |
+|---|---|
+| Date | 2026-10-23 |
+| Branch | `go-backend/phase2` (local, not pushed) |
+| Commits | `dd3ca30` mailer · `99833d4` settings + SMTP · `ae8b1b7` receipts · `12c096c` templates · `bb0aea9` worker · `3235328` Go 1.27.3 · `098fdac` gitleaks config |
+| Status | **Stopped after step 9** as asked. Nothing from step 10 on is built |
+
+## 1. What was built
+
+| Area | Outputs |
+|---|---|
+| Mailer | go-mail v0.8.1. Control characters refused in every address, name, subject and header; allow-listed headers. SSRF guard: resolve once, refuse internal ranges (incl. IPv4-mapped and `SMTP_DENY_CIDRS`), dial the checked IP, TLS still checks the host name. Tenant ports 465/587 only, TLS 1.2+. Classified errors |
+| Settings | Tenant migration 00005. `GET/PUT /api/settings` (business profile, currency, number format, time zone, tax, discount cap, invoice prefix, receipt header/footer). `GET/PUT/DELETE /api/settings/email`: password write-only, envelope-encrypted, bound to the tenant ID. `POST /api/settings/email/test` |
+| Receipts | Tenant migration 00006. One receipt per sale version; A4 PDF (maroto v2.4.3, Noto Sans) with CGST/SGST or IGST summary and a VOID banner. `GET /api/sales/{id}/receipt` (renders on demand, 5 s cap), `POST …/receipt/resend` (202, 5 per address per day). Sale responses carry `receiptUrl` |
+| Templates | English-only receipt, password reset, staff invite and welcome emails, HTML and text. Tenant text is data, never template source |
+| Worker | River v0.49.0 in schema `river` (platform migration 00004). Per-tenant outbox delivery (lease, `SKIP LOCKED`, `leased_by` guard, no SMTP inside a transaction); tenant SMTP with fallback to "<Business> via <Platform>"; backoff and dead letter; platform outbox; receipt pre-render. Nightly ledger check, POS lock sweep every 5 min, idempotency key cleanup hourly. `/readyz` reports `jobs` |
+
+## 2. Checks
+
+- **Gate commands, all green on Go 1.27.3:** gofmt, `go mod tidy -diff`, vet, `constsql`, golangci-lint (both build modes), govulncheck, gitleaks (branch commits), unit and integration tests. **280 test cases pass in the integration build (171 in the unit build), 0 fail, 0 skipped**, fresh run (`-count=1`). govulncheck still lists the unreachable `x/crypto/openpgp` advisory from step 8.
+- **Isolation:** every authenticated tenant route (**81**, was 73) rejects another tenant's token on 2 foreign hosts. Another tenant's or another biller's receipt gives 404 for download and resend. An SMTP password ciphertext copied into another tenant does not decrypt.
+- **SMTP safety:** hosts that resolve to cloud metadata, private, IPv4-mapped loopback or mixed public/private addresses are refused before connecting. CR/LF in recipients, names and subjects is refused. Test-send limits return 429.
+- **Delivery:** end to end through an in-process STARTTLS tenant server and a platform relay: PDF attached, From/Reply-To, fallback on 535, dead letter on 550, retry on 451, working reset and invite links, welcome emails, leases respected, an expired lease recovered.
+- **Dev stack smoke, HTTPS through Caddy:** image rebuilt on the Go 1.27.3 base. `migrate platform up` added River's tables (platform version 4); `migrate tenants up` moved `demo-shop` from 4 to 6; drift matches. `/readyz` said `jobs: fail` before the migration and `ready` after. A POS sale with a receipt email returned `receiptUrl`; the PDF downloaded (₹, CGST/SGST, India time; 401 without a token) and the email reached Mailpit from "Demo Shop via POS Dev" with the PDF. A resend to a new address followed at once by a void gave a version 2 PDF with the VOID banner. The resend's first attempt saw the newer version and retried; about 80 s later it went out with the VOID PDF.
+- **Not shown:** CI has never run (nothing pushed). The race detector can't run on this machine (no C compiler). Devanagari text was not tested (see §3).
+
+## 3. Differences from the design (please confirm)
+
+| Topic | Built | Why |
+|---|---|---|
+| PDF spike, fonts | No spike; Noto Sans only. **Names typed in Devanagari will not render correctly in PDFs** | Your 2026-10-20 decision (English only). Later fix: a Devanagari font plus shaping, or Gotenberg (§5.6) |
+| When tenant SMTP is used | Only with status `ok`, set by a passing test send. Saving changed settings resets it to `unverified`; an auth failure sets `failing` until the next passing test | One clear rule |
+| Tenant daily cap reached | The rest goes through the platform if fallback is on (within the plan's daily email limit), otherwise it waits | Receipts still go out |
+| **Mail held by a limit** | Held mail (plan limit reached, or fallback off and tenant SMTP not usable) retries hourly and **each retry uses one of the 8 attempts**, so it goes dead after about 8 hours. Limits are a rolling 24 h, so after a burst, held receipts can die before room frees up | Not intended. Suggested fix: waits for a limit don't count as attempts. Say if you want it |
+| Test-send limits | 20/hour in total, 5/hour to other addresses | Design limited only other addresses |
+| Per-tenant burst (30/min) | Not built; daily caps only. Pace is bounded by one job per tenant and 20 rows per batch | Enough at current volume |
+| SMTP auth | PLAIN only (no LOGIN) | Gmail, Workspace, SES and Brevo accept PLAIN |
+| From alias | Not built: when the username is an address, From must equal it | Alias verification deferred |
+| Receipt pre-render | River job queued right after commit; no sweep of old `pending` receipts. A receipt whose job was lost renders on first download or email | On-demand rendering covers it |
+| Receipt email without PDF | After 3 failed renders it says "ask the store for a copy", no download link | Download needs sign-in; a customer link needs a signed token (not built) |
+| Receipt email content | Always the sale's current version at send time | An edit or void before sending changes what the customer should get |
+| Message-ID | `<tenant>.<idempotency key>@MAIL_DOMAIN` | Keys like `sale:4:receipt` repeat across tenants |
+| River tables | Own schema `river`; `pos_jobs` gets DML only; River's migrations run as `pos_owner` in `migrate platform up` | Keeps River out of `platform` and tenant schemas |
+| Ledger check | Daily at 21:00 UTC (02:30 India) | Quiet hours |
+| Dev mail | `SMTP_TLS=none` for Mailpit in dev compose; production still requires TLS | Mailpit has no TLS |
+
+## 4. Deferred
+
+- Dead-letter list and manual retry (Settings ▸ Email ▸ failed messages): no endpoint yet. Status and last error are in `GET /api/settings/email`.
+- Platform billing emails (trial/subscription ending, payment failed, grace, suspended, reactivated) → step 16. No email verification flow or announcements yet.
+- Marketing mail, consent and `List-Unsubscribe`: no marketing mail exists yet.
+- Two-worker crash-point duplicate test: Phase 3, as planned.
+- Frontend (step 19): receipt email field in POS, download/resend buttons, settings pages, SMTP status display.
+
+## 5. Fixed during this gate
+
+- **Go 1.27.2 → 1.27.3** (`3235328`): govulncheck found GO-2026-6809 (crypto/x509 trusted compromised intermediate certificates), reachable from TLS certificate checks including the tenant SMTP client. `go.mod` toolchain, Dockerfile base (pinned by digest), LIBRARIES.md and README updated, per A7 (follow patch releases).
+- **gitleaks** (`098fdac`): the branch scan failed on two test `Idempotency-Key` values in `sales_test.go`, already there at step 8 (gitleaks was not in the step 8 check list). `.gitleaks.toml` allows only that file and value pattern. The default rules also **do not detect the values in the leaked `backend/.env`**, so `make gitleaks-history` had been failing only because of those test values. A new rule flags any committed backend `.env` file, so the full-history scan fails on `backend/.env` until the rewrite, as the README says.
+
+## 6. Open items for the owner
+
+1. Push and CI still wait on the history rewrite (`20cdb92`; the leaked `backend/.env` is in `63b1c9b` and `9cff503`).
+2. Confirm the differences in §3, especially Devanagari names in PDFs and the held-mail attempts.
+3. Say "approved" for step 10 (returns) when ready.
+4. Dev only: the demo shop now also has sale `POS-INV-000004` (voided), and Mailpit holds 3 emails. The dev DB is at platform 4 / tenant 6. The step 8 `owner@demo.test` dev password is unchanged.
+
+---
+
 # Phase 2 — Gate report after step 8
 
 | | |
