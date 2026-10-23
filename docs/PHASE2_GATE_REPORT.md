@@ -1,3 +1,64 @@
+# Phase 2 — Gate report after step 10
+
+| | |
+|---|---|
+| Date | 2026-10-23 |
+| Branch | `go-backend/phase2` (local, not pushed) |
+| Commits | `d926e83` held-mail fix · `7f63b17` returns schema · `f7b5d87` refund shares · `3bef53b` step 10 returns |
+| Status | **Stopped after step 10** as asked. Nothing from step 11 on is built. Step 9 differences confirmed 2026-10-23 |
+
+## 1. What was built
+
+| Area | Outputs |
+|---|---|
+| Held mail (step 9 follow-up) | A wait for a daily limit (the plan's platform limit, or the tenant mailbox cap with fallback off) reschedules the row and gives back its attempt, so held mail never goes dead while it waits. A tenant mailbox that is not ready still uses attempts |
+| Schema | Tenant migration 00007: `sale_returns`, `return_items` (link to the sold line, snapshots, sold unit price, discount/tax/CGST/SGST/IGST shares, refund), a `sale_return` counter. `return_items` is append-only for the tenant role |
+| Returns | `POST /api/sales/returns`, `GET /api/sales/returns` (bare array unless paged, `?saleId=`). Linked returns lock the sale row, then check each sold line cumulatively; `409 RETURN_EXCEEDS_SOLD` with sold/returned/requested. Quantity > 0; store and customer from the sale; refund = the sold amount, client prices ignored; voided sales refused. Returns without a sale need `sales:price_override`. Gapless `RET-000001`; stock back through the ledger; audited; optional Idempotency-Key |
+| Sales | A sale with returns can no longer be edited or voided (`409 INVALID_STATE`); sale lines show `returnedQty` |
+
+## 2. Checks
+
+- **Gate commands, all green:** gofmt, `go mod tidy -diff`, vet, `constsql`, golangci-lint (both build modes), govulncheck (no reachable vulnerabilities), gitleaks (29 branch commits), unit and integration tests. **292 test cases pass in the integration build (175 in the unit build), 0 fail, 0 skipped**, fresh run.
+- **Isolation:** every authenticated tenant route (**83**, was 81) rejects another tenant's token on 2 foreign hosts. On tenant C, tenant A's sale ID, sold line ID and variant ID are refused (400) and A's stock and returns are untouched; C's list never shows A's returns. A's IDs were moved to a range C does not have, so the check is not a coincidence.
+- **Returns rules:** a line returned in parts (1 then 2 of 3, with a sale discount and 18 % GST) refunds exactly the line amount, tax and CGST/SGST included; a 4th unit gets 409; negative, zero and fractional quantities, a product not on the sale, another store or customer, another sale's line, an unknown or voided sale are refused; a clerk without `sales:view_all` returns only own sales, and a return without a sale needs the price override. **12 concurrent returns of 5 sold units: exactly 5 succeed**, with consecutive numbers; the ledger reconciles after each test.
+- **Mutation check:** dropping the cumulative sum, the sale row lock, or the edit/void refusal each makes a test fail (without the lock, all 12 concurrent returns went through).
+- **Held mail:** both limits are held three times over with 0 attempts used, then the mail goes out with 1 attempt; the test fails on the old code.
+- **Dev stack smoke, HTTPS through Caddy:** `migrate tenants up` moved `demo-shop` from 6 to 7; drift matches. A return in the exact shape `AddSalesReturn.jsx` posts (string IDs, `RET482913`, unit price 999) became `RET-000001` for ₹42.00 (₹40 + CGST ₹1 + SGST ₹1); stock went 0 → 1; a second return got `409 RETURN_EXCEEDS_SOLD`, editing the sale `409`; the list has `customer.name`, `product.name` and `paymentStatus`; the ledger matches stock.
+- **Not shown:** CI has never run (nothing pushed). The race detector can't run on this machine (no C compiler).
+
+## 3. Differences from the design (please confirm)
+
+| Topic | Built | Why |
+|---|---|---|
+| Edit or void after a return | Refused (`409 INVALID_STATE`) | An edit replaces the lines returns point to; a void would restock goods that already came back |
+| Refund amount | The line's share of what was charged: after its share of the sale discount, with tax, split into CGST/SGST/IGST. Cut on the running quantity, so parts add up exactly. Shipping is not refunded | "Sold price" (C-13) made precise for discounts and GST credit notes |
+| Partly paid sales | A return refunds the full line share; the sale's own paid/due do not change | Settling a refund against an unpaid balance is not designed yet |
+| Status | `Pending`/`Completed` stored as sent (default `Pending`, as before); stock goes back at once either way; no way to change it later | Unchanged behaviour (PRD §3.6) |
+| Reference | Server issues `RET-000001` from its own gapless counter; client `reference` ignored; prefix fixed | Same rule as sale numbers |
+| Matching lines | By `productId`/`variantId`, as the form sends; a product sold in several variants needs `variantId`; the same variant on two lines is taken from them in order. New optional `orderItemId` names the line exactly | The form does not send line IDs |
+| Own-only | Without `sales:view_all`, only own sales can be returned ("Sale not found"). The returns list itself is not own-only (`sales_returns:view`, unchanged) | C-10 for the sale; list contract unchanged |
+| Without a sale | Client unit price × quantity, no tax split out; store must be active; customer defaults to walk-in | C-13 requires the price override |
+| Deleted products | A sold line of a since-deleted product can still be returned; the goods go back to that variant's stock | Same as void |
+| `paid` | Missing = refunded in full; `0` kept; above the total capped; payment status computed | Same as sales (C-04); the old code turned `0` into the total |
+| List response | Old flat fields plus nested `customer`/`product`, `paymentStatus`, `tax`, `currency`, `saleReference`, `storeName`, per-line tax shares; images are signed-in URLs | `SalesReturnList.jsx` reads the nested fields (it fails on today's backend) |
+| New error code | `409 RETURN_EXCEEDS_SOLD` with details (added to API_CONTRACT §1) | The form needs to show what is left |
+
+## 4. Deferred
+
+- Return receipt / credit note PDF and email.
+- Changing a return's status or refund payment after creation (no `PUT`).
+- Reports (step 13) and the dashboard (step 14) must net returns out of sales.
+- Frontend (step 19): `AddSalesReturn.jsx` should send `orderItemId`, show what is left (`returnedQty`), handle `409 RETURN_EXCEEDS_SOLD`, and stop sending a reference and unit prices for linked returns.
+
+## 5. Open items for the owner
+
+1. Push and CI still wait on the history rewrite (`20cdb92`; the leaked `backend/.env` is in `63b1c9b` and `9cff503`).
+2. Confirm the differences in §3, especially refusing edit/void after a return and the partly-paid case.
+3. Say "approved" for step 11 (purchases) when ready.
+4. Dev only: the demo shop now also has sale `POS-INV-000005` and return `RET-000001`; the dev DB is at tenant version 7.
+
+---
+
 # Phase 2 — Gate report after step 9
 
 | | |
