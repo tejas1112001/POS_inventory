@@ -1,0 +1,19 @@
+# gitleaks config: the default rules plus narrow allowlists for known
+# false positives. Keep each entry tied to one file and one value pattern.
+
+[extend]
+useDefault = true
+
+# The default rules don't recognise the values in the leaked backend/.env
+# (P0-1), so flag the file itself. This keeps `make gitleaks-history` failing
+# until the history rewrite removes it, and catches any backend .env commit.
+[[rules]]
+id = "backend-dotenv-file"
+description = "A backend .env file is committed"
+path = '''^(backend|backend-go)/(.*/)?\.env$'''
+
+[[allowlists]]
+description = "Idempotency-Key header values in the sales isolation test are not secrets"
+condition = "AND"
+paths = ['''^backend-go/test/isolation/sales_test\.go$''']
+regexes = ['''^pos-7f9c2b1e-000[0-9]$''']
