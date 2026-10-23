@@ -38,7 +38,7 @@ $P migrate drift
 
 ## Requirements
 
-- Go 1.27.2 (`go.mod` pins the toolchain)
+- Go 1.27.3 (`go.mod` pins the toolchain)
 - Docker with Compose (dev stack and integration tests)
 - GNU make
 

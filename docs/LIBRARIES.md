@@ -10,7 +10,7 @@
 
 | Need | Choice | Version | Notes |
 |---|---|---|---|
-| Language | Go | **1.27.2** (`go 1.27`, `toolchain go1.27.2`) | Current stable per go.dev. The brief's 1.23 is out of security support |
+| Language | Go | **1.27.3** (`go 1.27`, `toolchain go1.27.3`) | Current stable per go.dev; 1.27.3 fixes GO-2026-6809 (crypto/x509). The brief's 1.23 is out of security support |
 | Database | PostgreSQL | **18.x** (latest minor at deploy) | Need ≥ 16 for `GRANT … WITH INHERIT FALSE, SET TRUE`. Extensions: `citext`, `pg_trgm`, `pg_stat_statements` |
 | Reverse proxy / TLS | Caddy 2 (+ DNS provider module) | latest 2.x at build | Automatic ACME incl. DNS-01 wildcard and on-demand TLS (custom domains later). Alternatives: Traefik (fine, label-heavy config), Nginx + certbot (manual renewal glue) |
 | Container base | `gcr.io/distroless/static-debian12:nonroot` | pinned by digest | No shell, nonroot, CGO-free binary |
