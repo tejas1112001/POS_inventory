@@ -72,7 +72,7 @@ func TestStockAdjustmentsAtomicWithLedger(t *testing.T) {
 	// A variant with no stock row in the store: addition creates it,
 	// subtraction finds nothing to take.
 	vp := createProduct(t, "a", tok, map[string]any{"name": "Socks", "productType": "variable", "variants": []map[string]any{
-		{"sku": "SOCK-S", "price": "50"}, {"sku": "SOCK-M", "price": "50"}}})
+		{"sku": "ADJ-SOCK-S", "price": "50"}, {"sku": "ADJ-SOCK-M", "price": "50"}}})
 	require.Equal(t, 201, vp.Code, vp.Raw)
 	sock := vp.Body["ProductVariants"].([]any)[1].(map[string]any)["id"].(float64)
 	require.Equal(t, 409, postAdjustment(t, "a", tok, adjust(sock, store, "Subtraction", 1), nil).Code)

@@ -57,7 +57,7 @@ func TestPurchaseCreateReceiveOnceAndShape(t *testing.T) {
 	sup := createSupplier(t, "a", tok, "Bulk Traders A")
 	p := stockedProduct(t, "a", tok, "PUR-SINGLE", main, 2)
 	vp := createProduct(t, "a", tok, map[string]any{"name": "Kurta", "productType": "variable", "variants": []map[string]any{
-		{"sku": "KURTA-S", "price": "500"}, {"sku": "KURTA-M", "price": "500"}}})
+		{"sku": "PUR-KURTA-S", "price": "500"}, {"sku": "PUR-KURTA-M", "price": "500"}}})
 	require.Equal(t, 201, vp.Code, vp.Raw)
 	vs := vp.Body["ProductVariants"].([]any)
 	second := vs[1].(map[string]any)["id"].(float64)
@@ -146,7 +146,7 @@ func TestPurchaseApproveValidationAndStates(t *testing.T) {
 	sup := createSupplier(t, "a", tok, "Approve Traders A")
 	p := stockedProduct(t, "a", tok, "PUR-APPR", store, 0)
 	vp := createProduct(t, "a", tok, map[string]any{"name": "Shirt", "productType": "variable", "variants": []map[string]any{
-		{"sku": "SHIRT-S", "price": "300"}, {"sku": "SHIRT-M", "price": "300"}}})
+		{"sku": "PUR-SHIRT-S", "price": "300"}, {"sku": "PUR-SHIRT-M", "price": "300"}}})
 	require.Equal(t, 201, vp.Code, vp.Raw)
 
 	// Receiving needs purchases:approve, at creation and later.
