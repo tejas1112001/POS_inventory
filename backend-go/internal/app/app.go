@@ -18,6 +18,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/adjustments"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/auth"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/authtoken"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/buildinfo"
@@ -280,6 +281,7 @@ func (a *App) tenantAPI(cfg *config.Config, log *slog.Logger, network httpx.Netw
 	fileSvc := files.NewService(storage, a.sessions, planSvc, log)
 	productAPI := products.New(products.Deps{Sessions: a.sessions, Files: fileSvc, Plans: planSvc, MaxRows: cfg.MaxUnpagedRows})
 	purchaseAPI := purchases.New(purchases.Deps{Sessions: a.sessions, MaxRows: cfg.MaxUnpagedRows})
+	adjustmentAPI := adjustments.New(adjustments.Deps{Sessions: a.sessions, MaxRows: cfg.MaxUnpagedRows})
 	salesAPI := sales.New(sales.Deps{Sessions: a.sessions, MaxRows: cfg.MaxUnpagedRows,
 		OnReceipt: func(ctx context.Context, t tenancy.Tenant, receiptID int64) {
 			if a.worker != nil {
@@ -296,7 +298,7 @@ func (a *App) tenantAPI(cfg *config.Config, log *slog.Logger, network httpx.Netw
 	api := tenantapi.New(tenantapi.Deps{
 		Auth: authSvc, Users: users.NewService(a.sessions, authSvc, hasher, planSvc, cfg.MaxUnpagedRows),
 		States: states, Signer: signer, Sessions: a.sessions, Network: network, Metrics: a.metrics, MaxRows: cfg.MaxUnpagedRows,
-		Modules: []interface{ Mount(*rbac.Router) }{a.catalog, productAPI, salesAPI, purchaseAPI, settingsAPI, receiptAPI},
+		Modules: []interface{ Mount(*rbac.Router) }{a.catalog, productAPI, salesAPI, purchaseAPI, adjustmentAPI, settingsAPI, receiptAPI},
 	})
 	return api, authSvc, nil
 }
