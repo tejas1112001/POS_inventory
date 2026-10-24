@@ -33,6 +33,7 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/platform"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/products"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/provisioning"
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/purchases"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/rbac"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/receipts"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/sales"
@@ -278,6 +279,7 @@ func (a *App) tenantAPI(cfg *config.Config, log *slog.Logger, network httpx.Netw
 	planSvc := plans.NewService(a.sessions)
 	fileSvc := files.NewService(storage, a.sessions, planSvc, log)
 	productAPI := products.New(products.Deps{Sessions: a.sessions, Files: fileSvc, Plans: planSvc, MaxRows: cfg.MaxUnpagedRows})
+	purchaseAPI := purchases.New(purchases.Deps{Sessions: a.sessions, MaxRows: cfg.MaxUnpagedRows})
 	salesAPI := sales.New(sales.Deps{Sessions: a.sessions, MaxRows: cfg.MaxUnpagedRows,
 		OnReceipt: func(ctx context.Context, t tenancy.Tenant, receiptID int64) {
 			if a.worker != nil {
@@ -294,7 +296,7 @@ func (a *App) tenantAPI(cfg *config.Config, log *slog.Logger, network httpx.Netw
 	api := tenantapi.New(tenantapi.Deps{
 		Auth: authSvc, Users: users.NewService(a.sessions, authSvc, hasher, planSvc, cfg.MaxUnpagedRows),
 		States: states, Signer: signer, Sessions: a.sessions, Network: network, Metrics: a.metrics, MaxRows: cfg.MaxUnpagedRows,
-		Modules: []interface{ Mount(*rbac.Router) }{a.catalog, productAPI, salesAPI, settingsAPI, receiptAPI},
+		Modules: []interface{ Mount(*rbac.Router) }{a.catalog, productAPI, salesAPI, purchaseAPI, settingsAPI, receiptAPI},
 	})
 	return api, authSvc, nil
 }
