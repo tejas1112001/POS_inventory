@@ -2,6 +2,8 @@ package billing
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -20,6 +22,7 @@ type Fake struct {
 	PayBase string // checkout links: PayBase + subscription ID
 	mu      sync.Mutex
 	seq     atomic.Int64
+	run     string
 	subs    map[string]*Subscription
 	cancels map[string]bool // subscription ID → at period end
 	// FailNext makes the next call return this error (tests).
@@ -31,13 +34,19 @@ func NewFake(secret []byte, payBase string) *Fake {
 	if payBase == "" {
 		payBase = "https://billing.example.invalid/pay/"
 	}
-	return &Fake{Secret: secret, PayBase: payBase, subs: map[string]*Subscription{}, cancels: map[string]bool{}}
+	var tag [3]byte
+	_, _ = rand.Read(tag[:])
+	return &Fake{Secret: secret, PayBase: payBase, run: hex.EncodeToString(tag[:]), subs: map[string]*Subscription{}, cancels: map[string]bool{}}
 }
 
 // Name implements Provider.
 func (f *Fake) Name() string { return "fake" }
 
-func (f *Fake) id(prefix string) string { return fmt.Sprintf("%s_fake%06d", prefix, f.seq.Add(1)) }
+// id is unique across restarts (the run tag): stored provider IDs are
+// unique, and a dev stack keeps them in its database.
+func (f *Fake) id(prefix string) string {
+	return fmt.Sprintf("%s_fake%s%06d", prefix, f.run, f.seq.Add(1))
+}
 
 func (f *Fake) fail() error {
 	f.mu.Lock()
