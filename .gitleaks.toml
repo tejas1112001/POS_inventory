@@ -17,3 +17,9 @@ description = "Idempotency-Key header values in the sales isolation test are not
 condition = "AND"
 paths = ['''^backend-go/test/isolation/sales_test\.go$''']
 regexes = ['''^pos-7f9c2b1e-000[0-9]$''']
+
+[[allowlists]]
+description = "The isolation suite's own webhook signing secret (a test fixture the app is configured with) is not a secret"
+condition = "AND"
+paths = ['''^backend-go/test/isolation/billing_test\.go$''']
+regexes = ['''^whsec-isolation-0123456789abcdef$''']
