@@ -316,7 +316,8 @@ func (a *App) tenantAPI(cfg *config.Config, log *slog.Logger, network httpx.Netw
 		Auth: authSvc, Users: users.NewService(a.sessions, authSvc, hasher, planSvc, cfg.MaxUnpagedRows),
 		States: states, Signer: signer, Sessions: a.sessions, Network: network, Metrics: a.metrics, MaxRows: cfg.MaxUnpagedRows,
 		LoginPerTenant: a.opts.tenantLoginLimit,
-		Modules:        []interface{ Mount(*rbac.Router) }{a.catalog, productAPI, salesAPI, purchaseAPI, adjustmentAPI, reportAPI, shopAPI, settingsAPI, receiptAPI},
+		Modules: []interface{ Mount(*rbac.Router) }{a.catalog, productAPI, salesAPI, purchaseAPI, adjustmentAPI, reportAPI, shopAPI, settingsAPI, receiptAPI,
+			&billing.TenantAPI{Svc: a.billing}},
 	})
 	return api, authSvc, nil
 }

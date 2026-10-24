@@ -518,7 +518,9 @@ func TestTenantGate(t *testing.T) {
 	require.Equal(t, 200, rf.Code, "refresh allowed on read_only")
 	cookie = refreshCookie(t, rf).Value
 	_, _ = login(t, "c", c.OwnerEmail, ownerPW) // login allowed too
-	require.Equal(t, 403, do(t, rq{method: "POST", host: c.Host, path: "/api/auth/password/forgot", body: map[string]string{"email": c.OwnerEmail}}).Code)
+	// Credential flows stay open on read_only (step 16): the owner must be
+	// able to sign in to pay.
+	require.Equal(t, 202, do(t, rq{method: "POST", host: c.Host, path: "/api/auth/password/forgot", body: map[string]string{"email": c.OwnerEmail}}).Code)
 
 	setStatus(t, "c", "suspended")
 	eventually(t, func() bool {

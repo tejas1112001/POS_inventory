@@ -207,3 +207,24 @@ func TestTenantStatus(t *testing.T) {
 		require.Equal(t, string(s), TenantStatus(s))
 	}
 }
+
+func TestBillingBanner(t *testing.T) {
+	require.Nil(t, BannerFor(Sub{Status: Active}, t0))
+	require.Nil(t, BannerFor(Sub{Status: Trialing, TrialEnd: tp(t0.Add(10 * 24 * time.Hour))}, t0), "trial far off")
+	b := BannerFor(Sub{Status: Trialing, TrialEnd: tp(t0.Add(3 * 24 * time.Hour))}, t0)
+	require.Equal(t, "info", b.Level)
+	require.True(t, b.Dismissible)
+	require.Contains(t, b.Message, "27 Oct 2026")
+	for _, s := range []Status{PastDue, Grace} {
+		b = BannerFor(Sub{Status: s, GraceEnd: tp(t0.Add(48 * time.Hour))}, t0)
+		require.Equal(t, "critical", b.Level)
+		require.False(t, b.Dismissible)
+		require.Contains(t, b.Message, "26 Oct 2026")
+	}
+	require.Equal(t, "warning", BannerFor(Sub{Status: Cancelled, PeriodEnd: tp(t0)}, t0).Level)
+	require.Equal(t, "warning", BannerFor(Sub{Status: Active, CancelAtPeriodEnd: true, PeriodEnd: tp(t0)}, t0).Level)
+	for _, s := range []Status{ReadOnly, Expired} {
+		require.Equal(t, "critical", BannerFor(Sub{Status: s}, t0).Level)
+	}
+	require.Nil(t, BannerFor(Sub{Status: Suspended}, t0), "suspended tenants cannot sign in")
+}

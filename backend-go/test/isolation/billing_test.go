@@ -439,3 +439,135 @@ func TestRemindersAreSentOnceEvenInParallel(t *testing.T) {
 	require.Equal(t, "Last day to pay for Billing bill-rem-grace", g.Header.Get("Subject"))
 	require.Contains(t, g.Text, "Pay now: https://pay.example.test/sub_rem")
 }
+
+// buyable makes sure a public plan with a provider plan ID exists.
+func buyable(t *testing.T) {
+	t.Helper()
+	_, err := admin(t).Exec(context.Background(), `INSERT INTO platform.plans (code, name, price_minor, billing_interval, trial_days,
+			limits, features, is_public, razorpay_plan_id)
+		SELECT 'pro_test', 'Pro', 49900, 'monthly', 14, limits, features, true, 'plan_fake_pro' FROM platform.plans WHERE code = 'trial'
+		ON CONFLICT (code) DO NOTHING`)
+	require.NoError(t, err)
+}
+
+func TestBillingSubscriptionViewAndBanners(t *testing.T) {
+	ctx := context.Background()
+	buyable(t)
+	l := billingTenant(t, "bill-view")
+	other := billingTenant(t, "bill-view-other")
+	setSub(t, l, `trial_end = now() + interval '3 days'`)
+	_, err := admin(t).Exec(ctx, `INSERT INTO platform.invoices (tenant_id, provider, provider_invoice_id, amount_minor, currency, status, short_url)
+		VALUES ($1, 'fake', 'inv_view_mine', 49900, 'INR', 'issued', 'https://pay.test/inv_view_mine'),
+		       ($2, 'fake', 'inv_view_theirs', 99900, 'INR', 'paid', NULL)`, tenants[l].ID, tenants[other].ID)
+	require.NoError(t, err)
+	tok, _ := ownerLogin(t, l)
+	host := tenants[l].Host
+
+	v := get(t, host, "/api/billing/subscription", tok)
+	require.Equal(t, 200, v.Code, v.Raw)
+	require.Equal(t, "trialing", v.Body["status"])
+	require.Equal(t, "trial", v.Body["plan"].(map[string]any)["code"])
+	require.Equal(t, true, v.Body["billingEnabled"])
+	require.Equal(t, false, v.Body["subscribed"])
+	u := v.Body["usage"].(map[string]any)
+	require.Equal(t, 1.0, num(u["stores"]))
+	require.Equal(t, 1.0, num(u["users"]))
+	require.Contains(t, v.Raw, "inv_view_mine")
+	require.NotContains(t, v.Raw, "inv_view_theirs", "only this tenant's invoices")
+	require.NotContains(t, v.Raw, "plan_fake_pro", "no provider IDs")
+	var codes []string
+	for _, p := range v.Body["plans"].([]any) {
+		codes = append(codes, p.(map[string]any)["code"].(string))
+	}
+	require.Contains(t, codes, "pro_test")
+	require.NotContains(t, codes, "trial", "hidden plans are not offered")
+
+	b := get(t, host, "/api/notifications/banners", tok)
+	require.Equal(t, 200, b.Code)
+	banners := list(t, b)
+	require.Len(t, banners, 1)
+	require.Equal(t, "info", banners[0]["level"])
+	require.NotNil(t, banners[0]["action"])
+
+	// Staff without billing rights: no billing data, a banner without action.
+	createUser(t, l, tok, "cashier@bill-view.test", "biller", "cashier-bill-view-1")
+	btok, _ := login(t, l, "cashier@bill-view.test", "cashier-bill-view-1")
+	require.Equal(t, 403, get(t, host, "/api/billing/subscription", btok).Code)
+	require.Equal(t, 403, do(t, rq{method: "POST", host: host, path: "/api/billing/checkout", token: btok,
+		body: map[string]any{"planCode": "pro_test"}}).Code)
+	bb := list(t, get(t, host, "/api/notifications/banners", btok))
+	require.Len(t, bb, 1)
+	require.Nil(t, bb[0]["action"])
+
+	// Another tenant sees its own state only.
+	otok, _ := ownerLogin(t, other)
+	ov := get(t, tenants[other].Host, "/api/billing/subscription", otok)
+	require.Contains(t, ov.Raw, "inv_view_theirs")
+	require.NotContains(t, ov.Raw, "inv_view_mine")
+	require.Empty(t, list(t, get(t, tenants[other].Host, "/api/notifications/banners", otok)), "its trial is not ending")
+	require.Equal(t, 401, get(t, tenants[other].Host, "/api/billing/subscription", tok).Code)
+}
+
+func TestCheckoutNeverActivatesUntilTheWebhook(t *testing.T) {
+	ctx := context.Background()
+	buyable(t)
+	l := billingTenant(t, "bill-co")
+	other := billingTenant(t, "bill-co-other")
+	otherBefore := subOf(t, other)
+	tok, _ := ownerLogin(t, l)
+	host := tenants[l].Host
+	checkout := func(plan string) resp {
+		return do(t, rq{method: "POST", host: host, path: "/api/billing/checkout", token: tok, body: map[string]any{"planCode": plan}})
+	}
+
+	require.Equal(t, 400, checkout("no_such_plan").Code)
+	require.Equal(t, 400, checkout("trial").Code, "hidden plans cannot be bought")
+
+	// The provider fails: 503 and nothing stored.
+	fake := theApp.Billing().Provider.(*billing.Fake)
+	fake.FailNext = fmt.Errorf("provider down")
+	down := checkout("pro_test")
+	require.Equal(t, 503, down.Code)
+	require.NotContains(t, down.Raw, "provider down")
+
+	c := checkout("pro_test")
+	require.Equal(t, 200, c.Code, c.Raw)
+	url := c.Body["url"].(string)
+	require.True(t, strings.HasPrefix(url, "https://billing.example.invalid/pay/sub_fake"))
+	var subID, provStatus string
+	require.NoError(t, admin(t).QueryRow(ctx, `SELECT provider_subscription_id, provider_status FROM platform.subscriptions
+		WHERE tenant_id = $1`, tenants[l].ID).Scan(&subID, &provStatus))
+	require.Equal(t, "created", provStatus)
+	s := subOf(t, l)
+	require.Equal(t, "trialing", s.Status, "checkout never activates anything")
+	require.Equal(t, otherBefore, subOf(t, other), "other tenants untouched")
+	require.Equal(t, 200, checkout("pro_test").Code, "clicking again before paying is fine")
+
+	// The verified webhook activates, on the plan the provider names.
+	require.NoError(t, admin(t).QueryRow(ctx, `SELECT provider_subscription_id FROM platform.subscriptions WHERE tenant_id = $1`,
+		tenants[l].ID).Scan(&subID))
+	require.Equal(t, 200, send(t, billing.FakeEvent{Type: billing.EvActivated, SubscriptionID: subID, PlanID: "plan_fake_pro", Status: "active"}))
+	s = subOf(t, l)
+	require.Equal(t, "active", s.Status)
+	var planCode string
+	require.NoError(t, admin(t).QueryRow(ctx, `SELECT p.code FROM platform.tenants t JOIN platform.plans p ON p.id = t.plan_id
+		WHERE t.id = $1`, tenants[l].ID).Scan(&planCode))
+	require.Equal(t, "pro_test", planCode, "the tenant's plan follows the provider")
+	conflict := checkout("pro_test")
+	require.Equal(t, 409, conflict.Code)
+	require.Equal(t, "INVALID_STATE", conflict.Body["code"])
+
+	// A read-only tenant can still pay, and nothing else.
+	ro := billingTenant(t, "bill-co-ro")
+	setSub(t, ro, `status = 'read_only'`)
+	setTenant(t, ro, `status = 'read_only'`)
+	rtok, _ := ownerLogin(t, ro)
+	eventually(t, func() bool {
+		return do(t, rq{method: "POST", host: tenants[ro].Host, path: "/api/stores", token: rtok,
+			body: map[string]any{"name": "Blocked"}}).Code == 403
+	}, "read-only applied")
+	require.Equal(t, 200, do(t, rq{method: "POST", host: tenants[ro].Host, path: "/api/billing/checkout", token: rtok,
+		body: map[string]any{"planCode": "pro_test"}}).Code)
+	require.Equal(t, 200, get(t, tenants[ro].Host, "/api/billing/subscription", rtok).Code)
+	require.Equal(t, "critical", list(t, get(t, tenants[ro].Host, "/api/notifications/banners", rtok))[0]["level"])
+}

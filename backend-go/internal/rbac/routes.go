@@ -57,8 +57,13 @@ var AllowReadOnlyList = map[string]bool{
 	"POST /api/auth/refresh": true,
 	"POST /api/auth/logout":  true,
 	"GET /api/auth/me":       true,
-	// Step 16 adds: GET /api/billing/subscription, POST /api/billing/checkout,
-	// GET /api/notifications/banners, POST /api/notifications/{id}/dismiss.
+	// Credentials, so a read-only tenant's owner can sign in to pay.
+	"POST /api/auth/password/change": true,
+	"POST /api/auth/password/forgot": true,
+	"POST /api/auth/password/reset":  true,
+	"POST /api/auth/invite/accept":   true,
+	// Billing (C-21): a read-only tenant can still pay to come back.
+	"POST /api/billing/checkout": true,
 }
 
 // Guard builds the middleware for a requirement.

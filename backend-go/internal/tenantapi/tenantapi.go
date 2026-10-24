@@ -115,10 +115,12 @@ func (a *API) Mount(api chi.Router) error {
 	rt.Handle(http.MethodPost, "/auth/logout", rbac.Public().ReadOnlyOK(), with(a.logout, a.csrf))
 	rt.Handle(http.MethodGet, "/auth/me", rbac.Authenticated().ReadOnlyOK(), a.me)
 	rt.Handle(http.MethodGet, "/auth/permissions", rbac.Authenticated(), a.permissions)
-	rt.Handle(http.MethodPost, "/auth/password/change", rbac.Authenticated(), a.passwordChange)
-	rt.Handle(http.MethodPost, "/auth/password/forgot", rbac.Public(), with(a.forgot, tokenIP))
-	rt.Handle(http.MethodPost, "/auth/password/reset", rbac.Public(), with(a.useToken("reset"), tokenIP))
-	rt.Handle(http.MethodPost, "/auth/invite/accept", rbac.Public(), with(a.useToken("invite"), tokenIP))
+	// Credential flows pass the read-only gate: a read-only tenant's owner
+	// must be able to sign in to pay (C-21).
+	rt.Handle(http.MethodPost, "/auth/password/change", rbac.Authenticated().ReadOnlyOK(), a.passwordChange)
+	rt.Handle(http.MethodPost, "/auth/password/forgot", rbac.Public().ReadOnlyOK(), with(a.forgot, tokenIP))
+	rt.Handle(http.MethodPost, "/auth/password/reset", rbac.Public().ReadOnlyOK(), with(a.useToken("reset"), tokenIP))
+	rt.Handle(http.MethodPost, "/auth/invite/accept", rbac.Public().ReadOnlyOK(), with(a.useToken("invite"), tokenIP))
 
 	// Sign-in page branding (§5.1)
 	rt.Handle(http.MethodGet, "/public/tenant-info", rbac.Public(), with(a.tenantInfo, pubIP, pubTenant))

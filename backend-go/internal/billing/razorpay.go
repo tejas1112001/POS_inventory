@@ -238,7 +238,9 @@ func (r *Razorpay) call(ctx context.Context, method, path string, body any, out 
 			case <-time.After(time.Duration(i) * 300 * time.Millisecond):
 			}
 		}
-		req, err := http.NewRequestWithContext(ctx, method, r.c.BaseURL+path, bytes.NewReader(payload))
+		// The base URL is operator configuration (api.razorpay.com by
+		// default) and path IDs are escaped: no request input picks the host.
+		req, err := http.NewRequestWithContext(ctx, method, r.c.BaseURL+path, bytes.NewReader(payload)) // #nosec G704 -- configured host
 		if err != nil {
 			return err
 		}
@@ -246,7 +248,7 @@ func (r *Razorpay) call(ctx context.Context, method, path string, body any, out 
 		if body != nil {
 			req.Header.Set("Content-Type", "application/json")
 		}
-		res, err := r.c.HTTP.Do(req)
+		res, err := r.c.HTTP.Do(req) // #nosec G704 -- configured host
 		if err != nil {
 			last = fmt.Errorf("razorpay: %s %s: %w", method, path, err) // the URL holds no credentials
 			continue
