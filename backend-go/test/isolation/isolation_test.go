@@ -120,8 +120,8 @@ func run(m *testing.M) (int, error) {
 		"DATABASE_MIGRATOR_URL": tdb.MigratorDSN.Reveal(),
 		"JWT_KEYS":              "k1:" + rk(), "PLATFORM_JWT_KEYS": "p1:" + rk(), "MASTER_KEYS": "m1:" + rk(),
 		"TRUSTED_PROXY_CIDRS": "127.0.0.1/32", "SHUTDOWN_DRAIN_DELAY": "0s",
-		"STORAGE_FS_ROOT": storageDir,
-		"SMTP_HOST":       "127.0.0.2", "SMTP_PORT": strconv.Itoa(platSrv.Port), "SMTP_TLS": "none",
+		"STORAGE_FS_ROOT": storageDir, "RAZORPAY_WEBHOOK_SECRET": webhookSecret,
+		"SMTP_HOST": "127.0.0.2", "SMTP_PORT": strconv.Itoa(platSrv.Port), "SMTP_TLS": "none",
 	})
 	if err != nil {
 		return 0, err

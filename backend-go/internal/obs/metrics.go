@@ -27,6 +27,10 @@ type Metrics struct {
 	ReceiptRender  prometheus.Histogram
 	LedgerMismatch prometheus.Counter
 	JobsFailed     *prometheus.CounterVec
+
+	// Billing (BILLING_DESIGN §4). No tenant labels.
+	WebhookSignatureFailures prometheus.Counter
+	BillingEvents            *prometheus.CounterVec
 }
 
 // NewMetrics registers the metrics on a fresh registry.
@@ -88,6 +92,14 @@ func NewMetrics() *Metrics {
 			Name: "pos_jobs_failed_total",
 			Help: "Background job runs that returned an error.",
 		}, []string{"kind"}),
+		WebhookSignatureFailures: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "pos_webhook_signature_failures_total",
+			Help: "Billing webhooks refused for a missing or invalid signature (alert).",
+		}),
+		BillingEvents: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "pos_billing_events_total",
+			Help: "Verified billing webhook events by outcome (applied, duplicate, stale, ...).",
+		}, []string{"outcome"}),
 	}
 	reg.MustRegister(
 		collectors.NewGoCollector(),
@@ -95,6 +107,7 @@ func NewMetrics() *Metrics {
 		m.HTTPRequests, m.HTTPDuration, m.RateLimited, m.SessionTampered,
 		m.ListenerUp, m.ListenerRetries,
 		m.EmailSent, m.EmailFailed, m.EmailDead, m.OutboxDepth, m.ReceiptRender, m.LedgerMismatch, m.JobsFailed,
+		m.WebhookSignatureFailures, m.BillingEvents,
 	)
 	return m
 }

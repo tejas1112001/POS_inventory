@@ -21,6 +21,7 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/adjustments"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/auth"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/authtoken"
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/billing"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/buildinfo"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/catalog"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/config"
@@ -104,6 +105,7 @@ type App struct {
 	tenant   *tenantapi.API
 	catalog  *catalog.API
 	worker   *worker.Worker
+	billing  *billing.Service
 }
 
 // New builds the app. It does not open network listeners.
@@ -185,6 +187,9 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger, opts ...Opti
 		a.closePools()
 		return nil, err
 	}
+	a.billing = &billing.Service{Sessions: a.sessions, Provider: billingProvider(cfg, log),
+		Cfg:    billing.Config{GraceDays: cfg.BillingGraceDays, TrialChargeWait: billing.DefaultConfig.TrialChargeWait},
+		MaxAge: cfg.WebhookMaxAge, Metrics: a.metrics, Log: log}
 	tenantAPI, authSvc, err := a.tenantAPI(cfg, log, network, env, storage)
 	if err != nil {
 		a.closePools()
@@ -398,8 +403,34 @@ func (a *App) platformAPI(cfg *config.Config, log *slog.Logger, network httpx.Ne
 			return authSvc.OwnerInviteLink(ctx, t, auth.Meta{IP: m.IP, UserAgent: m.UserAgent, RequestID: m.RequestID})
 		},
 	})
-	return platform.NewHTTP(svc, network, cfg.PlatformIPAllowlist, a.metrics, cfg.PublicScheme), nil
+	h := platform.NewHTTP(svc, network, cfg.PlatformIPAllowlist, a.metrics, cfg.PublicScheme)
+	if a.billing.Provider != nil {
+		h.SetWebhook(a.billing.WebhookHandler())
+	}
+	return h, nil
 }
+
+// billingProvider builds the configured provider; nil when billing is off.
+// The fake signs its webhooks with RAZORPAY_WEBHOOK_SECRET, or with a
+// random secret when none is set (then no outside webhook verifies).
+func billingProvider(cfg *config.Config, log *slog.Logger) billing.Provider {
+	switch cfg.BillingProvider {
+	case config.BillingRazorpay:
+		return billing.NewRazorpay(billing.RazorpayConfig{KeyID: cfg.RazorpayKeyID, KeySecret: cfg.RazorpayKeySecret.Reveal(),
+			WebhookSecret: cfg.RazorpayWebhookSecret.Reveal()})
+	case config.BillingFake:
+		secret := []byte(cfg.RazorpayWebhookSecret.Reveal())
+		if len(secret) == 0 {
+			secret = []byte(security.NewToken(32))
+			log.Warn("fake billing provider with a random webhook secret; set RAZORPAY_WEBHOOK_SECRET to send test webhooks")
+		}
+		return billing.NewFake(secret, "")
+	}
+	return nil
+}
+
+// Billing exposes the billing service (tests).
+func (a *App) Billing() *billing.Service { return a.billing }
 
 // Handler exposes the public HTTP handler (tests).
 func (a *App) Handler() http.Handler { return a.http.Handler }

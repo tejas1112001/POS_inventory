@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -238,4 +239,51 @@ func TestMailSettings(t *testing.T) {
 	c, err = LoadFrom(v)
 	require.NoError(t, err, "plain relay is fine in development")
 	require.Len(t, c.SMTPDenyCIDRs, 2)
+}
+
+func TestBillingConfig(t *testing.T) {
+	c, err := LoadFrom(validVars(t))
+	require.NoError(t, err)
+	require.Equal(t, BillingFake, c.BillingProvider, "fake by default outside production")
+	require.Equal(t, 7, c.BillingGraceDays)
+	require.Equal(t, 72*time.Hour, c.WebhookMaxAge)
+
+	bad := map[string]map[string]string{
+		"unknown provider": {"BILLING_PROVIDER": "stripe"},
+		"razorpay keys":    {"BILLING_PROVIDER": "razorpay", "RAZORPAY_KEY_ID": "rzp_test_x"},
+		"weak secret": {"BILLING_PROVIDER": "razorpay", "RAZORPAY_KEY_ID": "rzp_test_x", "RAZORPAY_KEY_SECRET": "abcdefghijklmnop",
+			"RAZORPAY_WEBHOOK_SECRET": "short"},
+		"placeholder secret": {"RAZORPAY_WEBHOOK_SECRET": "changeme-changeme"},
+		"grace":              {"BILLING_GRACE_DAYS": "0"},
+		"max age":            {"WEBHOOK_MAX_AGE": "10m"},
+	}
+	for name, extra := range bad {
+		v := validVars(t)
+		for k, val := range extra {
+			v[k] = val
+		}
+		_, err := LoadFrom(v)
+		require.Error(t, err, name)
+		require.NotContains(t, err.Error(), "abcdefghijklmnop", "secrets never appear in errors")
+	}
+
+	v := validVars(t)
+	v["BILLING_PROVIDER"] = "razorpay"
+	v["RAZORPAY_KEY_ID"] = "rzp_test_x"
+	v["RAZORPAY_KEY_SECRET"] = "abcdefghijklmnop"
+	v["RAZORPAY_WEBHOOK_SECRET"] = "Wh7-" + strings.Repeat("k3Zq", 5)
+	c, err = LoadFrom(v)
+	require.NoError(t, err)
+	require.Equal(t, BillingRazorpay, c.BillingProvider)
+}
+
+func TestBillingFakeRefusedInProduction(t *testing.T) {
+	v := validVars(t)
+	v["APP_ENV"] = "production"
+	v["BILLING_PROVIDER"] = "fake"
+	_, err := LoadFrom(v)
+	require.ErrorContains(t, err, "BILLING_PROVIDER=fake is not allowed in production")
+	delete(v, "BILLING_PROVIDER")
+	_, err = LoadFrom(v)
+	require.NotContains(t, err.Error(), "BILLING_PROVIDER", "production defaults to none")
 }

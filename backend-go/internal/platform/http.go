@@ -27,7 +27,17 @@ type HTTP struct {
 	allowlist []netip.Prefix
 	metrics   *obs.Metrics
 	scheme    string
+	webhook   http.Handler
 }
+
+// WebhookBodyLimit caps a billing webhook body (BILLING_DESIGN §4: 256 KiB).
+const WebhookBodyLimit = 256 << 10
+
+// SetWebhook mounts the billing provider's webhook at
+// /api/platform/webhooks/razorpay: no sign-in and no IP allowlist (the
+// provider calls it), 600 requests a minute per IP, 256 KiB bodies. The
+// handler checks the signature itself.
+func (h *HTTP) SetWebhook(wh http.Handler) { h.webhook = wh }
 
 // NewHTTP creates the platform HTTP handlers.
 func NewHTTP(svc *Service, n httpx.Network, allowlist []netip.Prefix, m *obs.Metrics, publicScheme string) *HTTP {
@@ -60,36 +70,47 @@ func (h *HTTP) byIP(r *http.Request) string { return h.net.ClientIP(r).String() 
 
 // Mount registers /api/platform/* on the admin-host router.
 func (h *HTTP) Mount(api chi.Router) {
-	api.Route("/platform", func(r chi.Router) {
-		r.Use(httpx.BodyLimit(httpx.DefaultBodyLimit), h.ipAllowlist)
-		r.Group(func(pub chi.Router) {
-			pub.With(h.limiter("platform_login", 5, time.Minute, h.byIP)).Post("/auth/login", h.login)
-			mfa := h.limiter("platform_mfa", 10, time.Minute, h.byIP)
-			pub.With(mfa).Post("/auth/mfa/verify", h.mfaVerify)
-			pub.With(mfa).Post("/auth/mfa/enroll", h.enrollStart)
-			pub.With(mfa).Post("/auth/mfa/enroll/confirm", h.enrollConfirm)
-			pub.With(mfa).Post("/auth/password/change", h.passwordChange)
-			pub.With(h.limiter("platform_refresh", 30, time.Minute, h.byIP), h.csrf).Post("/auth/refresh", h.refresh)
-			pub.With(h.csrf).Post("/auth/logout", h.logout)
+	api.Route("/platform", func(root chi.Router) {
+		if h.webhook != nil {
+			root.With(h.limiter("billing_webhook", 600, time.Minute, h.byIP), httpx.BodyLimit(WebhookBodyLimit)).
+				Post("/webhooks/razorpay", h.webhook.ServeHTTP)
+		}
+		root.Group(func(r chi.Router) {
+			h.mountConsole(r)
 		})
-		r.Group(func(p chi.Router) {
-			p.Use(h.authenticate)
-			p.Get("/me", h.me)
-			p.With(h.limiter("platform_stepup", 5, time.Minute, h.byIP)).Post("/auth/step-up", h.stepUp)
+	})
+}
 
-			p.With(h.need(PermTenantsView)).Get("/tenants", h.listTenants)
-			p.With(h.need(PermTenantsCreate)).Post("/tenants", h.createTenant)
-			p.With(h.need(PermTenantsView)).Get("/tenants/{id}", h.getTenant)
-			p.With(h.need(PermTenantsEdit)).Patch("/tenants/{id}", h.patchTenant)
-			p.With(h.need(PermTenantsEdit), h.stepUpRequired).Post("/tenants/{id}/slug", h.renameSlug)
-			p.With(h.need(PermTenantsSuspend), h.stepUpRequired).Post("/tenants/{id}/suspend", h.suspend)
-			p.With(h.need(PermTenantsSuspend), h.stepUpRequired).Post("/tenants/{id}/reactivate", h.reactivate)
-			p.With(h.need(PermTenantsDelete), h.stepUpRequired).Delete("/tenants/{id}", h.deleteTenant)
-			p.With(h.need(PermTenantsDelete), h.stepUpRequired).Post("/tenants/{id}/restore", h.restore)
-			p.With(h.need(PermTenantsCreate)).Post("/tenants/{id}/provisioning/retry", h.retry)
-			p.With(h.need(PermTenantsEdit), h.stepUpRequired).Post("/tenants/{id}/owner-invite", h.ownerInvite)
-			p.With(h.needAny(PermAuditViewAll, PermAuditViewOwn)).Get("/audit", h.audit)
-		})
+// mountConsole registers the Super Admin console API.
+func (h *HTTP) mountConsole(r chi.Router) {
+	r.Use(httpx.BodyLimit(httpx.DefaultBodyLimit), h.ipAllowlist)
+	r.Group(func(pub chi.Router) {
+		pub.With(h.limiter("platform_login", 5, time.Minute, h.byIP)).Post("/auth/login", h.login)
+		mfa := h.limiter("platform_mfa", 10, time.Minute, h.byIP)
+		pub.With(mfa).Post("/auth/mfa/verify", h.mfaVerify)
+		pub.With(mfa).Post("/auth/mfa/enroll", h.enrollStart)
+		pub.With(mfa).Post("/auth/mfa/enroll/confirm", h.enrollConfirm)
+		pub.With(mfa).Post("/auth/password/change", h.passwordChange)
+		pub.With(h.limiter("platform_refresh", 30, time.Minute, h.byIP), h.csrf).Post("/auth/refresh", h.refresh)
+		pub.With(h.csrf).Post("/auth/logout", h.logout)
+	})
+	r.Group(func(p chi.Router) {
+		p.Use(h.authenticate)
+		p.Get("/me", h.me)
+		p.With(h.limiter("platform_stepup", 5, time.Minute, h.byIP)).Post("/auth/step-up", h.stepUp)
+
+		p.With(h.need(PermTenantsView)).Get("/tenants", h.listTenants)
+		p.With(h.need(PermTenantsCreate)).Post("/tenants", h.createTenant)
+		p.With(h.need(PermTenantsView)).Get("/tenants/{id}", h.getTenant)
+		p.With(h.need(PermTenantsEdit)).Patch("/tenants/{id}", h.patchTenant)
+		p.With(h.need(PermTenantsEdit), h.stepUpRequired).Post("/tenants/{id}/slug", h.renameSlug)
+		p.With(h.need(PermTenantsSuspend), h.stepUpRequired).Post("/tenants/{id}/suspend", h.suspend)
+		p.With(h.need(PermTenantsSuspend), h.stepUpRequired).Post("/tenants/{id}/reactivate", h.reactivate)
+		p.With(h.need(PermTenantsDelete), h.stepUpRequired).Delete("/tenants/{id}", h.deleteTenant)
+		p.With(h.need(PermTenantsDelete), h.stepUpRequired).Post("/tenants/{id}/restore", h.restore)
+		p.With(h.need(PermTenantsCreate)).Post("/tenants/{id}/provisioning/retry", h.retry)
+		p.With(h.need(PermTenantsEdit), h.stepUpRequired).Post("/tenants/{id}/owner-invite", h.ownerInvite)
+		p.With(h.needAny(PermAuditViewAll, PermAuditViewOwn)).Get("/audit", h.audit)
 	})
 }
 

@@ -88,6 +88,15 @@ type Config struct {
 	SMTPDenyCIDRsRaw string         `env:"SMTP_DENY_CIDRS"`
 	SMTPDenyCIDRs    []netip.Prefix `env:"-"`
 
+	// Billing (BILLING_DESIGN): none, fake (development and test only) or
+	// razorpay. Default: fake outside production, none in production.
+	BillingProvider       string         `env:"BILLING_PROVIDER"`
+	RazorpayKeyID         string         `env:"RAZORPAY_KEY_ID"`
+	RazorpayKeySecret     secrets.Secret `env:"RAZORPAY_KEY_SECRET"`
+	RazorpayWebhookSecret secrets.Secret `env:"RAZORPAY_WEBHOOK_SECRET"`
+	BillingGraceDays      int            `env:"BILLING_GRACE_DAYS" envDefault:"7"`
+	WebhookMaxAge         time.Duration  `env:"WEBHOOK_MAX_AGE" envDefault:"72h"`
+
 	LogLevel  string `env:"LOG_LEVEL" envDefault:"info"`
 	LogFormat string `env:"LOG_FORMAT" envDefault:"json"`
 
@@ -302,6 +311,7 @@ func (c *Config) validate() error {
 	}
 
 	c.validateMail(add)
+	c.validateBilling(add)
 
 	if !c.BootstrapAdminPasswd.IsZero() && security.IsLeakedSecret(c.BootstrapAdminPasswd.Reveal()) {
 		add("BOOTSTRAP_ADMIN_PASSWORD was leaked and must not be used")
@@ -329,6 +339,49 @@ func (c *Config) validate() error {
 		return errors.New("config: " + strings.Join(errs, "; "))
 	}
 	return nil
+}
+
+// Billing providers.
+const (
+	BillingNone     = "none"
+	BillingFake     = "fake"
+	BillingRazorpay = "razorpay"
+)
+
+func (c *Config) validateBilling(add func(string, ...any)) {
+	c.BillingProvider = strings.ToLower(strings.TrimSpace(c.BillingProvider))
+	if c.BillingProvider == "" {
+		c.BillingProvider = BillingFake
+		if c.IsProduction() {
+			c.BillingProvider = BillingNone
+		}
+	}
+	secret := c.RazorpayWebhookSecret.Reveal()
+	weak := !c.RazorpayWebhookSecret.IsZero() && (len(secret) < 16 || looksLikePlaceholder(secret))
+	switch c.BillingProvider {
+	case BillingNone:
+	case BillingFake:
+		if c.IsProduction() {
+			add("BILLING_PROVIDER=fake is not allowed in production")
+		}
+		if weak {
+			add("RAZORPAY_WEBHOOK_SECRET must be at least 16 random characters")
+		}
+	case BillingRazorpay:
+		if c.RazorpayKeyID == "" || c.RazorpayKeySecret.IsZero() || c.RazorpayWebhookSecret.IsZero() {
+			add("BILLING_PROVIDER=razorpay requires RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET and RAZORPAY_WEBHOOK_SECRET")
+		} else if weak {
+			add("RAZORPAY_WEBHOOK_SECRET must be at least 16 random characters")
+		}
+	default:
+		add("BILLING_PROVIDER must be none, fake or razorpay")
+	}
+	if c.BillingGraceDays < 1 || c.BillingGraceDays > 60 {
+		add("BILLING_GRACE_DAYS must be between 1 and 60")
+	}
+	if c.WebhookMaxAge < time.Hour || c.WebhookMaxAge > 30*24*time.Hour {
+		add("WEBHOOK_MAX_AGE must be between 1h and 720h")
+	}
 }
 
 func (c *Config) validateMail(add func(string, ...any)) {
