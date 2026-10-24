@@ -337,3 +337,105 @@ func TestWebhookTouchesOnlyItsTenant(t *testing.T) {
 	require.Equal(t, "trialing", subOf(t, "a").Status, "the shared test tenants are untouched")
 	require.True(t, strings.HasPrefix(tenants[x].Host, "bill-iso-x"))
 }
+
+// setSub changes a test tenant's subscription directly (dates, status).
+func setSub(t *testing.T, l, set string, args ...any) {
+	t.Helper()
+	_, err := admin(t).Exec(context.Background(), `UPDATE platform.subscriptions SET `+set+` WHERE tenant_id = $1`,
+		append([]any{tenants[l].ID}, args...)...)
+	require.NoError(t, err)
+}
+
+func setTenant(t *testing.T, l, set string, args ...any) {
+	t.Helper()
+	_, err := admin(t).Exec(context.Background(), `UPDATE platform.tenants SET `+set+` WHERE id = $1`,
+		append([]any{tenants[l].ID}, args...)...)
+	require.NoError(t, err)
+}
+
+func TestLifecycleJob(t *testing.T) {
+	ctx := context.Background()
+	trial := billingTenant(t, "bill-job-trial")
+	setSub(t, trial, `trial_end = now() - interval '1 minute'`)
+	waiting := billingTenant(t, "bill-job-wait")
+	setSub(t, waiting, `trial_end = now() - interval '1 hour', provider_subscription_id = 'sub_job_wait'`)
+	overdue := billingTenant(t, "bill-job-grace")
+	setSub(t, overdue, `status = 'grace', grace_end = now() - interval '1 minute'`)
+	setTenant(t, overdue, `status = 'grace'`)
+	inGrace := billingTenant(t, "bill-job-ingrace")
+	setSub(t, inGrace, `status = 'past_due', grace_end = now() + interval '2 days'`)
+	setTenant(t, inGrace, `status = 'past_due'`)
+	ended := billingTenant(t, "bill-job-cxl")
+	setSub(t, ended, `status = 'cancelled', current_period_end = now() - interval '1 minute'`)
+	setTenant(t, ended, `status = 'cancelled'`)
+	held := billingTenant(t, "bill-job-held")
+	setSub(t, held, `trial_end = now() - interval '1 minute'`)
+	setTenant(t, held, `status = 'suspended', suspension_source = 'admin', suspend_reason = 'Review'`)
+
+	svc := theApp.Billing()
+	_, err := svc.RunLifecycle(ctx)
+	require.NoError(t, err)
+	_, err = svc.RunLifecycle(ctx)
+	require.NoError(t, err, "a second run is harmless")
+
+	s := subOf(t, trial)
+	require.Equal(t, []string{"read_only", "read_only"}, []string{s.Status, s.Tenant}, "unpaid trial: read-only")
+	require.Equal(t, "trialing", subOf(t, waiting).Status, "a provider-backed trial waits for its first charge")
+	s = subOf(t, overdue)
+	require.Equal(t, []string{"suspended", "suspended", "billing"}, []string{s.Status, s.Tenant, s.Source})
+	require.Equal(t, 1, notices(t, overdue)["suspended"])
+	require.Equal(t, "past_due", subOf(t, inGrace).Status, "grace still running")
+	s = subOf(t, ended)
+	require.Equal(t, []string{"read_only", "read_only"}, []string{s.Status, s.Tenant}, "cancelled period over")
+	s = subOf(t, held)
+	require.Equal(t, []string{"read_only", "suspended", "admin"}, []string{s.Status, s.Tenant, s.Source}, "an admin suspension stays")
+
+	var audits int
+	require.NoError(t, admin(t).QueryRow(ctx, `SELECT count(*) FROM platform.platform_audit_log
+		WHERE target_tenant = $1 AND actor_email = 'system:billing' AND action = 'billing.lifecycle'`, tenants[overdue].ID).Scan(&audits))
+	require.Equal(t, 1, audits, "changed once")
+	// A suspended tenant can no longer sign in; a read-only one can, but not write.
+	require.Equal(t, 403, do(t, rq{method: "POST", host: tenants[overdue].Host, path: "/api/auth/login",
+		body: map[string]any{"email": tenants[overdue].OwnerEmail, "password": "whatever-password-1"}}).Code)
+}
+
+func TestRemindersAreSentOnceEvenInParallel(t *testing.T) {
+	ctx := context.Background()
+	trial := billingTenant(t, "bill-rem-trial")
+	setSub(t, trial, `trial_end = now() + interval '5 days'`)
+	setTenant(t, trial, `billing_email = 'accounts@bill-rem-trial.test'`)
+	grace := billingTenant(t, "bill-rem-grace")
+	setSub(t, grace, `status = 'grace', grace_end = now() + interval '12 hours', checkout_short_url = 'https://pay.example.test/sub_rem'`)
+	setTenant(t, grace, `status = 'grace', billing_email = 'accounts@bill-rem-grace.test'`)
+	ending := billingTenant(t, "bill-rem-end")
+	setSub(t, ending, `status = 'cancelled', current_period_end = now() + interval '2 days'`)
+	setTenant(t, ending, `status = 'cancelled'`)
+
+	svc := theApp.Billing()
+	var wg sync.WaitGroup
+	for range 4 {
+		wg.Go(func() {
+			_, err := svc.RunReminders(ctx)
+			require.NoError(t, err)
+		})
+	}
+	wg.Wait()
+	n, err := svc.RunReminders(ctx)
+	require.NoError(t, err)
+	require.Zero(t, n, "nothing new on a later run")
+	require.Equal(t, map[string]int{"trial_ending_7": 1}, notices(t, trial))
+	require.Equal(t, map[string]int{"grace_ending": 1}, notices(t, grace))
+	require.Equal(t, map[string]int{"subscription_ending_3": 1}, notices(t, ending))
+	var outbox int
+	require.NoError(t, admin(t).QueryRow(ctx, `SELECT count(*) FROM platform.email_outbox WHERE template = 'billing_notice'
+		AND template_data->>'tenant_id' = ANY($1)`, []string{tenants[trial].ID, tenants[grace].ID, tenants[ending].ID}).Scan(&outbox))
+	require.Equal(t, 3, outbox, "one email per notice")
+
+	// They go to the billing contact by platform mail, with the pay link.
+	m := waitMail(t, platSrv, "accounts@bill-rem-trial.test")
+	require.Equal(t, "Your Test trial for Billing bill-rem-trial ends in 7 days", m.Header.Get("Subject"))
+	require.Contains(t, m.Text, "http://bill-rem-trial.pos.test")
+	g := waitMail(t, platSrv, "accounts@bill-rem-grace.test")
+	require.Equal(t, "Last day to pay for Billing bill-rem-grace", g.Header.Get("Subject"))
+	require.Contains(t, g.Text, "Pay now: https://pay.example.test/sub_rem")
+}

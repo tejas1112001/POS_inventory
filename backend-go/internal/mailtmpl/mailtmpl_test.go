@@ -112,3 +112,50 @@ func TestWelcomeEmail(t *testing.T) {
 	require.Contains(t, r.Text, "Sign in with the password you already set.")
 	require.NotContains(t, r.HTML, "accept-invite")
 }
+
+func TestBillingNotices(t *testing.T) {
+	base := BillingNotice{TenantName: "Asha General Stores", PlatformName: "POS Cloud", Date: "31 Oct 2026",
+		TenantURL: "https://asha.pos.test", PayURL: "https://rzp.io/i/abc123"}
+	kinds := map[string]string{
+		"trial_ending_7":        "Your POS Cloud trial for Asha General Stores ends in 7 days",
+		"trial_ending_1":        "Your POS Cloud trial for Asha General Stores ends in 1 day",
+		"subscription_ending_3": "Your POS Cloud subscription for Asha General Stores ends in 3 days",
+		"payment_failed":        "Payment failed for Asha General Stores",
+		"grace_ending":          "Last day to pay for Asha General Stores",
+		"suspended":             "Asha General Stores is suspended",
+		"reactivated":           "Asha General Stores is active again",
+		"renewal_success":       "Payment received for Asha General Stores",
+	}
+	for kind, subj := range kinds {
+		d := base
+		d.Kind = kind
+		r, err := RenderBillingNotice(d)
+		require.NoError(t, err, kind)
+		require.Equal(t, subj, r.Subject, kind)
+		checkSafe(t, r)
+	}
+	d := base
+	d.Kind = "payment_failed"
+	r, err := RenderBillingNotice(d)
+	require.NoError(t, err)
+	golden(t, "billing_payment_failed", r)
+	require.Contains(t, r.Text, "Pay now: https://rzp.io/i/abc123")
+
+	// Suspended without a payment link: no sign-in link (nobody can sign in).
+	d.Kind, d.PayURL = "suspended", ""
+	r, err = RenderBillingNotice(d)
+	require.NoError(t, err)
+	require.NotContains(t, r.Text, "https://asha.pos.test")
+	require.Contains(t, r.Text, "Reply to this email")
+
+	_, err = RenderBillingNotice(BillingNotice{Kind: "free_money"})
+	require.Error(t, err)
+
+	h := base
+	h.Kind, h.TenantName, h.PayURL = "suspended", hostile, "javascript:alert(1)"
+	r, err = RenderBillingNotice(h)
+	require.NoError(t, err)
+	checkSafe(t, r)
+	require.NotContains(t, r.Text+r.HTML, "javascript:", "only http(s) links")
+	golden(t, "billing_hostile", r)
+}

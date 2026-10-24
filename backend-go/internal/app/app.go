@@ -338,8 +338,11 @@ func (a *App) newWorker(cfg *config.Config, log *slog.Logger, env *secrets.Envel
 		log.Warn("SMTP_HOST is not set: platform mail stays queued")
 	}
 	guard, roots := a.tenantMailGuard(), a.opts.mailRoots
+	jobsBilling := *a.billing // same settings, on the jobs pool
+	jobsBilling.Sessions = jobs
 	w, err := worker.New(worker.Config{
-		Pool: a.jobsPool, Registry: a.registry, Receipts: rcpt, Log: log,
+		Billing: &jobsBilling,
+		Pool:    a.jobsPool, Registry: a.registry, Receipts: rcpt, Log: log,
 		RunJobs: cfg.Mode != "api", SweepInterval: a.opts.sweepInterval,
 		Mail: worker.MailConfig{
 			Jobs: jobs, Registry: a.registry, Envelope: env, Receipts: rcpt, Plans: plans.NewService(jobs),

@@ -14,6 +14,7 @@ import (
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 	"github.com/riverqueue/river/rivertype"
 
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/billing"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/receipts"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/tenancy"
 )
@@ -94,6 +95,8 @@ const (
 	JobPOSLockSweep       = "pos_lock_sweep"
 	JobIdempotencyCleanup = "idempotency_cleanup"
 	JobLedgerReconcile    = "ledger_reconcile"
+	JobBillingLifecycle   = "billing_lifecycle"
+	JobBillingReminders   = "billing_reminders"
 )
 
 // ---------------------------------------------------------------- workers
@@ -162,6 +165,19 @@ func (k *maintenanceWorker) Work(ctx context.Context, job *river.Job[maintenance
 		}
 	case JobLedgerReconcile:
 		_, err = m.ReconcileLedgers(ctx)
+	case JobBillingLifecycle, JobBillingReminders:
+		if k.w.cfg.Billing == nil || k.w.cfg.Billing.Provider == nil {
+			return nil
+		}
+		var n int
+		if job.Args.Job == JobBillingLifecycle {
+			n, err = k.w.cfg.Billing.RunLifecycle(ctx)
+		} else {
+			n, err = k.w.cfg.Billing.RunReminders(ctx)
+		}
+		if n > 0 {
+			k.w.cfg.Log.InfoContext(ctx, "billing job", slog.String("job", job.Args.Job), slog.Int("rows", n))
+		}
 	default:
 		return nil
 	}
@@ -198,6 +214,9 @@ type Config struct {
 	RunJobs bool
 	// SweepInterval is the mail safety-net sweep (default 1 minute).
 	SweepInterval time.Duration
+	// Billing runs the lifecycle (hourly) and reminder (daily) jobs; nil
+	// or without a provider when billing is off.
+	Billing *billing.Service
 }
 
 // Worker owns the River client and the job implementations.
@@ -248,6 +267,8 @@ func New(cfg Config) (*Worker, error) {
 			periodic(JobPOSLockSweep, river.PeriodicInterval(5*time.Minute), false),
 			periodic(JobIdempotencyCleanup, river.PeriodicInterval(time.Hour), true),
 			periodic(JobLedgerReconcile, dailyAt{hour: 21, minute: 0}, false), // 02:30 in India
+			periodic(JobBillingLifecycle, river.PeriodicInterval(time.Hour), true),
+			periodic(JobBillingReminders, dailyAt{hour: 3, minute: 30}, false), // BILLING_NOTIFY_HOUR: 09:00 in India
 		}
 	}
 	client, err := river.NewClient(riverpgxv5.New(cfg.Pool), rc)

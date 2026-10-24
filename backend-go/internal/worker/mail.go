@@ -22,6 +22,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/apperr"
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/billing"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/files"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/mailer"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/mailtmpl"
@@ -703,6 +704,69 @@ func (m *Mailer) DeliverPlatform(ctx context.Context) error {
 	return nil
 }
 
+type billingData struct {
+	TenantID  string `json:"tenant_id"`
+	Kind      string `json:"kind"`
+	TrialEnd  string `json:"trial_end"`
+	GraceEnd  string `json:"grace_end"`
+	PeriodEnd string `json:"period_end"`
+	PayURL    string `json:"pay_url"`
+}
+
+// noticeDate picks the date a notice is about, as "02 Jan 2006" (UTC).
+func (d billingData) noticeDate() string {
+	v := d.PeriodEnd
+	switch {
+	case strings.HasPrefix(d.Kind, "trial_ending"):
+		v = d.TrialEnd
+	case d.Kind == billing.NoticePaymentFailed || d.Kind == billing.NoticeGraceEnding:
+		v = d.GraceEnd
+	}
+	t, err := time.Parse(time.RFC3339, v)
+	if err != nil {
+		return ""
+	}
+	return t.UTC().Format("02 Jan 2006")
+}
+
+// deliverBillingNotice sends a billing notice by platform mail to the
+// tenant's billing contact (BILLING_DESIGN §6).
+func (m *Mailer) deliverBillingNotice(ctx context.Context, r row) outcome {
+	var d billingData
+	if err := json.Unmarshal(r.data, &d); err != nil {
+		return outcome{status: "dead", class: "permanent", detail: "bad billing notice data"}
+	}
+	t, err := m.c.Registry.ByID(ctx, d.TenantID)
+	if err != nil {
+		if e, ok := apperr.As(err); ok && e.Kind == apperr.KindNotFound {
+			return outcome{status: "cancel", detail: "tenant gone"}
+		}
+		return outcome{status: "retry", class: "transient", detail: "registry lookup failed", retryAt: time.Now().Add(backoff(r.attempts))}
+	}
+	rendered, err := mailtmpl.RenderBillingNotice(mailtmpl.BillingNotice{Kind: d.Kind, TenantName: t.Name,
+		PlatformName: m.c.PlatformName, Date: d.noticeDate(), PayURL: d.PayURL, TenantURL: m.tenantURL(t)})
+	if err != nil {
+		return outcome{status: "dead", class: "permanent", detail: "template failed"}
+	}
+	if !refreshPlatform(ctx, m, r) {
+		return outcome{status: "cancel", detail: "lease lost"}
+	}
+	name := ""
+	if r.toName != nil {
+		name = *r.toName
+	}
+	id, err := m.c.Platform.Send(ctx, mailer.Message{
+		From:    mailer.Address{Name: mailer.SanitizeName(m.c.PlatformName), Email: m.c.MailFrom},
+		To:      []mailer.Address{{Name: mailer.SanitizeName(name), Email: r.to}},
+		Subject: rendered.Subject, TextBody: rendered.Text, HTMLBody: rendered.HTML,
+		MessageID: m.messageID("platform", r.key),
+	})
+	if err != nil {
+		return errOutcome(r, err)
+	}
+	return outcome{status: "sent", via: "platform", providerID: id}
+}
+
 type welcomeData struct {
 	TenantID  string `json:"tenant_id"`
 	TenantURL string `json:"tenant_url"`
@@ -715,7 +779,11 @@ func (m *Mailer) deliverPlatformRow(ctx context.Context, r row) outcome {
 	if m.c.Platform == nil {
 		return outcome{status: "retry", class: "transient", detail: "platform SMTP is not configured", retryAt: time.Now().Add(platformRetryWait)}
 	}
-	if r.template != "tenant_welcome" {
+	switch r.template {
+	case "tenant_welcome":
+	case billing.NoticeTemplate:
+		return m.deliverBillingNotice(ctx, r)
+	default:
 		return outcome{status: "dead", class: "permanent", detail: "unknown template " + keySafe.ReplaceAllString(r.template, "?")}
 	}
 	var d welcomeData

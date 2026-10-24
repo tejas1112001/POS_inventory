@@ -324,7 +324,7 @@ func (s *Service) apply(ctx context.Context, tx tenancy.PlatformTx, ev Event, no
 		return "", "", err
 	}
 	for _, n := range res.Notices {
-		if err := Notify(ctx, tx, r.tenantID, n, noticeData(res.Sub, ev)); err != nil {
+		if _, err := Notify(ctx, tx, r.tenantID, n, noticeData(res.Sub, ev)); err != nil {
 			return "", "", err
 		}
 	}
@@ -372,42 +372,62 @@ func Audit(ctx context.Context, tx tenancy.PlatformTx, e AuditEntry) error {
 // NoticeTemplate is the platform outbox template for billing notices.
 const NoticeTemplate = "billing_notice"
 
+// payLink is where an overdue tenant can pay without signing in: the
+// newest unpaid invoice's link, else the subscription's checkout link
+// (which one Razorpay honours for a halted subscription is R1).
+const qPayLink = `SELECT coalesce(
+		(SELECT short_url FROM platform.invoices WHERE tenant_id = $1 AND status IN ('issued','partially_paid')
+			AND short_url IS NOT NULL ORDER BY created_at DESC LIMIT 1),
+		(SELECT checkout_short_url FROM platform.subscriptions WHERE tenant_id = $1), '')`
+
+var needsPayLink = map[string]bool{NoticePaymentFailed: true, NoticeGraceEnding: true, NoticeSuspended: true}
+
 // Notify records a notice once per (tenant, kind, period key) and queues
 // its email to the tenant's billing contact (or owner) in the same
-// transaction (BILLING_DESIGN §6). A second call is a no-op.
-func Notify(ctx context.Context, tx tenancy.PlatformTx, tenantID string, n Notice, data map[string]any) error {
+// transaction (BILLING_DESIGN §6). It reports whether the notice is new;
+// a second call is a no-op.
+func Notify(ctx context.Context, tx tenancy.PlatformTx, tenantID string, n Notice, data map[string]any) (bool, error) {
 	var logID int64
 	err := tx.QueryRow(ctx, `INSERT INTO platform.notification_log (tenant_id, kind, period_key) VALUES ($1, $2, $3)
 		ON CONFLICT (tenant_id, kind, period_key) DO NOTHING RETURNING id`, tenantID, n.Kind, clip(n.PeriodKey, 100)).Scan(&logID)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil // already sent
+		return false, nil // already sent
 	}
 	if err != nil {
-		return err
+		return false, err
 	}
 	var to, name string
 	if err := tx.QueryRow(ctx, `SELECT coalesce(billing_email, owner_email)::text, name FROM platform.tenants WHERE id = $1`, tenantID).
 		Scan(&to, &name); err != nil {
-		return err
+		return false, err
 	}
 	if data == nil {
 		data = map[string]any{}
 	}
+	if _, ok := data["pay_url"]; !ok && needsPayLink[n.Kind] {
+		var link string
+		if err := tx.QueryRow(ctx, qPayLink, tenantID).Scan(&link); err != nil {
+			return false, err
+		}
+		if link != "" {
+			data["pay_url"] = link
+		}
+	}
 	data["tenant_id"], data["kind"], data["period_key"] = tenantID, n.Kind, n.PeriodKey
 	body, err := json.Marshal(data)
 	if err != nil {
-		return err
+		return false, err
 	}
 	var outboxID int64
 	err = tx.QueryRow(ctx, `INSERT INTO platform.email_outbox (idempotency_key, kind, to_addr, to_name, template, template_data)
 		VALUES ($1, 'platform_notice', $2, $3, $4, $5) ON CONFLICT (idempotency_key) DO NOTHING RETURNING id`,
 		clip("billing:"+tenantID+":"+n.Kind+":"+n.PeriodKey, 200), to, name, NoticeTemplate, string(body)).Scan(&outboxID)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil
+		return true, nil
 	}
 	if err != nil {
-		return err
+		return false, err
 	}
 	_, err = tx.Exec(ctx, `UPDATE platform.notification_log SET outbox_id = $2 WHERE id = $1`, logID, outboxID)
-	return err
+	return true, err
 }
