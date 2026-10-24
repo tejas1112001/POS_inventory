@@ -395,18 +395,19 @@ func (s *Service) transition(ctx context.Context, a Actor, id, action string, fr
 var liveStatuses = []string{"trialing", "active", "past_due", "grace", "read_only", "cancelled"}
 
 const (
-	qSuspend = `UPDATE platform.tenants SET status = 'suspended', suspended_at = now(), suspend_reason = $2, updated_at = now() WHERE id = $1`
+	qSuspend = `UPDATE platform.tenants SET status = 'suspended', suspended_at = now(), suspend_reason = $2,
+		suspension_source = 'admin', updated_at = now() WHERE id = $1`
 	// Back to trialing while the trial still runs, otherwise active.
 	qReactivate = `UPDATE platform.tenants t SET status = CASE WHEN EXISTS (
 			SELECT 1 FROM platform.subscriptions s WHERE s.tenant_id = t.id AND s.status = 'trialing' AND s.trial_end > now())
 		THEN 'trialing' ELSE 'active' END,
-		suspended_at = NULL, suspend_reason = NULL, updated_at = now()
+		suspended_at = NULL, suspend_reason = NULL, suspension_source = NULL, updated_at = now()
 		WHERE t.id = $1 AND $2::text IS NOT NULL` // $2 (reason) is unused here
 	qDelete = `UPDATE platform.tenants SET status = 'pending_deletion', deletion_requested_at = now(),
 		suspend_reason = coalesce(NULLIF($2, ''), suspend_reason), updated_at = now() WHERE id = $1`
 	// Restoring lands in suspended; reactivation is a separate, deliberate step.
-	qRestore = `UPDATE platform.tenants SET status = 'suspended', deletion_requested_at = NULL, purge_after = NULL,
-		updated_at = now() WHERE id = $1 AND $2::text IS NOT NULL` // $2 unused
+	qRestore = `UPDATE platform.tenants SET status = 'suspended', suspension_source = 'admin', deletion_requested_at = NULL,
+		purge_after = NULL, updated_at = now() WHERE id = $1 AND $2::text IS NOT NULL` // $2 unused
 )
 
 // Suspend blocks every login of a tenant (Q-11).
