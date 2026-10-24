@@ -100,3 +100,25 @@ func DropScratch(ctx context.Context, dsn secrets.Secret, s tenancy.ScratchSchem
 	}
 	return dropSchemaAndRole(ctx, dsn, s.String(), s.Role())
 }
+
+// DropOldSchema drops a schema a replace restore set aside.
+func DropOldSchema(ctx context.Context, dsn secrets.Secret, o tenancy.OldSchema) error {
+	if o.IsZero() {
+		return tenancy.ErrInvalidName
+	}
+	cfg, err := ownerConfig(dsn)
+	if err != nil {
+		return err
+	}
+	owner, err := pgx.ConnectConfig(ctx, cfg)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = owner.Close(context.WithoutCancel(ctx)) }()
+	return db.DropSchemaCascade(ctx, owner, o.String())
+}
+
+// OwnerConnConfig is a migrator connection acting as pos_owner with only
+// pg_catalog on the search_path (every name schema-qualified): the replace
+// restore's transaction.
+func OwnerConnConfig(dsn secrets.Secret) (*pgx.ConnConfig, error) { return ownerConfig(dsn) }

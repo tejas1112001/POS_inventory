@@ -1,0 +1,38 @@
+Subject: Asha General Stores was restored from a backup
+
+--- text ---
+Your shop was restored from a backup
+
+Hello,
+
+The data of Asha General Stores was restored from a backup taken on 24 Oct 2026 18:30 UTC. Changes made after that time are not in the shop.
+
+Everyone has been signed out and must sign in again. Invitations and password-reset links sent before the restore no longer work; send them again.
+
+Sign in: https://asha.pos.test
+
+-- 
+Sent by POS Cloud about the account of Asha General Stores.
+
+--- html ---
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Asha General Stores was restored from a backup</title></head>
+<body style="margin:0;padding:24px;background:#f4f4f5;font-family:Arial,Helvetica,sans-serif;color:#18181b;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:8px;">
+<tr><td style="padding:24px;">
+
+
+<h1 style="font-size:20px;margin:0 0 16px;">Your shop was restored from a backup</h1>
+<p style="margin:0 0 8px;">Hello,</p>
+<p style="margin:0 0 12px;">The data of Asha General Stores was restored from a backup taken on 24 Oct 2026 18:30 UTC. Changes made after that time are not in the shop.</p>
+<p style="margin:0 0 12px;">Everyone has been signed out and must sign in again. Invitations and password-reset links sent before the restore no longer work; send them again.</p>
+<p style="margin:4px 0 16px;"><a href="https://asha.pos.test" style="display:inline-block;padding:10px 18px;background:#4f46e5;color:#ffffff;text-decoration:none;border-radius:6px;">Sign in</a></p>
+<p style="margin:0 0 16px;font-size:12px;word-break:break-all;color:#52525b;">https://asha.pos.test</p>
+
+
+</td></tr>
+</table>
+<p style="max-width:560px;margin:16px auto 0;font-size:12px;color:#71717a;text-align:center;">Sent by POS Cloud about the account of Asha General Stores.</p>
+</body>
+</html>

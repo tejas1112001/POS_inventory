@@ -186,9 +186,9 @@ func (r *Restorer) Queued(ctx context.Context, limit int) ([]uuid.UUID, error) {
 	return out, rows.Err()
 }
 
-// Queue records a restore and returns its ID (posctl; the API uses
+// Enqueue records a restore and returns its ID (posctl; the API uses
 // RequestRestore in its own transaction).
-func (r *Restorer) Queue(ctx context.Context, tenantID string, exportID uuid.UUID, mode, requestedBy string) (uuid.UUID, error) {
+func (r *Restorer) Enqueue(ctx context.Context, tenantID string, exportID uuid.UUID, mode, requestedBy string) (uuid.UUID, error) {
 	pc, err := r.platform()
 	if err != nil {
 		return uuid.Nil, err
@@ -264,6 +264,9 @@ func (r *Restorer) run(ctx context.Context, id uuid.UUID, swap func(context.Cont
 	var dropAfter, droppedAt *time.Time
 	now := r.now()
 	switch {
+	case rep.OldSchema != "": // replace: the set-aside live schema is kept
+		t := now.Add(OldSchemaKeep)
+		dropAfter = &t
 	case rep.Kept:
 		keep := r.KeepFor
 		if keep <= 0 {
@@ -273,10 +276,6 @@ func (r *Restorer) run(ctx context.Context, id uuid.UUID, swap func(context.Cont
 		dropAfter = &t
 	case rep.Scratch != "":
 		droppedAt = &now
-	}
-	if rep.OldSchema != "" {
-		t := now.Add(30 * 24 * time.Hour)
-		dropAfter = &t
 	}
 	result, _ := json.Marshal(rep)
 	var scratch, old *string

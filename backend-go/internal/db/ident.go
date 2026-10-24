@@ -344,6 +344,104 @@ func ResetIdentity(ctx context.Context, c Execer, schema, table, column string) 
 	return err
 }
 
+// RenameSchema renames a schema (replace restore). Run as its owner.
+func RenameSchema(ctx context.Context, c Execer, from, to string) error {
+	f, err := quote(from)
+	if err != nil {
+		return err
+	}
+	t, err := quote(to)
+	if err != nil {
+		return err
+	}
+	_, err = c.Exec(ctx, "ALTER SCHEMA "+f+" RENAME TO "+t)
+	return err
+}
+
+// RevokeTenantPrivileges undoes GrantTenantPrivileges for a role on a
+// schema (a scratch role after its schema became the live one).
+func RevokeTenantPrivileges(ctx context.Context, c Execer, schema, role, owner string) error {
+	s, err := quote(schema)
+	if err != nil {
+		return err
+	}
+	r, err := quote(role)
+	if err != nil {
+		return err
+	}
+	o, err := quote(owner)
+	if err != nil {
+		return err
+	}
+	for _, q := range []string{
+		"REVOKE ALL ON ALL TABLES IN SCHEMA " + s + " FROM " + r,
+		"REVOKE ALL ON ALL SEQUENCES IN SCHEMA " + s + " FROM " + r,
+		"ALTER DEFAULT PRIVILEGES FOR ROLE " + o + " IN SCHEMA " + s + " REVOKE ALL ON TABLES FROM " + r,
+		"ALTER DEFAULT PRIVILEGES FOR ROLE " + o + " IN SCHEMA " + s + " REVOKE ALL ON SEQUENCES FROM " + r,
+		"REVOKE ALL ON SCHEMA " + s + " FROM " + r,
+		"REVOKE ALL ON SCHEMA extensions FROM " + r,
+	} {
+		if _, err := c.Exec(ctx, q); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// RevokeTenantSessions ends every session of a restored tenant (OPERATIONS
+// §6.3 step 8): token_version + 1 kills outstanding access tokens, and an
+// auth_changed / role_changed notification per user and role drops the
+// cached states. refresh_tokens and auth_tokens are already empty (never
+// exported). Run in the replace transaction.
+func RevokeTenantSessions(ctx context.Context, c Execer, schema, tenantID string) error {
+	if !tenantIDPattern.MatchString(tenantID) || schema != "t_"+tenantID {
+		return ErrBadIdentifier
+	}
+	s, err := quote(schema)
+	if err != nil {
+		return err
+	}
+	for _, q := range []string{
+		"UPDATE " + s + ".users SET token_version = token_version + 1",
+		"SELECT count(pg_notify('auth_changed', $1 || ':' || id)) FROM " + s + ".users",
+		"SELECT count(pg_notify('role_changed', $1 || ':' || id)) FROM " + s + ".roles",
+	} {
+		args := []any{}
+		if q[0] == 'S' {
+			args = append(args, tenantID)
+		}
+		if _, err := c.Exec(ctx, q, args...); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// CancelRestoredOutbox cancels emails that were waiting at export time: the
+// shop's state moved back, and resending could duplicate what was sent
+// after the export.
+func CancelRestoredOutbox(ctx context.Context, c Execer, schema string) error {
+	s, err := quote(schema)
+	if err != nil {
+		return err
+	}
+	_, err = c.Exec(ctx, "UPDATE "+s+".email_outbox SET status = 'cancelled', last_error = 'Restored from a backup; not sent again.'"+
+		" WHERE status IN ('pending','sending','failed')")
+	return err
+}
+
+// WriteTenantAudit adds a system entry to a tenant's audit log from an
+// operator path (replace restore).
+func WriteTenantAudit(ctx context.Context, c Execer, schema, action, entity, entityID string, after []byte) error {
+	s, err := quote(schema)
+	if err != nil {
+		return err
+	}
+	_, err = c.Exec(ctx, "INSERT INTO "+s+".audit_log (actor_type, action, entity, entity_id, after) VALUES ('system', $1, $2, $3, $4)",
+		action, entity, entityID, after)
+	return err
+}
+
 // ExecEmbeddedMigration runs one statement from a migration file embedded in
 // the binary (db/migrations). Used only by the tenant runner's --dry-run,
 // inside a transaction that is rolled back. Never pass request data here.

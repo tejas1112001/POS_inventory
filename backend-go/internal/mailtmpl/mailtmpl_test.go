@@ -159,3 +159,22 @@ func TestBillingNotices(t *testing.T) {
 	require.NotContains(t, r.Text+r.HTML, "javascript:", "only http(s) links")
 	golden(t, "billing_hostile", r)
 }
+
+func TestRestoreNotice(t *testing.T) {
+	r, err := RenderRestoreNotice(RestoreNotice{TenantName: "Asha General Stores", PlatformName: "POS Cloud",
+		BackupTime: "24 Oct 2026 18:30 UTC", TenantURL: "https://asha.pos.test"})
+	require.NoError(t, err)
+	require.Equal(t, "Asha General Stores was restored from a backup", r.Subject)
+	require.Contains(t, r.Text, "must sign in again")
+	require.Contains(t, r.Text, "https://asha.pos.test")
+	checkSafe(t, r)
+	golden(t, "restore_notice", r)
+
+	h, err := RenderRestoreNotice(RestoreNotice{TenantName: "<script>x</script>\r\nBcc: a@b", PlatformName: "P",
+		BackupTime: "now", TenantURL: "javascript:alert(1)"})
+	require.NoError(t, err)
+	checkSafe(t, h)
+	require.NotContains(t, h.HTML, "<script>")
+	require.NotContains(t, h.Subject, "\n")
+	require.NotContains(t, h.HTML, "javascript:")
+}

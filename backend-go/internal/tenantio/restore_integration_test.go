@@ -31,7 +31,7 @@ func restore(t *testing.T, s shop, exportID uuid.UUID, mode string) (tenantio.Re
 	t.Helper()
 	clock = clock.Add(time.Minute)
 	r := restorer()
-	id, err := r.Queue(context.Background(), s.ID, exportID, mode, "test")
+	id, err := r.Enqueue(context.Background(), s.ID, exportID, mode, "test")
 	require.NoError(t, err)
 	return r.Run(context.Background(), id)
 }
@@ -211,7 +211,7 @@ func TestRestoreRefusesTamperedOrForeignExports(t *testing.T) {
 	require.Contains(t, msg, "checksum")
 
 	// Another tenant's export cannot be restored as this tenant.
-	_, err = restorer().Queue(ctx, b.ID, rec3.ID, tenantio.ModeTest, "test")
+	_, err = restorer().Enqueue(ctx, b.ID, rec3.ID, tenantio.ModeTest, "test")
 	require.ErrorContains(t, err, "is not a succeeded export of tenant")
 	err = sessions.InPlatformTx(ctx, tenancy.TxOptions{Access: tenancy.ReadWrite}, func(tx tenancy.PlatformTx) error {
 		_, err := tenantio.RequestRestore(ctx, tx, b.ID, rec3.ID, tenantio.ModeTest, "test")
@@ -225,7 +225,7 @@ func TestRestoreRefusesTamperedOrForeignExports(t *testing.T) {
 	r := restorer()
 	r.Identity = other
 	clock = clock.Add(time.Minute)
-	id, err := r.Queue(ctx, a.ID, rec3.ID, tenantio.ModeTest, "test")
+	id, err := r.Enqueue(ctx, a.ID, rec3.ID, tenantio.ModeTest, "test")
 	require.NoError(t, err)
 	_, err = r.Run(ctx, id)
 	require.Error(t, err)
@@ -272,7 +272,7 @@ func TestRestoreComparisonCatchesADifference(t *testing.T) {
 		_, err := tdb.Admin(t).Exec(ctx, `UPDATE `+pgx.Identifier{s.String(), "customers"}.Sanitize()+` SET city = 'changed' WHERE name = 'Plain'`)
 		return err
 	})
-	id, err := r.Queue(ctx, a.ID, rec.ID, tenantio.ModeScratch, "test")
+	id, err := r.Enqueue(ctx, a.ID, rec.ID, tenantio.ModeScratch, "test")
 	require.NoError(t, err)
 	rep, err := r.Run(ctx, id)
 	require.ErrorIs(t, err, tenantio.ErrMismatch)

@@ -767,6 +767,54 @@ func (m *Mailer) deliverBillingNotice(ctx context.Context, r row) outcome {
 	return outcome{status: "sent", via: "platform", providerID: id}
 }
 
+// restoreData is the template data of a restore notice.
+type restoreData struct {
+	TenantID   string `json:"tenant_id"`
+	BackupTime string `json:"backup_time"` // RFC 3339
+}
+
+// deliverRestoreNotice tells the owner that the shop was restored and that
+// everyone must sign in again (OPERATIONS §6.3 step 8).
+func (m *Mailer) deliverRestoreNotice(ctx context.Context, r row) outcome {
+	var d restoreData
+	if err := json.Unmarshal(r.data, &d); err != nil {
+		return outcome{status: "dead", class: "permanent", detail: "bad restore notice data"}
+	}
+	t, err := m.c.Registry.ByID(ctx, d.TenantID)
+	if err != nil {
+		if e, ok := apperr.As(err); ok && e.Kind == apperr.KindNotFound {
+			return outcome{status: "cancel", detail: "tenant gone"}
+		}
+		return outcome{status: "retry", class: "transient", detail: "registry lookup failed", retryAt: time.Now().Add(backoff(r.attempts))}
+	}
+	when := d.BackupTime
+	if ts, err := time.Parse(time.RFC3339, d.BackupTime); err == nil {
+		when = ts.UTC().Format("02 Jan 2006 15:04") + " UTC"
+	}
+	rendered, err := mailtmpl.RenderRestoreNotice(mailtmpl.RestoreNotice{TenantName: t.Name, PlatformName: m.c.PlatformName,
+		BackupTime: when, TenantURL: m.tenantURL(t)})
+	if err != nil {
+		return outcome{status: "dead", class: "permanent", detail: "template failed"}
+	}
+	if !refreshPlatform(ctx, m, r) {
+		return outcome{status: "cancel", detail: "lease lost"}
+	}
+	name := ""
+	if r.toName != nil {
+		name = *r.toName
+	}
+	id, err := m.c.Platform.Send(ctx, mailer.Message{
+		From:    mailer.Address{Name: mailer.SanitizeName(m.c.PlatformName), Email: m.c.MailFrom},
+		To:      []mailer.Address{{Name: mailer.SanitizeName(name), Email: r.to}},
+		Subject: rendered.Subject, TextBody: rendered.Text, HTMLBody: rendered.HTML,
+		MessageID: m.messageID("platform", r.key),
+	})
+	if err != nil {
+		return errOutcome(r, err)
+	}
+	return outcome{status: "sent", via: "platform", providerID: id}
+}
+
 type welcomeData struct {
 	TenantID  string `json:"tenant_id"`
 	TenantURL string `json:"tenant_url"`
@@ -783,6 +831,8 @@ func (m *Mailer) deliverPlatformRow(ctx context.Context, r row) outcome {
 	case "tenant_welcome":
 	case billing.NoticeTemplate:
 		return m.deliverBillingNotice(ctx, r)
+	case mailtmpl.RestoreNoticeTemplate:
+		return m.deliverRestoreNotice(ctx, r)
 	default:
 		return outcome{status: "dead", class: "permanent", detail: "unknown template " + keySafe.ReplaceAllString(r.template, "?")}
 	}
