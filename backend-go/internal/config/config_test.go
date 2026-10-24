@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"filippo.io/age"
 	"github.com/stretchr/testify/require"
 )
 
@@ -286,4 +287,49 @@ func TestBillingFakeRefusedInProduction(t *testing.T) {
 	delete(v, "BILLING_PROVIDER")
 	_, err = LoadFrom(v)
 	require.NotContains(t, err.Error(), "BILLING_PROVIDER", "production defaults to none")
+}
+
+func TestExportConfig(t *testing.T) {
+	c, err := LoadFrom(validVars(t))
+	require.NoError(t, err)
+	require.False(t, c.ExportsEnabled(), "off unless configured")
+	require.Equal(t, 30, c.ReadOnlyDays)
+	require.Equal(t, 90, c.RetentionDays)
+
+	id, err := age.GenerateX25519Identity()
+	require.NoError(t, err)
+	key := "Mk-" + strings.Repeat("r8Vq", 9)
+	v := validVars(t)
+	v["EXPORT_AGE_RECIPIENT"] = id.Recipient().String()
+	v["EXPORT_MANIFEST_KEY"] = key
+	c, err = LoadFrom(v)
+	require.NoError(t, err)
+	require.True(t, c.ExportsEnabled())
+
+	for name, extra := range map[string]map[string]string{
+		"identity in posd":   {"EXPORT_AGE_IDENTITY": id.String()},
+		"recipient only":     {"EXPORT_MANIFEST_KEY": ""},
+		"key only":           {"EXPORT_AGE_RECIPIENT": ""},
+		"bad recipient":      {"EXPORT_AGE_RECIPIENT": "age1notakey"},
+		"two recipients":     {"EXPORT_AGE_RECIPIENT": id.Recipient().String() + "\n" + id.Recipient().String()},
+		"short key":          {"EXPORT_MANIFEST_KEY": "short"},
+		"read-only days":     {"READ_ONLY_DAYS": "3"},
+		"retention too soon": {"RETENTION_DAYS": "30"},
+	} {
+		bad := map[string]string{}
+		for k, val := range v {
+			bad[k] = val
+		}
+		for k, val := range extra {
+			if val == "" {
+				delete(bad, k)
+			} else {
+				bad[k] = val
+			}
+		}
+		_, err := LoadFrom(bad)
+		require.Error(t, err, name)
+		require.NotContains(t, err.Error(), key, "%s: secrets never appear in errors", name)
+		require.NotContains(t, err.Error(), id.String(), name)
+	}
 }

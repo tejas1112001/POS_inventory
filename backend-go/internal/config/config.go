@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"filippo.io/age"
 	"github.com/caarlos0/env/v11"
 
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/secrets"
@@ -96,6 +97,19 @@ type Config struct {
 	RazorpayWebhookSecret secrets.Secret `env:"RAZORPAY_WEBHOOK_SECRET"`
 	BillingGraceDays      int            `env:"BILLING_GRACE_DAYS" envDefault:"7"`
 	WebhookMaxAge         time.Duration  `env:"WEBHOOK_MAX_AGE" envDefault:"72h"`
+
+	// Tenant exports (OPERATIONS §6.2, S7): off unless both are set. The
+	// age identity (private key) is for posctl restore only; posd refuses
+	// to start with it (it must never reach the API process).
+	ExportAgeRecipientRaw string         `env:"EXPORT_AGE_RECIPIENT"`
+	ExportAgeRecipient    age.Recipient  `env:"-"`
+	ExportManifestKey     secrets.Secret `env:"EXPORT_MANIFEST_KEY"`
+	ExportAgeIdentity     secrets.Secret `env:"EXPORT_AGE_IDENTITY"`
+	// Deletion timeline (BILLING_DESIGN §3): read-only or suspended by
+	// billing for ReadOnlyDays → pending_deletion (final export); eligible
+	// for deletion RetentionDays after day 0. Nothing is dropped by a job.
+	ReadOnlyDays  int `env:"READ_ONLY_DAYS" envDefault:"30"`
+	RetentionDays int `env:"RETENTION_DAYS" envDefault:"90"`
 
 	LogLevel  string `env:"LOG_LEVEL" envDefault:"info"`
 	LogFormat string `env:"LOG_FORMAT" envDefault:"json"`
@@ -312,6 +326,7 @@ func (c *Config) validate() error {
 
 	c.validateMail(add)
 	c.validateBilling(add)
+	c.validateExports(add)
 
 	if !c.BootstrapAdminPasswd.IsZero() && security.IsLeakedSecret(c.BootstrapAdminPasswd.Reveal()) {
 		add("BOOTSTRAP_ADMIN_PASSWORD was leaked and must not be used")
@@ -381,6 +396,53 @@ func (c *Config) validateBilling(add func(string, ...any)) {
 	}
 	if c.WebhookMaxAge < time.Hour || c.WebhookMaxAge > 30*24*time.Hour {
 		add("WEBHOOK_MAX_AGE must be between 1h and 720h")
+	}
+}
+
+// ExportsEnabled reports whether tenant exports can run.
+func (c *Config) ExportsEnabled() bool { return c.ExportAgeRecipient != nil }
+
+// ParseAgeRecipient parses exactly one age recipient (age1…).
+func ParseAgeRecipient(s string) (age.Recipient, error) {
+	rs, err := age.ParseRecipients(strings.NewReader(strings.TrimSpace(s)))
+	if err != nil || len(rs) != 1 {
+		return nil, errors.New("must be one age recipient (age1…)")
+	}
+	return rs[0], nil
+}
+
+// CheckManifestKey validates EXPORT_MANIFEST_KEY (an HMAC key).
+func CheckManifestKey(k secrets.Secret) string {
+	v := k.Reveal()
+	if len(v) < 32 || looksLikePlaceholder(v) {
+		return "must be at least 32 random characters"
+	}
+	return ""
+}
+
+func (c *Config) validateExports(add func(string, ...any)) {
+	if !c.ExportAgeIdentity.IsZero() {
+		add("EXPORT_AGE_IDENTITY must not be set for posd: only posctl restore uses it")
+	}
+	hasR, hasK := strings.TrimSpace(c.ExportAgeRecipientRaw) != "", !c.ExportManifestKey.IsZero()
+	switch {
+	case hasR != hasK:
+		add("EXPORT_AGE_RECIPIENT and EXPORT_MANIFEST_KEY must be set together")
+	case hasR:
+		r, err := ParseAgeRecipient(c.ExportAgeRecipientRaw)
+		if err != nil {
+			add("EXPORT_AGE_RECIPIENT %v", err)
+		}
+		if msg := CheckManifestKey(c.ExportManifestKey); msg != "" {
+			add("EXPORT_MANIFEST_KEY %s", msg)
+		}
+		c.ExportAgeRecipient = r
+	}
+	if c.ReadOnlyDays < 7 || c.ReadOnlyDays > 365 {
+		add("READ_ONLY_DAYS must be between 7 and 365")
+	}
+	if c.RetentionDays <= c.ReadOnlyDays || c.RetentionDays > 3650 {
+		add("RETENTION_DAYS must be more than READ_ONLY_DAYS and at most 3650")
 	}
 }
 
