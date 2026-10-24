@@ -539,3 +539,61 @@ func (r *Restorer) compare(ctx context.Context, s tenancy.ScratchSchema, m Manif
 	}
 	return checks, nil
 }
+
+// Weekly restore test (OPERATIONS §6.3): one random tenant and the tenant
+// whose last successful test is oldest, among tenants with a recent
+// succeeded export.
+const qWeeklyCandidates = `WITH c AS (
+	SELECT t.id,
+	  (SELECT max(r.finished_at) FROM platform.tenant_restores r
+	    WHERE r.tenant_id = t.id AND r.mode = 'test' AND r.status = 'succeeded') AS tested
+	FROM platform.tenants t
+	WHERE t.status NOT IN ('provisioning','failed','deleted')
+	  AND EXISTS (SELECT 1 FROM platform.tenant_exports e WHERE e.tenant_id = t.id AND e.status = 'succeeded')
+)
+(SELECT id FROM c ORDER BY random() LIMIT 1)
+UNION
+(SELECT id FROM c ORDER BY tested NULLS FIRST, id LIMIT 1)`
+
+// ScheduleWeekly queues the weekly restore tests and returns their IDs. A
+// tenant with a restore already queued or running is skipped.
+func (r *Restorer) ScheduleWeekly(ctx context.Context) ([]uuid.UUID, error) {
+	tenants, err := r.weeklyCandidates(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var out []uuid.UUID
+	for _, t := range tenants {
+		id, err := r.Enqueue(ctx, t, uuid.Nil, ModeTest, "system:weekly")
+		if errors.Is(err, ErrRestoreBusy) {
+			continue
+		}
+		if err != nil {
+			return out, err
+		}
+		out = append(out, id)
+	}
+	return out, nil
+}
+
+func (r *Restorer) weeklyCandidates(ctx context.Context) ([]string, error) {
+	pc, err := r.platform()
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = pc.Close() }()
+	rows, err := pc.QueryContext(ctx, qWeeklyCandidates)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var tenants []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		tenants = append(tenants, id)
+	}
+	return tenants, rows.Err()
+}

@@ -44,6 +44,18 @@ commands:
                    [--currency INR] [--locale en-IN] [--timezone Asia/Kolkata]
   tenant retry <tenant_id> resume a failed provisioning run
   tenant reap [--older-than 15m]  fail and compensate runs stuck in provisioning
+  tenant export <tenant_id> [--files]
+                           encrypted per-tenant export to object storage (OPERATIONS §6.2);
+                           reads DATABASE_JOBS_URL, EXPORT_AGE_RECIPIENT, EXPORT_MANIFEST_KEY
+  tenant restore <tenant_id> [--export ID] [--drop]
+                           restore into a scratch schema and compare row counts and
+                           checksums (kept 7 days; --drop: a restore test)
+  tenant restore <tenant_id> --replace --confirm SLUG [--export ID]
+                           replace the live schema (tenant must be read_only); every
+                           session ends. Restores read DATABASE_MIGRATOR_URL,
+                           EXPORT_AGE_IDENTITY, EXPORT_MANIFEST_KEY
+  tenant restore-tests [--weekly]  run queued restore tests (--weekly: queue the weekly ones)
+  tenant restore-cleanup   drop kept scratch schemas and replaced schemas that are due
   bootstrap-superadmin     create the first super_admin from BOOTSTRAP_ADMIN_EMAIL,
                            BOOTSTRAP_ADMIN_PASSWORD (and optional BOOTSTRAP_ADMIN_NAME);
                            refuses if any platform user exists
@@ -93,6 +105,14 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		err = tenantRetry(ctx, cmd(2), stdout)
 	case cmd(0) == "tenant" && cmd(1) == "reap":
 		err = tenantReap(ctx, args[2:], stdout)
+	case cmd(0) == "tenant" && cmd(1) == "export":
+		err = tenantExport(ctx, args[2:], stdout)
+	case cmd(0) == "tenant" && cmd(1) == "restore":
+		err = tenantRestore(ctx, args[2:], stdout)
+	case cmd(0) == "tenant" && cmd(1) == "restore-tests":
+		err = tenantRestoreTests(ctx, args[2:], stdout)
+	case cmd(0) == "tenant" && cmd(1) == "restore-cleanup":
+		err = tenantRestoreCleanup(ctx, stdout)
 	case cmd(0) == "bootstrap-superadmin":
 		err = bootstrapSuperAdmin(ctx, stdout)
 	default:
