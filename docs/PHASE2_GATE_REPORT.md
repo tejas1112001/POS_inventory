@@ -1,3 +1,66 @@
+# Phase 2 — Gate report after step 15
+
+| | |
+|---|---|
+| Date | 2026-10-24 |
+| Branch | `go-backend/phase2` (local, not pushed) |
+| Commits | `ba04896` PDF fonts · `01a9fb1` reports · `70c9096` exports · `e445333` step 14 · `50464a6` step 15 · `0476995` full-suite test fixes |
+| Status | **Stopped after step 15** as asked. Nothing from step 16 on is built. Step 12 differences and the Excel writer confirmed 2026-10-24 |
+
+## 1. What was built
+
+| Step | Outputs |
+|---|---|
+| 13 Reports and exports | `GET /api/sales/report` and `/api/purchase/report`: one row per line, old fields kept, newest first, date/store/product/customer/supplier filters. Sales rows are own-only without `sales:view_all`, leave out voided sales and show returns netted per line; `stockQty` is real stock (was 0). `GET /api/sales/report/export` and `/api/purchase/report/export` with `?format=xlsx\|pdf`: `reports:export` and the plan's `reports_export` feature, same scope and filters, totals row, formula-safe text, audited, never truncated |
+| 14 Dashboard | `GET /api/dashboard`, same keys (C-16): store, date and user filters, own-only without `sales:view_all`, calendar months in the tenant's time zone ("Mon YYYY", zero-filled, latest 12), top 5 products, payment cards; adds `totalReturns` and `netRevenue` |
+| 15 Public shop | `GET /api/public/shop/{slug}` plus `/products`, `/products/{id or slug}`, `/categories`, `/featured` (C-18). No sign-in; tenant from the host, store by slug only; published-in-this-store products only; public allow-list; `limit` ≤ 48 with sorting in SQL; per-IP and per-tenant rate limits; `Cache-Control` + ETag/304 |
+
+## 2. Checks
+
+- **Gate commands, all green:** gofmt, `go mod tidy -diff`, vet, `constsql`, golangci-lint (both build modes), govulncheck (no reachable vulnerabilities), gitleaks (43 branch commits), unit and integration tests. **320 test cases pass in the integration build (184 in the unit build), 0 fail, 0 skipped**, fresh run.
+- **Isolation:** every authenticated tenant route (**94**, was 89) rejects another tenant's token on 2 foreign hosts. Reports, exports and the dashboard on tenant C never contain tenant A's rows. The public shop routes take no token; C's showcase slug, product IDs and product slugs give 404 on A's host, A's lists never show C's products, and the two hosts never share an ETag.
+- **Reports and exports:** own-only lines for billers (and in a clerk's export), returns netted, voided and cancelled rows left out by default, filters and paging, bad dates 400; the purchase report and its export need `purchases:view`; billers cannot export; a plan without `reports_export` gets `403 FEATURE_NOT_IN_PLAN`; every export writes an audit row. Excel files round-trip through our reader and were also opened with excelize outside the repo (PyPI is unreachable here, so not with openpyxl or Excel).
+- **Dashboard:** figures checked against sales dated in 2001 (a year no other test uses): totals, voided left out, returns, paid and unpaid (Partial counted), months zero-filled from the start date's month, top products; a biller's `userId` cannot widen the scope.
+- **Public shop:** only published, active products of that store; costs, barcodes, weights and stock counts never appear; discounts and stock status; sorting across the whole result; `%` in search is literal; numeric, unknown and malformed slugs look the same; a disabled showcase shows only its header; suspended tenants and plans without `public_shop` get 404, read-only tenants keep the shop; one IP gets exactly 120 requests a minute, then 429 with `Retry-After`. Mutations (unpublished listed, suspended shown) each fail a test. The first version of the test missed the first mutation, because the hidden product had no showcase row at all; it now has a featured-but-unpublished row.
+- **Found in the full run:** tenant A had already used all three stores, so the shop test fixture moved to tenant C. The suite also signs in more than 100 times a minute and hit the per-tenant login limit; the isolation app now raises it through a test-only option (`app.WithTenantLoginLimit`), and `posd` keeps 100 a minute.
+- **Dev stack smoke, HTTPS through Caddy:** image rebuilt, no new migrations (tenant 9), drift matches. The sales report, purchase report, Excel and PDF exports (correct headers; the Excel file read back by excelize: ₹85.05 sold, ₹42.00 returned, ₹43.05 net), and the dashboard (the same totals, 12 months, "Oct 2026") all agree. After publishing Smoke Tea, the public shop served it without a token, with `Cache-Control: public, max-age=60`, an ETag and 304 on a conditional request; a numeric store ID got 404.
+- **Not shown:** CI has never run (nothing pushed). The race detector can't run on this machine (no C compiler).
+
+## 3. Differences from the design (please confirm)
+
+| Topic | Built | Why |
+|---|---|---|
+| Export endpoints | `GET /api/sales/report/export` and `/api/purchase/report/export`, `?format=xlsx\|pdf` | The design named Excel/PDF export but no routes |
+| Export size | Refused (400, asks for a shorter range) above 50,000 rows for Excel or 5,000 for PDF | An export never silently drops rows |
+| Purchase report | Also needs `purchases:view` (report and export) | Billers have `reports:view` by default; supplier costs stay hidden from them |
+| Report rows | Old fields kept; `sku` is still the old `SO-…`/`PO-…` label, the product SKU is in `itemSku`; `stockQty` is current stock; adds `returnedQty`, `returnedAmount`, `netAmount`, customer, store, status | Compatible with today's pages; the customer report page can use `customerName` instead of the brand |
+| Report defaults | Voided sales and cancelled purchases left out unless `includeVoided` / `includeCancelled` | C-11 for sales; cancelled orders are not purchases |
+| Returns without a sale | Not in the sales report (no sold line); counted in the dashboard's `totalReturns` | They refund money without a sale to attach to |
+| Dashboard payments | `totalPaid` sums every payment (was only fully paid sales); `totalUnpaid` includes Partial | C-16 called the old figures wrong |
+| Dashboard counts | Customer and product counts are master data, not filtered by user, store or date | Billers already see both lists |
+| Dashboard extras | `totalReturns`, `netRevenue` and the filters used are added | Same keys otherwise |
+| Shop visibility | Suspended and pending-deletion tenants, and plans without `public_shop`, show no shop (404); read-only and grace tenants keep it | BILLING_DESIGN §3 status rules |
+| Shop data | No store ID, exact stock counts, barcodes or weights (old fields `qty`, `totalQty`, `itemBarcode`, `weight` dropped); `inStock`/`stockStatus` kept | THREAT_MODEL §3.10; `PublicShopPage.jsx` does not use them |
+| Shop prices | `price` is the first live variant's price, `finalPrice` applies the product discount rounded to the currency; products without a live variant are not shown | As before, sorting now in SQL |
+| Shop rate limits | 120 requests a minute per IP, 3,000 per tenant | One page view makes about 4 requests; the design gave no numbers |
+| Shop caching | `Cache-Control: public, max-age=60` and a strong ETag (304) on every success | CDN-friendly, short enough for stock changes |
+| Featured and categories | Featured needs published; categories only with published products in that store | C-18 |
+
+## 4. Deferred
+
+- Frontend (step 19): `PublicShopPage.jsx` relative URLs (C-18); report pages may switch to the server exports; customer report from `customerName`; dashboard month labels now include the year.
+- Server exports of the customer and customer-due reports (the pages build them from other endpoints).
+- A CDN in front of the public shop.
+
+## 5. Open items for the owner
+
+1. Push and CI still wait on the history rewrite (`20cdb92`; the leaked `backend/.env` is in `63b1c9b` and `9cff503`).
+2. Confirm the differences in §3, especially the purchase report needing `purchases:view` and the shop rate limits.
+3. Step 16 (billing) comes next and starts with the Razorpay test-mode checks (BILLING_DESIGN §10, R1–R6), which need Razorpay test-mode keys from you. Say "approved" with those when ready.
+4. Dev only: Smoke Tea is now published in the demo shop's Main Store, so `https://demo-shop.localhost:8443/api/public/shop/main` shows it. The dev DB is still at tenant version 9.
+
+---
+
 # Phase 2 — Gate report after step 12
 
 | | |
