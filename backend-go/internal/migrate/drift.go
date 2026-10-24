@@ -196,6 +196,12 @@ func CreateTenantSchema(ctx context.Context, dsn secrets.Secret, t Target) error
 // DropTenantSchema removes a tenant's schema and role (compensation,
 // scratch schemas). Never used on live tenants without step-up (step 4+).
 func DropTenantSchema(ctx context.Context, dsn secrets.Secret, t Target) error {
+	return dropSchemaAndRole(ctx, dsn, t.Schema.String(), t.Role.String())
+}
+
+// dropSchemaAndRole drops a schema (as its owner) and then the role whose
+// only privileges were in it. Both names come from validated types.
+func dropSchemaAndRole(ctx context.Context, dsn secrets.Secret, schema, role string) error {
 	cfg, err := ownerConfig(dsn)
 	if err != nil {
 		return err
@@ -204,18 +210,18 @@ func DropTenantSchema(ctx context.Context, dsn secrets.Secret, t Target) error {
 	if err != nil {
 		return err
 	}
-	if err := db.DropSchemaCascade(ctx, owner, t.Schema.String()); err != nil {
+	if err := db.DropSchemaCascade(ctx, owner, schema); err != nil {
 		_ = owner.Close(ctx)
 		return err
 	}
 	// The role's grant on the shared extensions schema would block DROP ROLE.
 	var exists bool
-	if err := owner.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = $1)`, t.Role.String()).Scan(&exists); err != nil {
+	if err := owner.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = $1)`, role).Scan(&exists); err != nil {
 		_ = owner.Close(ctx)
 		return err
 	}
 	if exists {
-		if err := db.RevokeSchemaUsage(ctx, owner, "extensions", t.Role.String()); err != nil {
+		if err := db.RevokeSchemaUsage(ctx, owner, "extensions", role); err != nil {
 			_ = owner.Close(ctx)
 			return err
 		}
@@ -226,7 +232,7 @@ func DropTenantSchema(ctx context.Context, dsn secrets.Secret, t Target) error {
 		return err
 	}
 	defer func() { _ = mig.Close(context.WithoutCancel(ctx)) }()
-	return db.DropRole(ctx, mig, t.Role.String())
+	return db.DropRole(ctx, mig, role)
 }
 
 // ownerConfig returns a migrator config acting as pos_owner with only

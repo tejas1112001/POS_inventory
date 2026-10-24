@@ -300,6 +300,50 @@ func CopyInSQL(table string, columns []string) (string, error) {
 	return "COPY " + t + " (" + c + ") FROM STDIN WITH (FORMAT csv, HEADER MATCH)", nil
 }
 
+// TruncateTables empties tables of one schema in a single statement (a
+// restore empties the rows its migrations seeded before loading). Run as
+// the schema owner.
+func TruncateTables(ctx context.Context, c Execer, schema string, tables []string) error {
+	s, err := quote(schema)
+	if err != nil {
+		return err
+	}
+	if len(tables) == 0 {
+		return nil
+	}
+	parts := make([]string, len(tables))
+	for i, t := range tables {
+		q, err := quote(t)
+		if err != nil {
+			return err
+		}
+		parts[i] = s + "." + q
+	}
+	_, err = c.Exec(ctx, "TRUNCATE "+strings.Join(parts, ", "))
+	return err
+}
+
+// ResetIdentity moves an identity column's sequence past the largest
+// value present, so new rows after a restore get fresh IDs. Run as the
+// schema owner.
+func ResetIdentity(ctx context.Context, c Execer, schema, table, column string) error {
+	s, err := quote(schema)
+	if err != nil {
+		return err
+	}
+	t, err := quote(table)
+	if err != nil {
+		return err
+	}
+	col, err := quote(column)
+	if err != nil {
+		return err
+	}
+	_, err = c.Exec(ctx, "SELECT setval(pg_get_serial_sequence($1, $2), coalesce(max("+col+"), 0) + 1, false) FROM "+s+"."+t,
+		s+"."+t, column)
+	return err
+}
+
 // ExecEmbeddedMigration runs one statement from a migration file embedded in
 // the binary (db/migrations). Used only by the tenant runner's --dry-run,
 // inside a transaction that is rolled back. Never pass request data here.

@@ -73,6 +73,35 @@ func SnapshotConfig(dsn secrets.Secret, schema tenancy.SchemaName, role tenancy.
 	return sessionConfig(dsn, schema.SearchPath(), role.String(), app, true)
 }
 
+// ScratchConn opens a single-connection *sql.DB as pos_owner on a restore
+// scratch schema (migrations, emptying tables, sequences).
+func ScratchConn(dsn secrets.Secret, s tenancy.ScratchSchema, app string) (*sql.DB, error) {
+	if s.IsZero() {
+		return nil, tenancy.ErrInvalidName
+	}
+	return dedicated(dsn, s.SearchPath(), app)
+}
+
+// ScratchSessionConfig acts as the scratch schema's own role (login
+// pos_migrator, a member with SET): restore loads and verifies through it,
+// and it holds privileges on the scratch schema only, so a restore cannot
+// write anywhere else.
+func ScratchSessionConfig(dsn secrets.Secret, s tenancy.ScratchSchema, readOnly bool, app string) (*pgx.ConnConfig, error) {
+	if s.IsZero() {
+		return nil, tenancy.ErrInvalidName
+	}
+	return sessionConfig(dsn, s.SearchPath(), s.Role(), app, readOnly)
+}
+
+// ScratchOwnerConfig is a pgx connection as pos_owner on a scratch schema
+// (emptying seeded rows, resetting sequences after a load).
+func ScratchOwnerConfig(dsn secrets.Secret, s tenancy.ScratchSchema, app string) (*pgx.ConnConfig, error) {
+	if s.IsZero() {
+		return nil, tenancy.ErrInvalidName
+	}
+	return sessionConfig(dsn, s.SearchPath(), OwnerRole, app, false)
+}
+
 // sessionConfig is the shared builder for export and restore sessions.
 func sessionConfig(dsn secrets.Secret, searchPath, role, app string, readOnly bool) (*pgx.ConnConfig, error) {
 	cfg, err := pgx.ParseConfig(dsn.Reveal())
