@@ -31,16 +31,68 @@ type Limits struct {
 	MaxEmailsPerDay int64 `json:"max_emails_per_day"`
 }
 
-// Service reads plan limits with a small cache.
+// Feature flags (platform.plans.features, BILLING_DESIGN §2).
+const (
+	FeatureReportsExport = "reports_export"
+	FeaturePublicShop    = "public_shop"
+)
+
+// Service reads plan limits and features with a small cache.
 type Service struct {
 	sessions *tenancy.Sessions
 	cache    *tenancy.TTLCache[int64, Limits]
+	features *tenancy.TTLCache[int64, map[string]bool]
 	ttl      time.Duration
 }
 
 // NewService creates the service.
 func NewService(s *tenancy.Sessions) *Service {
-	return &Service{sessions: s, cache: tenancy.NewTTLCache[int64, Limits](), ttl: time.Minute}
+	return &Service{sessions: s, cache: tenancy.NewTTLCache[int64, Limits](),
+		features: tenancy.NewTTLCache[int64, map[string]bool](), ttl: time.Minute}
+}
+
+// Has reports whether a plan includes a feature. Plan 0 (no plan) has
+// every feature, as it has no limits; a missing or non-true flag is off.
+func (s *Service) Has(ctx context.Context, planID int64, feature string) (bool, error) {
+	if planID == 0 {
+		return true, nil
+	}
+	if f, ok := s.features.Get(planID); ok {
+		return f[feature], nil
+	}
+	var raw []byte
+	err := s.sessions.InPlatformTx(ctx, tenancy.TxOptions{Access: tenancy.ReadOnly}, func(tx tenancy.PlatformTx) error {
+		return tx.QueryRow(ctx, `SELECT features FROM platform.plans WHERE id = $1`, planID).Scan(&raw)
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return true, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	var all map[string]any
+	if err := json.Unmarshal(raw, &all); err != nil {
+		return false, err
+	}
+	f := make(map[string]bool, len(all))
+	for k, v := range all {
+		b, _ := v.(bool)
+		f[k] = b
+	}
+	s.features.Set(planID, f, s.ttl)
+	return f[feature], nil
+}
+
+// RequireFeature returns 403 FEATURE_NOT_IN_PLAN unless the plan has it.
+func (s *Service) RequireFeature(ctx context.Context, planID int64, feature, what string) error {
+	ok, err := s.Has(ctx, planID, feature)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return apperr.Forbidden(apperr.CodeFeatureNotInPlan, "Your plan does not include "+what+". Upgrade the plan to use it.")
+	}
+	return nil
 }
 
 // For returns the limits of a plan. Plan 0 (no plan) has no limits.
