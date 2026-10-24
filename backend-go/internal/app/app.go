@@ -42,6 +42,7 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/secrets"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/security"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/settings"
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/shop"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/tenancy"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/tenantapi"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/users"
@@ -284,6 +285,7 @@ func (a *App) tenantAPI(cfg *config.Config, log *slog.Logger, network httpx.Netw
 	purchaseAPI := purchases.New(purchases.Deps{Sessions: a.sessions, MaxRows: cfg.MaxUnpagedRows})
 	adjustmentAPI := adjustments.New(adjustments.Deps{Sessions: a.sessions, MaxRows: cfg.MaxUnpagedRows})
 	reportAPI := reports.New(reports.Deps{Sessions: a.sessions, Plans: planSvc, MaxRows: cfg.MaxUnpagedRows})
+	shopAPI := shop.New(shop.Deps{Sessions: a.sessions, Plans: planSvc, Network: network, Metrics: a.metrics})
 	salesAPI := sales.New(sales.Deps{Sessions: a.sessions, MaxRows: cfg.MaxUnpagedRows,
 		OnReceipt: func(ctx context.Context, t tenancy.Tenant, receiptID int64) {
 			if a.worker != nil {
@@ -300,7 +302,7 @@ func (a *App) tenantAPI(cfg *config.Config, log *slog.Logger, network httpx.Netw
 	api := tenantapi.New(tenantapi.Deps{
 		Auth: authSvc, Users: users.NewService(a.sessions, authSvc, hasher, planSvc, cfg.MaxUnpagedRows),
 		States: states, Signer: signer, Sessions: a.sessions, Network: network, Metrics: a.metrics, MaxRows: cfg.MaxUnpagedRows,
-		Modules: []interface{ Mount(*rbac.Router) }{a.catalog, productAPI, salesAPI, purchaseAPI, adjustmentAPI, reportAPI, settingsAPI, receiptAPI},
+		Modules: []interface{ Mount(*rbac.Router) }{a.catalog, productAPI, salesAPI, purchaseAPI, adjustmentAPI, reportAPI, shopAPI, settingsAPI, receiptAPI},
 	})
 	return api, authSvc, nil
 }
