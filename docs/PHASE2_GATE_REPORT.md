@@ -1,3 +1,63 @@
+# Phase 2 — Gate report after step 12
+
+| | |
+|---|---|
+| Date | 2026-10-24 |
+| Branch | `go-backend/phase2` (local, not pushed) |
+| Commits | `9eb438f` shared helpers · `ace0d45` purchases schema · `4179671` step 11 · `b2a9afb` adjustments schema · `20ffb86` step 12 · `b3652c9` test SKUs |
+| Status | **Stopped after step 12** as asked. Nothing from step 13 on is built. Step 10 differences confirmed 2026-10-23 |
+
+## 1. What was built
+
+| Step | Outputs |
+|---|---|
+| Shared helpers | Idempotency-Key handling, stock row locking and document dates moved out of sales into `idempotency`, `inventory` and `docdate`, unchanged, so purchases and adjustments use the same code |
+| 11 Purchases | Tenant migration 00008. `GET/POST /api/purchases`, `GET/PUT /api/purchases/{id}`. Every line stores its variant and store (C-09). Stock goes in once, when the purchase becomes Received, to each line's own variant and store, through the ledger, under the purchase's row lock. Receiving needs `purchases:approve`. Received and Cancelled are final (`409 INVALID_STATE`); payment and note stay editable. Totals computed here; reference unique per supplier, else a gapless `PUR-000001`; Idempotency-Key; audited (create, update, receive) |
+| 12 Stock adjustments | Tenant migration 00009 (append-only). `GET/POST /api/stock-adjustments`. The inventory row is locked; a subtraction below zero gets `409 INSUFFICIENT_STOCK`; the record, the stock change and the ledger row commit together; the stock left is recorded. Idempotency-Key; audited |
+
+## 2. Checks
+
+- **Gate commands, all green:** gofmt, `go mod tidy -diff`, vet, `constsql`, golangci-lint (both build modes), govulncheck (no reachable vulnerabilities), gitleaks (36 branch commits), unit and integration tests. **300 test cases pass in the integration build (175 in the unit build), 0 fail, 0 skipped**, fresh run.
+- **Isolation:** every authenticated tenant route (**89**, was 83) rejects another tenant's token on 2 foreign hosts. On tenant C, tenant A's purchase ID gives 404 for read and receive (A's purchase stays Pending, A's stock unchanged); A's supplier and variant IDs are refused (400); C's lists never show A's purchases or adjustments. A's IDs were moved to ranges C does not have.
+- **Purchases:** lines stock their own variant and store, not "the first variant in store 1"; `storeId` in the PUT body is ignored; received again changes nothing, back to Pending is refused; **8 concurrent receives stock once** (one `purchase.receive` audit row); approve needed at creation and later; 14 validation cases; Cancelled final; Overdue kept while due. Mutations (no row lock, Received not final, no approve check) each fail a test.
+- **Adjustments:** ledger and audit rows with every change; a refused subtraction records nothing; **12 concurrent subtractions of 5 units: exactly 5 succeed**, recording 4, 3, 2, 1, 0 left; 11 validation cases; the tenant role cannot update or delete adjustments.
+- **Dev stack smoke, HTTPS through Caddy:** `demo-shop` migrated from 7 to 9; drift matches. A purchase in the exact `AddPurchase.jsx` shape (`STW-1001`, 24 × ₹30) was created Pending (no stock change) and received by PUT: stock 1 → 25, paid ₹300 of ₹720 shown as Partial although the client sent "Paid". Back to Pending and a duplicate reference both got 409. An adjustment of −3 left 22; −500 got `409 INSUFFICIENT_STOCK`; the ledger matches stock.
+- **Found while testing:** a new test reused SKUs from the products test in the same tenant and failed only in a full run; fixed in `b3652c9`.
+- **Not shown:** CI has never run (nothing pushed). The race detector can't run on this machine (no C compiler).
+
+## 3. Differences from the design (please confirm)
+
+| Topic | Built | Why |
+|---|---|---|
+| Purchase status | Only `Ordered`, `Pending`, `Received`, `Cancelled` (was free text); missing means `Pending` | Design DDL; no stock-in without an explicit Received |
+| Cancelled | Final, like Received | A cancelled order should not come back to life; enter a new one |
+| Reference | Unique per supplier (`409`); empty gets a gapless `PUR-000001` | The same supplier invoice cannot be stocked twice; the form's field is optional |
+| `paid` on purchases | Above the total is refused (400), not capped as on sales; missing means 0 | Purchases are typed by hand; the old code also defaulted to 0 |
+| Payment status | Paid/Partial/Unpaid follow from `paid`; `Overdue` is kept only while something is due | Totals recomputed (C-09) |
+| Amounts | Optional per-line discount (up to the line amount); no purchase-level discount and no tax on purchases | The form sends neither; input tax credit is out of scope |
+| Checks | Line stores must be active; supplier and variants must not be deleted (inactive products can be bought) | Same rules as sales |
+| After creation | Status, payment and note can change; lines and totals cannot | PRD §3.10 |
+| New route | `GET /api/purchases/{id}` | Detail view |
+| Purchase response | Adds the capitalised `Supplier` and `paymentStatus` | `Purchases.jsx` reads `Supplier`, so today it shows "Unknown Supplier" |
+| Adjustment store | Must exist; an inactive store is allowed | Counting stock in a closed store is still a correction |
+| Adjustment records | Append-only; store the stock left and the product | Corrections are new adjustments |
+| Adjustment Idempotency-Key | Supported (S2 named sales, returns and purchases) | A double click would adjust twice |
+
+## 4. Deferred
+
+- Purchase report (step 13).
+- Editing a purchase's lines before it is received; deleting purchases (no endpoint, as before); returns to suppliers; stock transfers between stores.
+- Frontend (step 19): stock adjustment screen (PRD G13); hide Received without `purchases:approve` (C-09).
+
+## 5. Open items for the owner
+
+1. Push and CI still wait on the history rewrite (`20cdb92`; the leaked `backend/.env` is in `63b1c9b` and `9cff503`).
+2. Confirm the differences in §3, especially Cancelled being final and `paid` above the total being refused.
+3. Say "approved" for step 13 (reports and exports) when ready.
+4. Dev only: the demo shop now also has supplier "Smoke Tea Wholesale", purchase `STW-1001` (received, 24 units, ₹300 paid) and one −3 adjustment; the dev DB is at tenant version 9.
+
+---
+
 # Phase 2 — Gate report after step 10
 
 | | |
