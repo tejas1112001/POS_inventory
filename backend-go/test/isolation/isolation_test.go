@@ -128,7 +128,10 @@ func run(m *testing.M) (int, error) {
 	}
 
 	guard := mailer.Guard{Resolver: testResolver(), Allow: []netip.Addr{netip.MustParseAddr("127.0.0.2")}, DialFunc: smtptest.PortDialer(smtpSrv.Port)}
-	theApp, err = app.New(ctx, cfg, log, app.WithMailTesting(guard, smtpSrv.RootCAs), app.WithSweepInterval(time.Second))
+	// The suite signs in far more often than a shop does; the per-tenant
+	// login limit (100 a minute) would refuse later tests.
+	theApp, err = app.New(ctx, cfg, log, app.WithMailTesting(guard, smtpSrv.RootCAs), app.WithSweepInterval(time.Second),
+		app.WithTenantLoginLimit(100_000))
 	if err != nil {
 		return 0, err
 	}

@@ -39,6 +39,9 @@ type Deps struct {
 	Network  httpx.Network
 	Metrics  *obs.Metrics
 	MaxRows  int
+	// LoginPerTenant is the login rate limit per tenant per minute
+	// (0: 100). Only tests raise it.
+	LoginPerTenant int
 	// Modules register their routes on the same rbac router (steps 6+).
 	Modules []interface{ Mount(*rbac.Router) }
 }
@@ -89,7 +92,11 @@ func (a *API) Mount(api chi.Router) error {
 	rt := rbac.NewRouter(api, "/api", a.d.States.Guard(a.d.Signer))
 	a.router = rt
 	ipLogin := a.limit("login_ip", 20, time.Minute, a.byIP)
-	tenantLogin := a.limit("login_tenant", 100, time.Minute, byTenant)
+	perTenant := a.d.LoginPerTenant
+	if perTenant <= 0 {
+		perTenant = 100
+	}
+	tenantLogin := a.limit("login_tenant", perTenant, time.Minute, byTenant)
 	pubIP := a.limit("public_ip", 30, time.Minute, a.byIP)
 	pubTenant := a.limit("public_tenant", 300, time.Minute, byTenant)
 	tokenIP := a.limit("token_ip", 10, time.Minute, a.byIP)

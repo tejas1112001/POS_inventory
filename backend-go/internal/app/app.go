@@ -62,14 +62,22 @@ const (
 type Option func(*options)
 
 type options struct {
-	mailGuard     *mailer.Guard
-	mailRoots     *x509.CertPool
-	sweepInterval time.Duration
+	mailGuard        *mailer.Guard
+	mailRoots        *x509.CertPool
+	sweepInterval    time.Duration
+	tenantLoginLimit int
 }
 
 // WithSweepInterval shortens the mail safety-net sweep (tests).
 func WithSweepInterval(d time.Duration) Option {
 	return func(o *options) { o.sweepInterval = d }
+}
+
+// WithTenantLoginLimit raises the per-tenant login rate limit (default
+// 100 a minute) so a test suite that signs in very often is not limited.
+// Never used by posd.
+func WithTenantLoginLimit(n int) Option {
+	return func(o *options) { o.tenantLoginLimit = n }
 }
 
 // WithMailTesting replaces the tenant SMTP guard and the trusted CA roots,
@@ -302,7 +310,8 @@ func (a *App) tenantAPI(cfg *config.Config, log *slog.Logger, network httpx.Netw
 	api := tenantapi.New(tenantapi.Deps{
 		Auth: authSvc, Users: users.NewService(a.sessions, authSvc, hasher, planSvc, cfg.MaxUnpagedRows),
 		States: states, Signer: signer, Sessions: a.sessions, Network: network, Metrics: a.metrics, MaxRows: cfg.MaxUnpagedRows,
-		Modules: []interface{ Mount(*rbac.Router) }{a.catalog, productAPI, salesAPI, purchaseAPI, adjustmentAPI, reportAPI, shopAPI, settingsAPI, receiptAPI},
+		LoginPerTenant: a.opts.tenantLoginLimit,
+		Modules:        []interface{ Mount(*rbac.Router) }{a.catalog, productAPI, salesAPI, purchaseAPI, adjustmentAPI, reportAPI, shopAPI, settingsAPI, receiptAPI},
 	})
 	return api, authSvc, nil
 }

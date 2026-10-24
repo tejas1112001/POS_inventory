@@ -34,8 +34,9 @@ func shopNames(t *testing.T, r resp) []string {
 	return out
 }
 
-// shopWindow creates tenant A's showcase store (its third, the plan's
-// last) once per run, with products in known states.
+// shopWindow creates a showcase store in tenant C (A and B already use
+// all three stores the trial plan allows) once per run, with products in
+// known states.
 type window struct {
 	tok, slug                 string
 	id                        float64
@@ -51,8 +52,9 @@ func shopWindow(t *testing.T) *window {
 	if shopFixture != nil {
 		return shopFixture
 	}
-	tok, _ := ownerLogin(t, "a")
-	host := tenants["a"].Host
+	setStatus(t, "c", "trialing")
+	tok, _ := ownerLogin(t, "c")
+	host := tenants["c"].Host
 	s := do(t, rq{method: "POST", host: host, path: "/api/stores", token: tok, body: map[string]any{"name": "Shop Window", "status": "Active"}})
 	require.Equal(t, 201, s.Code, s.Raw)
 	w := &window{tok: tok, id: s.Body["id"].(float64), slug: s.Body["slug"].(string)}
@@ -66,13 +68,13 @@ func shopWindow(t *testing.T) *window {
 		if edit != nil {
 			edit(b)
 		}
-		p := createProduct(t, "a", tok, b)
+		p := createProduct(t, "c", tok, b)
 		require.Equal(t, 201, p.Code, p.Raw)
 		return p.Body["id"].(float64)
 	}
 	w.plain = mk("SHOP-PLAIN", 2, func(b map[string]any) { b["categoryId"] = jsonID(w.category); b["slug"] = "shop-plain-tea" })
 	w.discounted = mk("SHOP-DISC", 0, func(b map[string]any) { b["discountType"] = "Percentage"; b["discountValue"] = "10" })
-	vp := createProduct(t, "a", tok, map[string]any{"name": "Shop Cheap Sampler", "productType": "variable", "variants": []map[string]any{
+	vp := createProduct(t, "c", tok, map[string]any{"name": "Shop Cheap Sampler", "productType": "variable", "variants": []map[string]any{
 		{"sku": "SHOP-CHEAP-S", "price": "10", "attributes": map[string]any{"size": "S"}, "inventories": []map[string]any{{"storeId": w.id, "qty": 1}}},
 		{"sku": "SHOP-CHEAP-L", "price": "15", "attributes": map[string]any{"size": "L"}}}})
 	require.Equal(t, 201, vp.Code, vp.Raw)
@@ -81,13 +83,13 @@ func shopWindow(t *testing.T) *window {
 	w.inactive = mk("SHOP-INACTIVE", 3, func(b map[string]any) { b["status"] = "Inactive" })
 	w.mainPub = mk("SHOP-MAIN", 3, nil)
 	for _, p := range []float64{w.plain, w.discounted, w.cheap, w.inactive} {
-		publish(t, "a", tok, w.id, p, "isPublished")
+		publish(t, "c", tok, w.id, p, "isPublished")
 	}
-	publish(t, "a", tok, w.id, w.plain, "isFeatured")
+	publish(t, "c", tok, w.id, w.plain, "isFeatured")
 	// Featured but never published: it has a showcase row and must still
 	// stay hidden everywhere.
-	publish(t, "a", tok, w.id, w.hidden, "isFeatured")
-	publish(t, "a", tok, storeIDs(t, "a", tok)[0], w.mainPub, "isPublished")
+	publish(t, "c", tok, w.id, w.hidden, "isFeatured")
+	publish(t, "c", tok, storeIDs(t, "c", tok)[0], w.mainPub, "isPublished")
 	shopFixture = w
 	return w
 }
@@ -97,7 +99,7 @@ func TestPublicShopShowsOnlyPublishedProducts(t *testing.T) {
 	base := "/" + w.slug
 
 	// Shop header, cacheable, with a working ETag.
-	info := pub(t, "a", base, nil)
+	info := pub(t, "c", base, nil)
 	require.Equal(t, 200, info.Code, info.Raw)
 	require.Equal(t, "Shop Window", info.Body["name"])
 	require.Equal(t, true, info.Body["isPublicEnabled"])
@@ -105,10 +107,10 @@ func TestPublicShopShowsOnlyPublishedProducts(t *testing.T) {
 	require.Equal(t, "public, max-age=60", info.Header.Get("Cache-Control"))
 	etag := info.Header.Get("ETag")
 	require.NotEmpty(t, etag)
-	require.Equal(t, 304, pub(t, "a", base, map[string]string{"If-None-Match": etag}).Code)
+	require.Equal(t, 304, pub(t, "c", base, map[string]string{"If-None-Match": etag}).Code)
 
 	// Published, active products of this store only; newest first.
-	list := pub(t, "a", base+"/products", nil)
+	list := pub(t, "c", base+"/products", nil)
 	require.ElementsMatch(t, []string{"Product SHOP-PLAIN", "Product SHOP-DISC", "Shop Cheap Sampler"}, shopNames(t, list))
 	require.Equal(t, 3.0, num(list.Body["pagination"].(map[string]any)["total"]))
 	for _, banned := range []string{`"qty"`, `"totalQty"`, `"cost"`, `"itemBarcode"`, `"weight"`, `"supplier`, `"created_by"`, "SHOP-HIDDEN", "SHOP-MAIN", "SHOP-INACTIVE"} {
@@ -134,49 +136,49 @@ func TestPublicShopShowsOnlyPublishedProducts(t *testing.T) {
 	require.Equal(t, false, c["variants"].([]any)[1].(map[string]any)["inStock"])
 
 	// Sorting in SQL, across the whole result; filters; the page size cap.
-	require.Equal(t, []string{"Shop Cheap Sampler", "Product SHOP-DISC", "Product SHOP-PLAIN"}, shopNames(t, pub(t, "a", base+"/products?sort=price_asc", nil)))
-	require.Equal(t, []string{"Product SHOP-PLAIN", "Product SHOP-DISC", "Shop Cheap Sampler"}, shopNames(t, pub(t, "a", base+"/products?sort=price_desc", nil)))
-	require.Equal(t, []string{"Product SHOP-DISC", "Product SHOP-PLAIN", "Shop Cheap Sampler"}, shopNames(t, pub(t, "a", base+"/products?sort=name_asc", nil)))
-	require.Equal(t, []string{"Shop Cheap Sampler"}, shopNames(t, pub(t, "a", base+"/products?search=sampler", nil)))
-	require.Empty(t, shopNames(t, pub(t, "a", base+"/products?search=%25", nil)), "LIKE wildcards are literal")
-	require.Equal(t, []string{"Product SHOP-PLAIN"}, shopNames(t, pub(t, "a", base+"/products?categoryId="+jsonID(w.category), nil)))
-	require.Equal(t, []string{"Product SHOP-PLAIN"}, shopNames(t, pub(t, "a", base+"/products?featured=true", nil)))
-	paged := pub(t, "a", base+"/products?limit=1000&page=2", nil)
+	require.Equal(t, []string{"Shop Cheap Sampler", "Product SHOP-DISC", "Product SHOP-PLAIN"}, shopNames(t, pub(t, "c", base+"/products?sort=price_asc", nil)))
+	require.Equal(t, []string{"Product SHOP-PLAIN", "Product SHOP-DISC", "Shop Cheap Sampler"}, shopNames(t, pub(t, "c", base+"/products?sort=price_desc", nil)))
+	require.Equal(t, []string{"Product SHOP-DISC", "Product SHOP-PLAIN", "Shop Cheap Sampler"}, shopNames(t, pub(t, "c", base+"/products?sort=name_asc", nil)))
+	require.Equal(t, []string{"Shop Cheap Sampler"}, shopNames(t, pub(t, "c", base+"/products?search=sampler", nil)))
+	require.Empty(t, shopNames(t, pub(t, "c", base+"/products?search=%25", nil)), "LIKE wildcards are literal")
+	require.Equal(t, []string{"Product SHOP-PLAIN"}, shopNames(t, pub(t, "c", base+"/products?categoryId="+jsonID(w.category), nil)))
+	require.Equal(t, []string{"Product SHOP-PLAIN"}, shopNames(t, pub(t, "c", base+"/products?featured=true", nil)))
+	paged := pub(t, "c", base+"/products?limit=1000&page=2", nil)
 	require.Equal(t, 48.0, num(paged.Body["pagination"].(map[string]any)["limit"]), "limit is capped at 48")
 	require.Empty(t, paged.Body["data"].([]any))
-	two := pub(t, "a", base+"/products?limit=2&page=2&sort=name_asc", nil)
+	two := pub(t, "c", base+"/products?limit=2&page=2&sort=name_asc", nil)
 	require.Equal(t, []string{"Shop Cheap Sampler"}, shopNames(t, two))
 	require.Equal(t, 2.0, num(two.Body["pagination"].(map[string]any)["totalPages"]))
 
-	feat := pub(t, "a", base+"/featured", nil)
+	feat := pub(t, "c", base+"/featured", nil)
 	require.Equal(t, 200, feat.Code)
 	require.Contains(t, feat.Raw, "Product SHOP-PLAIN")
 	require.NotContains(t, feat.Raw, "SHOP-DISC")
 	require.NotContains(t, feat.Raw, "SHOP-HIDDEN", "featured needs published")
-	cats := pub(t, "a", base+"/categories", nil)
+	cats := pub(t, "c", base+"/categories", nil)
 	require.Equal(t, 200, cats.Code)
 	require.Contains(t, cats.Raw, "Shop Teas")
 	require.NotContains(t, cats.Raw, "Shop Unused", "only categories with published products")
 
 	// Product pages: by ID or slug, published here only.
-	one := pub(t, "a", base+"/products/"+jsonID(w.plain), nil)
+	one := pub(t, "c", base+"/products/"+jsonID(w.plain), nil)
 	require.Equal(t, 200, one.Code, one.Raw)
 	require.Equal(t, "Product SHOP-PLAIN", one.Body["product"].(map[string]any)["name"])
 	require.Equal(t, "Shop Window", one.Body["shop"].(map[string]any)["name"])
-	require.Equal(t, 200, pub(t, "a", base+"/products/shop-plain-tea", nil).Code)
+	require.Equal(t, 200, pub(t, "c", base+"/products/shop-plain-tea", nil).Code)
 	for _, id := range []float64{w.hidden, w.inactive, w.mainPub} {
-		require.Equal(t, 404, pub(t, "a", base+"/products/"+jsonID(id), nil).Code)
+		require.Equal(t, 404, pub(t, "c", base+"/products/"+jsonID(id), nil).Code)
 	}
-	require.Equal(t, 404, pub(t, "a", base+"/products/no-such-slug", nil).Code)
+	require.Equal(t, 404, pub(t, "c", base+"/products/no-such-slug", nil).Code)
 
 	// No numeric store lookup; unknown and malformed slugs look the same.
-	unknown := pub(t, "a", "/no-such-shop", nil)
+	unknown := pub(t, "c", "/no-such-shop", nil)
 	require.Equal(t, 404, unknown.Code)
-	require.Equal(t, unknown.Raw, pub(t, "a", "/"+jsonID(w.id), nil).Raw)
-	require.Equal(t, 404, pub(t, "a", "/bad_slug!", nil).Code)
+	require.Equal(t, unknown.Raw, pub(t, "c", "/"+jsonID(w.id), nil).Raw)
+	require.Equal(t, 404, pub(t, "c", "/bad_slug!", nil).Code)
 
 	// A disabled showcase says so on the header and shows nothing else.
-	host := tenants["a"].Host
+	host := tenants["c"].Host
 	off := do(t, rq{method: "PUT", host: host, path: fmt.Sprintf("/api/stores/%s/showcase", jsonID(w.id)), token: w.tok,
 		body: map[string]any{"isPublicEnabled": false}})
 	require.Equal(t, 200, off.Code, off.Raw)
@@ -184,13 +186,13 @@ func TestPublicShopShowsOnlyPublishedProducts(t *testing.T) {
 		do(t, rq{method: "PUT", host: host, path: fmt.Sprintf("/api/stores/%s/showcase", jsonID(w.id)), token: w.tok,
 			body: map[string]any{"isPublicEnabled": true}})
 	})
-	closed := pub(t, "a", base, nil)
+	closed := pub(t, "c", base, nil)
 	require.Equal(t, 200, closed.Code)
 	require.Equal(t, false, closed.Body["isPublicEnabled"])
 	require.NotEmpty(t, closed.Body["message"])
 	require.NotContains(t, closed.Body, "address")
 	for _, path := range []string{"/products", "/featured", "/categories", "/products/" + jsonID(w.plain)} {
-		require.Equal(t, 404, pub(t, "a", base+path, nil).Code, path)
+		require.Equal(t, 404, pub(t, "c", base+path, nil).Code, path)
 	}
 }
 
@@ -243,21 +245,22 @@ func TestPublicShopTenantStatusPlanAndRateLimit(t *testing.T) {
 
 func TestPublicShopIsolationAcrossTenants(t *testing.T) {
 	w := shopWindow(t)
-	cTok, _ := ownerLogin(t, "c")
-	setStatus(t, "c", "trialing")
-	cSlug := list(t, get(t, tenants["c"].Host, "/api/stores", cTok))[0]["slug"].(string)
-	require.NotEqual(t, w.slug, cSlug)
+	aTok, _ := ownerLogin(t, "a")
+	aSlug := list(t, get(t, tenants["a"].Host, "/api/stores", aTok))[0]["slug"].(string)
+	for _, s := range list(t, get(t, tenants["a"].Host, "/api/stores", aTok)) {
+		require.NotEqual(t, w.slug, s["slug"], "A has no store with C's showcase slug")
+	}
 
-	// A's store slug and product IDs mean nothing on C's host.
-	require.Equal(t, 404, pub(t, "c", "/"+w.slug, nil).Code)
-	require.Equal(t, 404, pub(t, "c", "/"+w.slug+"/products", nil).Code)
-	require.Equal(t, 404, pub(t, "c", "/"+cSlug+"/products/"+jsonID(w.plain), nil).Code)
-	require.Equal(t, 404, pub(t, "c", "/"+cSlug+"/products/shop-plain-tea", nil).Code)
+	// C's store slug and product IDs mean nothing on A's host.
+	require.Equal(t, 404, pub(t, "a", "/"+w.slug, nil).Code)
+	require.Equal(t, 404, pub(t, "a", "/"+w.slug+"/products", nil).Code)
+	require.Equal(t, 404, pub(t, "a", "/"+aSlug+"/products/"+jsonID(w.plain), nil).Code)
+	require.Equal(t, 404, pub(t, "a", "/"+aSlug+"/products/shop-plain-tea", nil).Code)
 	for _, path := range []string{"/products", "/featured", "/categories"} {
-		r := pub(t, "c", "/"+cSlug+path, nil)
+		r := pub(t, "a", "/"+aSlug+path, nil)
 		require.Equal(t, 200, r.Code, r.Raw)
 		require.False(t, strings.Contains(r.Raw, "SHOP-") || strings.Contains(r.Raw, "Shop Teas") || strings.Contains(r.Raw, "Shop Cheap"), path)
 	}
-	// ETags differ per host for different content, so caches cannot mix them.
-	require.NotEqual(t, pub(t, "a", "/"+w.slug, nil).Header.Get("ETag"), pub(t, "c", "/"+cSlug, nil).Header.Get("ETag"))
+	// Different content on each host never shares an ETag.
+	require.NotEqual(t, pub(t, "c", "/"+w.slug, nil).Header.Get("ETag"), pub(t, "a", "/"+aSlug, nil).Header.Get("ETag"))
 }
