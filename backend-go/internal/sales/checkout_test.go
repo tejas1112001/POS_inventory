@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"testing"
-	"time"
 
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
@@ -111,19 +110,4 @@ func TestPay(t *testing.T) {
 
 	p = pay(decimal.Zero, nil, nil, "INR")
 	require.Equal(t, "Paid", p.status, "a free sale is paid")
-}
-
-func TestBound(t *testing.T) {
-	loc := time.UTC
-	from, err := bound("2026-10-01", loc, false)
-	require.NoError(t, err)
-	require.Equal(t, time.Date(2026, 10, 1, 0, 0, 0, 0, loc), *from)
-	to, err := bound("2026-10-01", loc, true)
-	require.NoError(t, err)
-	require.Equal(t, time.Date(2026, 10, 2, 0, 0, 0, 0, loc), *to, "endDate includes the whole day")
-	none, err := bound(" ", loc, false)
-	require.NoError(t, err)
-	require.Nil(t, none)
-	_, err = bound("yesterday", loc, false)
-	require.Error(t, err)
 }

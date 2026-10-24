@@ -33,3 +33,18 @@ func TestParse(t *testing.T) {
 	_, err = Parse("01/10/2026", loc, now)
 	require.Error(t, err)
 }
+
+func TestBound(t *testing.T) {
+	loc := time.UTC
+	from, err := Bound("2026-10-01", loc, false)
+	require.NoError(t, err)
+	require.Equal(t, time.Date(2026, 10, 1, 0, 0, 0, 0, loc), *from)
+	to, err := Bound("2026-10-01", loc, true)
+	require.NoError(t, err)
+	require.Equal(t, time.Date(2026, 10, 2, 0, 0, 0, 0, loc), *to, "endDate includes the whole day")
+	none, err := Bound(" ", loc, false)
+	require.NoError(t, err)
+	require.Nil(t, none)
+	_, err = Bound("yesterday", loc, false)
+	require.Error(t, err)
+}

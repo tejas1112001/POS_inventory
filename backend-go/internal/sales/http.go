@@ -109,28 +109,6 @@ const (
 	qSaleIDs   = `SELECT s.id` + qSaleFilter + ` ORDER BY s.date DESC, s.id DESC LIMIT $8 OFFSET $9`
 )
 
-// bound parses a startDate/endDate filter. A date is a whole day in the
-// tenant's time zone; endDate is inclusive.
-func bound(v string, loc *time.Location, end bool) (*time.Time, error) {
-	v = strings.TrimSpace(v)
-	if v == "" {
-		return nil, nil
-	}
-	if d, err := time.ParseInLocation("2006-01-02", v, loc); err == nil {
-		if end {
-			d = d.AddDate(0, 0, 1)
-		}
-		return &d, nil
-	}
-	if t, err := time.Parse(time.RFC3339, v); err == nil {
-		if end {
-			t = t.Add(time.Microsecond)
-		}
-		return &t, nil
-	}
-	return nil, apperr.Invalid("date", "Dates must be YYYY-MM-DD or RFC 3339 timestamps.")
-}
-
 func (a *API) list(w http.ResponseWriter, r *http.Request) {
 	p := httpx.ParsePage(r, a.d.MaxRows)
 	q := r.URL.Query()
@@ -149,11 +127,11 @@ func (a *API) list(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
-		from, err := bound(q.Get("startDate"), s.loc, false)
+		from, err := docdate.Bound(q.Get("startDate"), s.loc, false)
 		if err != nil {
 			return err
 		}
-		to, err := bound(q.Get("endDate"), s.loc, true)
+		to, err := docdate.Bound(q.Get("endDate"), s.loc, true)
 		if err != nil {
 			return err
 		}
