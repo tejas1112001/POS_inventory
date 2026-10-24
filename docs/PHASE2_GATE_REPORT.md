@@ -1,3 +1,77 @@
+# Phase 2 — Gate report after step 16
+
+| | |
+|---|---|
+| Date | 2026-10-24 |
+| Branch | `go-backend/phase2` (local, not pushed) |
+| Commits | `c223643` schema · `147e2b2` lifecycle · `879c289` providers · `67f69f6` webhook · `db3a187` jobs and notices · `36f347d` tenant API · `8395ccc` Super Admin API · `03356ff` limit tests · `0da0593` test-mode checklist · `ed52a63` gitleaks allowlist · `046c905` fake IDs · `64acbb0` env example |
+| Status | **Stopped after step 16** as asked. Built against the fake provider: no Razorpay keys yet, and the test-mode checks are a checklist (`docs/spikes/RAZORPAY_TEST_MODE.md`). Step 15 report confirmed 2026-10-24 |
+
+## 1. What was built
+
+| Part | Outputs |
+|---|---|
+| Schema | Platform migration 00005: `invoices` (paise), `billing_events` (one row per verified event ID), `notification_log` (one row per tenant, kind and period), `tenants.suspension_source` (admin or billing) |
+| Lifecycle | `billing.Apply`: one table maps each event to the next status. Older events never undo newer ones. Grace once per incident. `halted` after the grace end suspends. Hourly job: an unpaid trial becomes read-only, grace that has run out suspends, a cancelled subscription becomes read-only at period end. Daily reminders at 7, 3 and 1 days |
+| Providers | `Provider` interface; a Razorpay client (customer, subscription, fetch, cancel, webhook check) and a fake that sends signed events shaped like Razorpay's. The fake is refused in production |
+| Webhook | `POST /api/platform/webhooks/razorpay` on the admin host, outside the IP allowlist: constant-time signature check, 256 KiB cap, 600 a minute per IP, dedupe by event ID, events older than 72 h ignored, every event stored with its outcome. Changes only its own tenant, never lifts an admin suspension, audited as `system:razorpay` |
+| Notices | Emails (trial ending, subscription ending, payment failed, grace ending, suspended, reactivated, renewal) to the billing email, else the owner. Sent once each, even with several workers; payment emails carry a pay link |
+| Tenant API | `GET /api/billing/subscription` (plan, dates, usage against limits, own invoices, plans you can buy), `POST /api/billing/checkout` (returns the pay link and never activates anything), `GET /api/notifications/banners` |
+| Super Admin API | Plans (create, edit, list); per tenant: assign plan, extend trial, grace, cancel (step-up); lists of expiring, past-due and invoices; billing detail per tenant. Every change needs a reason and is audited with before and after |
+
+## 2. Checks
+
+- **Gate commands, all green:** gofmt, `go mod tidy -diff`, vet, `constsql`, golangci-lint (both build modes), govulncheck (no reachable vulnerabilities), gitleaks (56 branch commits), unit and integration tests. **350 test cases pass in the integration build (202 in the unit build), 0 fail, 0 skipped**, fresh run (integration one package at a time, see below).
+- **Isolation:** every authenticated tenant route (**97**, was 94) rejects another tenant's token on 2 foreign hosts. A tenant sees only its own subscription and invoices; a webhook changes only the tenant it names; console actions leave another tenant's subscription and tenant row unchanged; tenant tokens get 401 on console billing routes.
+- **Webhook:** missing, malformed and wrong signatures, and a body changed after signing: 400, nothing applied. Duplicates: 10 concurrent copies of one event apply once (one audit row). Out-of-order and stale events don't undo newer state. An unknown subscription is stored but changes nothing.
+- **Lifecycle:** every move in the transition table has a unit test. Integration covers trial → active → past due → grace → suspended → reactivated, cancel, and the hourly job (unpaid trial, grace run out, period end).
+- **Notices:** 4 reminder runs in parallel send each email once.
+- **Checkout:** returns the link and leaves the status alone until the webhook activates it, on the plan the provider names. A second checkout after that gets 409. Unknown or hidden plans get 400. A provider failure gets 503 with nothing stored. Billers get 403. A read-only tenant can still sign in and pay, but cannot write.
+- **Plan limits:** 8 parallel store creates on a 2-store plan: exactly one succeeds. The same holds for users and products. A downgrade blocks new records and keeps existing ones.
+- **Mutation checks:** each of these breaks a test: dropping the event lock, the staleness check, the admin-suspension guard, the plan-limit lock, step-up on cancel, the limit merge, or the live-provider check.
+- **Dev stack smoke, HTTPS through Caddy:** platform migrated 4 → 5; tenants at 9; drift matches. Subscription view and banners for `demo-shop`. Checkout returned the fake pay link with the status still trialing. A badly signed webhook got 400 (stored as rejected). The signed `subscription.activated` made the tenant active on the new plan with the period end set. A duplicate got 200 and changed nothing. A second checkout got 409. The demo tenant was then put back as it was. Run again after the ID fix, with the same results.
+- **Found while testing:** the fake numbered its IDs from 1 in every process, so a dev checkout after a restart could reuse a stored ID and fail (fixed in `046c905`). gitleaks flagged the isolation suite's webhook test secret; an allowlist entry now covers that one file and value. In two full runs with two packages at a time, the test database of one or two packages (isolation, then platform and tenancy) timed out while starting, because Docker Desktop answered slowly; no test failed. The full integration run one package at a time passed.
+- **Not shown:** nothing has talked to Razorpay. CI has never run (nothing pushed). The race detector can't run on this machine (no C compiler).
+
+## 3. Differences from the design (please confirm)
+
+| Topic | Built | Why |
+|---|---|---|
+| Test-mode checks | Not run. Checklist with setup, steps and "what to change" per outcome (R1–R6 in full, R7–R11 listed) | No keys; you asked for a checklist |
+| R1 (halted revival) | The **revivable** branch: the suspended email links the newest unpaid invoice, else the checkout link; `activated` or `charged` reactivates. The not-revivable branch (new subscription) is not built | Waits for R1; about a day of work if needed |
+| Sign-in on read-only | Password change, forgot, reset and invite accept now pass the read-only gate (step 5 refused forgot-password there) | An owner who never set or forgot a password must be able to sign in and pay (C-21) |
+| Checkout | Refused (409) once a provider subscription is live; refused when suspended (pay from the email); 10 a minute per user; a running trial keeps going and the first charge is at its end | No plan changes yet (R7) |
+| Plan changes | None while the provider bills: the console's assign-plan is refused then, since the next event would set the plan back | Needs R7 (`ChangePlan` or cancel plus new subscription) |
+| `authenticated` | Never changes the status; read-only 24 h after the trial end if no charge arrives | R4 |
+| Grace | 7 days from the first `pending` (or `halted`), once per incident; `payment.failed` alone changes nothing | BILLING_DESIGN §3; R3 may change the length |
+| Suspensions | Billing never lifts an admin suspension; admin reactivate clears both | Kept apart by `suspension_source` |
+| Plans | Every limit must be set on create (0 = no limit); a PATCH merges limits and features; a provider-linked plan keeps its price and interval; the provider plan ID is set once | A missing limit means unlimited |
+| Console actions | Reason 5–500 characters; extend trial 1–90 days (also revives a read-only tenant whose trial ended); grace 1–60 days (lifts a billing suspension); cancel cancels at the provider first | The design gave no ranges |
+| Banners | Billing banner only (trial ≤ 7 days, payment failed, ending, read-only); the button only for billing managers; no dismiss endpoint or announcements | Deferred |
+| Ordering | Only subscription events move `last_event_at`; invoice and payment events don't | Their timestamps describe other objects |
+| Stored payload | The parsed event, not the raw body; bad signatures store no payload | Smaller, and nothing unverified is kept |
+| Limit edits | A tenant moved to another plan gets its limits at once; editing a plan's limits takes up to a minute (cache) | Plan cache from step 6 |
+| Dates in emails | UTC | Tenant time zones in emails come later |
+
+## 4. Deferred
+
+- Reconcile (a periodic fetch of every live subscription) and an alert when webhooks go quiet. Needed before go-live if R6 shows Razorpay disables failing webhooks.
+- Plan changes and proration (R7); clean-up of unpaid `created` provider subscriptions.
+- The not-revivable branch, if R1 needs it.
+- Pending deletion after `READ_ONLY_DAYS` (comes with step 18 exports).
+- Banner dismissal, announcements; console reminders and reconcile buttons.
+- The billing page and console screens (step 19).
+
+## 5. Open items for the owner
+
+1. Push and CI still wait on the history rewrite (`20cdb92`; the leaked `backend/.env` is in `63b1c9b` and `9cff503`).
+2. Confirm the differences in §3, especially sign-in flows open on read-only and no plan changes while the provider bills.
+3. When you have Razorpay test keys: run `docs/spikes/RAZORPAY_TEST_MODE.md` (or give me the keys and I run it). R1 decides whether the not-revivable branch is needed; R6 decides how urgent reconcile is.
+4. Next is step 18 (per-tenant export/restore); the design's step list has no step 17. Say "approved" when ready.
+5. Dev only: `deploy/.env` (git-ignored) now has a random `RAZORPAY_WEBHOOK_SECRET` so test webhooks can be signed. The dev DB is at platform 5 / tenant 9. A hidden, inactive `smoke_pro` plan and the smoke events stay in it.
+
+---
+
 # Phase 2 — Gate report after step 15
 
 | | |
