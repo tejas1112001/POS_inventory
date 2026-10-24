@@ -10,6 +10,7 @@ import (
 	"database/sql"
 	"errors"
 	"regexp"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -248,6 +249,55 @@ END $fn$`,
 		}
 	}
 	return nil
+}
+
+func quoteList(names []string) (string, error) {
+	if len(names) == 0 {
+		return "", ErrBadIdentifier
+	}
+	out := make([]string, len(names))
+	for i, n := range names {
+		q, err := quote(n)
+		if err != nil {
+			return "", err
+		}
+		out[i] = q
+	}
+	return strings.Join(out, ", "), nil
+}
+
+// CopyOutSQL is the export query of one table (OPERATIONS §6.2): exactly
+// these columns, sorted by the primary key, as CSV with a header. The
+// table resolves through the session's search_path (one schema).
+func CopyOutSQL(table string, columns, orderBy []string) (string, error) {
+	t, err := quote(table)
+	if err != nil {
+		return "", err
+	}
+	c, err := quoteList(columns)
+	if err != nil {
+		return "", err
+	}
+	o, err := quoteList(orderBy)
+	if err != nil {
+		return "", err
+	}
+	return "COPY (SELECT " + c + " FROM " + t + " ORDER BY " + o + ") TO STDOUT WITH (FORMAT csv, HEADER true)", nil
+}
+
+// CopyInSQL loads one table from an export's CSV. HEADER MATCH makes the
+// server check the column names against the header line. COPY writes the
+// identity values as given (like OVERRIDING SYSTEM VALUE).
+func CopyInSQL(table string, columns []string) (string, error) {
+	t, err := quote(table)
+	if err != nil {
+		return "", err
+	}
+	c, err := quoteList(columns)
+	if err != nil {
+		return "", err
+	}
+	return "COPY " + t + " (" + c + ") FROM STDIN WITH (FORMAT csv, HEADER MATCH)", nil
 }
 
 // ExecEmbeddedMigration runs one statement from a migration file embedded in

@@ -28,6 +28,9 @@ var ErrNotFound = errors.New("files: object not found")
 // Storage keeps file bytes. Keys look like "tenants/<id>/images/<uuid>.png".
 type Storage interface {
 	Put(ctx context.Context, key, contentType string, data []byte) error
+	// PutStream uploads from a reader of unknown length with bounded
+	// memory (tenant exports). On error nothing is left under key.
+	PutStream(ctx context.Context, key, contentType string, r io.Reader) (int64, error)
 	Get(ctx context.Context, key string) (io.ReadCloser, int64, error)
 	Delete(ctx context.Context, key string) error
 }
@@ -74,6 +77,36 @@ func (s *FSStorage) Put(_ context.Context, key, _ string, data []byte) error {
 		return err
 	}
 	return s.root.Rename(tmp, key)
+}
+
+// PutStream writes atomically from a reader.
+func (s *FSStorage) PutStream(_ context.Context, key, _ string, r io.Reader) (int64, error) {
+	if !validKey(key) {
+		return 0, fmt.Errorf("files: invalid key")
+	}
+	if err := s.root.MkdirAll(path.Dir(key), 0o750); err != nil {
+		return 0, err
+	}
+	tmp := key + ".tmp"
+	f, err := s.root.OpenFile(tmp, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o640)
+	if err != nil {
+		return 0, err
+	}
+	n, err := io.Copy(f, r)
+	if err == nil {
+		err = f.Sync()
+	}
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err == nil {
+		err = s.root.Rename(tmp, key)
+	}
+	if err != nil {
+		_ = s.root.Remove(tmp)
+		return 0, err
+	}
+	return n, nil
 }
 
 // Get opens a file.
@@ -163,6 +196,20 @@ func (s *S3Storage) Put(ctx context.Context, key, contentType string, data []byt
 	_, err := s.c.PutObject(ctx, s.bucket, key, bytes.NewReader(data), int64(len(data)),
 		minio.PutObjectOptions{ContentType: contentType})
 	return err
+}
+
+// PutStream uploads in 16 MiB parts (multipart), so memory stays bounded
+// whatever the size. A failed upload is aborted and leaves no object.
+func (s *S3Storage) PutStream(ctx context.Context, key, contentType string, r io.Reader) (int64, error) {
+	if !validKey(key) {
+		return 0, fmt.Errorf("files: invalid key")
+	}
+	info, err := s.c.PutObject(ctx, s.bucket, key, r, -1,
+		minio.PutObjectOptions{ContentType: contentType, PartSize: 16 << 20})
+	if err != nil {
+		return 0, err
+	}
+	return info.Size, nil
 }
 
 // Get downloads an object.

@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"errors"
 	"image"
 	"image/color"
 	"image/gif"
 	"image/jpeg"
 	"image/png"
 	"io"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -109,7 +111,31 @@ func TestFSStorage(t *testing.T) {
 	for _, bad := range []string{"../etc/passwd", "/abs/key", "tenants/../../x", "tenants/A/x", "a b"} {
 		require.Error(t, s.Put(ctx, bad, "image/png", []byte("x")), bad)
 	}
+
+	// Streaming: complete, or nothing at all.
+	skey := "exports/abcdefghij/00000000-0000-4000-8000-000000000002.tar.zst.age"
+	n, err := s.PutStream(ctx, skey, "application/octet-stream", strings.NewReader("streamed"))
+	require.NoError(t, err)
+	require.EqualValues(t, 8, n)
+	rc, _, err = s.Get(ctx, skey)
+	require.NoError(t, err)
+	b, _ = io.ReadAll(rc)
+	_ = rc.Close()
+	require.Equal(t, "streamed", string(b))
+	fkey := "exports/abcdefghij/00000000-0000-4000-8000-000000000003.tar.zst.age"
+	_, err = s.PutStream(ctx, fkey, "application/octet-stream", io.MultiReader(strings.NewReader("part"), failingReader{}))
+	require.Error(t, err)
+	_, _, err = s.Get(ctx, fkey)
+	require.ErrorIs(t, err, ErrNotFound)
+	_, _, err = s.Get(ctx, fkey+".tmp")
+	require.ErrorIs(t, err, ErrNotFound, "no temp file left")
+	_, err = s.PutStream(ctx, "../x", "application/octet-stream", strings.NewReader("x"))
+	require.Error(t, err)
 }
+
+type failingReader struct{}
+
+func (failingReader) Read([]byte) (int, error) { return 0, errors.New("source failed") }
 
 func TestURLs(t *testing.T) {
 	id := [16]byte{1}

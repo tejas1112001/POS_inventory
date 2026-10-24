@@ -3,7 +3,9 @@
 package files
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"io"
 	"testing"
 	"time"
@@ -54,7 +56,29 @@ func TestS3StorageAgainstVersityGateway(t *testing.T) {
 	_, _, err = s.Get(ctx, key)
 	require.ErrorIs(t, err, ErrNotFound)
 
+	// Streaming past one 16 MiB part (multipart), then a failing source.
+	big := bytes.Repeat([]byte("0123456789abcdef"), (17<<20)/16)
+	skey := "exports/abcdefghij/00000000-0000-4000-8000-000000000002.tar.zst.age"
+	n, err := s.PutStream(ctx, skey, "application/octet-stream", bytes.NewReader(big))
+	require.NoError(t, err)
+	require.EqualValues(t, len(big), n)
+	rc, size, err = s.Get(ctx, skey)
+	require.NoError(t, err)
+	got, _ := io.ReadAll(rc)
+	_ = rc.Close()
+	require.EqualValues(t, len(big), size)
+	require.True(t, bytes.Equal(big, got))
+	fkey := "exports/abcdefghij/00000000-0000-4000-8000-000000000003.tar.zst.age"
+	_, err = s.PutStream(ctx, fkey, "application/octet-stream", io.MultiReader(bytes.NewReader(big), failing{}))
+	require.Error(t, err)
+	_, _, err = s.Get(ctx, fkey)
+	require.ErrorIs(t, err, ErrNotFound, "an aborted upload leaves no object")
+
 	_, err = NewS3Storage(ctx, S3Config{Endpoint: endpoint, Bucket: "posd-test", AccessKey: secrets.Secret("testaccess"),
 		SecretKey: secrets.Secret("wrong-secret"), Region: "us-east-1"})
 	require.Error(t, err, "bad credentials fail at startup")
 }
+
+type failing struct{}
+
+func (failing) Read([]byte) (int, error) { return 0, errors.New("source failed") }

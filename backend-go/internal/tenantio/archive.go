@@ -95,7 +95,13 @@ type Manifest struct {
 	Tables        []TableEntry      `json:"tables"`
 	Excluded      []string          `json:"excluded"`
 	Files         []FileEntry       `json:"files"`
+	// Missing lists file keys that were referenced but not in storage
+	// (outsidePrefix for a key outside the tenant's own prefix).
+	Missing []string `json:"missing_files"`
 }
+
+// outsidePrefix marks a file row whose key is not under tenants/<id>/.
+const outsidePrefix = "outside-tenant-prefix"
 
 // Table returns the manifest entry for a table.
 func (m Manifest) Table(name string) (TableEntry, bool) {
@@ -145,6 +151,11 @@ func (m Manifest) validate() error {
 	}
 	for _, e := range m.Excluded {
 		if !identRe.MatchString(e) || seen[e] {
+			return ErrArchive
+		}
+	}
+	for _, k := range m.Missing {
+		if k != outsidePrefix && !validFileKey(k) {
 			return ErrArchive
 		}
 	}
@@ -344,6 +355,9 @@ func (w *Writer) Close(m Manifest) (Manifest, Summary, error) {
 	}
 	if m.Excluded == nil {
 		m.Excluded = []string{}
+	}
+	if m.Missing == nil {
+		m.Missing = []string{}
 	}
 	m.ExportedAt = m.ExportedAt.UTC()
 	if err := m.validate(); err != nil {

@@ -54,6 +54,45 @@ func dedicated(dsn secrets.Secret, searchPath, app string) (*sql.DB, error) {
 	return db, nil
 }
 
+// ExportSettings are the session settings of every export and of the
+// restore verification, so the same rows always give the same bytes
+// (OPERATIONS §6.2). They are startup parameters, never SET.
+var ExportSettings = map[string]string{
+	"TimeZone": "UTC", "DateStyle": "ISO", "IntervalStyle": "iso_8601",
+	"extra_float_digits": "3", "bytea_output": "hex", "client_encoding": "UTF8",
+}
+
+// SnapshotConfig is a read-only connection acting as role on one schema
+// (search_path "<schema>", extensions) with ExportSettings. For an export
+// the role is the tenant role (login pos_jobs, a member with SET): it
+// cannot read another tenant's schema, and nothing it runs can write.
+func SnapshotConfig(dsn secrets.Secret, schema tenancy.SchemaName, role tenancy.RoleName, app string) (*pgx.ConnConfig, error) {
+	if schema.IsZero() || role.IsZero() {
+		return nil, tenancy.ErrInvalidName
+	}
+	return sessionConfig(dsn, schema.SearchPath(), role.String(), app, true)
+}
+
+// sessionConfig is the shared builder for export and restore sessions.
+func sessionConfig(dsn secrets.Secret, searchPath, role, app string, readOnly bool) (*pgx.ConnConfig, error) {
+	cfg, err := pgx.ParseConfig(dsn.Reveal())
+	if err != nil {
+		return nil, errors.New("migrate: invalid connection string")
+	}
+	for k, v := range ExportSettings {
+		cfg.RuntimeParams[k] = v
+	}
+	cfg.RuntimeParams["role"] = role
+	cfg.RuntimeParams["search_path"] = searchPath
+	cfg.RuntimeParams["statement_timeout"] = "0"
+	cfg.RuntimeParams["application_name"] = app
+	if readOnly {
+		cfg.RuntimeParams["default_transaction_read_only"] = "on"
+	}
+	cfg.DefaultQueryExecMode = pgx.QueryExecModeExec
+	return cfg, nil
+}
+
 // startupParamConfig builds a pgx config whose session role and search_path
 // are startup parameters (preflight M6 check).
 // ownerPoolConfig is a small pool that runs as pos_owner with a fixed
