@@ -2,7 +2,6 @@ package receipts
 
 import (
 	"bytes"
-	_ "embed" // fonts
 	"errors"
 	"fmt"
 	"strconv"
@@ -18,20 +17,12 @@ import (
 	"github.com/johnfercher/maroto/v2/pkg/consts/fontstyle"
 	"github.com/johnfercher/maroto/v2/pkg/consts/pagesize"
 	"github.com/johnfercher/maroto/v2/pkg/core"
-	"github.com/johnfercher/maroto/v2/pkg/fontrepository"
 	"github.com/johnfercher/maroto/v2/pkg/props"
+
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/pdffonts"
 )
 
-// Noto Sans (SIL OFL 1.1, see fonts/OFL.txt) covers ₹ and the other
-// currency symbols.
-var (
-	//go:embed fonts/NotoSans-Regular.ttf
-	fontRegular []byte
-	//go:embed fonts/NotoSans-Bold.ttf
-	fontBold []byte
-)
-
-const family = "noto"
+const family = pdffonts.Family
 
 var (
 	grey  = &props.Color{Red: 110, Green: 110, Blue: 110}
@@ -67,10 +58,7 @@ func logoExt(b []byte) (extension.Type, bool) {
 
 // RenderPDF draws an A4 receipt. logo may be nil.
 func RenderPDF(v View, logo []byte) ([]byte, error) {
-	fonts, err := fontrepository.New().
-		AddUTF8FontFromBytes(family, fontstyle.Normal, fontRegular).
-		AddUTF8FontFromBytes(family, fontstyle.Bold, fontBold).
-		Load()
+	fonts, err := pdffonts.Load()
 	if err != nil {
 		return nil, err
 	}

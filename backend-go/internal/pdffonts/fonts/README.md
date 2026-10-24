@@ -1,9 +1,9 @@
-# Receipt fonts
+# PDF fonts
 
 Noto Sans Regular and Bold (static, hinted TTF) from
 https://github.com/notofonts/notofonts.github.io (fonts/NotoSans/hinted/ttf),
 downloaded 2026-10-20. Licensed under the SIL Open Font License 1.1
-(`OFL.txt`). Embedded in receipts because they contain the rupee sign (U+20B9)
+(`OFL.txt`). Embedded in receipts and report PDFs because they contain the rupee sign (U+20B9)
 and the other currency symbols tenants may use. English only, so no
 Devanagari font is shipped (step 9 decision).
 
