@@ -398,7 +398,7 @@ func (a *App) platformAPI(cfg *config.Config, log *slog.Logger, network httpx.Ne
 		SessionMax: cfg.PlatformSessionMax, IdleTimeout: cfg.PlatformIdleTimeout, SecureCookies: true,
 		Provisioner: prov, Registry: a.registry, Log: log,
 		Hasher:   security.NewHasher(security.PlatformArgon2, 4),
-		Envelope: env, Signer: signer, Sessions: a.sessions,
+		Envelope: env, Signer: signer, Sessions: a.sessions, Billing: a.billing,
 		IssueOwnerInvite: func(ctx context.Context, id string, m platform.Meta) (string, time.Time, error) {
 			t, err := a.registry.ByID(ctx, id)
 			if err != nil {

@@ -15,6 +15,7 @@ import (
 
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/apperr"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/authtoken"
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/billing"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/provisioning"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/secrets"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/security"
@@ -50,6 +51,9 @@ type Config struct {
 	// IssueOwnerInvite creates a one-time invite link for a tenant's owner
 	// (until the email worker of step 9 sends it). Nil disables the action.
 	IssueOwnerInvite func(ctx context.Context, tenantID string, m Meta) (url string, expires time.Time, err error)
+	// Billing is the SaaS billing service (step 16); its Provider is nil
+	// when billing is off.
+	Billing *billing.Service
 }
 
 // Service implements the platform API.

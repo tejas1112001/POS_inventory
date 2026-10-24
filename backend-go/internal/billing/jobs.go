@@ -79,7 +79,7 @@ func (s *Service) RunLifecycle(ctx context.Context) (int, error) {
 				id, string(next.Status)); err != nil {
 				return err
 			}
-			before, after, err := syncTenant(ctx, tx, r.tenantID, next.Status, r.planID)
+			before, after, err := SyncTenant(ctx, tx, r.tenantID, next.Status, r.planID)
 			if err != nil {
 				return err
 			}

@@ -111,6 +111,7 @@ func (h *HTTP) mountConsole(r chi.Router) {
 		p.With(h.need(PermTenantsCreate)).Post("/tenants/{id}/provisioning/retry", h.retry)
 		p.With(h.need(PermTenantsEdit), h.stepUpRequired).Post("/tenants/{id}/owner-invite", h.ownerInvite)
 		p.With(h.needAny(PermAuditViewAll, PermAuditViewOwn)).Get("/audit", h.audit)
+		h.mountBilling(p)
 	})
 }
 

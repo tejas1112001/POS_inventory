@@ -225,11 +225,11 @@ func saveSub(ctx context.Context, tx tenancy.PlatformTx, r subRow, s Sub) (int64
 	return plan, err
 }
 
-// syncTenant gives the tenant the status its subscription implies and
+// SyncTenant gives the tenant the status its subscription implies and
 // the subscription's plan. It never touches tenants being provisioned,
 // failed, pending deletion or deleted, and never lifts a Super Admin's
 // suspension (only billing suspensions come and go with payments).
-func syncTenant(ctx context.Context, tx tenancy.PlatformTx, tenantID string, s Status, planID int64) (string, string, error) {
+func SyncTenant(ctx context.Context, tx tenancy.PlatformTx, tenantID string, s Status, planID int64) (string, string, error) {
 	var before string
 	var source *string
 	if err := tx.QueryRow(ctx, `SELECT status, suspension_source FROM platform.tenants WHERE id = $1 FOR UPDATE`, tenantID).
@@ -313,7 +313,7 @@ func (s *Service) apply(ctx context.Context, tx tenancy.PlatformTx, ev Event, no
 	if err != nil {
 		return "", "", err
 	}
-	before, after, err := syncTenant(ctx, tx, r.tenantID, res.Sub.Status, plan)
+	before, after, err := SyncTenant(ctx, tx, r.tenantID, res.Sub.Status, plan)
 	if err != nil {
 		return "", "", err
 	}

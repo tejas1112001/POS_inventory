@@ -26,6 +26,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/authtoken"
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/billing"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/config"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/httpx"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/platform"
@@ -66,6 +67,7 @@ type env struct {
 	ipSeq    atomic.Int64
 	sessions *tenancy.Sessions
 	registry *tenancy.Registry
+	fake     *billing.Fake
 }
 
 // One clock for every test: TOTP replay state lives in the database, so
@@ -136,7 +138,9 @@ func newEnv(t *testing.T) *env {
 	require.NoError(t, err)
 	e.sessions = tenancy.NewSessions(tdb.AppPool(t, 4), 5*time.Second, nil, nil)
 	e.registry = tenancy.NewRegistry(e.sessions, nil)
+	e.fake = billing.NewFake([]byte("whsec-platform-test-0123456789"), "")
 	svc := platform.NewService(platform.Config{
+		Billing:    &billing.Service{Sessions: e.sessions, Provider: e.fake, Cfg: billing.DefaultConfig},
 		BaseDomain: "pos.test", PlatformName: "POS Test", SessionMax: 8 * time.Hour, IdleTimeout: 30 * time.Minute,
 		Provisioner: provisioning.New(tdb.MigratorDSN, "https", "pos.test", slog.New(slog.DiscardHandler)),
 		Registry:    e.registry, Log: slog.New(slog.DiscardHandler),
