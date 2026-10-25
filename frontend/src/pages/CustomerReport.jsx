@@ -1,7 +1,7 @@
 // frontend/src/pages/CustomerReport.jsx
 
 import React, { useState, useEffect } from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import ListPageShell from '../components/layout/ListPageShell';
 import CustomerReportList from '../components/lists/CustomerReportList';
 import { api } from '../services/api'; // <-- IMPORT API
@@ -21,30 +21,33 @@ export default function CustomerReport() {
         // This endpoint returns sales data, which is what this report shows
         const data = await api.get('/api/sales/report');
         
-        // This report seems to want an aggregation per customer,
-        // but the backend route returns per-item.
-        // For now, we will just pass the raw data.
-        // A better fix would be to create a new backend route for this.
-        
-        // Let's aggregate by customer on the frontend for now
-        const customerAggregates = {};
-        data.forEach(item => {
-          const customerName = item.product.brand; // This seems wrong in your backend, but following its structure
-          if (!customerAggregates[customerName]) {
-            customerAggregates[customerName] = {
-              id: customerName,
-              reference: item.sku,
-              code: 'N/A',
-              customer: { name: customerName, image: item.product.image },
-              totalOrders: 0,
-              amount: 0,
-              paymentMethod: 'Multiple',
-              status: 'Completed'
-            };
+        // One row per customer, from the sold lines (returns netted).
+        const byCustomer = {};
+        (Array.isArray(data) ? data : []).forEach((item) => {
+          const name = item.customerName || item.customer?.name || 'Walk-in Customer';
+          const key = item.customer?.id ?? name;
+          const c = (byCustomer[key] ||= {
+            id: String(key),
+            reference: item.reference,
+            customer: { name },
+            sales: new Set(),
+            items: 0,
+            amount: 0,
+            reportDate: item.date,
+            paymentMethod: '-',
+            status: 'Completed',
+          });
+          c.sales.add(item.saleId);
+          c.items += Number(item.soldQty) || 0;
+          c.amount += Number(item.netAmount ?? item.soldAmount) || 0;
+          if (new Date(item.date) > new Date(c.reportDate)) {
+            c.reportDate = item.date;
+            c.reference = item.reference;
           }
-          customerAggregates[customerName].totalOrders += item.soldQty;
-          customerAggregates[customerName].amount += item.soldAmount;
         });
+        const customerAggregates = Object.fromEntries(
+          Object.entries(byCustomer).map(([k, c]) => [k, { ...c, totalOrders: c.sales.size, sales: undefined }])
+        );
 
         setReports(Object.values(customerAggregates));
       } catch (err) {
@@ -58,10 +61,6 @@ export default function CustomerReport() {
   }, []);
 
 
-  const location = useLocation();
-  const isDueReport = location.pathname.includes('/due');
-  const pageTitle = isDueReport ? "Customer Due Report" : "Customer Report";
-  const pageDescription = isDueReport ? "View Reports of Customer" : "Manage your customer reports";
   
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col">
@@ -69,7 +68,7 @@ export default function CustomerReport() {
         <ul className="flex">
           <li className="mr-2">
             <NavLink
-              to="/customers/report"
+              to="/customer-report"
               end
               className={({ isActive }) =>
                 `block px-6 py-3 text-sm font-medium ${
@@ -84,7 +83,7 @@ export default function CustomerReport() {
           </li>
           <li>
             <NavLink
-              to="/customers/report/due"
+              to="/customer-due-report"
               className={({ isActive }) =>
                 `block px-6 py-3 text-sm font-medium ${
                   isActive

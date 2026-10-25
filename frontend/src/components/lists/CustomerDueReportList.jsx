@@ -43,7 +43,7 @@ export default function CustomerDueReportList({ reports }) {
       header: 'Reference',
       size: 120,
       cell: ({ getValue }) => (
-        <a href="#" className="text-blue-600 hover:underline">{getValue()}</a>
+        <span>{getValue()}</span>
       )
     },
     {
@@ -130,7 +130,6 @@ export default function CustomerDueReportList({ reports }) {
   const {
     table,
     controlButtons,
-    primaryButtons,
     emptyState
   } = useUI({
     moduleName: 'customer due reports',

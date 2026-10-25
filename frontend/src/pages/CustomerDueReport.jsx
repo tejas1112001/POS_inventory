@@ -1,7 +1,7 @@
 // frontend/src/pages/CustomerDueReport.jsx
 
 import React, { useState, useEffect } from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import ListPageShell from '../components/layout/ListPageShell';
 import CustomerDueReportList from '../components/lists/CustomerDueReportList';
 import { api } from '../services/api'; // <-- IMPORT API
@@ -27,7 +27,7 @@ export default function CustomerDueReport() {
           .map(invoice => ({ // Map to the structure expected by the list
             id: invoice.id,
             reference: invoice.invoiceNo,
-            code: invoice.customer.id, // Assuming customer ID is the code
+            code: invoice.customer?.id ?? '-',
             customer: invoice.customer,
             totalAmount: invoice.amount,
             paid: invoice.paid,
@@ -46,13 +46,7 @@ export default function CustomerDueReport() {
     fetchReports();
   }, []);
 
-  const location = useLocation();
-  const isDue = location.pathname.endsWith('/due');
 
-  const pageTitle = isDue ? 'Customer Due Report' : 'Customer Report';
-  const pageDescription = isDue
-    ? 'View outstanding dues for customers'
-    : 'Manage your customer reports';
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col">
@@ -60,7 +54,7 @@ export default function CustomerDueReport() {
         <ul className="flex">
           <li className="mr-2">
             <NavLink
-              to="/customers/report"
+              to="/customer-report"
               end
               className={({ isActive }) =>
                 `block px-6 py-3 text-sm font-medium ${
@@ -75,7 +69,7 @@ export default function CustomerDueReport() {
           </li>
           <li>
             <NavLink
-              to="/customers/report/due"
+              to="/customer-due-report"
               className={({ isActive }) =>
                 `block px-6 py-3 text-sm font-medium ${
                   isActive
