@@ -1,193 +1,147 @@
-import React, { useState } from 'react';
-import { XMarkIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
-import { useNavigate } from 'react-router-dom';
-import { api } from '../services/api';
-const ImportProduct = ({ showForm, setShowForm }) => {
-  const navigate = useNavigate();
-  const [selectedFile, setSelectedFile] = useState(null);
-  const handleFileUpload = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      setSelectedFile(file);
-    }
-  };
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    
-    try {
-      const formData = new FormData();
-      formData.append('csvFile', selectedFile);
-      formData.append('product', e.target.product.value);
-      // Add other form fields as needed
+import { useState } from 'react';
+import { Download, FileCheck2, Loader2, Upload, X } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { api } from '@/services/api';
 
-      await api.post('/products', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data'
-        }
-      });
-      
-      setShowForm(false);
-      navigate.push('/products'); // Redirect after success
-    } catch (error) {
-      console.error('Error importing products:', error);
-      // Handle error
+const MAX_BYTES = 5 * 1024 * 1024;
+
+// ImportProduct uploads a product CSV (C-19, API_CONTRACT §5.1.1):
+// "Check file" validates without saving (?dryRun=true), "Import" saves all
+// rows or none. Row errors from the server are listed with their row.
+export default function ImportProduct({ showForm, setShowForm, onImportComplete }) {
+  const [file, setFile] = useState(null);
+  const [busy, setBusy] = useState('');
+  const [result, setResult] = useState(null); // {dryRun, created, variants}
+  const [errors, setErrors] = useState([]);
+  const [message, setMessage] = useState('');
+
+  if (!showForm) return null;
+  const close = () => setShowForm(false);
+
+  const pick = (e) => {
+    const f = e.target.files?.[0] || null;
+    setResult(null);
+    setErrors([]);
+    setMessage('');
+    if (f && f.size > MAX_BYTES) {
+      setMessage('The file can be at most 5 MB.');
+      setFile(null);
+      return;
+    }
+    setFile(f);
+  };
+
+  const send = async (dryRun) => {
+    if (!file) {
+      setMessage('Choose a CSV file first.');
+      return;
+    }
+    setBusy(dryRun ? 'check' : 'import');
+    setResult(null);
+    setErrors([]);
+    setMessage('');
+    const form = new FormData();
+    form.append('csvFile', file);
+    try {
+      const res = await api.postFormData(`/api/products/import${dryRun ? '?dryRun=true' : ''}`, form, { quiet: true });
+      setResult({ dryRun, created: res?.created ?? 0, variants: res?.variants ?? 0 });
+      if (!dryRun) onImportComplete?.();
+    } catch (err) {
+      const rows = Array.isArray(err.body?.errors) ? err.body.errors : [];
+      setErrors(rows);
+      setMessage(
+        rows.length
+          ? `Nothing was imported. Fix these rows and try again${rows.length >= 200 ? ' (only the first 200 are listed)' : ''}:`
+          : err.code === 'PLAN_LIMIT_REACHED'
+            ? 'Your plan does not allow this many products.'
+            : err.message
+      );
+    } finally {
+      setBusy('');
     }
   };
+
+  const template = async () => {
+    try {
+      await api.download('/api/products/import/template', 'products-template.csv', { quiet: true });
+    } catch (err) {
+      setMessage(err.message);
+    }
+  };
+
   return (
-    <>
-    {showForm && 
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 flex items-center justify-center p-4" onClick={() => setShowForm(false)}>
-      <div className="relative w-full max-w-2xl"> {/* Added max height */}
-        {/* Modal Content */}
-        <div className="bg-white rounded-xl shadow-xl border border-gray-800 overflow-hidden flex flex-col h-[90vh]" onClick={e => e.stopPropagation()}> {/* Added flex column */}
-          
-          {/* Modal Header */}
-          <div className="flex justify-between items-center p-5 border-b border-gray-800">
-            <h3 className="text-xl font-bold text-gray-800">Import Product</h3>
-            <button onClick={()=> setShowForm(false)}
-              className="p-1 text-gray-500 hover:text-gray-800 rounded-full hover:bg-gray-100"
-            >
-              <XMarkIcon className="w-6 h-6" />
-            </button>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={close}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Import products"
+        className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl border bg-card shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between border-b p-5">
+          <h3 className="text-lg font-bold">Import products</h3>
+          <button onClick={close} className="rounded-full p-1 text-muted-foreground hover:bg-accent" aria-label="Close">
+            <X className="size-5" />
+          </button>
+        </div>
+
+        <div className="flex-1 space-y-5 overflow-y-auto p-6 text-sm">
+          <div className="space-y-1 text-muted-foreground">
+            <p>
+              One row per product (or per variant: rows with the same name become variants). Required columns: name, sku, price.
+              Categories, brands, units and stores must already exist. Existing SKUs or barcodes are not changed.
+            </p>
+            <p>All rows are imported or none: any error stops the whole file. At most 5,000 rows.</p>
           </div>
-          
-          {/* Modal Body - Made scrollable */}
-          <div className="p-6 overflow-y-auto flex-grow"> {/* Added overflow and flex-grow */}
-            <form className="space-y-6" onSubmit={handleSubmit}> {/* Moved space-y-6 here */}
-              <div className="space-y-6">
-                {/* Product Select */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Product <span className="text-red-500">*</span>
-                  </label>
-                  <select className="w-full px-3 py-2 border border-gray-600 rounded-lg focus:ring-blue-500 focus:border-blue-500">
-                    <option>Select</option>
-                    <option>Bold V3.2</option>
-                    <option>Nike Jordan</option>
-                    <option>Iphone 14 Pro</option>
-                  </select>
-                </div>
-                
-                {/* Category & Subcategory */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Category <span className="text-red-500">*</span>
-                    </label>
-                    <select className="w-full px-3 py-2 border border-gray-600 rounded-lg focus:ring-blue-500 focus:border-blue-500">
-                      <option>Select</option>
-                      <option>Laptop</option>
-                      <option>Electronics</option>
-                      <option>Shoe</option>
-                    </select>
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Sub Category <span className="text-red-500">*</span>
-                    </label>
-                    <select className="w-full px-3 py-2 border border-gray-600 rounded-lg focus:ring-blue-500 focus:border-blue-500">
-                      <option>Select</option>
-                      <option>Lenovo</option>
-                      <option>Bolt</option>
-                      <option>Nike</option>
-                    </select>
-                  </div>
-                </div>
-                
-                {/* Download Sample */}
-                <div className="flex justify-center">
-                  <button 
-                    type="button"
-                    className="flex items-center px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors"
-                  >
-                    <ArrowDownTrayIcon className="w-5 h-5 mr-2" />
-                    Download Sample File
-                  </button>
-                </div>
-                
-                {/* CSV Upload */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Upload CSV File
-                  </label>
-                  <div className="border-2 border-dashed border-gray-600 rounded-lg p-6 text-center cursor-pointer hover:bg-gray-50 transition-colors">
-                    <input 
-                      type="file" 
-                      className="hidden" 
-                      id="csv-upload"
-                      accept=".csv"
-                      onChange={handleFileUpload}
-                    />
-                    <label htmlFor="csv-upload" className="cursor-pointer">
-                      <div className="flex flex-col items-center justify-center">
-                        <div className="bg-gray-200 rounded-full p-3 mb-3">
-                          <ArrowDownTrayIcon className="w-8 h-8 text-gray-600" />
-                        </div>
-                        <h4 className="font-medium text-gray-800">
-                          Drag and drop a <span className="text-black font-semibold">file to upload</span>
-                        </h4>
-                        <p className="text-sm text-gray-500 mt-1">
-                          Only CSV files accepted (Max size: 10MB)
-                        </p>
-                        {selectedFile && (
-                          <p className="mt-3 text-sm text-gray-700">
-                            Selected: {selectedFile.name}
-                          </p>
-                        )}
-                      </div>
-                    </label>
-                  </div>
-                </div>
-                
-                {/* Created By */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Created by <span className="text-red-500">*</span>
-                  </label>
-                  <input 
-                    type="text" 
-                    className="w-full px-3 py-2 border border-gray-600 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Enter creator name"
-                  />
-                </div>
-                
-                {/* Description */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Description
-                  </label>
-                  <textarea 
-                    className="w-full px-3 py-2 border border-gray-600 rounded-lg focus:ring-blue-500 focus:border-blue-500 min-h-[100px]"
-                    placeholder="Enter description"
-                  ></textarea>
-                  <p className="text-sm text-gray-500 mt-1">Maximum 60 Characters</p>
-                </div>
-              </div>
-            </form>
-          </div>
-          
-          {/* Modal Footer */}
-          <div className="flex justify-end space-x-3 p-5 border-t border-gray-800">
-            <button 
-              type="button"
-              onClick={()=> setShowForm(false)}
-              className="px-6 py-2 border border-gray-600 text-gray-700 rounded-lg hover:bg-gray-50"
-            >
-              Cancel
-            </button>
-            <button 
-              type="submit"
-              className="px-6 py-2 bg-black text-white rounded-lg hover:bg-gray-800"
-            >
-              Submit
-            </button>
-          </div>
+
+          <Button type="button" variant="outline" onClick={template}>
+            <Download className="size-4" /> Download the sample file
+          </Button>
+
+          <label className="flex cursor-pointer flex-col items-center gap-2 rounded-lg border-2 border-dashed p-6 text-center hover:bg-accent/50">
+            <Upload className="size-6 text-muted-foreground" />
+            <span className="font-medium">{file ? file.name : 'Choose a CSV file'}</span>
+            <span className="text-xs text-muted-foreground">UTF-8, comma-separated, up to 5 MB</span>
+            <input type="file" accept=".csv,text/csv" className="sr-only" onChange={pick} aria-label="CSV file" />
+          </label>
+
+          {result && (
+            <div role="status" className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-emerald-800">
+              {result.dryRun
+                ? `The file is fine: ${result.created} products (${result.variants} variants) would be created. Nothing was saved yet.`
+                : `Imported ${result.created} products (${result.variants} variants).`}
+            </div>
+          )}
+
+          {message && (
+            <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-destructive">
+              {message}
+              {errors.length > 0 && (
+                <ul className="mt-2 max-h-56 list-none space-y-0.5 overflow-y-auto text-xs">
+                  {errors.map((r, i) => (
+                    <li key={`${r.row}-${r.field}-${i}`}>
+                      Row {r.row}
+                      {r.field ? `, ${r.field}` : ''}: {r.message}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="flex justify-end gap-2 border-t p-4">
+          <Button type="button" variant="outline" onClick={close}>
+            {result && !result.dryRun ? 'Close' : 'Cancel'}
+          </Button>
+          <Button type="button" variant="outline" onClick={() => send(true)} disabled={!!busy || !file}>
+            {busy === 'check' ? <Loader2 className="size-4 animate-spin" /> : <FileCheck2 className="size-4" />} Check file
+          </Button>
+          <Button type="button" onClick={() => send(false)} disabled={!!busy || !file || (result && !result.dryRun)}>
+            {busy === 'import' ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />} Import
+          </Button>
         </div>
       </div>
     </div>
-    }
-    </>);
-};
-
-export default ImportProduct;
+  );
+}

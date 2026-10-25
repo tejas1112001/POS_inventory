@@ -6,7 +6,7 @@ const API_BASE_URL = (import.meta.env?.VITE_API_URL || '').replace(/\/+$/, '');
 
 // ApiError carries the server's {error, code, fields} body (API_CONTRACT §1).
 export class ApiError extends Error {
-  constructor(message, { status = 0, code = '', fields = null, details = null, retryAfter = null } = {}) {
+  constructor(message, { status = 0, code = '', fields = null, details = null, retryAfter = null, body = null } = {}) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
@@ -14,6 +14,7 @@ export class ApiError extends Error {
     this.fields = fields;
     this.details = details;
     this.retryAfter = retryAfter;
+    this.body = body; // the whole error body (e.g. CSV import row errors)
   }
 }
 
@@ -73,6 +74,7 @@ async function errorFrom(response) {
     fields: payload.fields || null,
     details: payload.details || null,
     retryAfter: Number.isFinite(retry) && retry > 0 ? retry : null,
+    body: payload,
   });
 }
 

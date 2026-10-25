@@ -7,7 +7,6 @@ import { useFormWizard, FORM_STEPS } from '../hooks/useFormWizard';
 import { useNavigate } from 'react-router-dom';
 import SupplierModal from '../components/forms/SupplierModal';
 import { api } from '../services/api';
-import { usePos } from '../hooks/usePos';
 import { usePermission } from '../hooks/usePermission';
 import {
   InformationCircleIcon,
@@ -22,7 +21,6 @@ const AddPurchase = () => {
   const [showSupplierModal, setShowSupplierModal] = useState(false);
   const [purchaseItems, setPurchaseItems] = useState([]);
   const { currentStep, goNext, goBack, goToStep } = useFormWizard(2);
-  const { currentUser } = usePos();
   const { hasPermission } = usePermission();
   
   const navigate = useNavigate();
@@ -81,7 +79,7 @@ const AddPurchase = () => {
       const purchaseData = {
         reference: data.reference,
         date: data.date || new Date().toISOString().split('T')[0],
-        status: data.status || 'Received',
+        status: data.status || 'Pending',
         payment_status: data.payment_status || 'Unpaid',
         total: total,
         paid: paid,
@@ -245,9 +243,10 @@ const AddPurchase = () => {
                   className="w-full px-3 py-2 border border-gray-600 rounded-lg focus:ring-blue-500 focus:border-blue-500"
                   required
                 >
-                  <option value="Received">Received</option>
+                  {/* Received is final and moves stock in: it needs purchases:approve (C-09). */}
                   <option value="Pending">Pending</option>
                   <option value="Ordered">Ordered</option>
+                  {hasPermission('purchases', 'approve') && <option value="Received">Received</option>}
                 </select>
               </div>
               
@@ -452,7 +451,7 @@ const AddPurchase = () => {
         <FormFooter 
           cancelPath="/purchases" 
           submitLabel="Add Purchase" 
-          disabled={!isAdmin}
+          disabled={!hasPermission('purchases', 'create')}
           showStepNav
           currentStep={currentStep}
           totalSteps={2}

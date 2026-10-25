@@ -29,6 +29,7 @@ export default function PublicShopPage() {
   const [shop, setShop] = useState(null);
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [categoryIds, setCategoryIds] = useState({});
   const [featuredProducts, setFeaturedProducts] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [search, setSearch] = useState('');
@@ -38,7 +39,7 @@ export default function PublicShopPage() {
 
   // Selected product modal state
   const [selectedProduct, setSelectedProduct] = useState(null);
-  const [selectedVariant, setSelectedVariant] = useState(null);
+  const [, setSelectedVariant] = useState(null);
 
   useEffect(() => {
     fetchPublicShopData();
@@ -54,7 +55,7 @@ export default function PublicShopPage() {
     try {
       setLoading(true);
       setError(null);
-      const res = await fetch(`http://localhost:3000/api/public/shop/${shopSlug}`);
+      const res = await fetch(`/api/public/shop/${shopSlug}`);
       if (!res.ok) {
         throw new Error('Shop showcase unavailable or not found.');
       }
@@ -63,14 +64,15 @@ export default function PublicShopPage() {
 
       if (data.isPublicEnabled) {
         // Fetch categories
-        const catRes = await fetch(`http://localhost:3000/api/public/shop/${shopSlug}/categories`);
+        const catRes = await fetch(`/api/public/shop/${shopSlug}/categories`);
         if (catRes.ok) {
           const cats = await catRes.json();
           setCategories(['All', ...cats.map((c) => c.name)]);
+          setCategoryIds(Object.fromEntries(cats.map((c) => [c.name, c.id])));
         }
 
         // Fetch featured products
-        const featRes = await fetch(`http://localhost:3000/api/public/shop/${shopSlug}/featured`);
+        const featRes = await fetch(`/api/public/shop/${shopSlug}/featured`);
         if (featRes.ok) {
           const feats = await featRes.json();
           setFeaturedProducts(feats || []);
@@ -86,11 +88,12 @@ export default function PublicShopPage() {
 
   const fetchPublicProducts = async () => {
     try {
-      let url = `http://localhost:3000/api/public/shop/${shopSlug}/products?sort=${sort}`;
+      let url = `/api/public/shop/${shopSlug}/products?sort=${sort}`;
       if (search) url += `&search=${encodeURIComponent(search)}`;
       if (selectedCategory && selectedCategory !== 'All') {
-        const catObj = categories.find((c) => c === selectedCategory);
-        if (catObj) url += `&categoryId=${selectedCategory}`;
+        // The API filters by category ID, not by name.
+        const id = categoryIds[selectedCategory];
+        if (id) url += `&categoryId=${id}`;
       }
 
       const res = await fetch(url);
