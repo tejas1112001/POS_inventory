@@ -43,9 +43,22 @@ export default function ShowcaseSettings() {
   const [statusFilter, setStatusFilter] = useState('All');
 
   const selectedStoreId = currentStore?.id || 1;
+  const [homeSlug, setHomeSlug] = useState(null);
 
   useEffect(() => {
     fetchShowcaseData();
+  }, [selectedStoreId]);
+
+  // The store whose shop is at the main address (Settings > Shop > Home page).
+  useEffect(() => {
+    let live = true;
+    fetch('/api/public/home')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((h) => live && setHomeSlug(h?.homePage === 'shop' ? h.slug : null))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
   }, [selectedStoreId]);
 
   const fetchShowcaseData = async () => {
@@ -114,7 +127,8 @@ export default function ShowcaseSettings() {
     }
   };
 
-  const publicUrl = `${window.location.origin}/shop/${storeData.slug || selectedStoreId}`;
+  const isHome = !!homeSlug && homeSlug.toLowerCase() === storeData.slug.toLowerCase();
+  const publicUrl = isHome ? `${window.location.origin}/` : `${window.location.origin}/shop/${storeData.slug || selectedStoreId}`;
 
   const copyLink = () => {
     navigator.clipboard.writeText(publicUrl);

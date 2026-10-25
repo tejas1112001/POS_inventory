@@ -26,12 +26,17 @@ const TAX_SPLITS = [
   { value: 'cgst_sgst', label: 'CGST + SGST (within the state)' },
   { value: 'igst', label: 'IGST (between states)' },
 ];
+const HOME_PAGES = [
+  { value: 'login', label: 'Staff login' },
+  { value: 'shop', label: 'Online shop' },
+];
 const LOGO_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
 const MAX_LOGO = 2 * 1024 * 1024;
 
 const FIELDS = [
   'businessName', 'legalName', 'address', 'phone', 'email', 'currency', 'locale', 'timezone', 'taxLabel',
   'taxRegistrationNo', 'taxSplit', 'pricesIncludeTax', 'maxDiscountPct', 'invoicePrefix', 'receiptHeader', 'receiptFooter',
+  'homePage', 'shopStoreId',
 ];
 
 function timeZones(current) {
@@ -52,7 +57,28 @@ function fromSettings(s) {
   const out = {};
   for (const k of FIELDS) out[k] = s?.[k] ?? (k === 'pricesIncludeTax' ? false : '');
   out.maxDiscountPct = s?.maxDiscountPct != null ? String(s.maxDiscountPct) : '';
+  out.homePage = s?.homePage || 'login';
+  out.shopStoreId = s?.shopStoreId != null ? String(s.shopStoreId) : '';
   return out;
+}
+
+// toBody turns a form value into what PUT /api/settings expects.
+function toBody(k, v) {
+  if (k === 'maxDiscountPct') return Number(v);
+  if (k === 'shopStoreId') return v ? Number(v) : null;
+  return v;
+}
+
+// storeOptions lists the stores that can be shown at the main address.
+// Without stores:view the list is empty and only the current choice shows.
+function storeOptions(stores, current) {
+  const opts = [{ value: '', label: 'Main store (default)' }];
+  for (const st of stores) {
+    const notes = [st.status !== 'Active' && 'inactive', !st.isPublicEnabled && 'shop turned off'].filter(Boolean);
+    opts.push({ value: String(st.id), label: st.name + (notes.length ? ` (${notes.join(', ')})` : '') });
+  }
+  if (current && !opts.some((o) => o.value === current)) opts.push({ value: current, label: `Store ${current}` });
+  return opts;
 }
 
 function readFile(file) {
@@ -75,10 +101,22 @@ export default function ShopSettings({ canEdit }) {
   const [fields, setFields] = useState({});
   const [notice, setNotice] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [stores, setStores] = useState([]);
 
   useEffect(() => {
     if (settings) setForm(fromSettings(settings));
   }, [settings]);
+
+  useEffect(() => {
+    let live = true;
+    api
+      .get('/api/stores', { quiet: true })
+      .then((list) => live && setStores(Array.isArray(list) ? list : []))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, []);
 
   const zones = useMemo(() => timeZones(form.timezone), [form.timezone]);
   const set = (k) => (v) => setForm((f) => ({ ...f, [k]: v }));
@@ -105,7 +143,7 @@ export default function ShopSettings({ canEdit }) {
     const original = fromSettings(settings);
     const body = {};
     for (const k of FIELDS) {
-      if (form[k] !== original[k]) body[k] = k === 'maxDiscountPct' ? Number(form[k]) : form[k];
+      if (form[k] !== original[k]) body[k] = toBody(k, form[k]);
     }
     if (logo) body.logo = logo;
     if (Object.keys(body).length === 0) {
@@ -195,6 +233,20 @@ export default function ShopSettings({ canEdit }) {
           <TextArea id="receiptHeader" label="Header" hint="Shown above the shop name." value={form.receiptHeader} onChange={set('receiptHeader')} error={fields.receiptHeader} disabled={dis} maxLength={500} />
           <TextArea id="receiptFooter" label="Footer" hint="For example a return policy or a thank-you note." value={form.receiptFooter} onChange={set('receiptFooter')} error={fields.receiptFooter} disabled={dis} maxLength={500} />
         </div>
+      </SectionCard>
+
+      <SectionCard title="Home page">
+        <div className="grid gap-4 md:grid-cols-2">
+          <SelectField id="homePage" label={`What ${window.location.host}/ shows`} hint="Staff always sign in at /login." value={form.homePage} onChange={set('homePage')} error={fields.homePage} disabled={dis} options={HOME_PAGES} />
+          {form.homePage === 'shop' && (
+            <SelectField id="shopStoreId" label="Store shown" hint="Its shop moves from /shop/... to the main address; the old link still works." value={form.shopStoreId} onChange={set('shopStoreId')} error={fields.shopStoreId} disabled={dis} options={storeOptions(stores, form.shopStoreId)} />
+          )}
+        </div>
+        {form.homePage === 'shop' && (
+          <p className="mt-3 text-xs text-muted-foreground">
+            If that store is inactive or its shop is turned off, or your plan has no online shop, the main address shows the staff login.
+          </p>
+        )}
       </SectionCard>
 
       <div className="flex items-center justify-between gap-3">
