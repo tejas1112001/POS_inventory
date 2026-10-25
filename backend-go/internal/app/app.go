@@ -46,6 +46,7 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/shop"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/tenancy"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/tenantapi"
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/tenantio"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/users"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/worker"
 )
@@ -342,9 +343,15 @@ func (a *App) newWorker(cfg *config.Config, log *slog.Logger, env *secrets.Envel
 	guard, roots := a.tenantMailGuard(), a.opts.mailRoots
 	jobsBilling := *a.billing // same settings, on the jobs pool
 	jobsBilling.Sessions = jobs
+	var exporter *tenantio.Exporter
+	if cfg.ExportsEnabled() {
+		// The snapshot logs in as pos_jobs and acts as the tenant role.
+		exporter = &tenantio.Exporter{Sessions: jobs, DSN: cfg.DatabaseJobsURL, Storage: storage,
+			Recipient: cfg.ExportAgeRecipient, ManifestKey: []byte(cfg.ExportManifestKey.Reveal()), Log: log}
+	}
 	w, err := worker.New(worker.Config{
-		Billing: &jobsBilling,
-		Pool:    a.jobsPool, Registry: a.registry, Receipts: rcpt, Log: log,
+		Billing: &jobsBilling, Exporter: exporter,
+		Pool: a.jobsPool, Registry: a.registry, Receipts: rcpt, Log: log,
 		RunJobs: cfg.Mode != "api", SweepInterval: a.opts.sweepInterval,
 		Mail: worker.MailConfig{
 			Jobs: jobs, Registry: a.registry, Envelope: env, Receipts: rcpt, Plans: plans.NewService(jobs),

@@ -25,6 +25,7 @@ import (
 	"testing"
 	"time"
 
+	"filippo.io/age"
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
@@ -89,6 +90,12 @@ func TestMain(m *testing.M) {
 
 var storageDir string
 
+// Tenant exports: posd gets the recipient and the manifest key; the
+// identity (private key) stays with the tests, like posctl restore.
+var exportIdent *age.X25519Identity
+
+const exportKey = "export-manifest-key-isolation-0123456789"
+
 func run(m *testing.M) (int, error) {
 	ctx := context.Background()
 	var err0 error
@@ -114,7 +121,11 @@ func run(m *testing.M) (int, error) {
 		return 0, err
 	}
 	defer platSrv.Close()
+	if exportIdent, err = age.GenerateX25519Identity(); err != nil {
+		return 0, err
+	}
 	cfg, err := config.LoadFrom(map[string]string{
+		"EXPORT_AGE_RECIPIENT": exportIdent.Recipient().String(), "EXPORT_MANIFEST_KEY": exportKey,
 		"BASE_DOMAIN": "pos.test", "PLATFORM_NAME": "Test", "APP_ENV": "test", "PUBLIC_SCHEME": "http",
 		"DATABASE_URL": tdb.AppDSN.Reveal(), "DATABASE_JOBS_URL": tdb.JobsDSN.Reveal(),
 		"DATABASE_MIGRATOR_URL": tdb.MigratorDSN.Reveal(),

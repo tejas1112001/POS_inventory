@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/riverqueue/river"
@@ -17,6 +18,7 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/billing"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/receipts"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/tenancy"
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/tenantio"
 )
 
 // Queues.
@@ -24,6 +26,7 @@ const (
 	QueueMail        = "mail"
 	QueueReceipts    = "receipts"
 	QueueMaintenance = "maintenance"
+	QueueExports     = "exports"
 )
 
 // activeStates makes a job unique while it waits or runs, but not after it
@@ -76,6 +79,21 @@ func (RenderReceiptArgs) InsertOpts() river.InsertOpts {
 	return river.InsertOpts{Queue: QueueReceipts, UniqueOpts: unique(), MaxAttempts: 3}
 }
 
+// ExportArgs runs one queued tenant export (OPERATIONS §6.2).
+type ExportArgs struct {
+	ExportID uuid.UUID `json:"export_id"`
+}
+
+// Kind implements river.JobArgs.
+func (ExportArgs) Kind() string { return "tenant_export" }
+
+// InsertOpts implements river.JobArgsWithInsertOpts. One attempt: a
+// failed export is recorded as failed and is requested again by a person
+// (or, for a final export, by the sweep).
+func (ExportArgs) InsertOpts() river.InsertOpts {
+	return river.InsertOpts{Queue: QueueExports, UniqueOpts: unique(), MaxAttempts: 1}
+}
+
 // maintenanceArgs is one periodic job.
 type maintenanceArgs struct {
 	Job string `json:"job"`
@@ -98,6 +116,7 @@ const (
 	JobBillingLifecycle   = "billing_lifecycle"
 	JobBillingReminders   = "billing_reminders"
 	JobDeletionClock      = "deletion_clock"
+	JobExportSweep        = "export_sweep"
 )
 
 // ---------------------------------------------------------------- workers
@@ -142,6 +161,33 @@ func (k *renderWorker) Work(ctx context.Context, job *river.Job[RenderReceiptArg
 	}
 	return k.w.observe("receipt_render", err)
 }
+
+type exportWorker struct {
+	river.WorkerDefaults[ExportArgs]
+	w *Worker
+}
+
+func (k *exportWorker) Work(ctx context.Context, job *river.Job[ExportArgs]) error {
+	e := k.w.cfg.Exporter
+	if !e.Enabled() {
+		return nil // stays queued until exports are configured
+	}
+	rec, err := e.Run(ctx, job.Args.ExportID)
+	if errors.Is(err, tenantio.ErrNotQueued) {
+		return nil // already run (a duplicate job or the sweep)
+	}
+	if err == nil {
+		k.w.cfg.Log.InfoContext(ctx, "tenant export succeeded", slog.String("tenant_id", rec.TenantID),
+			slog.String("export_id", rec.ID.String()), slog.Int64("bytes", rec.Summary.Size), slog.Int64("rows", rec.Rows))
+	}
+	// A failure is already recorded on the export (and logged); a retry
+	// would find it not queued.
+	_ = k.w.observe("tenant_export", err)
+	return nil
+}
+
+// Timeout is below the export's stale limit (6 h).
+func (k *exportWorker) Timeout(*river.Job[ExportArgs]) time.Duration { return 3 * time.Hour }
 
 type maintenanceWorker struct {
 	river.WorkerDefaults[maintenanceArgs]
@@ -188,6 +234,8 @@ func (k *maintenanceWorker) Work(ctx context.Context, job *river.Job[maintenance
 		if n, err = k.w.cfg.Billing.RunDeletionClock(ctx); n > 0 {
 			k.w.cfg.Log.InfoContext(ctx, "tenants moved to pending_deletion", slog.Int("tenants", n))
 		}
+	case JobExportSweep:
+		err = k.w.SweepExports(ctx)
 	default:
 		return nil
 	}
@@ -224,9 +272,14 @@ type Config struct {
 	RunJobs bool
 	// SweepInterval is the mail safety-net sweep (default 1 minute).
 	SweepInterval time.Duration
+	// ExportSweepInterval is the export sweep (default 10 minutes).
+	ExportSweepInterval time.Duration
 	// Billing runs the lifecycle (hourly) and reminder (daily) jobs; nil
 	// or without a provider when billing is off.
 	Billing *billing.Service
+	// Exporter runs tenant exports; nil or not enabled when exports are
+	// not configured.
+	Exporter *tenantio.Exporter
 }
 
 // Worker owns the River client and the job implementations.
@@ -246,6 +299,9 @@ func New(cfg Config) (*Worker, error) {
 	if cfg.SweepInterval <= 0 {
 		cfg.SweepInterval = time.Minute
 	}
+	if cfg.ExportSweepInterval <= 0 {
+		cfg.ExportSweepInterval = 10 * time.Minute
+	}
 	w := &Worker{cfg: cfg, mail: NewMailer(cfg.Mail)}
 	w.maint = &Maintenance{Jobs: cfg.Mail.Jobs, Metrics: cfg.Mail.Metrics, Log: cfg.Log, EnqueueMail: w.EnqueueMail}
 
@@ -254,6 +310,7 @@ func New(cfg Config) (*Worker, error) {
 	river.AddWorker(workers, &mailPlatformWorker{w: w})
 	river.AddWorker(workers, &renderWorker{w: w})
 	river.AddWorker(workers, &maintenanceWorker{w: w})
+	river.AddWorker(workers, &exportWorker{w: w})
 
 	rc := &river.Config{
 		Schema:  "river",
@@ -265,6 +322,7 @@ func New(cfg Config) (*Worker, error) {
 			QueueMail:          {MaxWorkers: 10}, // tenants in parallel; each job handles one tenant
 			QueueReceipts:      {MaxWorkers: 4},
 			QueueMaintenance:   {MaxWorkers: 2},
+			QueueExports:       {MaxWorkers: 1}, // one export at a time per node: they are long, streamed reads
 			river.QueueDefault: {MaxWorkers: 1},
 		}
 		periodic := func(job string, s river.PeriodicSchedule, onStart bool) *river.PeriodicJob {
@@ -280,6 +338,7 @@ func New(cfg Config) (*Worker, error) {
 			periodic(JobBillingLifecycle, river.PeriodicInterval(time.Hour), true),
 			periodic(JobBillingReminders, dailyAt{hour: 3, minute: 30}, false), // BILLING_NOTIFY_HOUR: 09:00 in India
 			periodic(JobDeletionClock, river.PeriodicInterval(time.Hour), false),
+			periodic(JobExportSweep, river.PeriodicInterval(cfg.ExportSweepInterval), true),
 		}
 	}
 	client, err := river.NewClient(riverpgxv5.New(cfg.Pool), rc)
@@ -391,6 +450,45 @@ func (w *Worker) ReceiptChanged(ctx context.Context, t tenancy.Tenant, receiptID
 	if _, err := w.client.Insert(ctx, RenderReceiptArgs{TenantID: t.ID, ReceiptID: receiptID}, nil); err != nil {
 		w.cfg.Log.WarnContext(ctx, "receipt render not queued; it renders on demand", slog.String("tenant_id", t.ID), slog.Any("err", err))
 	}
+}
+
+// EnqueueExport queues the job that runs a queued export. If this fails,
+// the export sweep picks the export up.
+func (w *Worker) EnqueueExport(ctx context.Context, id uuid.UUID) error {
+	_, err := w.client.Insert(ctx, ExportArgs{ExportID: id}, nil)
+	return err
+}
+
+// SweepExports fails stale exports, queues final exports of tenants
+// pending deletion, and queues a job for every queued export (duplicates
+// collapse: the jobs are unique by export).
+func (w *Worker) SweepExports(ctx context.Context) error {
+	e := w.cfg.Exporter
+	if !e.Enabled() {
+		return nil
+	}
+	if n, err := e.FailStale(ctx); err != nil {
+		return err
+	} else if n > 0 {
+		w.cfg.Log.WarnContext(ctx, "stale tenant exports marked failed", slog.Int64("exports", n))
+	}
+	finals, err := e.QueueFinals(ctx)
+	if len(finals) > 0 {
+		w.cfg.Log.InfoContext(ctx, "final exports queued", slog.Int("exports", len(finals)))
+	}
+	if err != nil {
+		return err
+	}
+	ids, err := e.Queued(ctx, 100)
+	if err != nil || len(ids) == 0 {
+		return err
+	}
+	params := make([]river.InsertManyParams, 0, len(ids))
+	for _, id := range ids {
+		params = append(params, river.InsertManyParams{Args: ExportArgs{ExportID: id}})
+	}
+	_, err = w.client.InsertMany(ctx, params)
+	return err
 }
 
 // Maintenance exposes the periodic jobs (tests, posctl).
