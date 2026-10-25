@@ -399,3 +399,13 @@ pre.json {
 .contents {
   display: contents;
 }
+
+.pre-line {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.select-all {
+  user-select: all;
+  overflow-wrap: anywhere;
+}

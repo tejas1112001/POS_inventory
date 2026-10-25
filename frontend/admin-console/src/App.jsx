@@ -4,6 +4,7 @@ import { StepUpProvider } from './stepup';
 import Layout from './components/Layout';
 import SignIn from './pages/SignIn';
 import Tenants from './pages/Tenants';
+import TenantDetail from './pages/TenantDetail';
 
 function Routed() {
   const { loading, user } = useSession();
@@ -13,6 +14,7 @@ function Routed() {
     <Layout>
       <Routes>
         <Route path="/tenants" element={<Tenants />} />
+        <Route path="/tenants/:id" element={<TenantDetail />} />
         <Route path="*" element={<Navigate to="/tenants" replace />} />
       </Routes>
     </Layout>
