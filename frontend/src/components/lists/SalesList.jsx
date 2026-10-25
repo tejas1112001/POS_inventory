@@ -6,13 +6,15 @@ import SelectFilters from '../ListComponents/SelectFilters';
 import {
   selectColumn,
   indexColumn,
-  actionsColumn,
   statusColumn
 } from '../ListComponents/columnHelpers';
 import { useUI } from '../ListComponents/useUI';
-import { formatDate } from '@/lib/format';
+import { ReceiptText } from 'lucide-react';
+import Receipt from '../Receipt';
+import { formatCurrency, formatDate } from '@/lib/format';
 
-export default function SalesList({ sales = [], onRefresh, onAddItem }) {
+export default function SalesList({ sales = [], onAddItem }) {
+  const [receiptFor, setReceiptFor] = useState(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [paymentStatusFilter, setPaymentStatusFilter] = useState('All');
@@ -60,29 +62,45 @@ export default function SalesList({ sales = [], onRefresh, onAddItem }) {
     {
       accessorKey: 'total',
       header: 'Grand Total',
-      cell: ({ getValue }) => <span>${getValue()}</span>,
+      cell: ({ getValue }) => <span>{formatCurrency(getValue())}</span>,
       size: 100,
     },
     {
       accessorKey: 'paid',
       header: 'Paid',
-      cell: ({ getValue }) => <span>${getValue()}</span>,
+      cell: ({ getValue }) => <span>{formatCurrency(getValue())}</span>,
       size: 100,
     },
     {
       accessorKey: 'due',
       header: 'Due',
-      cell: ({ getValue }) => <span>${getValue()}</span>,
+      cell: ({ getValue }) => <span>{formatCurrency(getValue())}</span>,
       size: 100,
     },
     statusColumn('payment_status', 'Payment Status', 120),
     {
-      accessorKey: 'User.name',
+      id: 'biller',
+      accessorFn: (row) => row.user?.name || row.User?.name || '',
       header: 'Biller',
       size: 140,
       cell: ({ getValue }) => getValue() || 'Unknown'
     },
-    actionsColumn(['view'])
+    {
+      id: 'receipt',
+      header: '',
+      size: 60,
+      cell: ({ row }) => (
+        <button
+          type="button"
+          onClick={() => setReceiptFor(row.original)}
+          className="rounded-md p-1 text-primary hover:bg-primary/10"
+          aria-label={`Receipt ${row.original.reference || ''}`}
+          title="Receipt"
+        >
+          <ReceiptText className="size-4" />
+        </button>
+      ),
+    },
   ], []);
 
   // Corrected filteredData (use `sales` prop and handle possible field-name variants)
@@ -133,38 +151,41 @@ export default function SalesList({ sales = [], onRefresh, onAddItem }) {
   });
 
   return (
-    <ListPageLayout
-      title="POS Orders"
-      description="Manage Your pos orders"
-      controlButtons={<ListControlButtons buttons={controlButtons} />}
-      primaryButtons={primaryButtons.map((btn, i) => (
-        <React.Fragment key={i}>{btn.element}</React.Fragment>
-      ))}
-      filters={
-        <>
-          <SearchInput search={search} setSearch={setSearch} />
-          <SelectFilters
-            statusFilter={statusFilter}
-            setStatusFilter={setStatusFilter}
-            statusOptions={statusOptions}
-          />
-          <SelectFilters
-            statusFilter={paymentStatusFilter}
-            setStatusFilter={setPaymentStatusFilter}
-            statusOptions={paymentStatusOptions}
-            placeholder="Payment Status"
-          />
-          <SelectFilters
-            statusFilter={customerFilter}
-            setStatusFilter={setCustomerFilter}
-            statusOptions={customerOptions}
-            placeholder="Customer"
-          />
-        </>
-      }
-      table={table}
-      emptyState={emptyState}
-      dataLength={filteredData.length}
-    />
+    <>
+      <ListPageLayout
+        title="POS Orders"
+        description="Manage Your pos orders"
+        controlButtons={<ListControlButtons buttons={controlButtons} />}
+        primaryButtons={primaryButtons.map((btn, i) => (
+          <React.Fragment key={i}>{btn.element}</React.Fragment>
+        ))}
+        filters={
+          <>
+            <SearchInput search={search} setSearch={setSearch} />
+            <SelectFilters
+              statusFilter={statusFilter}
+              setStatusFilter={setStatusFilter}
+              statusOptions={statusOptions}
+            />
+            <SelectFilters
+              statusFilter={paymentStatusFilter}
+              setStatusFilter={setPaymentStatusFilter}
+              statusOptions={paymentStatusOptions}
+              placeholder="Payment Status"
+            />
+            <SelectFilters
+              statusFilter={customerFilter}
+              setStatusFilter={setCustomerFilter}
+              statusOptions={customerOptions}
+              placeholder="Customer"
+            />
+          </>
+        }
+        table={table}
+        emptyState={emptyState}
+        dataLength={filteredData.length}
+      />
+      {receiptFor && <Receipt saleId={receiptFor.id} onClose={() => setReceiptFor(null)} />}
+    </>
   );
 }

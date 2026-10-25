@@ -6,7 +6,6 @@ import CustomerForm from '../components/CustomerForm';
 import PayForm from '../components/PayForm';
 import Receipt from '../components/Receipt';
 import { api } from '../services/api';
-import { usePos } from '../hooks/usePos';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -44,7 +43,6 @@ function CategoryPill({ active, onClick, children }) {
 }
 
 export default function POS() {
-  const { currentUser } = usePos();
   const [products, setProducts] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [stores, setStores] = useState([]);
@@ -547,15 +545,8 @@ export default function POS() {
             setCompletedSale(null);
             clearAll();
           }}
-          invoiceNo={completedSale?.reference}
-          customerName={selectedCustomerObj?.name || 'Walk-in Customer'}
-          customerId={selectedCustomer}
-          orderItems={orderItems}
-          subtotal={subtotal}
-          discount={discount}
-          tax={tax}
-          total={total}
-          biller={currentUser?.name || 'System'}
+          sale={completedSale}
+          store={stores.find((st) => String(st.id) === String(selectedStore))}
         />
       )}
 
