@@ -172,6 +172,12 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger, opts ...Opti
 			continue
 		}
 		if spa != nil {
+			switch name {
+			case "tenant":
+				spa.WithNoindex(httpx.TenantStaffPage)
+			case "admin":
+				spa.WithNoindex(func(string) bool { return true })
+			}
 			spas[name] = spa
 		}
 	}

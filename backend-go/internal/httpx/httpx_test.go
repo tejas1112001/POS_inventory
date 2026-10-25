@@ -432,6 +432,29 @@ func TestSPA(t *testing.T) {
 	require.Error(t, err, "index.html required")
 }
 
+func TestSPANoindexOnStaffPages(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "index.html"), []byte("<html>spa</html>"), 0o600))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "assets"), 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "assets", "app.js"), []byte("x"), 0o600))
+	spa, err := NewSPA(dir)
+	require.NoError(t, err)
+	spa.WithNoindex(TenantStaffPage)
+	robots := func(p string) string {
+		rec := httptest.NewRecorder()
+		spa.ServeHTTP(rec, httptest.NewRequest("GET", "http://acme.pos.test"+p, nil))
+		require.Equal(t, 200, rec.Code, p)
+		return rec.Header().Get("X-Robots-Tag")
+	}
+	for _, p := range []string{"/", "/product/12", "/shop/main", "/shop/main/product/tea"} {
+		require.Empty(t, robots(p), "public shop page %s", p)
+	}
+	for _, p := range []string{"/login", "/signin", "/dashboard", "/pos", "/products", "/shop", "/reset-password"} {
+		require.Equal(t, "noindex", robots(p), "staff page %s", p)
+	}
+	require.Empty(t, robots("/assets/app.js"), "only pages")
+}
+
 func TestHealthReadiness(t *testing.T) {
 	h := newHarness(t, nil)
 	h.hc.Add("db", func(context.Context) error { return errors.New("connection refused to 10.0.0.5") })
