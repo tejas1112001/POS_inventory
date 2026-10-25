@@ -1,151 +1,128 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import React, { createContext, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useError } from './ErrorContext';
-import {
-  getToken,
-  getStoredUser,
-  setAuthData,
-  clearAuthData,
-  isTokenExpired,
-  getRememberSession,
-} from '../lib/authStorage';
+import { authApi, refreshAccessToken } from '../services/api';
+import { clearSession, getSession, setSession, subscribeSession, tokenSecondsLeft } from '../lib/session';
+import { purgeLegacyAuthData } from '../lib/authStorage';
+import { setFormatSettings } from '../lib/format';
 
+// eslint-disable-next-line react-refresh/only-export-components -- the context is shared with usePos
 export const PosContext = createContext();
 
-const API_BASE = import.meta.env?.VITE_API_URL?.replace(/\/+$/, '') ||
-  (import.meta.env?.DEV ? 'http://localhost:3000' : '');
-
+// PosProvider owns the session: it starts from the refresh cookie on page
+// load, keeps the in-memory access token fresh, and loads the tenant's
+// formatting settings from /api/auth/me.
 export const PosProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(null);
+  const [tenant, setTenant] = useState(null);
+  const [impersonation, setImpersonation] = useState(false);
   const [loading, setLoading] = useState(true);
   const { showError } = useError();
-  const refreshTimerRef = useRef(null);
+  const timerRef = useRef(null);
+  const currentUserRef = useRef(null);
 
-  const logout = useCallback(() => {
-    setCurrentUser(null);
-    clearAuthData();
-    if (refreshTimerRef.current) {
-      clearTimeout(refreshTimerRef.current);
-      refreshTimerRef.current = null;
-    }
-  }, []);
-
-  const refreshSession = useCallback(async () => {
-    const token = getToken();
-    if (!token || isTokenExpired(token, 0)) return false;
-
+  const loadMe = useCallback(async () => {
     try {
-      const response = await fetch(`${API_BASE}/api/auth/refresh`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ remember: getRememberSession() }),
-      });
-
-      if (!response.ok) return false;
-
-      const data = await response.json();
-      setAuthData({
-        user: data.user,
-        token: data.token,
-        permissions: data.permissions || [],
-        remember: data.remember ?? getRememberSession(),
-      });
-      setCurrentUser(data.user);
-      return true;
+      const me = await authApi.me();
+      setTenant(me.tenant || null);
+      setImpersonation(!!me.impersonation);
+      setFormatSettings(me.tenant || {});
+      if (me.user) setSession({ ...getSession(), user: me.user, permissions: me.permissions });
+      return me;
     } catch {
-      return false;
+      return null;
     }
   }, []);
 
-  const scheduleRefresh = useCallback(() => {
-    if (refreshTimerRef.current) {
-      clearTimeout(refreshTimerRef.current);
-    }
+  const signedOut = useCallback(() => {
+    clearSession();
+    setTenant(null);
+    setImpersonation(false);
+  }, []);
 
-    const token = getToken();
-    if (!token) return;
+  // Keep React state in step with the session store (refreshes update it).
+  useEffect(() => subscribeSession((s) => setCurrentUser(s.user)), []);
 
-    try {
-      const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
-      const expiresAt = payload.exp * 1000;
-      const refreshAt = expiresAt - 5 * 60 * 1000;
-      // Clamp delay between 30 seconds and 24 hours (2147483647 ms max for 32-bit int)
-      const rawDelay = refreshAt - Date.now();
-      const delay = Math.min(Math.max(rawDelay, 30_000), 86_400_000);
+  // Refresh one minute before the access token expires.
+  const schedule = useCallback(() => {
+    clearTimeout(timerRef.current);
+    if (!getSession().token) return;
+    const delay = Math.max((tokenSecondsLeft() - 60) * 1000, 15_000);
+    timerRef.current = setTimeout(async () => {
+      const ok = await refreshAccessToken();
+      if (!ok) {
+        signedOut();
+        return;
+      }
+      schedule();
+    }, delay);
+  }, [signedOut]);
 
-      refreshTimerRef.current = setTimeout(async () => {
-        const ok = await refreshSession();
-        if (ok) {
-          scheduleRefresh();
-        }
-      }, delay);
-    } catch (e) {
-      console.error('Failed to schedule token refresh:', e);
-    }
-  }, [refreshSession]);
+  useEffect(() => subscribeSession(() => schedule()), [schedule]);
 
   useEffect(() => {
-    const initAuth = async () => {
-      const user = getStoredUser();
-      const token = getToken();
+    let active = true;
+    purgeLegacyAuthData();
+    (async () => {
+      const body = await refreshAccessToken();
+      if (body && active) await loadMe();
+      if (active) setLoading(false);
+    })();
 
-      if (user && token) {
-        if (isTokenExpired(token, 0)) {
-          const refreshed = await refreshSession();
-          if (!refreshed) {
-            clearAuthData();
-          } else {
-            setCurrentUser(getStoredUser());
-            scheduleRefresh();
-          }
-        } else {
-          setCurrentUser(user);
-          scheduleRefresh();
-        }
-      }
-      setLoading(false);
+    const onUnauthorized = () => {
+      const wasSignedIn = !!currentUserRef.current;
+      currentUserRef.current = null;
+      signedOut();
+      if (wasSignedIn) showError('Your session has ended. Please sign in again.');
     };
-
-    initAuth();
-
-    const handleUnauthorized = async () => {
-      const refreshed = await refreshSession();
-      if (!refreshed) {
-        showError('Your session has expired. Please sign in again.');
-        logout();
+    // A tab in the background may sleep through its timer.
+    const onVisible = () => {
+      if (document.visibilityState === 'visible' && getSession().token && tokenSecondsLeft() < 90) {
+        refreshAccessToken().then((ok) => (ok ? schedule() : signedOut()));
       }
     };
-
-    window.addEventListener('unauthorized', handleUnauthorized);
-
+    window.addEventListener('unauthorized', onUnauthorized);
+    document.addEventListener('visibilitychange', onVisible);
     return () => {
-      window.removeEventListener('unauthorized', handleUnauthorized);
-      if (refreshTimerRef.current) {
-        clearTimeout(refreshTimerRef.current);
-      }
+      active = false;
+      window.removeEventListener('unauthorized', onUnauthorized);
+      document.removeEventListener('visibilitychange', onVisible);
+      clearTimeout(timerRef.current);
     };
-  }, [logout, refreshSession, scheduleRefresh, showError]);
+    // Run once on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  const login = (userData) => {
-    const { user, token, permissions, remember = true } = userData;
-    setAuthData({ user, token, permissions, remember });
-    setCurrentUser(user);
-    scheduleRefresh();
-  };
+  useEffect(() => {
+    currentUserRef.current = currentUser;
+  }, [currentUser]);
 
-  const value = {
-    currentUser,
-    login,
-    logout,
-    loading,
-    refreshSession,
-  };
-
-  return (
-    <PosContext.Provider value={value}>
-      {children}
-    </PosContext.Provider>
+  // login takes the body of POST /api/auth/login (the cookie is already set).
+  const login = useCallback(
+    async (body) => {
+      setSession({ token: body.token, user: body.user, permissions: body.permissions });
+      await loadMe();
+    },
+    [loadMe]
   );
+
+  const logout = useCallback(async () => {
+    await authApi.logout();
+    signedOut();
+  }, [signedOut]);
+
+  const value = useMemo(
+    () => ({
+      currentUser,
+      tenant,
+      impersonation,
+      loading,
+      login,
+      logout,
+      reloadMe: loadMe,
+      refreshSession: refreshAccessToken,
+    }),
+    [currentUser, tenant, impersonation, loading, login, logout, loadMe]
+  );
+
+  return <PosContext.Provider value={value}>{children}</PosContext.Provider>;
 };

@@ -115,7 +115,7 @@ export default function ShowcaseSettings() {
     }
   };
 
-  const publicUrl = `${window.location.origin}/#/shop/${storeData.slug || selectedStoreId}`;
+  const publicUrl = `${window.location.origin}/shop/${storeData.slug || selectedStoreId}`;
 
   const copyLink = () => {
     navigator.clipboard.writeText(publicUrl);
@@ -218,7 +218,7 @@ export default function ShowcaseSettings() {
                 placeholder="e.g. abc-fashion"
               />
               <p className="text-[11px] text-muted-foreground mt-1">
-                Your store link will be: {window.location.origin}/#/shop/
+                Your store link will be: {window.location.origin}/shop/
                 <span className="font-semibold text-foreground">{storeData.slug || 'slug'}</span>
               </p>
             </div>

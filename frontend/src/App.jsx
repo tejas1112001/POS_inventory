@@ -1,11 +1,10 @@
 import GlobalErrorHandler from './components/GlobalErrorHandler';
-import React, { useEffect } from 'react';
-import { HashRouter as Router, Routes, Route } from 'react-router-dom';
+import React from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import ProtectedRoute from './components/ProtectedRoute';
 import { PosProvider } from './context/PosContext';
 import { PermissionProvider } from './context/PermissionContext';
 import { ThemeProvider } from './context/ThemeContext';
-import { useError } from './context/ErrorContext';
 import AppLayout from './components/layout/AppLayout';
 import Dashboard from './pages/Dashboard';
 import Products from './pages/Products';
@@ -37,7 +36,8 @@ import Inventory from './pages/Inventory';
 import Roles from './pages/Roles';
 import AddRole from './pages/AddRole';
 import SignIn from './pages/SignIn';
-import SignUp from './pages/SignUp';
+import ForgotPassword from './pages/ForgotPassword';
+import SetPassword from './pages/SetPassword';
 import Settings from './pages/Settings';
 import ShowcaseSettings from './pages/ShowcaseSettings';
 import PublicShopPage from './pages/PublicShopPage';
@@ -51,18 +51,12 @@ function ProtectedLayout({ children, fullBleed = false, module, action = 'view' 
 }
 
 function AppRoutes() {
-  const { showError } = useError();
-
-  useEffect(() => {
-    window.electronAPI?.onBackendError((message) => {
-      showError(`Backend failed: ${message}`);
-    });
-  }, [showError]);
-
   return (
     <Routes>
       <Route path="/signin" element={<SignIn />} />
-      <Route path="/signup" element={<SignUp />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<SetPassword purpose="reset" />} />
+      <Route path="/accept-invite" element={<SetPassword purpose="invite" />} />
       <Route path="/" element={<ProtectedLayout module="dashboard"><Dashboard /></ProtectedLayout>} />
       <Route path="/categories" element={<ProtectedLayout module="categories" action="view"><Categories /></ProtectedLayout>} />
       <Route path="/add-category" element={<ProtectedLayout module="categories" action="create"><AddCategory /></ProtectedLayout>} />
@@ -98,6 +92,7 @@ function AppRoutes() {
       <Route path="/showcase-settings" element={<ProtectedLayout module="stores" action="view"><ShowcaseSettings /></ProtectedLayout>} />
       <Route path="/shop/:slug" element={<PublicShopPage />} />
       <Route path="/shop/:slug/product/:productId" element={<PublicShopPage />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }

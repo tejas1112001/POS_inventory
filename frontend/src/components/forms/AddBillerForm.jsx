@@ -14,7 +14,8 @@ export default function AddBillerForm({ onSaved, onCancel }) {
   useEffect(() => {
     api.get('/api/roles')
       .then((data) => {
-        const list = Array.isArray(data) ? data : [];
+        // The owner role cannot be given here (C-07).
+        const list = (Array.isArray(data) ? data : []).filter((r) => r.name?.toLowerCase() !== 'owner');
         setRoles(list);
         if (list.length > 0) {
           const defaultRole = list.find((r) => r.name.toLowerCase() === 'biller') || list[0];
@@ -26,21 +27,26 @@ export default function AddBillerForm({ onSaved, onCancel }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!name.trim() || !email.trim() || !password) {
-      setError('Name, email, and password are required.');
+    if (!name.trim() || !email.trim()) {
+      setError('Name and email are required.');
+      return;
+    }
+    if (password && password.length < 12) {
+      setError('A password needs at least 12 characters, or leave it empty to send an invitation.');
       return;
     }
 
     try {
       setSaving(true);
       setError(null);
-      await api.post('/api/auth/signup', {
+      // Without a password the server emails an invitation link (C-05).
+      await api.post('/api/users', {
         name: name.trim(),
         email: email.trim(),
-        password,
-        role_id: roleId ? parseInt(roleId) : undefined,
+        ...(password ? { password } : {}),
+        role_id: roleId ? parseInt(roleId, 10) : undefined,
         status,
-      });
+      }, { quiet: true });
       onSaved();
       onCancel();
     } catch (err) {
@@ -86,16 +92,19 @@ export default function AddBillerForm({ onSaved, onCancel }) {
 
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
-          Password <span className="text-red-500">*</span>
+          Password
         </label>
         <input
           type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          placeholder="Enter initial password"
+          placeholder="Leave empty to email an invitation"
+          autoComplete="new-password"
           className="w-full px-3 py-2 border rounded-lg focus:ring-blue-500 focus:border-blue-500"
-          required
         />
+        <p className="mt-1 text-xs text-gray-500">
+          Empty: the user gets an email to set their own password. Otherwise at least 12 characters.
+        </p>
       </div>
 
       <div>

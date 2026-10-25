@@ -5,10 +5,10 @@ import { usePermission } from '../context/PermissionContext';
 
 export default function ProtectedRoute({ children, module, action = 'view' }) {
   const { currentUser, loading } = usePos();
-  const { hasPermission, loadingPermissions } = usePermission();
+  const { hasPermission } = usePermission();
   const location = useLocation();
 
-  if (loading || loadingPermissions) {
+  if (loading) {
     return (
       <div className="flex items-center justify-center py-20 text-muted-foreground">
         Loading session...

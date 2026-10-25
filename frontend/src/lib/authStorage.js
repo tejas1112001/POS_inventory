@@ -1,103 +1,46 @@
-const TOKEN_KEY = 'token';
-const USER_KEY = 'currentUser';
-const PERMISSIONS_KEY = 'userPermissions';
+// Browser storage keeps only two sign-in preferences: the saved email and
+// "remember me". Tokens, the user and permissions stay in memory
+// (lib/session.js; API_CONTRACT C-02).
+
 const REMEMBER_KEY = 'rememberSession';
 const SAVED_EMAIL_KEY = 'savedEmail';
 
+// Keys the old frontend used for tokens and user data.
+const LEGACY_KEYS = ['token', 'currentUser', 'userPermissions'];
+
+function safe(fn, fallback) {
+  try {
+    return fn();
+  } catch {
+    return fallback;
+  }
+}
+
+// purgeLegacyAuthData removes tokens an older version left in storage.
+export function purgeLegacyAuthData() {
+  safe(() => {
+    for (const key of LEGACY_KEYS) {
+      localStorage.removeItem(key);
+      sessionStorage.removeItem(key);
+    }
+  });
+}
+
 export function getRememberSession() {
-  return localStorage.getItem(REMEMBER_KEY) === 'true';
+  return safe(() => localStorage.getItem(REMEMBER_KEY) !== 'false', true);
 }
 
 export function setRememberSession(remember) {
-  localStorage.setItem(REMEMBER_KEY, remember ? 'true' : 'false');
-}
-
-export function getAuthStorage() {
-  return getRememberSession() ? localStorage : sessionStorage;
-}
-
-export function getToken() {
-  return localStorage.getItem(TOKEN_KEY) || sessionStorage.getItem(TOKEN_KEY);
-}
-
-export function setAuthData({ user, token, permissions, remember }) {
-  setRememberSession(remember);
-  const storage = remember ? localStorage : sessionStorage;
-  const other = remember ? sessionStorage : localStorage;
-
-  storage.setItem(TOKEN_KEY, token);
-  storage.setItem(USER_KEY, JSON.stringify(user));
-  if (Array.isArray(permissions)) {
-    storage.setItem(PERMISSIONS_KEY, JSON.stringify(permissions));
-  }
-  other.removeItem(TOKEN_KEY);
-  other.removeItem(USER_KEY);
-  other.removeItem(PERMISSIONS_KEY);
-}
-
-export function getStoredUser() {
-  const raw =
-    localStorage.getItem(USER_KEY) || sessionStorage.getItem(USER_KEY);
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
-}
-
-export function getStoredPermissions() {
-  const raw =
-    localStorage.getItem(PERMISSIONS_KEY) || sessionStorage.getItem(PERMISSIONS_KEY);
-  if (!raw) return [];
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return [];
-  }
-}
-
-export function setStoredPermissions(permissions) {
-  const storage = getAuthStorage();
-  if (Array.isArray(permissions)) {
-    storage.setItem(PERMISSIONS_KEY, JSON.stringify(permissions));
-  }
-}
-
-export function clearAuthData() {
-  localStorage.removeItem(TOKEN_KEY);
-  localStorage.removeItem(USER_KEY);
-  localStorage.removeItem(PERMISSIONS_KEY);
-  sessionStorage.removeItem(TOKEN_KEY);
-  sessionStorage.removeItem(USER_KEY);
-  sessionStorage.removeItem(PERMISSIONS_KEY);
+  safe(() => localStorage.setItem(REMEMBER_KEY, remember ? 'true' : 'false'));
 }
 
 export function getSavedEmail() {
-  return localStorage.getItem(SAVED_EMAIL_KEY) || '';
+  return safe(() => localStorage.getItem(SAVED_EMAIL_KEY) || '', '');
 }
 
 export function setSavedEmail(email) {
-  if (email) {
-    localStorage.setItem(SAVED_EMAIL_KEY, email);
-  } else {
-    localStorage.removeItem(SAVED_EMAIL_KEY);
-  }
-}
-
-export function decodeJwtPayload(token) {
-  if (!token) return null;
-  try {
-    const payload = token.split('.')[1];
-    const decoded = atob(payload.replace(/-/g, '+').replace(/_/g, '/'));
-    return JSON.parse(decoded);
-  } catch {
-    return null;
-  }
-}
-
-export function isTokenExpired(token, bufferSeconds = 60) {
-  const payload = decodeJwtPayload(token);
-  if (!payload?.exp) return true;
-  return Date.now() >= (payload.exp - bufferSeconds) * 1000;
+  safe(() => {
+    if (email) localStorage.setItem(SAVED_EMAIL_KEY, email);
+    else localStorage.removeItem(SAVED_EMAIL_KEY);
+  });
 }
