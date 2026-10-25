@@ -5,6 +5,9 @@ import {
 import CustomerForm from '../components/CustomerForm';
 import PayForm from '../components/PayForm';
 import Receipt from '../components/Receipt';
+import PriceChangedDialog from '../components/PriceChangedDialog';
+import { useShopSettings } from '../hooks/useShopSettings';
+import { isRetryable, newIdempotencyKey, priceChanges } from '../lib/checkout';
 import { api } from '../services/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -52,7 +55,6 @@ export default function POS() {
   const [activeCategory, setActiveCategory] = useState('all');
   const [orderItems, setOrderItems] = useState([]);
   const [showCustomerForm, setShowCustomerForm] = useState(false);
-  const [categories, setCategories] = useState([]);
   const [showPayForm, setShowPayForm] = useState(false);
   const [showReceipt, setShowReceipt] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -60,6 +62,10 @@ export default function POS() {
   const [clearConfirm, setClearConfirm] = useState(false);
 
   const [completedSale, setCompletedSale] = useState(null);
+  const [changedPrices, setChangedPrices] = useState(null);
+  const { settings } = useShopSettings();
+  // One key per checkout attempt; a retry after a lost answer reuses it.
+  const idemKey = useRef(null);
 
   // Compute subtotal and dynamic item-level tax
   const subtotal = orderItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
@@ -140,9 +146,6 @@ export default function POS() {
           setSelectedCustomer(walkInCustomer ? walkInCustomer.id : (fetchedCustomers[0]?.id || null));
         }
 
-        const fetchedCategories = await api.get('/api/categories');
-        setCategories(fetchedCategories);
-
         const fetchedStores = await api.get('/api/stores');
         setStores(fetchedStores);
         if (fetchedStores && fetchedStores.length > 0) {
@@ -165,6 +168,13 @@ export default function POS() {
       fetchProducts(selectedStore);
     }
   }, [selectedStore, fetchProducts]);
+
+  // Category pills come from the products on sale here, so cashiers need
+  // no categories:view permission (the biller role does not have it).
+  const categories = useMemo(() => {
+    const names = [...new Set(products.map((p) => p.category).filter(Boolean))];
+    return names.sort((a, b) => a.localeCompare(b)).map((name) => ({ id: name, name }));
+  }, [products]);
 
   const filteredProducts = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
@@ -235,37 +245,62 @@ export default function POS() {
     setDiscount(0.0);
   }
 
+  // A changed cart is a different request: it needs a new key.
+  useEffect(() => {
+    idemKey.current = null;
+  }, [orderItems, discount, selectedCustomer, selectedStore]);
+
+  // processOrder sends the sale. The server prices it (C-04): the cart's
+  // own subtotal, tax and total are only an estimate and are not sent.
   const processOrder = async (paymentData) => {
+    if (!selectedStore || !selectedCustomer) {
+      setError('Select a store and a customer first.');
+      return;
+    }
+    if (!idemKey.current) idemKey.current = newIdempotencyKey();
+    const { receiptEmail, ...payment } = paymentData;
+    const orderData = {
+      ...payment,
+      orderItems: orderItems.map((item) => ({
+        productId: item.id,
+        variantId: item.variantId,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+      })),
+      customerId: Number(selectedCustomer),
+      storeId: Number(selectedStore),
+      discount,
+      ...(receiptEmail ? { receiptEmail } : {}),
+    };
     try {
-      if (!selectedStore || !selectedCustomer) {
-        throw new Error('Store and Customer must be selected');
-      }
-
-      const orderData = {
-        ...paymentData,
-        orderItems: orderItems.map((item) => ({
-          productId: item.id,
-          variantId: item.variantId,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-          total: item.price * item.quantity,
-        })),
-        customerId: selectedCustomer,
-        storeId: selectedStore,
-        subtotal,
-        discount,
-        tax,
-        total,
-      };
-
-      const result = await api.post('/api/sales', orderData);
+      const result = await api.post('/api/sales', orderData, {
+        headers: { 'Idempotency-Key': idemKey.current },
+        quiet: true,
+      });
+      idemKey.current = null;
       setCompletedSale(result);
       setShowReceipt(true);
-      return result;
     } catch (err) {
-      setError(err.response?.data?.error || err.message || 'Failed to process order');
-      throw err;
+      if (!isRetryable(err)) idemKey.current = null;
+      const changes = priceChanges(err);
+      if (changes) {
+        setChangedPrices(changes);
+        return;
+      }
+      setError(
+        isRetryable(err)
+          ? 'No answer from the server. The sale may not be saved. Press PAY again: it will not be charged twice.'
+          : err.message || 'The sale could not be saved.'
+      );
     }
+  };
+
+  const acceptNewPrices = () => {
+    const byVariant = new Map((changedPrices || []).map((c) => [c.variantId, c.unitPrice]));
+    setOrderItems((prev) =>
+      prev.map((i) => (byVariant.has(i.variantId) ? { ...i, unitPrice: byVariant.get(i.variantId), price: byVariant.get(i.variantId) } : i))
+    );
+    setChangedPrices(null);
   };
 
   const isProductLocked = (product) => {
@@ -273,7 +308,7 @@ export default function POS() {
     return product.isLocked && (new Date() - new Date(product.lockedAt)) < twoMinutes;
   };
 
-  const selectedCustomerObj = customers.find((c) => c.id === selectedCustomer);
+  const selectedCustomerObj = customers.find((c) => String(c.id) === String(selectedCustomer));
 
   if (loading && products.length === 0) {
     return <div className="flex h-full items-center justify-center text-muted-foreground">Loading products...</div>;
@@ -494,7 +529,7 @@ export default function POS() {
             />
           </div>
           <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">Tax (8%)</span>
+            <span className="text-muted-foreground">{settings?.taxLabel || 'Tax'}</span>
             <span className="font-medium">{formatCurrency(tax)}</span>
           </div>
           <div className="flex items-center justify-between border-t pt-2">
@@ -534,6 +569,7 @@ export default function POS() {
           onClose={() => setShowPayForm(false)}
           total={total}
           onPaySubmit={processOrder}
+          customerEmail={selectedCustomerObj?.email || ''}
         />
       )}
 
@@ -549,6 +585,13 @@ export default function POS() {
           store={stores.find((st) => String(st.id) === String(selectedStore))}
         />
       )}
+
+      <PriceChangedDialog
+        changes={changedPrices}
+        nameOf={(c) => orderItems.find((i) => i.variantId === c.variantId)?.name}
+        onAccept={acceptNewPrices}
+        onClose={() => setChangedPrices(null)}
+      />
 
       {clearConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setClearConfirm(false)}>
