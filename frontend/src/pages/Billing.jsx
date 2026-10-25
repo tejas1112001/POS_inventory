@@ -123,7 +123,8 @@ export default function Billing() {
           </dl>
         </div>
         {!sub.billingEnabled && <p className="mt-3 text-sm text-muted-foreground">Online payment is not set up yet. Contact support to change your plan.</p>}
-        {canManage && pending && !sub.subscribed && (
+        {/* subscribed is true from the moment a checkout starts, before payment. */}
+        {canManage && pending && sub.status !== 'active' && (
           <a href={pending} className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline">
             Continue the payment you started <ExternalLink className="size-3.5" />
           </a>
