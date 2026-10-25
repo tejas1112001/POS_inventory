@@ -14,9 +14,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
-
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/adjustments"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/auth"
@@ -407,6 +407,13 @@ func (a *App) platformAPI(cfg *config.Config, log *slog.Logger, network httpx.Ne
 		Provisioner: prov, Registry: a.registry, Log: log,
 		Hasher:   security.NewHasher(security.PlatformArgon2, 4),
 		Envelope: env, Signer: signer, Sessions: a.sessions, Billing: a.billing,
+		ExportsEnabled: cfg.ExportsEnabled(),
+		ExportQueued: func(ctx context.Context, id uuid.UUID) error {
+			if a.worker == nil {
+				return errors.New("no job runner")
+			}
+			return a.worker.EnqueueExport(ctx, id)
+		},
 		IssueOwnerInvite: func(ctx context.Context, id string, m platform.Meta) (string, time.Time, error) {
 			t, err := a.registry.ByID(ctx, id)
 			if err != nil {

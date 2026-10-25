@@ -304,8 +304,10 @@ All approved (Q-6, 2026-10-15). "FE" = frontend change needed.
 | POST/GET | `/notifications` | notifications:send / view | Announcement to one / group / all (email + banner) |
 | GET | `/migrations/status`, `/migrations/drift` | migrations:view | |
 | POST | `/migrations/run` | migrations:run + step-up | `{dryRun, tenantIds?, parallelism}` |
-| POST | `/tenants/:id/exports`, GET `/tenants/:id/exports` | tenants:export + step-up | Per-tenant export |
-| POST | `/tenants/:id/restore-tests` | tenants:export | Restore latest export into a scratch schema and compare |
+| POST | `/tenants/:id/exports` | tenants:export + step-up | Per-tenant export `{includeFiles?}` → `202` + the queued export; the worker runs it. `409` while one is queued or running, or when exports are not configured |
+| GET | `/tenants/:id/exports` | tenants:export | The tenant's last 50 exports (status, size, SHA-256, counts, error). Archives are never downloadable from the API |
+| POST | `/tenants/:id/restore-tests` | tenants:export | Queue a restore of the latest (or `{exportId}`) succeeded export of this tenant into a scratch schema, compared and dropped → `202`. Run by `posctl tenant restore-tests` (only posctl holds the age identity). `404` without a succeeded export of this tenant |
+| GET | `/tenants/:id/restore-tests` | tenants:export | The tenant's last 50 restores (any mode): status, `verified`, rows, per-table counts and checksums |
 | GET | `/audit` | audit:view | Platform audit log |
 | GET/POST/PATCH | `/users[/:id]` | platform_users:manage (super_admin) | Platform staff |
 | POST | `/webhooks/razorpay` | 🔓 signature | Raw-body HMAC, idempotent (BILLING_DESIGN §4) |

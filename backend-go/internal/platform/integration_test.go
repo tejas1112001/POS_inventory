@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/authtoken"
@@ -68,6 +69,8 @@ type env struct {
 	sessions *tenancy.Sessions
 	registry *tenancy.Registry
 	fake     *billing.Fake
+	mu       sync.Mutex
+	queued   []uuid.UUID // export jobs started by the console
 }
 
 // One clock for every test: TOTP replay state lives in the database, so
@@ -111,7 +114,11 @@ var (
 	shared    *env
 )
 
-func newEnv(t *testing.T) *env {
+func newEnv(t *testing.T) *env { return newEnvWith(t, nil) }
+
+// newEnvWith builds an env whose service config mod may change. Exports
+// are on by default; queued export jobs are recorded in e.queued.
+func newEnvWith(t *testing.T, mod func(*platform.Config)) *env {
 	setupOnce.Do(func() {
 		_, err := platform.BootstrapSuperAdmin(context.Background(), tdb.MigratorDSN, rootEmail, "Root", rootPW, security.NewHasher(fast, 2))
 		if err != nil {
@@ -139,14 +146,25 @@ func newEnv(t *testing.T) *env {
 	e.sessions = tenancy.NewSessions(tdb.AppPool(t, 4), 5*time.Second, nil, nil)
 	e.registry = tenancy.NewRegistry(e.sessions, nil)
 	e.fake = billing.NewFake([]byte("whsec-platform-test-0123456789"), "")
-	svc := platform.NewService(platform.Config{
+	pc := platform.Config{
 		Billing:    &billing.Service{Sessions: e.sessions, Provider: e.fake, Cfg: billing.DefaultConfig},
 		BaseDomain: "pos.test", PlatformName: "POS Test", SessionMax: 8 * time.Hour, IdleTimeout: 30 * time.Minute,
 		Provisioner: provisioning.New(tdb.MigratorDSN, "https", "pos.test", slog.New(slog.DiscardHandler)),
 		Registry:    e.registry, Log: slog.New(slog.DiscardHandler),
 		Hasher: security.NewHasher(fast, 4), Envelope: e.svcEnv, Signer: signer, Sessions: e.sessions,
-		Now: e.clock,
-	})
+		Now:            e.clock,
+		ExportsEnabled: true,
+		ExportQueued: func(_ context.Context, id uuid.UUID) error {
+			e.mu.Lock()
+			defer e.mu.Unlock()
+			e.queued = append(e.queued, id)
+			return nil
+		},
+	}
+	if mod != nil {
+		mod(&pc)
+	}
+	svc := platform.NewService(pc)
 	n := httpx.Network{BaseDomain: "pos.test"}
 	ph := platform.NewHTTP(svc, n, nil, nil, "http")
 	e.h = httpx.NewRouter(httpx.RouterDeps{

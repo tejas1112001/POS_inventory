@@ -54,6 +54,12 @@ type Config struct {
 	// Billing is the SaaS billing service (step 16); its Provider is nil
 	// when billing is off.
 	Billing *billing.Service
+	// ExportsEnabled is set when EXPORT_AGE_RECIPIENT and
+	// EXPORT_MANIFEST_KEY are configured (step 18).
+	ExportsEnabled bool
+	// ExportQueued starts the job of a newly queued export (optional: the
+	// worker's export sweep finds queued exports too).
+	ExportQueued func(ctx context.Context, exportID uuid.UUID) error
 }
 
 // Service implements the platform API.
