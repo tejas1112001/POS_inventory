@@ -18,6 +18,7 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/apperr"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/audit"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/authtoken"
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/httpx"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/secrets"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/security"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/tenancy"
@@ -43,6 +44,7 @@ type Config struct {
 	RefreshRemember time.Duration // 30 d sliding
 	RefreshSession  time.Duration // 12 h absolute
 	PublicScheme    string
+	PublicPort      string // dev proxy port in invite links (empty in production)
 	BaseDomain      string
 	Log             *slog.Logger
 	Now             func() time.Time
@@ -670,6 +672,6 @@ func (s *Service) OwnerInviteLink(ctx context.Context, t tenancy.Tenant, m Meta)
 	if err != nil {
 		return "", time.Time{}, err
 	}
-	url := s.cfg.PublicScheme + "://" + t.Slug + "." + s.cfg.BaseDomain + "/accept-invite#token=" + raw
+	url := httpx.TenantURL(s.cfg.PublicScheme, t.Slug, s.cfg.BaseDomain, s.cfg.PublicPort) + "/accept-invite#token=" + raw
 	return url, s.now().Add(InviteTokenTTL), nil
 }

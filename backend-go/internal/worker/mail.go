@@ -24,6 +24,7 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/apperr"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/billing"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/files"
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/httpx"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/mailer"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/mailtmpl"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/obs"
@@ -59,6 +60,7 @@ type MailConfig struct {
 	TenantSender func(mailer.Server) mailer.Sender // builds a guarded sender for tenant SMTP
 	OwnerInvite  func(context.Context, tenancy.Tenant) (string, time.Time, error)
 	PublicScheme string
+	PublicPort   string // dev proxy port in links (empty in production)
 	BaseDomain   string
 	PlatformName string
 	MailFrom     string
@@ -512,7 +514,7 @@ func errCode(err error) string {
 }
 
 func (m *Mailer) tenantURL(t tenancy.Tenant) string {
-	return m.c.PublicScheme + "://" + t.Slug + "." + m.c.BaseDomain
+	return httpx.TenantURL(m.c.PublicScheme, t.Slug, m.c.BaseDomain, m.c.PublicPort)
 }
 
 func humanize(d time.Duration) string {

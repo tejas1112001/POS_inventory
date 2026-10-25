@@ -135,6 +135,24 @@ func TestHTTPSchemeOnlyInDev(t *testing.T) {
 	require.ErrorContains(t, err, "PUBLIC_SCHEME=http is only allowed")
 }
 
+func TestPublicPort(t *testing.T) {
+	v := validVars(t)
+	v["PUBLIC_PORT"] = "8443"
+	c, err := LoadFrom(v)
+	require.NoError(t, err)
+	require.Equal(t, "8443", c.PublicPort)
+	for _, bad := range []string{"0", "65536", "84x3", "08443", ":8443"} {
+		v["PUBLIC_PORT"] = bad
+		_, err := LoadFrom(v)
+		require.ErrorContains(t, err, "PUBLIC_PORT must be a port number", bad)
+	}
+	v["PUBLIC_PORT"] = "8443"
+	v["APP_ENV"] = "production"
+	v["PUBLIC_SCHEME"] = "https"
+	_, err = LoadFrom(v)
+	require.ErrorContains(t, err, "PUBLIC_PORT is for development only")
+}
+
 func TestProductionRules(t *testing.T) {
 	v := validVars(t)
 	v["APP_ENV"] = "production"

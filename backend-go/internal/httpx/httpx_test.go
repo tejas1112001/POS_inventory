@@ -160,6 +160,60 @@ func TestForgedForwardedHeadersIgnoredFromUntrustedPeer(t *testing.T) {
 	require.Equal(t, "https", testNet.Scheme(r))
 }
 
+func TestSameOrigin(t *testing.T) {
+	mk := func(host, fwdHost, proto, origin string, trusted bool) *http.Request {
+		r := httptest.NewRequest("POST", "/api/auth/refresh", nil)
+		r.Host = host
+		r.RemoteAddr = "203.0.113.9:1"
+		if trusted {
+			r.RemoteAddr = "10.1.2.3:1"
+		}
+		if fwdHost != "" {
+			r.Header.Set("X-Forwarded-Host", fwdHost)
+		}
+		if proto != "" {
+			r.Header.Set("X-Forwarded-Proto", proto)
+		}
+		if origin != "" {
+			r.Header.Set("Origin", origin)
+		}
+		return r
+	}
+	cases := []struct {
+		name string
+		r    *http.Request
+		want bool
+	}{
+		{"production 443", mk("app:8080", "acme.pos.test", "https", "https://acme.pos.test", true), true},
+		{"explicit default port", mk("app:8080", "acme.pos.test:443", "https", "https://acme.pos.test", true), true},
+		{"origin with default port", mk("app:8080", "acme.pos.test", "https", "https://acme.pos.test:443", true), true},
+		{"dev proxy port", mk("app:8080", "acme.pos.test:8443", "https", "https://acme.pos.test:8443", true), true},
+		{"case and trailing dot", mk("app:8080", "Acme.Pos.Test:8443", "https", "https://ACME.pos.test.:8443", true), true},
+		{"other port", mk("app:8080", "acme.pos.test:8443", "https", "https://acme.pos.test:9999", true), false},
+		{"port missing in origin", mk("app:8080", "acme.pos.test:8443", "https", "https://acme.pos.test", true), false},
+		{"other tenant", mk("app:8080", "acme.pos.test", "https", "https://other.pos.test", true), false},
+		{"http origin on https", mk("app:8080", "acme.pos.test", "https", "http://acme.pos.test", true), false},
+		{"suffix trick", mk("app:8080", "acme.pos.test", "https", "https://acme.pos.test.evil.com", true), false},
+		{"with path", mk("app:8080", "acme.pos.test", "https", "https://acme.pos.test/x", true), false},
+		{"null origin", mk("app:8080", "acme.pos.test", "https", "null", true), false},
+		{"no origin", mk("app:8080", "acme.pos.test", "https", "", true), false},
+		{"forged forwarded host from a client", mk("acme.pos.test", "other.pos.test", "", "http://other.pos.test", false), false},
+		{"direct, no proxy", mk("acme.pos.test:8080", "", "", "http://acme.pos.test:8080", false), true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			require.Equal(t, c.want, testNet.SameOrigin(c.r))
+		})
+	}
+}
+
+func TestTenantURL(t *testing.T) {
+	require.Equal(t, "https://acme.pos.test", TenantURL("https", "acme", "pos.test", ""))
+	require.Equal(t, "https://acme.pos.test", TenantURL("https", "acme", "pos.test", "443"))
+	require.Equal(t, "https://acme.localhost:8443", TenantURL("https", "acme", "localhost", "8443"))
+	require.Equal(t, "http://acme.localhost:8080", TenantURL("http", "acme", "localhost", "8080"))
+}
+
 func TestClientIPRightmostUntrusted(t *testing.T) {
 	r := httptest.NewRequest("GET", "/", nil)
 	r.RemoteAddr = "10.0.0.1:1"

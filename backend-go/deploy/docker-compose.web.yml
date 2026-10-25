@@ -1,0 +1,13 @@
+# Overlay: posd also serves the tenant app build, so the app and /api share
+# one origin as in production. Build the frontend first (frontend/dist).
+#
+#   make up-web          # = docker compose -f docker-compose.yml -f docker-compose.web.yml up
+#
+# FRONTEND_DIST points elsewhere if the build lives in another folder.
+
+services:
+  app:
+    environment:
+      STATIC_DIR: /static
+    volumes:
+      - ${FRONTEND_DIST:-../../frontend/dist}:/static/tenant:ro

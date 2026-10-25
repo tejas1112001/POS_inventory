@@ -292,7 +292,7 @@ func (a *App) tenantAPI(cfg *config.Config, log *slog.Logger, network httpx.Netw
 	authSvc := auth.NewService(auth.Config{
 		Sessions: a.sessions, States: states, Signer: signer, Hasher: hasher, Envelope: env,
 		RefreshRemember: cfg.RefreshTTLRemember, RefreshSession: cfg.RefreshTTLSession,
-		PublicScheme: cfg.PublicScheme, BaseDomain: cfg.BaseDomain, Log: log,
+		PublicScheme: cfg.PublicScheme, PublicPort: cfg.PublicPort, BaseDomain: cfg.BaseDomain, Log: log,
 	})
 	planSvc := plans.NewService(a.sessions)
 	fileSvc := files.NewService(storage, a.sessions, planSvc, log)
@@ -362,7 +362,7 @@ func (a *App) newWorker(cfg *config.Config, log *slog.Logger, env *secrets.Envel
 			OwnerInvite: func(ctx context.Context, t tenancy.Tenant) (string, time.Time, error) {
 				return authSvc.OwnerInviteLink(ctx, t, auth.Meta{RequestID: "worker"})
 			},
-			PublicScheme: cfg.PublicScheme, BaseDomain: cfg.BaseDomain, PlatformName: cfg.PlatformName,
+			PublicScheme: cfg.PublicScheme, PublicPort: cfg.PublicPort, BaseDomain: cfg.BaseDomain, PlatformName: cfg.PlatformName,
 			MailFrom: cfg.MailFromAddress, MailDomain: cfg.MailDomain(), Metrics: a.metrics, Log: log,
 		},
 	})

@@ -176,9 +176,7 @@ func idParam(r *http.Request) (int64, error) {
 // the custom header (TENANCY §7.4).
 func (a *API) csrf(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		want := a.d.Network.Scheme(r) + "://" + httpx.HostFrom(r.Context()).Name
-		origin := strings.TrimSuffix(strings.TrimSuffix(r.Header.Get("Origin"), ":443"), ":80")
-		if r.Header.Get("X-Requested-With") != "fetch" || origin != want {
+		if r.Header.Get("X-Requested-With") != "fetch" || !a.d.Network.SameOrigin(r) {
 			httpx.WriteError(w, r, apperr.Forbidden(apperr.CodeForbidden, "Cross-site request refused"))
 			return
 		}

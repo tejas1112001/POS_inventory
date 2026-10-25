@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"reflect"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -36,6 +37,9 @@ type Config struct {
 
 	BaseDomain   string `env:"BASE_DOMAIN,required,notEmpty"`
 	PublicScheme string `env:"PUBLIC_SCHEME" envDefault:"https"`
+	// PublicPort is the port in links that emails carry, for a dev proxy
+	// on a non-default port (8443). Empty in production.
+	PublicPort   string `env:"PUBLIC_PORT"`
 	PlatformName string `env:"PLATFORM_NAME,required,notEmpty"`
 	AppEnv       string `env:"APP_ENV,required,notEmpty"`
 
@@ -211,6 +215,12 @@ func (c *Config) validate() error {
 		add("PUBLIC_SCHEME must be https or http")
 	}
 
+	if c.PublicPort != "" {
+		if n, err := strconv.Atoi(c.PublicPort); err != nil || n < 1 || n > 65535 || strconv.Itoa(n) != c.PublicPort {
+			add("PUBLIC_PORT must be a port number")
+		}
+	}
+
 	c.BaseDomain = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(c.BaseDomain), "."))
 	if !validDomain(c.BaseDomain) {
 		add("BASE_DOMAIN must be a bare host name such as pos.example.com")
@@ -347,6 +357,9 @@ func (c *Config) validate() error {
 		}
 		if c.BaseDomain == "localhost" {
 			add("production requires a real BASE_DOMAIN")
+		}
+		if c.PublicPort != "" {
+			add("PUBLIC_PORT is for development only")
 		}
 	}
 

@@ -4,6 +4,7 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"net/url"
 	"regexp"
 	"strings"
 )
@@ -137,6 +138,54 @@ func (n Network) RawHost(r *http.Request) string {
 		}
 	}
 	return r.Host
+}
+
+// Origin is this request's own origin as a browser writes it in the Origin
+// header: scheme, host name and the port when it is not the scheme's
+// default (a dev proxy on :8443 forwards Host with its port).
+func (n Network) Origin(r *http.Request) string {
+	raw := n.RawHost(r)
+	name := normalizeHost(raw)
+	if name == "" {
+		return ""
+	}
+	return canonicalOrigin(n.Scheme(r), name, portOf(raw))
+}
+
+// SameOrigin reports whether the request's Origin header is exactly this
+// request's origin (scheme, host and port). CSRF check for the cookie
+// endpoints (TENANCY §7.4).
+func (n Network) SameOrigin(r *http.Request) bool {
+	want := n.Origin(r)
+	u, err := url.Parse(strings.TrimSpace(r.Header.Get("Origin")))
+	if want == "" || err != nil || u.Host == "" || u.Path != "" || u.RawQuery != "" || u.User != nil {
+		return false
+	}
+	name := normalizeHost(u.Host)
+	if name == "" {
+		return false
+	}
+	return canonicalOrigin(strings.ToLower(u.Scheme), name, u.Port()) == want
+}
+
+// TenantURL is a tenant's public base URL for links in emails. port is
+// empty in production (443); a dev proxy sets PUBLIC_PORT (e.g. 8443).
+func TenantURL(scheme, slug, baseDomain, port string) string {
+	return canonicalOrigin(scheme, slug+"."+baseDomain, port)
+}
+
+func portOf(hostport string) string {
+	if _, p, err := net.SplitHostPort(hostport); err == nil {
+		return p
+	}
+	return ""
+}
+
+func canonicalOrigin(scheme, name, port string) string {
+	if port == "" || (scheme == "https" && port == "443") || (scheme == "http" && port == "80") {
+		return scheme + "://" + name
+	}
+	return scheme + "://" + name + ":" + port
 }
 
 // Classify maps the request host to a router.

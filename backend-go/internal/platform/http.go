@@ -137,18 +137,12 @@ func (h *HTTP) ipAllowlist(next http.Handler) http.Handler {
 // exact host and the custom header must be present (TENANCY §7.4).
 func (h *HTTP) csrf(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		want := h.net.Scheme(r) + "://" + httpx.HostFrom(r.Context()).Name
-		if r.Header.Get("X-Requested-With") != "fetch" || stripDefaultPort(r.Header.Get("Origin")) != want {
+		if r.Header.Get("X-Requested-With") != "fetch" || !h.net.SameOrigin(r) {
 			httpx.WriteError(w, r, apperr.Forbidden(apperr.CodeForbidden, "Cross-site request refused"))
 			return
 		}
 		next.ServeHTTP(w, r)
 	})
-}
-
-func stripDefaultPort(origin string) string {
-	origin = strings.TrimSuffix(origin, ":443")
-	return strings.TrimSuffix(origin, ":80")
 }
 
 func (h *HTTP) authenticate(next http.Handler) http.Handler {
