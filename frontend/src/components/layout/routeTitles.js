@@ -26,6 +26,7 @@ export const routeTitles = {
   '/customer-report': 'Customer Report',
   '/customer-due-report': 'Customer Due Report',
   '/settings': 'Settings',
+  '/billing': 'Billing',
 };
 
 export function getRouteTitle(pathname) {

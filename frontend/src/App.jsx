@@ -39,6 +39,7 @@ import SignIn from './pages/SignIn';
 import ForgotPassword from './pages/ForgotPassword';
 import SetPassword from './pages/SetPassword';
 import Settings from './pages/Settings';
+import Billing from './pages/Billing';
 import ShowcaseSettings from './pages/ShowcaseSettings';
 import PublicShopPage from './pages/PublicShopPage';
 
@@ -89,6 +90,7 @@ function AppRoutes() {
       <Route path="/customer-report" element={<ProtectedLayout module="reports" action="view"><CustomerReport /></ProtectedLayout>} />
       <Route path="/inventory" element={<ProtectedLayout module="inventory" action="view"><Inventory /></ProtectedLayout>} />
       <Route path="/settings" element={<ProtectedLayout><Settings /></ProtectedLayout>} />
+      <Route path="/billing" element={<ProtectedLayout module="billing" action="view"><Billing /></ProtectedLayout>} />
       <Route path="/showcase-settings" element={<ProtectedLayout module="stores" action="view"><ShowcaseSettings /></ProtectedLayout>} />
       <Route path="/shop/:slug" element={<PublicShopPage />} />
       <Route path="/shop/:slug/product/:productId" element={<PublicShopPage />} />

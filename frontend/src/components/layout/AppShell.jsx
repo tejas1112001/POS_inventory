@@ -19,6 +19,7 @@ export function PageWrapper({ children, className }) {
 export function MainLayout({
   sidebar,
   topbar,
+  banner,
   children,
   fullBleed = false,
   sidebarCollapsed = false,
@@ -33,6 +34,7 @@ export function MainLayout({
         )}
       >
         <div className="shrink-0">{topbar}</div>
+        {banner && <div className="shrink-0">{banner}</div>}
         <main
           className={cn(
             'flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto no-scrollbar',

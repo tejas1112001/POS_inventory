@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
+  CreditCard,
   ShoppingCart,
   ReceiptText,
   RotateCcw,
@@ -83,6 +84,7 @@ const navSections = [
       { label: 'Product Showcase', path: '/showcase-settings', icon: Globe, menuKey: 'stores' },
       { label: 'Users', path: '/users', icon: UserCog, menuKey: 'users' },
       { label: 'Roles & Permissions', path: '/roles', icon: ShieldCheck, menuKey: 'roles' },
+      { label: 'Billing', path: '/billing', icon: CreditCard, menuKey: 'billing' },
       { label: 'Settings', path: '/settings', icon: Settings, menuKey: 'settings' },
     ],
   },

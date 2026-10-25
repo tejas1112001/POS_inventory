@@ -89,6 +89,8 @@ export const PermissionProvider = ({ children }) => {
           return hasPermission('invoices', 'view');
         case 'stores':
           return hasPermission('stores', 'view');
+        case 'billing':
+          return hasPermission('billing', 'view');
         default:
           return true;
       }
