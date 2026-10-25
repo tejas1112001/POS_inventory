@@ -264,3 +264,62 @@ func TestPublicShopIsolationAcrossTenants(t *testing.T) {
 	// Different content on each host never shares an ETag.
 	require.NotEqual(t, pub(t, "c", "/"+w.slug, nil).Header.Get("ETag"), pub(t, "a", "/"+aSlug, nil).Header.Get("ETag"))
 }
+
+func TestPublicHomePage(t *testing.T) {
+	w := shopWindow(t)
+	host := tenants["c"].Host
+	home := func(l string) resp {
+		t.Helper()
+		r := do(t, rq{method: "GET", host: tenants[l].Host, path: "/api/public/home"})
+		require.Equal(t, 200, r.Code, r.Raw)
+		require.Equal(t, "no-cache", r.Header.Get("Cache-Control"), "a settings change shows at once")
+		return r
+	}
+	put := func(body map[string]any) resp {
+		return do(t, rq{method: "PUT", host: host, path: "/api/settings", token: w.tok, body: body})
+	}
+	t.Cleanup(func() { put(map[string]any{"homePage": "login", "shopStoreId": nil}) })
+
+	// Default: the staff sign-in.
+	require.Equal(t, "login", get(t, host, "/api/settings", w.tok).Body["homePage"])
+	r := home("c")
+	require.JSONEq(t, `{"homePage":"login"}`, r.Raw)
+
+	// The shop with no store chosen: the store with slug "main".
+	s := put(map[string]any{"homePage": "shop"})
+	require.Equal(t, 200, s.Code, s.Raw)
+	require.Equal(t, "shop", s.Body["homePage"])
+	require.Nil(t, s.Body["shopStoreId"])
+	require.JSONEq(t, `{"homePage":"shop","slug":"main"}`, home("c").Raw)
+
+	// A chosen store; its ETag works.
+	s = put(map[string]any{"shopStoreId": jsonID(w.id)})
+	require.Equal(t, 200, s.Code, s.Raw)
+	r = home("c")
+	require.Equal(t, w.slug, r.Body["slug"])
+	require.Equal(t, 304, do(t, rq{method: "GET", host: host, path: "/api/public/home", header: map[string]string{"If-None-Match": r.Header.Get("ETag")}}).Code)
+
+	// Bad values are refused.
+	require.Equal(t, 400, put(map[string]any{"homePage": "landing"}).Code)
+	require.Equal(t, 400, put(map[string]any{"shopStoreId": 999999}).Code)
+
+	// No public shop → the sign-in: showcase off, tenant suspended.
+	off := func(on bool) {
+		r := do(t, rq{method: "PUT", host: host, path: fmt.Sprintf("/api/stores/%s/showcase", jsonID(w.id)), token: w.tok,
+			body: map[string]any{"isPublicEnabled": on}})
+		require.Equal(t, 200, r.Code, r.Raw)
+	}
+	off(false)
+	t.Cleanup(func() { off(true) })
+	require.JSONEq(t, `{"homePage":"login"}`, home("c").Raw)
+	off(true)
+	require.Equal(t, w.slug, home("c").Body["slug"])
+	setStatus(t, "c", "suspended")
+	t.Cleanup(func() { setStatus(t, "c", "trialing") })
+	eventually(t, func() bool { return home("c").Body["homePage"] == "login" }, "suspended shows the sign-in")
+	setStatus(t, "c", "trialing")
+	eventually(t, func() bool { return home("c").Body["homePage"] == "shop" }, "active again")
+
+	// Other tenants are not affected.
+	require.JSONEq(t, `{"homePage":"login"}`, home("a").Raw)
+}

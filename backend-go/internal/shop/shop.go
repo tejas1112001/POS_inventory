@@ -42,6 +42,7 @@ const (
 	FeaturedLimit    = 8
 	maxSearch        = 100
 	cacheControl     = "public, max-age=60"
+	homeCacheControl = "no-cache" // a settings change shows at once; the ETag still saves the body
 )
 
 // Deps are the shop dependencies.
@@ -88,6 +89,7 @@ func (a *API) Mount(rt *rbac.Router) {
 	})
 	wrap := func(h http.HandlerFunc) http.HandlerFunc { return byIP(byTenant(h)).ServeHTTP }
 	pub := rbac.Public()
+	rt.Handle(http.MethodGet, "/public/home", pub, wrap(a.home))
 	rt.Handle(http.MethodGet, "/public/shop/{slug}", pub, wrap(a.info))
 	rt.Handle(http.MethodGet, "/public/shop/{slug}/products", pub, wrap(a.products))
 	rt.Handle(http.MethodGet, "/public/shop/{slug}/products/{product}", pub, wrap(a.product))
@@ -170,6 +172,10 @@ func (a *API) serve(w http.ResponseWriter, r *http.Request, needPublic bool,
 // writeCached sends JSON with Cache-Control and a strong ETag, and 304
 // when the client already has it.
 func writeCached(w http.ResponseWriter, r *http.Request, v any) {
+	writeCachedAs(w, r, v, cacheControl)
+}
+
+func writeCachedAs(w http.ResponseWriter, r *http.Request, v any, cc string) {
 	body, err := json.Marshal(v)
 	if err != nil {
 		httpx.WriteError(w, r, err)
@@ -178,7 +184,7 @@ func writeCached(w http.ResponseWriter, r *http.Request, v any) {
 	sum := sha256.Sum256(body)
 	etag := `"` + hex.EncodeToString(sum[:12]) + `"`
 	h := w.Header()
-	h.Set("Cache-Control", cacheControl)
+	h.Set("Cache-Control", cc)
 	h.Set("ETag", etag)
 	if match := r.Header.Get("If-None-Match"); match != "" {
 		for _, e := range strings.Split(match, ",") {
@@ -235,4 +241,50 @@ func (a *API) info(w http.ResponseWriter, r *http.Request) {
 			Banner: publicURL(s.banner, files.PurposeStoreBanner), Description: str(s.desc), Phone: str(s.phone),
 			OpeningHours: str(s.hours), IsPublicEnabled: true}, nil
 	})
+}
+
+// ------------------------------------------------------------------ home
+
+// Home is GET /api/public/home: what the tenant's main address shows.
+type Home struct {
+	HomePage string `json:"homePage"`       // "shop" or "login"
+	Slug     string `json:"slug,omitempty"` // the store whose shop is shown, with "shop"
+}
+
+// qHome finds the store shown at the main address: the chosen store, or
+// with none chosen the store with slug 'main', or else the oldest active
+// one. It must be active and public, and the home page set to the shop.
+const qHome = `SELECT s.slug::text FROM settings g
+	JOIN stores s ON s.id = coalesce(g.shop_store_id, (SELECT id FROM stores WHERE deleted_at IS NULL AND status = 'Active'
+		ORDER BY slug = 'main' DESC, id LIMIT 1))
+	WHERE g.id = 1 AND g.home_page = 'shop' AND s.deleted_at IS NULL AND s.status = 'Active' AND s.is_public_enabled`
+
+// home answers "login" whenever the shop is not shown: home page set to
+// the staff sign-in, tenant suspended, plan without public_shop, or no
+// active public store. The answer does not say which.
+func (a *API) home(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	t, _ := tenancy.TenantFrom(ctx)
+	out := Home{HomePage: settings.HomeLogin}
+	if !hiddenStatuses[t.Status] {
+		ok, err := a.d.Plans.Has(ctx, t.PlanID, plans.FeaturePublicShop)
+		if err == nil && ok {
+			err = a.d.Sessions.InTenantTx(ctx, t, tenancy.TxOptions{Access: tenancy.ReadOnly}, func(tx tenancy.TenantTx) error {
+				var slug string
+				err := tx.QueryRow(ctx, qHome).Scan(&slug)
+				if errors.Is(err, pgx.ErrNoRows) {
+					return nil
+				}
+				if err == nil {
+					out = Home{HomePage: settings.HomeShop, Slug: slug}
+				}
+				return err
+			})
+		}
+		if err != nil {
+			httpx.WriteError(w, r, err)
+			return
+		}
+	}
+	writeCachedAs(w, r, out, homeCacheControl)
 }

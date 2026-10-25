@@ -94,12 +94,21 @@ type Business struct {
 	PricesIncludeTax                                                    bool
 	MaxDiscountPct                                                      decimal.Decimal
 	DefaultCustomerID                                                   *int64
+	HomePage                                                            string // "login" or "shop"
+	ShopStoreID                                                         *int64 // store shown at /; nil: 'main' or the oldest
 	UpdatedAt                                                           time.Time
 }
 
+// Home page values (settings.home_page).
+const (
+	HomeLogin = "login"
+	HomeShop  = "shop"
+)
+
 const qLoad = `SELECT business_name, legal_name, address, phone, email::text, logo_file_id, currency, locale, timezone,
 		tax_label, tax_registration_no, tax_split, prices_include_tax_default, max_discount_pct_without_override,
-		invoice_prefix, receipt_header, receipt_footer, default_customer_id, updated_at FROM settings WHERE id = 1`
+		invoice_prefix, receipt_header, receipt_footer, default_customer_id, home_page, shop_store_id, updated_at
+	FROM settings WHERE id = 1`
 
 // LoadBusiness reads the settings row in the caller's tenant transaction.
 func LoadBusiness(ctx context.Context, tx tenancy.TenantTx) (Business, error) {
@@ -110,7 +119,7 @@ func scanBusiness(row pgx.Row) (Business, error) {
 	var b Business
 	err := row.Scan(&b.Name, &b.LegalName, &b.Address, &b.Phone, &b.Email, &b.LogoFileID, &b.Currency, &b.Locale,
 		&b.Timezone, &b.TaxLabel, &b.TaxRegistrationNo, &b.TaxSplit, &b.PricesIncludeTax, &b.MaxDiscountPct,
-		&b.InvoicePrefix, &b.ReceiptHeader, &b.ReceiptFooter, &b.DefaultCustomerID, &b.UpdatedAt)
+		&b.InvoicePrefix, &b.ReceiptHeader, &b.ReceiptFooter, &b.DefaultCustomerID, &b.HomePage, &b.ShopStoreID, &b.UpdatedAt)
 	return b, err
 }
 
@@ -142,6 +151,8 @@ type JSON struct {
 	ReceiptHeader     *string         `json:"receiptHeader"`
 	ReceiptFooter     *string         `json:"receiptFooter"`
 	DefaultCustomerID *int64          `json:"defaultCustomerId"`
+	HomePage          string          `json:"homePage"`
+	ShopStoreID       *int64          `json:"shopStoreId"`
 	UpdatedAt         time.Time       `json:"updatedAt"`
 }
 
@@ -151,7 +162,7 @@ func toJSON(b Business) JSON {
 		Timezone: b.Timezone, TaxLabel: b.TaxLabel, TaxRegistrationNo: b.TaxRegistrationNo, TaxSplit: b.TaxSplit,
 		PricesIncludeTax: b.PricesIncludeTax, MaxDiscountPct: b.MaxDiscountPct, InvoicePrefix: b.InvoicePrefix,
 		ReceiptHeader: b.ReceiptHeader, ReceiptFooter: b.ReceiptFooter, DefaultCustomerID: b.DefaultCustomerID,
-		UpdatedAt: b.UpdatedAt}
+		HomePage: b.HomePage, ShopStoreID: b.ShopStoreID, UpdatedAt: b.UpdatedAt}
 }
 
 func (a *API) get(w http.ResponseWriter, r *http.Request) {
@@ -189,6 +200,8 @@ type settingsIn struct {
 	ReceiptHeader     *string   `json:"receiptHeader"`
 	ReceiptFooter     *string   `json:"receiptFooter"`
 	DefaultCustomerID money.Int `json:"defaultCustomerId"`
+	HomePage          *string   `json:"homePage"`
+	ShopStoreID       money.Int `json:"shopStoreId"`
 }
 
 var (
@@ -332,6 +345,22 @@ func (a *API) apply(in settingsIn, b *Business) (changed []string, err error) {
 			b.DefaultCustomerID = nil
 		}
 	}
+	if in.HomePage != nil {
+		switch *in.HomePage {
+		case HomeLogin, HomeShop:
+			b.HomePage = *in.HomePage
+		default:
+			f["homePage"] = "Use login or shop."
+		}
+	}
+	if in.ShopStoreID.Set {
+		if in.ShopStoreID.Valid && in.ShopStoreID.V > 0 {
+			v := in.ShopStoreID.V
+			b.ShopStoreID = &v
+		} else {
+			b.ShopStoreID = nil
+		}
+	}
 	if len(f) > 0 {
 		return nil, apperr.Validation(f)
 	}
@@ -348,6 +377,7 @@ func (a *API) apply(in settingsIn, b *Business) (changed []string, err error) {
 		{"maxDiscountPct", !before.MaxDiscountPct.Equal(b.MaxDiscountPct)}, {"invoicePrefix", before.InvoicePrefix != b.InvoicePrefix},
 		{"receiptHeader", neq(before.ReceiptHeader, b.ReceiptHeader)}, {"receiptFooter", neq(before.ReceiptFooter, b.ReceiptFooter)},
 		{"defaultCustomerId", neqInt(before.DefaultCustomerID, b.DefaultCustomerID)},
+		{"homePage", before.HomePage != b.HomePage}, {"shopStoreId", neqInt(before.ShopStoreID, b.ShopStoreID)},
 	} {
 		if c.diff {
 			changed = append(changed, c.name)
@@ -363,7 +393,8 @@ func neqInt(a, b *int64) bool { return (a == nil) != (b == nil) || (a != nil && 
 const qUpdate = `UPDATE settings SET business_name = $1, legal_name = $2, address = $3, phone = $4, email = $5,
 		logo_file_id = $6, currency = $7, locale = $8, timezone = $9, tax_label = $10, tax_registration_no = $11,
 		tax_split = $12, prices_include_tax_default = $13, max_discount_pct_without_override = $14,
-		invoice_prefix = $15, receipt_header = $16, receipt_footer = $17, default_customer_id = $18, updated_at = now()
+		invoice_prefix = $15, receipt_header = $16, receipt_footer = $17, default_customer_id = $18,
+		home_page = $19, shop_store_id = $20, updated_at = now()
 	WHERE id = 1`
 
 func (a *API) put(w http.ResponseWriter, r *http.Request) {
@@ -405,6 +436,15 @@ func (a *API) put(w http.ResponseWriter, r *http.Request) {
 				return apperr.Invalid("defaultCustomerId", "Customer not found.")
 			}
 		}
+		if in.ShopStoreID.Set && b.ShopStoreID != nil {
+			var ok bool
+			if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM stores WHERE id = $1 AND deleted_at IS NULL)`, *b.ShopStoreID).Scan(&ok); err != nil {
+				return err
+			}
+			if !ok {
+				return apperr.Invalid("shopStoreId", "Store not found.")
+			}
+		}
 		if !ch.Keep() {
 			if b.LogoFileID, err = ch.Apply(ctx, tx, b.LogoFileID, p.UserID); err != nil {
 				return err
@@ -413,7 +453,7 @@ func (a *API) put(w http.ResponseWriter, r *http.Request) {
 		}
 		if _, err := tx.Exec(ctx, qUpdate, b.Name, b.LegalName, b.Address, b.Phone, b.Email, b.LogoFileID, b.Currency,
 			b.Locale, b.Timezone, b.TaxLabel, b.TaxRegistrationNo, b.TaxSplit, b.PricesIncludeTax, b.MaxDiscountPct,
-			b.InvoicePrefix, b.ReceiptHeader, b.ReceiptFooter, b.DefaultCustomerID); err != nil {
+			b.InvoicePrefix, b.ReceiptHeader, b.ReceiptFooter, b.DefaultCustomerID, b.HomePage, b.ShopStoreID); err != nil {
 			return err
 		}
 		if len(changed) > 0 {
