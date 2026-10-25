@@ -6,6 +6,7 @@ import SignIn from './pages/SignIn';
 import Tenants from './pages/Tenants';
 import TenantDetail from './pages/TenantDetail';
 import Plans from './pages/Plans';
+import Billing from './pages/Billing';
 import { TENANT_TABS } from './pages/tenantTabs';
 
 function Routed() {
@@ -18,6 +19,7 @@ function Routed() {
         <Route path="/tenants" element={<Tenants />} />
         <Route path="/tenants/:id" element={<TenantDetail extraTabs={TENANT_TABS} />} />
         <Route path="/plans" element={<Plans />} />
+        <Route path="/billing" element={<Billing />} />
         <Route path="*" element={<Navigate to="/tenants" replace />} />
       </Routes>
     </Layout>

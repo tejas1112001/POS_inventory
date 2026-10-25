@@ -409,3 +409,7 @@ pre.json {
   user-select: all;
   overflow-wrap: anywhere;
 }
+
+.select.narrow {
+  width: auto;
+}
