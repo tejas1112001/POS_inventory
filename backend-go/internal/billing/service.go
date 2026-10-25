@@ -249,10 +249,14 @@ func SyncTenant(ctx context.Context, tx tenancy.PlatformTx, tenantID string, s S
 	case before == after:
 		return before, before, nil
 	}
+	// restricted_at is day 0 of the deletion clock: the first moment the
+	// tenant was read-only or suspended by billing, kept while it stays
+	// restricted (read_only → suspended keeps it), cleared once it is live.
 	_, err := tx.Exec(ctx, `UPDATE platform.tenants SET status = $2,
 			suspension_source = CASE WHEN $2 = 'suspended' THEN 'billing' END,
 			suspended_at = CASE WHEN $2 = 'suspended' THEN now() END,
 			suspend_reason = CASE WHEN $2 = 'suspended' THEN 'Payment overdue' END,
+			restricted_at = CASE WHEN $2 IN ('read_only','suspended') THEN coalesce(restricted_at, now()) END,
 			updated_at = now()
 		WHERE id = $1`, tenantID, after)
 	return before, after, err

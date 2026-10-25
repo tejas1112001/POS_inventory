@@ -87,6 +87,12 @@ func RenderBillingNotice(d BillingNotice) (Rendered, error) {
 		} else {
 			v.Lines = append(v.Lines, "Reply to this email and we will send you a payment link.")
 		}
+	case "pending_deletion":
+		subj = shop + " is scheduled for deletion"
+		v.Heading = "Your shop is scheduled for deletion"
+		v.Lines = []string{"The payment for " + shop + " has been overdue for a long time, so the shop is closed and nobody can sign in.",
+			"Your data is kept until " + date + ". After that it may be deleted for good.",
+			"To keep your shop, reply to this email before then and we will help you pay and reopen it."}
 	case "reactivated":
 		subj = shop + " is active again"
 		v.Heading = "Welcome back"

@@ -97,6 +97,7 @@ const (
 	JobLedgerReconcile    = "ledger_reconcile"
 	JobBillingLifecycle   = "billing_lifecycle"
 	JobBillingReminders   = "billing_reminders"
+	JobDeletionClock      = "deletion_clock"
 )
 
 // ---------------------------------------------------------------- workers
@@ -177,6 +178,15 @@ func (k *maintenanceWorker) Work(ctx context.Context, job *river.Job[maintenance
 		}
 		if n > 0 {
 			k.w.cfg.Log.InfoContext(ctx, "billing job", slog.String("job", job.Args.Job), slog.Int("rows", n))
+		}
+	case JobDeletionClock:
+		// Runs also with billing off: restricted_at may predate that.
+		if k.w.cfg.Billing == nil {
+			return nil
+		}
+		var n int
+		if n, err = k.w.cfg.Billing.RunDeletionClock(ctx); n > 0 {
+			k.w.cfg.Log.InfoContext(ctx, "tenants moved to pending_deletion", slog.Int("tenants", n))
 		}
 	default:
 		return nil
@@ -269,6 +279,7 @@ func New(cfg Config) (*Worker, error) {
 			periodic(JobLedgerReconcile, dailyAt{hour: 21, minute: 0}, false), // 02:30 in India
 			periodic(JobBillingLifecycle, river.PeriodicInterval(time.Hour), true),
 			periodic(JobBillingReminders, dailyAt{hour: 3, minute: 30}, false), // BILLING_NOTIFY_HOUR: 09:00 in India
+			periodic(JobDeletionClock, river.PeriodicInterval(time.Hour), false),
 		}
 	}
 	client, err := river.NewClient(riverpgxv5.New(cfg.Pool), rc)

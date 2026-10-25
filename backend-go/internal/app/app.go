@@ -188,7 +188,8 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger, opts ...Opti
 		return nil, err
 	}
 	a.billing = &billing.Service{Sessions: a.sessions, Provider: billingProvider(cfg, log),
-		Cfg:    billing.Config{GraceDays: cfg.BillingGraceDays, TrialChargeWait: billing.DefaultConfig.TrialChargeWait},
+		Cfg: billing.Config{GraceDays: cfg.BillingGraceDays, TrialChargeWait: billing.DefaultConfig.TrialChargeWait,
+			ReadOnlyDays: cfg.ReadOnlyDays, RetentionDays: cfg.RetentionDays},
 		MaxAge: cfg.WebhookMaxAge, Metrics: a.metrics, Log: log}
 	tenantAPI, authSvc, err := a.tenantAPI(cfg, log, network, env, storage)
 	if err != nil {

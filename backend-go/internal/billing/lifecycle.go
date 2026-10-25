@@ -125,6 +125,9 @@ const (
 	NoticeGraceEnding   = "grace_ending"
 	NoticeTrialEnding   = "trial_ending" // + _7, _3, _1
 	NoticeSubEnding     = "subscription_ending"
+	// NoticePendingDeletion: the deletion clock moved the tenant to
+	// pending_deletion (once per restriction).
+	NoticePendingDeletion = "pending_deletion"
 )
 
 // Notice is a notice to send once per (kind, period key).
@@ -147,10 +150,15 @@ type Config struct {
 	// may run past trial_end before Tick makes it read-only (the first
 	// charge is usually seconds away).
 	TrialChargeWait time.Duration
+	// ReadOnlyDays after day 0 (read-only or suspended by billing) the
+	// tenant becomes pending_deletion; it is eligible for deletion
+	// RetentionDays after day 0 (BILLING_DESIGN §3).
+	ReadOnlyDays, RetentionDays int
 }
 
-// DefaultConfig is grace 7 days and a 24-hour wait for the first charge.
-var DefaultConfig = Config{GraceDays: 7, TrialChargeWait: 24 * time.Hour}
+// DefaultConfig is grace 7 days, a 24-hour wait for the first charge and
+// the 30/90-day deletion clock.
+var DefaultConfig = Config{GraceDays: 7, TrialChargeWait: 24 * time.Hour, ReadOnlyDays: 30, RetentionDays: 90}
 
 // Result is what Apply decided.
 type Result struct {

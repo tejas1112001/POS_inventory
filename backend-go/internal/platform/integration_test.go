@@ -461,12 +461,18 @@ func TestStepUpAndTenantAdmin(t *testing.T) {
 		"name": "Squatter", "slug": "console-shop", "ownerEmail": "x@y.test"}})
 	require.Equal(t, 409, taken.Code, "old slug stays reserved")
 
+	// The deletion clock had been running (billing day 0 long ago).
+	_, err = tdb.Admin(t).Exec(context.Background(), `UPDATE platform.tenants SET restricted_at = now() - interval '40 days' WHERE id = $1`, id)
+	require.NoError(t, err)
 	del := e.do(req{method: "DELETE", path: "/tenants/" + id, token: s.token})
 	require.Equal(t, 200, del.Code, del.Raw)
 	require.Equal(t, "pending_deletion", del.Body["status"])
 	res := e.do(req{method: "POST", path: "/tenants/" + id + "/restore", token: s.token})
 	require.Equal(t, 200, res.Code)
 	require.Equal(t, "suspended", res.Body["status"])
+	var day0 *time.Time
+	require.NoError(t, tdb.Admin(t).QueryRow(context.Background(), `SELECT restricted_at FROM platform.tenants WHERE id = $1`, id).Scan(&day0))
+	require.Nil(t, day0, "a restore stops the deletion clock")
 	require.Equal(t, 409, e.do(req{method: "POST", path: "/tenants/" + id + "/restore", token: s.token}).Code)
 
 	// Step-up expires after 5 minutes.

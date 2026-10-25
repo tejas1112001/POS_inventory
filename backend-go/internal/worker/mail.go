@@ -705,12 +705,13 @@ func (m *Mailer) DeliverPlatform(ctx context.Context) error {
 }
 
 type billingData struct {
-	TenantID  string `json:"tenant_id"`
-	Kind      string `json:"kind"`
-	TrialEnd  string `json:"trial_end"`
-	GraceEnd  string `json:"grace_end"`
-	PeriodEnd string `json:"period_end"`
-	PayURL    string `json:"pay_url"`
+	TenantID   string `json:"tenant_id"`
+	Kind       string `json:"kind"`
+	TrialEnd   string `json:"trial_end"`
+	GraceEnd   string `json:"grace_end"`
+	PeriodEnd  string `json:"period_end"`
+	PurgeAfter string `json:"purge_after"`
+	PayURL     string `json:"pay_url"`
 }
 
 // noticeDate picks the date a notice is about, as "02 Jan 2006" (UTC).
@@ -721,6 +722,8 @@ func (d billingData) noticeDate() string {
 		v = d.TrialEnd
 	case d.Kind == billing.NoticePaymentFailed || d.Kind == billing.NoticeGraceEnding:
 		v = d.GraceEnd
+	case d.Kind == billing.NoticePendingDeletion:
+		v = d.PurgeAfter
 	}
 	t, err := time.Parse(time.RFC3339, v)
 	if err != nil {
