@@ -517,6 +517,10 @@ func (m *Mailer) tenantURL(t tenancy.Tenant) string {
 	return httpx.TenantURL(m.c.PublicScheme, t.Slug, m.c.BaseDomain, m.c.PublicPort)
 }
 
+// signInURL is the staff sign-in page. The main address may show the
+// public shop instead (settings.home_page), so emails never link there.
+func (m *Mailer) signInURL(t tenancy.Tenant) string { return m.tenantURL(t) + "/login" }
+
 func humanize(d time.Duration) string {
 	switch {
 	case d >= 48*time.Hour:
@@ -749,7 +753,7 @@ func (m *Mailer) deliverBillingNotice(ctx context.Context, r row) outcome {
 		return outcome{status: "retry", class: "transient", detail: "registry lookup failed", retryAt: time.Now().Add(backoff(r.attempts))}
 	}
 	rendered, err := mailtmpl.RenderBillingNotice(mailtmpl.BillingNotice{Kind: d.Kind, TenantName: t.Name,
-		PlatformName: m.c.PlatformName, Date: d.noticeDate(), PayURL: d.PayURL, TenantURL: m.tenantURL(t)})
+		PlatformName: m.c.PlatformName, Date: d.noticeDate(), PayURL: d.PayURL, TenantURL: m.signInURL(t)})
 	if err != nil {
 		return outcome{status: "dead", class: "permanent", detail: "template failed"}
 	}
@@ -797,7 +801,7 @@ func (m *Mailer) deliverRestoreNotice(ctx context.Context, r row) outcome {
 		when = ts.UTC().Format("02 Jan 2006 15:04") + " UTC"
 	}
 	rendered, err := mailtmpl.RenderRestoreNotice(mailtmpl.RestoreNotice{TenantName: t.Name, PlatformName: m.c.PlatformName,
-		BackupTime: when, TenantURL: m.tenantURL(t)})
+		BackupTime: when, TenantURL: m.signInURL(t)})
 	if err != nil {
 		return outcome{status: "dead", class: "permanent", detail: "template failed"}
 	}
@@ -852,7 +856,7 @@ func (m *Mailer) deliverPlatformRow(ctx context.Context, r row) outcome {
 		}
 		return outcome{status: "retry", class: "transient", detail: "registry lookup failed", retryAt: time.Now().Add(backoff(r.attempts))}
 	}
-	data := mailtmpl.Welcome{TenantName: t.Name, TenantURL: m.tenantURL(t), PlatformName: m.c.PlatformName}
+	data := mailtmpl.Welcome{TenantName: t.Name, TenantURL: m.signInURL(t), PlatformName: m.c.PlatformName}
 	if r.toName != nil {
 		data.Name = *r.toName
 	}

@@ -100,7 +100,7 @@ func TestLinkEmails(t *testing.T) {
 }
 
 func TestWelcomeEmail(t *testing.T) {
-	d := Welcome{Name: "Asha", TenantName: "Asha General Stores", TenantURL: "https://asha.pos.test", PlatformName: "ShopCloud",
+	d := Welcome{Name: "Asha", TenantName: "Asha General Stores", TenantURL: "https://asha.pos.test/login", PlatformName: "ShopCloud",
 		Link: "https://asha.pos.test/accept-invite#token=abc", Expires: "7 days"}
 	r, err := RenderWelcome(d)
 	require.NoError(t, err)
@@ -115,7 +115,7 @@ func TestWelcomeEmail(t *testing.T) {
 
 func TestBillingNotices(t *testing.T) {
 	base := BillingNotice{TenantName: "Asha General Stores", PlatformName: "POS Cloud", Date: "31 Oct 2026",
-		TenantURL: "https://asha.pos.test", PayURL: "https://rzp.io/i/abc123"}
+		TenantURL: "https://asha.pos.test/login", PayURL: "https://rzp.io/i/abc123"}
 	kinds := map[string]string{
 		"trial_ending_7":        "Your POS Cloud trial for Asha General Stores ends in 7 days",
 		"trial_ending_1":        "Your POS Cloud trial for Asha General Stores ends in 1 day",
@@ -163,7 +163,7 @@ func TestBillingNotices(t *testing.T) {
 
 func TestRestoreNotice(t *testing.T) {
 	r, err := RenderRestoreNotice(RestoreNotice{TenantName: "Asha General Stores", PlatformName: "POS Cloud",
-		BackupTime: "24 Oct 2026 18:30 UTC", TenantURL: "https://asha.pos.test"})
+		BackupTime: "24 Oct 2026 18:30 UTC", TenantURL: "https://asha.pos.test/login"})
 	require.NoError(t, err)
 	require.Equal(t, "Asha General Stores was restored from a backup", r.Subject)
 	require.Contains(t, r.Text, "must sign in again")

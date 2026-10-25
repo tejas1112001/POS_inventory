@@ -154,8 +154,9 @@ func RenderUserInvite(d Link) (Rendered, error) {
 	})
 }
 
-// Welcome is the platform's welcome email to a new tenant owner. Link is
-// empty when the owner already has a password.
+// Welcome is the platform's welcome email to a new tenant owner. TenantURL
+// is the staff sign-in page. Link is empty when the owner already has a
+// password.
 type Welcome struct {
 	Name, TenantName, TenantURL, PlatformName, Link, Expires string
 }

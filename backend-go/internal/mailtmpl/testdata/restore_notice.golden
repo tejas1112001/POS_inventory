@@ -9,7 +9,7 @@ The data of Asha General Stores was restored from a backup taken on 24 Oct 2026 
 
 Everyone has been signed out and must sign in again. Invitations and password-reset links sent before the restore no longer work; send them again.
 
-Sign in: https://asha.pos.test
+Sign in: https://asha.pos.test/login
 
 -- 
 Sent by POS Cloud about the account of Asha General Stores.
@@ -27,8 +27,8 @@ Sent by POS Cloud about the account of Asha General Stores.
 <p style="margin:0 0 8px;">Hello,</p>
 <p style="margin:0 0 12px;">The data of Asha General Stores was restored from a backup taken on 24 Oct 2026 18:30 UTC. Changes made after that time are not in the shop.</p>
 <p style="margin:0 0 12px;">Everyone has been signed out and must sign in again. Invitations and password-reset links sent before the restore no longer work; send them again.</p>
-<p style="margin:4px 0 16px;"><a href="https://asha.pos.test" style="display:inline-block;padding:10px 18px;background:#4f46e5;color:#ffffff;text-decoration:none;border-radius:6px;">Sign in</a></p>
-<p style="margin:0 0 16px;font-size:12px;word-break:break-all;color:#52525b;">https://asha.pos.test</p>
+<p style="margin:4px 0 16px;"><a href="https://asha.pos.test/login" style="display:inline-block;padding:10px 18px;background:#4f46e5;color:#ffffff;text-decoration:none;border-radius:6px;">Sign in</a></p>
+<p style="margin:0 0 16px;font-size:12px;word-break:break-all;color:#52525b;">https://asha.pos.test/login</p>
 
 
 </td></tr>
