@@ -8,6 +8,7 @@ export const routeTitles = {
   '/products': 'Products',
   '/add-product': 'Add Product',
   '/inventory': 'Inventory',
+  '/stock-adjustments': 'Stock Adjustments',
   '/purchases': 'Purchases',
   '/add-purchase': 'Add Purchase',
   '/categories': 'Categories',

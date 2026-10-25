@@ -3,6 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
   CreditCard,
+  SlidersHorizontal,
   ShoppingCart,
   ReceiptText,
   RotateCcw,
@@ -51,6 +52,7 @@ const navSections = [
     items: [
       { label: 'Products', path: '/products', icon: Package, menuKey: 'products' },
       { label: 'Inventory', path: '/inventory', icon: Boxes, menuKey: 'inventory' },
+      { label: 'Stock Adjustments', path: '/stock-adjustments', icon: SlidersHorizontal, menuKey: 'stock_adjustments' },
       { label: 'Purchases', path: '/purchases', icon: Truck, menuKey: 'purchases' },
     ],
   },
