@@ -82,3 +82,11 @@ OSV status = known vulnerabilities affecting **that exact version** at check tim
 | **Gotenberg** (HTML→PDF) | **Only if the PDF spike fails** (EMAIL_AND_RECEIPTS §5.6) | Correct Devanagari shaping | ~1 GB container, 200–500 ms/render |
 | **PgBouncer (transaction mode)** | **Deferred** (needed only beyond ~2 app nodes) | Connection fan-in; compatible with `SET LOCAL` + `Exec` mode. `LISTEN` keeps its own direct connection (TENANCY §5.5) | Another component |
 | **Cloudflare Turnstile** | **Deferred** (no self-signup, Q-5) | Privacy-friendly CAPTCHA | Third party |
+
+## 5. Super Admin console (frontend/admin-console, decided 2026-10-25)
+
+Plain React 19 and CSS (static stylesheet and CSS Modules), built by Vite into its own bundle. No MUI, no Tailwind, no runtime CSS-in-JS: the admin host's CSP allows only `'self'` scripts and styles. One new package:
+
+| Need | Chosen package | Version (released) | License | OSV | Alternatives considered | Why chosen |
+|---|---|---|---|---|---|---|
+| QR code for authenticator enrolment | `qrcode-generator` | 2.0.4 (2025-08-07) | MIT | none (checked 2026-10-25) | `qrcode` (pulls in pngjs, dijkstrajs, yargs), a hand-written encoder, a server-rendered image | No dependencies; we read its module grid and draw one SVG `<path>` in React, so no HTML string and no `data:` image is needed |

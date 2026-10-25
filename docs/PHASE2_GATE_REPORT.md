@@ -1,3 +1,63 @@
+# Phase 2 — Report after step 19b (Super Admin console)
+
+| | |
+|---|---|
+| Date | 2026-10-25 |
+| Branch | `go-backend/phase2` (local, not pushed) |
+| Commits | `0c82ddf` build, sign-in with MFA, tenant list · `b3933e2` tenant page and actions · `31cc0b3` plans and subscriptions · `2f95df4` expiring, past-due, invoices · `1b280da` exports and restore tests · `ea73a80` audit log · this report |
+| Status | **Stopped after 19b** as asked. 19a confirmed 2026-10-25 |
+
+## 1. What was built
+
+`frontend/admin-console/`: a separate Vite build (`npm run build:admin` → `frontend/dist-admin`), plain React and CSS (one static stylesheet plus CSS Modules). No MUI, no Tailwind, nothing shared with the tenant app. posd serves it on `admin.<domain>` (`STATIC_DIR/admin`).
+
+| Area | Built |
+|---|---|
+| Sign-in | Password; forced password change; authenticator enrolment with a QR code (drawn as an SVG path) and the key for manual entry; 10 recovery codes shown once; then the code or a recovery code. Token in memory, HttpOnly refresh cookie, refreshes serialised across tabs, refreshed before expiry |
+| Step-up | Any action answered with `STEP_UP_REQUIRED` asks for a fresh code, then runs once more (valid 5 minutes) |
+| Tenants | Search, status filter, paging; create (name, subdomain, owner, plan, currency, number format, time zone). Tenant page: facts, subscription, provisioning (retry when failed); edit, change subdomain, suspend (reason) / reactivate, delete (typed subdomain) / restore, owner sign-in link (shown as text, never a link) |
+| Plans and subscriptions | Plans list, create and edit (limits, features, active/public; a provider-linked plan keeps price and period). Tenant Billing tab: subscription, invoices, provider events; change plan, extend trial, more time to pay, cancel (step-up), each with a reason for the audit log; buttons only where the server accepts them |
+| Billing lists | Ending within 3–90 days, past due, invoices; a row opens the tenant |
+| Exports | Tenant Exports tab: request (with or without files, step-up), list with size, counts and SHA-256; "Test restore" queues a restore test; results show whether rows and checksums matched |
+| Audit | Audit log page (filter by tenant, load older) and a tenant Audit tab; before/after as plain text |
+| Permissions | Menu, tabs and buttons follow the role (checked with `support`: read-only, no exports, own audit entries only) |
+
+**Security:** the built page has only an external script and stylesheet, so it runs under the strict admin CSP unchanged. ESLint on `admin-console/` fails on `dangerouslySetInnerHTML`, `innerHTML`/`outerHTML`, `insertAdjacentHTML`, `style` attributes, computed `href`/`src`/`action` and `eval`. All tenant text is React text.
+
+New dependency: `qrcode-generator` 2.0.4 (MIT, no dependencies, no known vulnerabilities; `docs/LIBRARIES.md` §5). Only the lockfile entry was added; `node_modules` already has the package.
+
+## 2. Checks
+
+- **Browser checks on the dev stack, under the real CSP** (headless Chromium, 9 scripts, 81 checks, all pass): first sign-in through password change, QR enrolment and recovery codes; sign-in with a code and with a recovery code; reload, sign-out, nothing in browser storage, cookie flags; three tabs reloading together and 6 idle minutes (longer than the access token); tenant create, edit, subdomain, suspend/reactivate, delete/restore, owner link, search; plan create/edit with a server field error; extend trial, change plan, grace, cancel with step-up; the three billing lists; export → worker → restore test → `posctl` verifies every table → console shows it verified; audit page, tenant tab, filter; the `support` role; the console through the Vite dev server.
+- **Plain text:** a tenant name `<img src=x onerror=…>` and notes containing `<script>` are shown literally on the tenant page and in the audit log; no element is created and no script runs.
+- **CSP:** no violation in any check; an inline style injected on purpose is reported, so the check works.
+- Lint: the console has no errors; the tenant app still has 33 old errors and none new. Both builds pass. No backend code changed in 19b (only dev Makefile, compose and Caddy files).
+
+## 3. Decisions to confirm
+
+| Topic | Built | Why |
+|---|---|---|
+| Build | A separate Vite config instead of a multi-page build | Separate bundle and dependencies; each host serves its own folder |
+| QR code | Drawn in the browser from the `otpauth://` URI | Already the design (LIBRARIES §2: "QR rendering stays in the frontend") |
+| Restore tests | Queued in the console, run by `posctl tenant restore-tests` (dev: `make restore-tests-dev`) | Confirmed in step 18 |
+| Dev exports | Turned on in your `deploy/.env` (age public key, manifest key); the private key is in `deploy/.env.restore` (git-ignored, never read by posd) | To run exports end to end in dev |
+| Dev accounts | Super Admins made directly in the dev DB: `console-check`, `console-flow`, `console-support` (used by my checks) and `owner-console` (fresh, for you) | Nobody knew the bootstrap password of `admin@posdev.test` |
+
+## 4. Not done
+
+Platform users page, impersonation, migrations screen, announcements (not in 19b's list). No automated frontend tests in the repo (browser checks live outside it).
+
+## 5. Run it locally
+
+1. PowerShell in `frontend`: `npm run build` and `npm run build:admin` (`npm install` first is harmless; the new package is already in `node_modules`). `VITE_API_URL` must stay empty in `frontend/.env`, as for 19a.
+2. WSL in `backend-go`: `make up-web`.
+3. Open **https://admin.localhost:8443**. Sign in as `owner-console@posdev.test` with `console-first-signin-2026` (dev only). You then choose your own password, scan the QR code with your authenticator app and save the recovery codes.
+4. Exports: request one on a tenant's Exports tab; to run queued restore tests: `make restore-tests-dev` (WSL, `backend-go`).
+5. Hot reload: PowerShell in `frontend`: `$env:VITE_BEHIND_CADDY='1'; npm run dev:admin`; WSL: `ADMIN_UPSTREAM=host.docker.internal:5174 make up-web`.
+6. The shop app stays at https://demo-shop.localhost:8443. Stop with `make down`.
+
+---
+
 # Phase 2 — Report after step 19a (tenant app)
 
 | | |
