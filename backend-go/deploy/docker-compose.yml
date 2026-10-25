@@ -77,6 +77,7 @@ services:
       # Set FRONTEND_UPSTREAM=host.docker.internal:5173 to put the Vite dev
       # server behind Caddy (same origin, /api still goes to the app).
       FRONTEND_UPSTREAM: ${FRONTEND_UPSTREAM:-app:8080}
+      ADMIN_UPSTREAM: ${ADMIN_UPSTREAM:-app:8080}   # host.docker.internal:5174 for the console's Vite dev server
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
