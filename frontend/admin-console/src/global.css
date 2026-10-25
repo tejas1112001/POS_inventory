@@ -413,3 +413,7 @@ pre.json {
 .select.narrow {
   width: auto;
 }
+
+.input.narrow-input {
+  width: 260px;
+}
