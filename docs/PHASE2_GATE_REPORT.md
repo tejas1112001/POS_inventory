@@ -1,3 +1,70 @@
+# Phase 2 — Report after step 19a (tenant app)
+
+| | |
+|---|---|
+| Date | 2026-10-25 |
+| Branch | `go-backend/phase2` (local, not pushed) |
+| Commits | `f2f0f4b` dev stack on a non-default port (backend) · `4bd684c` session and sign-in · `94beb1d` currency and time zone · `f228127` receipts · `b8b0039` POS and sales · `914dd57` settings and SMTP · `00aced2` billing and banners · `563adb0` stock adjustments · `043eb78` returns · `ae63b9f` reports · `33d5cfe` CSV import, shop URLs, purchase status · `0e6ef67` change password · `ff280a0` continue a started checkout · `3a3e754` lint |
+| Status | **Stopped after 19a** as asked. Step 18 confirmed 2026-10-25. The Super Admin console (19b) is not started |
+
+## 1. What changed in the tenant app
+
+| Area | Now |
+|---|---|
+| Session | Access token, user and permissions in memory only; refresh through the HttpOnly `__Host-rt` cookie on load, before expiry and on a 401; logout calls the API. Refreshes are serialised across tabs (Web Lock), because a reused refresh token ends the whole session |
+| Sign-in | Shop name from `tenant-info`; forgot password, reset and accept-invite pages (token read from the link's `#token=` and removed from the address bar); clear messages for wrong password, lockout, suspended shop. Sign-up removed; adding a user without a password emails an invitation (`POST /api/users`). Path-based routes; old `/#/...` links still work |
+| Formats | Currency, number format and time zone from the shop's settings everywhere (₹ and `$` literals and `en-IN` removed) |
+| POS and sales | Tax label from settings; cart totals are an estimate and not sent; Idempotency-Key per checkout; `409 PRICE_CHANGED` dialog with old and current prices; receipt email field. Back-office sale form rewritten (store, variant, catalog prices) |
+| Receipts | Server's sale with business details from settings, CGST/SGST split, print, PDF download, email again (POS and sales list) |
+| Settings | Shop (profile, logo, currency, number format, time zone, tax, invoice prefix, receipt texts), Email (own SMTP with status, test, remove), Appearance |
+| Billing | Billing page (plan, usage against limits, features, invoices, plans, checkout to the provider) and banners on every page (billing, read-only, support signed in) |
+| Stock | Stock adjustments (add/remove with reason, stock before and after) and stock history (the ledger) |
+| Returns | Linked to sale lines (`orderItemId`), what is left per line, `409 RETURN_EXCEEDS_SOLD` explained and refreshed; unlinked returns only with price override |
+| Reports | Server-side filters (dates, store, supplier), real totals, Excel/PDF from the server; customer report grouped by customer |
+| Other | CSV product import (sample, check, import, row errors); public shop on its own origin; purchase "Received" only with `purchases:approve`; change your own password |
+
+Backend (dev only): the CSRF check on refresh/logout compared the Origin without its port, so every refresh failed behind Caddy on `:8443` (production on 443 was fine); dev emails now link to `:8443` (`PUBLIC_PORT`, refused in production); `make up-web` serves the app build from posd.
+
+## 2. Checks
+
+- **Browser checks** (headless Chromium against the dev stack, 12 scripts, 108 checks): sign-in, storage holds no token, cookie flags, reload, old links, sign-out; forgot/reset; invitation from Mailpit to first sign-in; receipts (list, PDF, email); POS sale, price change in a cashier's cart, back-office sale; settings (USD and back, footer on receipts, field errors, logo, SMTP save/test/remove); billing (banner, plans or started checkout, read-only, cashier without access); stock adjustments; returns with a concurrent return; reports and exports; CSV import; public shop; change password with a second device; three tabs reloading together (4 rounds). All pass; the same auth checks pass in the Vite dev server.
+- **Mutation:** without the cross-tab lock, the three-tab check fails and the server logs a refresh-token reuse.
+- **Builds and lint:** `vite build` clean. ESLint: no errors in files changed in 19a; the whole app has 33 errors left (55 before), all in untouched files. No frontend unit tests exist yet.
+- **Backend:** `make check` (vet, constsql, golangci-lint, govulncheck, unit), staticcheck, gitleaks green; full integration suite: see §5.
+
+## 3. Bugs found on the way (fixed)
+
+POS failed to load for cashiers (it read categories the biller role cannot see) · clicking Next on the second-to-last step submitted every wizard form · the back-office sale form could never save · the purchase form crashed (`isAdmin` undefined) · CSV import posted to a route that does not exist · lists printed money with `$` · sales report showed made-up totals and store names · customer report grouped by brand · report tabs linked to missing routes · billing hid the link to a started payment · sign-out could briefly bounce back to the dashboard.
+
+## 4. Decisions to confirm
+
+| Topic | Built | Why |
+|---|---|---|
+| Routing | Path-based routes (`/sales`), base `/` | Email links are `/accept-invite#token=…`; posd already serves `index.html` for app paths |
+| Cashier role | Not changed; the POS builds category pills from its own product list | The default biller role has no `categories:view` |
+| Unlinked returns | Offered only with `sales:price_override` | The server requires it (C-13) |
+| Dismissed banners | Hidden for the browser tab only | There is no dismiss endpoint yet |
+| Profile | The menu item became "Change password" | It did nothing |
+
+## 5. Not done / open
+
+- Super Admin console (19b), impersonation hand-off page (no backend endpoint yet), Electron removal (cutover).
+- No automated frontend tests in the repo; the browser checks live outside it. Adding Playwright to the repo is a small follow-up if you want it.
+- Full backend integration run with `-p 2`: all 31 packages pass after the backend change.
+- Dev data changed by the checks: about 30 test sales, returns and adjustments for "Smoke Tea" (restocked +100), a few "Invited Cashier" users, a logo, a started fake checkout on the demo shop, and a hidden `pro_dev` plan.
+
+## 6. Run it locally
+
+The repo's `node_modules` was installed from Windows, so build the app in a **Windows** terminal; run the stack from **WSL**.
+
+1. In `frontend/.env`, empty the API line: `VITE_API_URL=` (it still points at the old Express server). Then, in PowerShell in the `frontend` folder (`\\wsl.localhost\Ubuntu\home\tejas_shinde\projects\POS_inventory\frontend`): `npm run build`.
+2. In WSL, in `backend-go`: `make up-web` (posd serves `frontend/dist`). The dev database is already migrated; after future migrations run `make migrate-dev`.
+3. Open **https://demo-shop.localhost:8443** (accept Caddy's certificate once). Owner: `owner@demo.test` / `smoke-test-pass-2026`. Cashier: the newest "Invited Cashier" on the Users page, password `invited-cashier-pass-1` (or invite one: the email is in Mailpit). Emails: **http://localhost:8026**.
+4. Hot reload instead of rebuilding: PowerShell in `frontend`: `$env:VITE_BEHIND_CADDY='1'; npm run dev`; WSL in `backend-go`: `FRONTEND_UPSTREAM=host.docker.internal:5173 make up-web`. Same URL.
+5. Stop: `make down`.
+
+---
+
 # Phase 2 — Gate report after step 18
 
 | | |
