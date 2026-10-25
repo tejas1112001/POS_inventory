@@ -13,7 +13,7 @@ LDFLAGS := -s -w -X github.com/tejas1112001/POS_inventory/backend-go/internal/bu
 BIN := bin
 CONSTSQL := $(BIN)/constsql
 
-.PHONY: db-init help build test test-race test-integration lint vet constsql staticcheck gosec vuln gitleaks gitleaks-history check fmt tidy docker up up-web migrate-dev down clean
+.PHONY: db-init help build test test-race test-integration lint vet constsql staticcheck gosec vuln gitleaks gitleaks-history check fmt tidy docker up up-web migrate-dev restore-tests-dev down clean
 
 help: ## List targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-18s %s\n", $$1, $$2}'
@@ -82,6 +82,9 @@ up-web: ## Dev stack that also serves the tenant app build (frontend/dist)
 migrate-dev: ## Dev stack: apply platform and tenant migrations
 	$(COMPOSE_WEB) run --rm --no-deps --entrypoint /usr/local/bin/posctl app migrate platform up
 	$(COMPOSE_WEB) run --rm --no-deps --entrypoint /usr/local/bin/posctl app migrate tenants up
+
+restore-tests-dev: ## Dev stack: run queued restore tests (private key from deploy/.env.restore)
+	set -a && . deploy/.env.restore && set +a && $(COMPOSE_WEB) run --rm --no-deps -e EXPORT_AGE_IDENTITY -e EXPORT_MANIFEST_KEY --entrypoint /usr/local/bin/posctl app tenant restore-tests
 
 db-init: ## Dev stack: create roles/schemas and apply platform migrations
 	docker compose -f deploy/docker-compose.yml --env-file deploy/.env run --rm --no-deps --entrypoint /usr/local/bin/posctl app db bootstrap
