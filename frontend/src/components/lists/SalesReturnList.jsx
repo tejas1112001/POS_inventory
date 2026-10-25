@@ -8,8 +8,9 @@ import ListPageLayout from '../ListComponents/ListPageLayout';
 import ListControlButtons from '../ListComponents/ListControlButtons';
 import SearchInput from '../ListComponents/SearchInput';
 import SelectField from '../ListComponents/SelectField';
+import { formatCurrency } from '@/lib/format';
 
-export default function SalesReturnList({ salesReturns, setShowForm }) {
+export default function SalesReturnList({ salesReturns }) {
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [customerFilter, setCustomerFilter] = useState('All');
@@ -90,19 +91,19 @@ export default function SalesReturnList({ salesReturns, setShowForm }) {
       {
         accessorKey: 'total',
         header: 'Total',
-        cell: ({ getValue }) => <span>${getValue()}</span>,
+        cell: ({ getValue }) => <span>{formatCurrency(getValue())}</span>,
         size: 80,
       },
       {
         accessorKey: 'paid',
         header: 'Paid',
-        cell: ({ getValue }) => <span>${getValue()}</span>,
+        cell: ({ getValue }) => <span>{formatCurrency(getValue())}</span>,
         size: 80,
       },
       {
         accessorKey: 'due',
         header: 'Due',
-        cell: ({ getValue }) => <span>${getValue()}</span>,
+        cell: ({ getValue }) => <span>{formatCurrency(getValue())}</span>,
         size: 80,
       },
       {

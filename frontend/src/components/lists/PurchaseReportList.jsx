@@ -10,7 +10,7 @@ import GenerateButton from '../ListComponents/GenerateButton';
 import { exportToPDF } from '../ListComponents/exportFunctions';
 import ListControlButtons from '../ListComponents/ListControlButtons';
 import SearchInput from '../ListComponents/SearchInput';
-import { formatDate } from '@/lib/format';
+import { formatDate, formatCurrency } from '@/lib/format';
 
 export default function PurchaseReportList({ reports }) {
   const [search, setSearch] = useState('');
@@ -96,7 +96,7 @@ export default function PurchaseReportList({ reports }) {
     {
       accessorKey: 'purchaseAmount',
       header: 'Purchase Amount',
-      cell: ({ getValue }) => <span>${getValue() || 0}</span>,
+      cell: ({ getValue }) => <span>{formatCurrency(getValue())}</span>,
       size: 120,
     }
   ];
