@@ -36,7 +36,7 @@ import { initials } from '@/lib/format';
 const navSections = [
   {
     title: 'Overview',
-    items: [{ label: 'Dashboard', path: '/', icon: LayoutDashboard, menuKey: 'dashboard' }],
+    items: [{ label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard, menuKey: 'dashboard' }],
   },
   {
     title: 'Sales',
@@ -102,7 +102,7 @@ export default function Sidebar({ mobileOpen, setMobileOpen, collapsed: controll
 
   const handleSignOut = async () => {
     await logout();
-    navigate('/signin', { replace: true });
+    navigate('/login', { replace: true });
   };
 
   const visibleSections = navSections
@@ -196,7 +196,6 @@ export default function Sidebar({ mobileOpen, setMobileOpen, collapsed: controll
                       <li key={item.path}>
                         <NavLink
                           to={item.path}
-                          end={item.path === '/'}
                           onClick={() => setMobileOpen(false)}
                           className={({ isActive }) =>
                             cn(

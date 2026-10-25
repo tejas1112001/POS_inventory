@@ -1,5 +1,5 @@
 export const routeTitles = {
-  '/': 'Dashboard',
+  '/dashboard': 'Dashboard',
   '/pos': 'POS Checkout',
   '/sales': 'Sales',
   '/add-sale': 'Add Sale',
@@ -33,7 +33,7 @@ export const routeTitles = {
 export function getRouteTitle(pathname) {
   if (routeTitles[pathname]) return routeTitles[pathname];
   const match = Object.keys(routeTitles).find(
-    (route) => route !== '/' && pathname.startsWith(route)
+    (route) => pathname.startsWith(route)
   );
   return match ? routeTitles[match] : 'Dashboard';
 }

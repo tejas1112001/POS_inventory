@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import {
   Store,
   MapPin,
@@ -22,9 +22,10 @@ import {
 } from 'lucide-react';
 import { formatCurrency } from '@/lib/format';
 
-export default function PublicShopPage() {
-  const { slug } = useParams();
-  const shopSlug = slug || 'islamabad-main';
+// PublicShopPage is a store's public showcase. Root.jsx passes the store
+// slug: the home store at /, any other at /shop/:slug.
+export default function PublicShopPage({ slug }) {
+  const shopSlug = encodeURIComponent(slug);
 
   const [shop, setShop] = useState(null);
   const [products, setProducts] = useState([]);
@@ -105,6 +106,16 @@ export default function PublicShopPage() {
       console.error('Failed to load products:', err);
     }
   };
+
+  // The tab shows the shop's name; the staff app's title comes back after.
+  useEffect(() => {
+    if (!shop?.name) return undefined;
+    const before = document.title;
+    document.title = shop.name;
+    return () => {
+      document.title = before;
+    };
+  }, [shop?.name]);
 
   const openProductDetails = (product) => {
     setSelectedProduct(product);
@@ -473,6 +484,11 @@ export default function PublicShopPage() {
       <footer className="border-t border-slate-800/80 bg-slate-950 py-8 text-center text-xs text-slate-500 space-y-2">
         <p>© {new Date().getFullYear()} {shop.name}. All rights reserved.</p>
         <p className="text-[11px] text-slate-600">Product Showcase Powered by POS Retail Suite</p>
+        <p>
+          <Link to="/login" rel="nofollow" className="text-[11px] text-slate-500 hover:text-slate-300 underline-offset-2 hover:underline">
+            Staff sign-in
+          </Link>
+        </p>
       </footer>
     </div>
   );

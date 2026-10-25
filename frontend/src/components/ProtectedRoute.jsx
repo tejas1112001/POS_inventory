@@ -17,12 +17,15 @@ export default function ProtectedRoute({ children, module, action = 'view' }) {
   }
 
   if (!currentUser) {
-    // Redirect to signin, preserving the intended destination
-    return <Navigate to="/signin" state={{ from: location }} replace />;
+    // Redirect to the sign-in, preserving the intended destination
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
   if (module && !hasPermission(module, action)) {
-    return <Navigate to="/" replace />;
+    if (location.pathname === '/dashboard') {
+      return <div className="py-20 text-center text-muted-foreground">You do not have access to this page.</div>;
+    }
+    return <Navigate to="/dashboard" replace />;
   }
 
   return children;

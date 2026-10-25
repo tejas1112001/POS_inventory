@@ -22,7 +22,7 @@ export default function Topbar({ title, onOpenMobileMenu }) {
 
   const handleSignOut = async () => {
     await logout();
-    navigate('/signin', { replace: true });
+    navigate('/login', { replace: true });
   };
 
   return (

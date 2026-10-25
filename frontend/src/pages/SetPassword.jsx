@@ -93,7 +93,7 @@ export default function SetPassword({ purpose }) {
         <>
           <FormMessage kind="ok">{t.done}</FormMessage>
           <Button asChild className="mt-5 h-11 w-full">
-            <Link to="/signin">Sign in</Link>
+            <Link to="/login">Sign in</Link>
           </Button>
         </>
       ) : (
@@ -152,7 +152,7 @@ function BackLink({ purpose }) {
           Ask for a new link
         </Link>
       ) : (
-        <Link to="/signin" className="font-medium text-primary hover:underline">
+        <Link to="/login" className="font-medium text-primary hover:underline">
           Back to sign in
         </Link>
       )}

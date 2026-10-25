@@ -1,6 +1,7 @@
 import GlobalErrorHandler from './components/GlobalErrorHandler';
-import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { ErrorProvider } from './context/ErrorContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import { PosProvider } from './context/PosContext';
 import { PermissionProvider } from './context/PermissionContext';
@@ -42,7 +43,9 @@ import Settings from './pages/Settings';
 import Billing from './pages/Billing';
 import StockAdjustments from './pages/StockAdjustments';
 import ShowcaseSettings from './pages/ShowcaseSettings';
-import PublicShopPage from './pages/PublicShopPage';
+
+// The staff app: sign-in and back office. Root.jsx loads it on every path
+// that is not the public shop.
 
 function ProtectedLayout({ children, fullBleed = false, module, action = 'view' }) {
   return (
@@ -52,14 +55,33 @@ function ProtectedLayout({ children, fullBleed = false, module, action = 'view' 
   );
 }
 
+// /signin was the sign-in path before /login.
+function SignInRedirect() {
+  const { search, hash, state } = useLocation();
+  return <Navigate to={{ pathname: '/login', search, hash }} state={state} replace />;
+}
+
+// Search engines must not list staff pages (the server also sends
+// X-Robots-Tag: noindex for them).
+function useNoindex() {
+  useEffect(() => {
+    const meta = document.createElement('meta');
+    meta.name = 'robots';
+    meta.content = 'noindex';
+    document.head.appendChild(meta);
+    return () => meta.remove();
+  }, []);
+}
+
 function AppRoutes() {
   return (
     <Routes>
-      <Route path="/signin" element={<SignIn />} />
+      <Route path="/login" element={<SignIn />} />
+      <Route path="/signin" element={<SignInRedirect />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<SetPassword purpose="reset" />} />
       <Route path="/accept-invite" element={<SetPassword purpose="invite" />} />
-      <Route path="/" element={<ProtectedLayout module="dashboard"><Dashboard /></ProtectedLayout>} />
+      <Route path="/dashboard" element={<ProtectedLayout module="dashboard"><Dashboard /></ProtectedLayout>} />
       <Route path="/categories" element={<ProtectedLayout module="categories" action="view"><Categories /></ProtectedLayout>} />
       <Route path="/add-category" element={<ProtectedLayout module="categories" action="create"><AddCategory /></ProtectedLayout>} />
       <Route path="/products" element={<ProtectedLayout module="products" action="view"><Products /></ProtectedLayout>} />
@@ -94,25 +116,24 @@ function AppRoutes() {
       <Route path="/settings" element={<ProtectedLayout><Settings /></ProtectedLayout>} />
       <Route path="/billing" element={<ProtectedLayout module="billing" action="view"><Billing /></ProtectedLayout>} />
       <Route path="/showcase-settings" element={<ProtectedLayout module="stores" action="view"><ShowcaseSettings /></ProtectedLayout>} />
-      <Route path="/shop/:slug" element={<PublicShopPage />} />
-      <Route path="/shop/:slug/product/:productId" element={<PublicShopPage />} />
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
   );
 }
 
 function App() {
+  useNoindex();
   return (
-    <ThemeProvider>
-      <PosProvider>
-        <PermissionProvider>
-          <GlobalErrorHandler />
-          <Router>
+    <ErrorProvider>
+      <ThemeProvider>
+        <PosProvider>
+          <PermissionProvider>
+            <GlobalErrorHandler />
             <AppRoutes />
-          </Router>
-        </PermissionProvider>
-      </PosProvider>
-    </ThemeProvider>
+          </PermissionProvider>
+        </PosProvider>
+      </ThemeProvider>
+    </ErrorProvider>
   );
 }
 
