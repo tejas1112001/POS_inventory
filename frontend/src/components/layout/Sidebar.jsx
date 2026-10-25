@@ -83,7 +83,7 @@ const navSections = [
       { label: 'Product Showcase', path: '/showcase-settings', icon: Globe, menuKey: 'stores' },
       { label: 'Users', path: '/users', icon: UserCog, menuKey: 'users' },
       { label: 'Roles & Permissions', path: '/roles', icon: ShieldCheck, menuKey: 'roles' },
-      { label: 'Settings', path: '/settings', icon: Settings, menuKey: 'stores' },
+      { label: 'Settings', path: '/settings', icon: Settings, menuKey: 'settings' },
     ],
   },
 ];

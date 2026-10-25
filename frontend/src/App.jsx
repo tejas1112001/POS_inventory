@@ -88,7 +88,7 @@ function AppRoutes() {
       <Route path="/add-customer" element={<ProtectedLayout module="customers" action="create"><AddCustomer /></ProtectedLayout>} />
       <Route path="/customer-report" element={<ProtectedLayout module="reports" action="view"><CustomerReport /></ProtectedLayout>} />
       <Route path="/inventory" element={<ProtectedLayout module="inventory" action="view"><Inventory /></ProtectedLayout>} />
-      <Route path="/settings" element={<ProtectedLayout module="stores" action="view"><Settings /></ProtectedLayout>} />
+      <Route path="/settings" element={<ProtectedLayout><Settings /></ProtectedLayout>} />
       <Route path="/showcase-settings" element={<ProtectedLayout module="stores" action="view"><ShowcaseSettings /></ProtectedLayout>} />
       <Route path="/shop/:slug" element={<PublicShopPage />} />
       <Route path="/shop/:slug/product/:productId" element={<PublicShopPage />} />
