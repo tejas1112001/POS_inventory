@@ -43,7 +43,7 @@
 
 ## 2. Existing route inventory (as built, `backend/src/**`)
 
-Legend: 🔓 public · 🔑 any valid token · `mod:act` = permission required by the **old** code. "New guard" is what the Go backend enforces. Status: **U** unchanged contract · **C** changed (see §4) · **F** behavior fix only (same request/response shape).
+Legend: 🔓 public · 🔑 any valid token · `mod:act` = permission required by the **old** code. "New guard" is what the Go backend enforces. Status: **U** unchanged contract · **C** changed (see §4) · **F** behavior fix only (same request/response shape) · **N** new route.
 
 ### 2.1 Auth — `routes/auth.js`
 
@@ -156,6 +156,7 @@ Legend: 🔓 public · 🔑 any valid token · `mod:act` = permission required b
 | GET | `/api/public/shop/:slug/products/:productId` | Id or slug; **unpublished visible when `NODE_ENV=development`** | Published only | C-18 |
 | GET | `/api/public/shop/:slug/categories` | All categories (not store-filtered) | Categories that have published products in the store | F |
 | GET | `/api/public/shop/:slug/featured` | Up to 8 | Same | U |
+| GET | `/api/public/home` | — | What the main address shows: `{homePage:"shop",slug}` or `{homePage:"login"}` (home page set to login, tenant suspended, plan without `public_shop`, or store inactive/not public). `Cache-Control: no-cache` + ETag; same rate limits | N |
 
 ### 2.11 Misc
 
@@ -245,7 +246,7 @@ All approved (Q-6, 2026-10-15). "FE" = frontend change needed.
 | POST | `/api/auth/password/change` | 🔑 | `{currentPassword,newPassword}`; revokes other sessions |
 | POST | `/api/auth/impersonation/exchange` | 🔓 one-time code | Platform impersonation hand-off (TENANCY §9) |
 | POST | `/api/users` | users:create | Replaces signup-as-create |
-| GET/PUT | `/api/settings` | settings:view / settings:edit | Business profile, currency, number format (`locale`, English tags only, `^en-[A-Z]{2}$`), timezone, tax config, receipt template. No language field |
+| GET/PUT | `/api/settings` | settings:view / settings:edit | Business profile, currency, number format (`locale`, English tags only, `^en-[A-Z]{2}$`), timezone, tax config, receipt template. No language field; `homePage` (`login` default, or `shop`) and `shopStoreId` (store shown at `/`; null: slug `main`, else the oldest active store) |
 | GET/PUT/DELETE | `/api/settings/email` | email_settings:* | Tenant SMTP (password write-only; GET returns `passwordSet: true`) |
 | POST | `/api/settings/email/test` | email_settings:edit | Send test email to `{to}` |
 | GET | `/api/sales/:id` | sales:view (+ own-only) | Single sale (receipt page reload) |
