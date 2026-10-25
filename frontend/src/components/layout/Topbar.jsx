@@ -1,4 +1,6 @@
-import { Menu, ChevronDown, LogOut, User as UserIcon, Settings } from 'lucide-react';
+import { useState } from 'react';
+import { Menu, ChevronDown, LogOut, KeyRound, Settings } from 'lucide-react';
+import ChangePasswordDialog from '@/components/ChangePasswordDialog';
 import { useNavigate } from 'react-router-dom';
 import { usePos } from '@/hooks/usePos';
 import { Button } from '@/components/ui/button';
@@ -16,6 +18,7 @@ import { initials } from '@/lib/format';
 export default function Topbar({ title, onOpenMobileMenu }) {
   const { currentUser, logout } = usePos();
   const navigate = useNavigate();
+  const [pwOpen, setPwOpen] = useState(false);
 
   const handleSignOut = async () => {
     await logout();
@@ -60,8 +63,8 @@ export default function Topbar({ title, onOpenMobileMenu }) {
             <DropdownMenuItem onClick={() => navigate('/settings')}>
               <Settings className="size-4" /> Settings
             </DropdownMenuItem>
-            <DropdownMenuItem>
-              <UserIcon className="size-4" /> Profile
+            <DropdownMenuItem onClick={() => setPwOpen(true)}>
+              <KeyRound className="size-4" /> Change password
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={handleSignOut}>
@@ -70,6 +73,7 @@ export default function Topbar({ title, onOpenMobileMenu }) {
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+      <ChangePasswordDialog open={pwOpen} onClose={() => setPwOpen(false)} />
     </header>
   );
 }
