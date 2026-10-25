@@ -92,13 +92,13 @@ export default function Sidebar({ mobileOpen, setMobileOpen, collapsed: controll
   const [internalCollapsed, setInternalCollapsed] = useState(false);
   const collapsed = controlledCollapsed ?? internalCollapsed;
   const setCollapsed = onCollapsedChange ?? setInternalCollapsed;
-  const { currentUser, logout } = usePos();
+  const { currentUser, logout, tenant } = usePos();
   const { canAccessMenu } = usePermission();
   const navigate = useNavigate();
 
-  const handleSignOut = () => {
-    logout();
-    navigate('/signin');
+  const handleSignOut = async () => {
+    await logout();
+    navigate('/signin', { replace: true });
   };
 
   const visibleSections = navSections
@@ -145,8 +145,10 @@ export default function Sidebar({ mobileOpen, setMobileOpen, collapsed: controll
                   <ShoppingCart className="size-5" />
                 </div>
                 <div className="flex flex-col leading-tight">
-                  <span className="text-sm font-bold tracking-tight text-foreground">ReactronPOS</span>
-                  <span className="text-[10px] font-medium text-muted-foreground">Retail Suite</span>
+                  <span className="max-w-[150px] truncate text-sm font-bold tracking-tight text-foreground" title={tenant?.name || ''}>
+                    {tenant?.name || 'Point of Sale'}
+                  </span>
+                  <span className="text-[10px] font-medium text-muted-foreground">Point of sale</span>
                 </div>
               </div>
               <div className="flex items-center gap-1">

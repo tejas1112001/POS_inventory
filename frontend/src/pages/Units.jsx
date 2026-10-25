@@ -3,6 +3,7 @@ import ListPageShell from '../components/layout/ListPageShell';
 import UnitList from '../components/lists/UnitList';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
+import { formatDate } from '@/lib/format';
 
 export default function Units() {
   const [units, setUnits] = useState([]);
@@ -23,11 +24,7 @@ export default function Units() {
       // Format dates for display
       const formattedData = unitRows.map(unit => ({
         ...unit,
-        createdAt: new Date(unit.createdAt).toLocaleDateString('en-US', {
-          year: 'numeric',
-          month: 'short',
-          day: 'numeric'
-        })
+        createdAt: formatDate(unit.createdAt)
       }));
       
       setUnits(formattedData);

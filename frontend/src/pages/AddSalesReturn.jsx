@@ -11,6 +11,7 @@ import {
   PlusCircleIcon,
   XMarkIcon
 } from '@heroicons/react/24/outline';
+import { currencySymbol, formatCurrency } from '@/lib/format';
 
 const SALES_RETURN_STEPS = [
   { id: 'info', title: 'Return Info', description: 'Customer and date' },
@@ -200,7 +201,7 @@ const AddSalesReturn = () => {
                   <option value="">Select Original Sale</option>
                   {sales.map(sale => (
                     <option key={sale.id} value={sale.id}>
-                      {sale.reference || `Sale #${sale.id}`} - ₹{sale.total}
+                      {sale.reference || `Sale #${sale.id}`} - {formatCurrency(sale.total)}
                     </option>
                   ))}
                 </select>
@@ -375,7 +376,7 @@ const AddSalesReturn = () => {
               
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Refund Amount (₹)
+                  Refund Amount ({currencySymbol()})
                 </label>
                 <input 
                   name="paid"
@@ -401,7 +402,7 @@ const AddSalesReturn = () => {
                 </div>
                 <div className="flex justify-between pt-2 border-t">
                   <span className="text-gray-700 font-medium">Total Amount:</span>
-                  <span className="font-bold">₹{returnItems.reduce((sum, item) => sum + (item.quantity * item.unitPrice || 0), 0).toFixed(2)}</span>
+                  <span className="font-bold">{formatCurrency(returnItems.reduce((sum, item) => sum + (item.quantity * item.unitPrice || 0), 0))}</span>
                 </div>
               </div>
             </div>

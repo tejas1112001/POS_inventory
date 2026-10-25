@@ -2,7 +2,7 @@
 // currency and an English number-format locale such as en-IN). All UI text
 // stays English; only the number format follows the locale.
 
-let settings = { currency: 'INR', locale: 'en-IN' };
+let settings = { currency: 'INR', locale: 'en-IN', timezone: undefined };
 const cache = new Map();
 
 function validLocale(locale) {
@@ -13,8 +13,18 @@ function validCurrency(currency) {
   return typeof currency === 'string' && /^[A-Z]{3}$/.test(currency) ? currency : 'INR';
 }
 
-export function setFormatSettings({ currency, locale } = {}) {
-  settings = { currency: validCurrency(currency), locale: validLocale(locale) };
+function validTimeZone(tz) {
+  if (typeof tz !== 'string' || !tz) return undefined;
+  try {
+    new Intl.DateTimeFormat('en', { timeZone: tz });
+    return tz;
+  } catch {
+    return undefined;
+  }
+}
+
+export function setFormatSettings({ currency, locale, timezone } = {}) {
+  settings = { currency: validCurrency(currency), locale: validLocale(locale), timezone: validTimeZone(timezone) };
   cache.clear();
 }
 
@@ -50,6 +60,32 @@ export function currencySymbol() {
 
 export function formatNumber(value, maximumFractionDigits = 2) {
   return new Intl.NumberFormat(settings.locale, { maximumFractionDigits }).format(Number(value) || 0);
+}
+
+function dateFormatter(key, options) {
+  const k = `d:${key}:${settings.locale}:${settings.timezone}`;
+  if (!cache.has(k)) cache.set(k, new Intl.DateTimeFormat(settings.locale, { ...options, timeZone: settings.timezone }));
+  return cache.get(k);
+}
+
+function toDate(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const d = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+// formatDate shows a date in the shop's time zone ("25 Oct 2026").
+export function formatDate(value, fallback = '') {
+  const d = toDate(value);
+  return d ? dateFormatter('date', { day: '2-digit', month: 'short', year: 'numeric' }).format(d) : fallback;
+}
+
+// formatDateTime shows a date and time in the shop's time zone.
+export function formatDateTime(value, fallback = '') {
+  const d = toDate(value);
+  return d
+    ? dateFormatter('datetime', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(d)
+    : fallback;
 }
 
 export function initials(name) {

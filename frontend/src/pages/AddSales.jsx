@@ -13,6 +13,7 @@ import {
   PlusCircleIcon,
   XMarkIcon
 } from '@heroicons/react/24/outline';
+import { currencySymbol } from '@/lib/format';
 
 const AddSales = () => {
   const [customers, setCustomers] = useState([]);
@@ -349,7 +350,7 @@ const handleSubmit = async (e) => {
               
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Discount (₹)
+                  Discount ({currencySymbol()})
                 </label>
                 <input 
                   name="discount"
@@ -363,7 +364,7 @@ const handleSubmit = async (e) => {
               
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Tax (₹)
+                  Tax ({currencySymbol()})
                 </label>
                 <input 
                   name="tax"
@@ -377,7 +378,7 @@ const handleSubmit = async (e) => {
               
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Shipping (₹)
+                  Shipping ({currencySymbol()})
                 </label>
                 <input 
                   name="shipping"
@@ -391,7 +392,7 @@ const handleSubmit = async (e) => {
               
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Paid Amount (₹)
+                  Paid Amount ({currencySymbol()})
                 </label>
                 <input 
                   name="paid"

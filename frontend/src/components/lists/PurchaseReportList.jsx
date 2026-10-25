@@ -10,6 +10,7 @@ import GenerateButton from '../ListComponents/GenerateButton';
 import { exportToPDF } from '../ListComponents/exportFunctions';
 import ListControlButtons from '../ListComponents/ListControlButtons';
 import SearchInput from '../ListComponents/SearchInput';
+import { formatDate } from '@/lib/format';
 
 export default function PurchaseReportList({ reports }) {
   const [search, setSearch] = useState('');
@@ -50,7 +51,7 @@ export default function PurchaseReportList({ reports }) {
     {
       accessorKey: 'dueDate',
       header: 'Date',
-      cell: ({ getValue }) => getValue ? new Date(getValue()).toLocaleDateString() : 'N/A',
+      cell: ({ getValue }) => formatDate(getValue(), 'N/A'),
       size: 120,
     },
     {

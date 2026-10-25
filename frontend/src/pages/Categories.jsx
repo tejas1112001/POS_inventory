@@ -3,6 +3,7 @@ import ListPageShell from '../components/layout/ListPageShell';
 import CategoryList from '../components/lists/CategoryList';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
+import { formatDate } from '@/lib/format';
 
 export default function Categories() {
   const [categories, setCategories] = useState([]);
@@ -23,11 +24,7 @@ export default function Categories() {
       // Format dates for display
       const formattedData = categoryRows.map(category => ({
         ...category,
-        created_at: new Date(category.created_at).toLocaleDateString('en-US', {
-          year: 'numeric',
-          month: 'short',
-          day: 'numeric'
-        })
+        created_at: formatDate(category.created_at)
       }));
       
       setCategories(formattedData);

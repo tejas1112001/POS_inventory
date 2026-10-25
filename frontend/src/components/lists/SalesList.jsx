@@ -10,6 +10,7 @@ import {
   statusColumn
 } from '../ListComponents/columnHelpers';
 import { useUI } from '../ListComponents/useUI';
+import { formatDate } from '@/lib/format';
 
 export default function SalesList({ sales = [], onRefresh, onAddItem }) {
   const [search, setSearch] = useState('');
@@ -52,7 +53,7 @@ export default function SalesList({ sales = [], onRefresh, onAddItem }) {
     {
       accessorKey: 'date',
       header: 'Date',
-      cell: ({ getValue }) => new Date(getValue()).toLocaleDateString(),
+      cell: ({ getValue }) => formatDate(getValue()),
       size: 120,
     },
     statusColumn('status', 'Status', 100),

@@ -12,15 +12,14 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { initials } from '@/lib/format';
-import { getRouteTitle } from './routeTitles';
 
 export default function Topbar({ title, onOpenMobileMenu }) {
   const { currentUser, logout } = usePos();
   const navigate = useNavigate();
 
-  const handleSignOut = () => {
-    logout();
-    navigate('/signin');
+  const handleSignOut = async () => {
+    await logout();
+    navigate('/signin', { replace: true });
   };
 
   return (
@@ -73,8 +72,4 @@ export default function Topbar({ title, onOpenMobileMenu }) {
       </div>
     </header>
   );
-}
-
-export function usePageTitle(pathname) {
-  return getRouteTitle(pathname);
 }
