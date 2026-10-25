@@ -41,7 +41,6 @@ export default function ShowcaseSettings() {
   const [copied, setCopied] = useState(false);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
-  const [showQR, setShowQR] = useState(false);
 
   const selectedStoreId = currentStore?.id || 1;
 
