@@ -1,3 +1,66 @@
+# Phase 2 — Gate report after step 18
+
+| | |
+|---|---|
+| Date | 2026-10-25 |
+| Branch | `go-backend/phase2` (local, not pushed) |
+| Commits | `1766fe7` schema and settings · `5c6b959` archive format · `712602c` export · `bbde9ba` restore into scratch · `f1acbf7` replace restore and session revocation · `af683fc` posctl commands · `01cbaca` deletion clock · `9b3bd5c` exports in the worker · `5467c75` console endpoints · `20154fe` end-to-end and cross-tenant tests |
+| Status | **Stopped after step 18** as asked. Step 16 report confirmed 2026-10-24 |
+
+## 1. What was built
+
+| Part | Outputs |
+|---|---|
+| Schema | Platform migration 00006: `tenant_exports`, `tenant_restores` (one queued or running of each per tenant), `tenants.restricted_at` (day 0 of the deletion clock) |
+| Archive | `age(zstd(tar))`: per-table CSV parts, optional files, a manifest with the export query, row count and SHA-256 per table, signed with HMAC (`EXPORT_MANIFEST_KEY`). Streamed: constant memory whatever the table size |
+| Export | One `REPEATABLE READ, READ ONLY` snapshot as the tenant role (it cannot read other schemas or write). Credential and transient tables never exported. Encrypted to `EXPORT_AGE_RECIPIENT`; posd refuses to start with the private key |
+| Restore | Verify the whole archive first, then into a scratch schema `r_<id>_<ts>` that no host can resolve, at the export's schema version. Re-run each export query: rows and SHA-256 must match the manifest. Then migrate to latest. Test mode drops it; scratch mode keeps it 7 days |
+| Replace | posctl only, tenant must be `read_only`, slug typed to confirm. Schema swap in one transaction; every session ends (`token_version + 1`, no refresh or reset tokens survive); owner emailed; old schema kept 30 days |
+| posctl | `tenant export`, `tenant restore [--drop / --replace]`, `tenant restore-tests [--weekly]` (runs console requests and the weekly test), `tenant restore-cleanup` |
+| Worker | `tenant_export` job runs queued exports. `export_sweep` (every 10 min) fails exports stuck over 6 h, queues a **final export** (with files) for every `pending_deletion` tenant, and starts any queued export |
+| Deletion clock | Day 0 is set when billing makes a tenant read-only or suspends it, and cleared when it is live again. Hourly: after `READ_ONLY_DAYS` (30) → `pending_deletion` (no sign-in), `purge_after` = day 0 + `RETENTION_DAYS` (90), audited, one email to the billing contact. **Nothing is dropped** (O-4) |
+| Console | `POST /tenants/:id/exports` (`tenants:export` + step-up), `GET /tenants/:id/exports`, `POST /tenants/:id/restore-tests`, `GET /tenants/:id/restore-tests`. Audited. Archives are never downloadable |
+
+## 2. Checks
+
+- **Gate commands, all green:** gofmt, vet, `constsql`, golangci-lint, staticcheck, govulncheck (no reachable vulnerabilities), gitleaks (67 branch commits), unit tests, and the **full integration suite with `-p 2`** (31 packages, no start-up timeouts this time). 300 test functions (146 unit, 154 integration-only), 0 fail.
+- **Isolation:** an export holds only its tenant's rows (checked against another tenant's marker row), never `refresh_tokens`, `auth_tokens`, `pos_locks` or `idempotency_keys`. The snapshot role cannot read another tenant or the platform. The scratch role cannot read the live schema or another tenant. A restore leaves every other schema's write counters unchanged. Console: another tenant's export ID gets 404 for a restore test; lists show only the tenant's own rows; tenant tokens get 401 on the admin host; the 4 new routes give 404 on two tenant hosts and with a forged `X-Forwarded-Host`; support and billing_admin get 403.
+- **End to end on the real app:** Super Admin signs in (TOTP, step-up), requests an export, the worker runs it, the console lists it succeeded. A restore test requested in the console is run by the restorer (as posctl), verifies every table, drops its scratch schema, and the console shows it verified.
+- **Deletion clock:** day 0 follows billing events. Three parallel runs move each due tenant once. Day 29 and admin suspensions are not moved. Sign-in is blocked, and the email gives the date the data is kept until (no sign-in link). A Super Admin restore clears day 0. The worker takes one final export.
+- **Mutation checks:** each of these breaks a test: no step-up on export requests, the clock counting admin suspensions, restore keeping day 0, billing never setting day 0. Earlier step 18 commits: refresh tokens exported, no file-prefix check, a writable snapshot, seeded rows kept, no sequence reset, a rows-only comparison, no session revocation, the old schema left readable.
+- **Found while testing:** in the isolation suite, signing in the owner of a brand-new tenant can race with its welcome email (the email replaces the invite token). The new test uses a shared tenant; older tests could hit the same race (not seen to fail).
+- **Not shown:** no dev stack smoke for step 18 (the dev DB is still at platform 5). CI has never run (nothing pushed). No race detector (no C compiler).
+
+## 3. Differences from the design (please confirm)
+
+| Topic | Built | Why |
+|---|---|---|
+| Restore tests from the console | Queued by posd, **run by `posctl tenant restore-tests`** (a timer next to posd) | Only posctl holds the age private key; the API never does (S7) |
+| `GET /tenants/:id/exports` | `tenants:export` without step-up (only the request needs it) | A status list; step-up lasts 5 minutes |
+| `GET /tenants/:id/restore-tests` | New: last 50 restores with verified, rows and per-table results | The console needs to see the result |
+| Exports not configured | `409 INVALID_STATE` | Both keys are optional settings |
+| Clock | Only billing restrictions count (read-only, billing suspension); an admin suspension, reactivate or restore stops it | BILLING_DESIGN §3 names billing states |
+| Final export | Queued by the sweep within 10 minutes, with files, also after a manual `DELETE`; a failed one is retried after 6 h | Retries without a person |
+| Pending-deletion email | "Reply to this email" instead of a pay link | No sign-in; R1 decides how a long-unpaid tenant pays |
+| Replace restore | No impersonation sessions to revoke (not built yet); emails waiting at export time are cancelled, not resent | — |
+| Weekly restore test | `posctl tenant restore-tests --weekly` on a timer, not a posd job; no `pos_restore_test_last_success_timestamp_seconds` metric yet | Needs the private key |
+
+## 4. Deferred
+
+- Nightly exports and their retention (7 daily + 4 weekly), final export kept 1 year, export expiry.
+- Deletion eligibility (OPERATIONS §6.4): the "eligible" list, warnings at 14/7/1 days, the verified-final-export check and the typed-slug drop.
+- Restore-test metric and alert; console screens (step 19).
+- Phase 3 restore drill on a real instance.
+
+## 5. Open items for the owner
+
+1. Push and CI still wait on the history rewrite (`20cdb92`; the leaked `backend/.env` is in `63b1c9b` and `9cff503`).
+2. Confirm the differences in §3, especially that console restore tests run in posctl.
+3. Want a dev stack smoke for step 18? It needs an age key pair and `EXPORT_*` in `deploy/.env`, and moves the dev DB to platform 6.
+4. Next is step 19 (frontend changes and the admin console). Say "approved" when ready.
+
+---
+
 # Phase 2 — Gate report after step 16
 
 | | |
