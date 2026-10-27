@@ -719,7 +719,7 @@ Other levers: gzip/brotli at Caddy, HTTP/2, `pgx` batch for multi-statement step
 | S7 | Per-tenant export encrypted with `age` (filippo.io/age) | One dependency; exports safe at rest outside the DB | **Phase 2** (step 18) |
 | S8 | Store-scoped users (`user_stores`) so billers see only their store | Schema + UI; PRD roadmap item | Deferred |
 | S9 | Read replica for reports/dashboard later (READ ONLY tx already in place) | Replica lag on dashboards | Deferred |
-| S10 | "Find my store" on the apex host: email in → email out with the tenant URL(s) | Needs platform-level email→tenant index (hash of email only) | Deferred |
+| S10 | "Find my store" on the apex host: email in → email out with the tenant URL(s) | Needs platform-level email→tenant index (hash of email only) | Built for owner and billing emails (`platform.tenants`, API_CONTRACT §5.4); staff emails still need the index |
 | S11 | Have-I-Been-Pwned k-anonymity check on password set | External call (optional, fail-open) | Deferred |
 | S12 | Server-side pagination migration for all FE lists | FE work; removes the 5,000-row cap | Deferred |
 | S13 | Strict CSP (no `'unsafe-inline'`), later nonces and Trusted Types | Requires checking MUI/Emotion inline styles | **Split:** strict CSP on the **admin host now** (step 4); nonce work for the **tenant app deferred** |

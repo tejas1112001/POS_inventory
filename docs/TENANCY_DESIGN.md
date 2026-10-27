@@ -348,7 +348,7 @@ Channels: `tenant_changed`, `auth_changed`, `role_changed`, `impersonation_chang
 |---|---|
 | `<slug>.<BASE_DOMAIN>` | Tenant SPA (static) + `/api/*` tenant API + `/api/public/tenant-info` + `/api/public/shop/*` + `/files/t/*` |
 | `admin.<BASE_DOMAIN>` | Admin console SPA + `/api/platform/*` only (incl. Razorpay webhook). Strict CSP (OPERATIONS §7) |
-| `<BASE_DOMAIN>` (apex) | Static landing page only (no self-signup, Q-5; "find my store" deferred, S10) |
+| `<BASE_DOMAIN>` (apex) | Landing site, server-rendered HTML + CSS from `internal/landing` (no JavaScript, strict CSP): pricing from public plans, "Find my shop", contact/demo form, staff sign-in redirect. No self-signup (Q-5). API_CONTRACT §5.4 |
 | anything else | `421` |
 
 The Go binary serves the static SPA builds (from `STATIC_DIR` or embedded with `go:embed`). That keeps everything same-origin, lets the app do slug redirects, and leaves the proxy with only TLS and forwarding to do.

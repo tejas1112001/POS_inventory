@@ -324,6 +324,25 @@ All approved (Q-6, 2026-10-15). "FE" = frontend change needed.
 | GET | `/metrics` | **Internal listener only** (`METRICS_ADDR`), never routed by the proxy |
 | GET | `/internal/tls/ask?domain=` | Internal only; Caddy on-demand TLS check (custom domains, later) |
 
+### 5.4 Main address (`<BASE_DOMAIN>`, landing site)
+
+Server-rendered HTML and one CSS file (`internal/landing`), no JavaScript, strict CSP (OPERATIONS §7). English only. Brand = `PLATFORM_NAME`, every URL from `PUBLIC_SCHEME` + `BASE_DOMAIN` (+ `PUBLIC_PORT` in development). No `/api` routes on this host (JSON `404`). No sign-up.
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/` | Hero, features, how it works, pricing, FAQ, Find my shop form, contact form. Pricing reads `platform.plans` where `is_public AND is_active` (cheapest first, cached 1 min); none → "Contact us for pricing". Title, description, canonical, Open Graph, Twitter and JSON-LD (`Organization`, `SoftwareApplication` with one `Offer` per public plan, `FAQPage`). `Cache-Control: public, max-age=300` |
+| GET | `/find-my-shop`, `/contact`, `/terms`, `/privacy` | Indexable pages. Terms and Privacy are marked placeholders (`internal/landing/templates/terms.html`, `privacy.html`) |
+| POST | `/find-my-shop` | Form `email`. Always `303 → /find-my-shop/sent` with the same page. Each valid request queues one `find_shop` row in `platform.email_outbox` (key: hash of the address + 15-minute bucket); the worker looks up shops whose `owner_email` or `billing_email` matches and sends their `/login` addresses, or cancels the row when there are none. Staff emails are not looked up |
+| POST | `/contact` | Form `topic` (`demo`\|`question`), `name`, `email`, `business?`, `phone?`, `message` (required for a question). Stored in `platform.contact_requests`; with `CONTACT_EMAIL` set, a `contact_request` email (Reply-To: the visitor) is queued in the same transaction. `303 → /contact/sent`; `422` re-renders with field errors |
+| GET | `/login` | Staff sign-in helper: shop address field. `noindex`; CSP `form-action` also allows `*.<BASE_DOMAIN>` |
+| GET | `/login/go?shop=` | `303` to `<slug>.<BASE_DOMAIN>/login` for any well-formed, non-reserved slug (never checks that it exists); else `422` |
+| GET | `/robots.txt`, `/sitemap.xml`, `/favicon.svg`, `/assets/site-<hash>.css` | Robots allows all and names the sitemap; noindex pages say so themselves |
+| GET | anything else | HTML `404`, `noindex` |
+
+Both forms: same-origin `Origin` required (`403`), `application/x-www-form-urlencoded` only, 16 KiB body. Spam checks that answer like a success and do nothing: hidden `website` field filled, missing or forged signed time stamp `ft` (HMAC from `MASTER_KEYS`), sent under 2 s after the page; a stamp over 24 h old asks to send again. Rate limits per IP (IPv6 /64), in memory per instance: Find my shop 5/hour (`429` page), plus 3 emails per address per hour (over it: dropped quietly, same reply); contact 5/hour per IP and 100/hour in total; `/login/go` 60/minute.
+
+Search engines: the admin host sends `X-Robots-Tag: noindex, nofollow` on every response; tenant staff pages (`/login`, back office) send `noindex`; tenant storefront pages (`/`, `/product/*`, `/shop/*`) are indexable.
+
 ---
 
 ## 6. Frontend changes (minimal set, Phase 2)
