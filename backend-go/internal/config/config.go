@@ -84,12 +84,15 @@ type Config struct {
 	// Platform SMTP (EMAIL_AND_RECEIPTS §2, Q-13): Amazon SES ap-south-1 or
 	// Brevo, or Mailpit in development. Without SMTP_HOST (allowed outside
 	// production) platform mail stays queued.
-	SMTPHost         string         `env:"SMTP_HOST"`
-	SMTPPort         int            `env:"SMTP_PORT" envDefault:"587"`
-	SMTPTLS          string         `env:"SMTP_TLS" envDefault:"starttls"`
-	SMTPUsername     string         `env:"SMTP_USERNAME"`
-	SMTPPassword     secrets.Secret `env:"SMTP_PASSWORD"`
-	MailFromAddress  string         `env:"MAIL_FROM_ADDRESS"`
+	SMTPHost        string         `env:"SMTP_HOST"`
+	SMTPPort        int            `env:"SMTP_PORT" envDefault:"587"`
+	SMTPTLS         string         `env:"SMTP_TLS" envDefault:"starttls"`
+	SMTPUsername    string         `env:"SMTP_USERNAME"`
+	SMTPPassword    secrets.Secret `env:"SMTP_PASSWORD"`
+	MailFromAddress string         `env:"MAIL_FROM_ADDRESS"`
+	// ContactEmail receives the contact and demo requests sent from the
+	// landing page. Without it requests are only stored.
+	ContactEmail     string         `env:"CONTACT_EMAIL"`
 	SMTPDenyCIDRsRaw string         `env:"SMTP_DENY_CIDRS"`
 	SMTPDenyCIDRs    []netip.Prefix `env:"-"`
 
@@ -489,6 +492,11 @@ func (c *Config) validateMail(add func(string, ...any)) {
 	}
 	if a, err := mail.ParseAddress(c.MailFromAddress); err != nil || a.Address != c.MailFromAddress || !strings.Contains(c.MailFromAddress, "@") {
 		add("MAIL_FROM_ADDRESS must be a bare email address")
+	}
+	if c.ContactEmail != "" {
+		if a, err := mail.ParseAddress(c.ContactEmail); err != nil || a.Address != c.ContactEmail || !strings.Contains(c.ContactEmail, "@") {
+			add("CONTACT_EMAIL must be a bare email address")
+		}
 	}
 	var err error
 	if c.SMTPDenyCIDRs, err = parseCIDRs(c.SMTPDenyCIDRsRaw); err != nil {

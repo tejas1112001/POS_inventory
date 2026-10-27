@@ -1,0 +1,13 @@
+{{define "body"}}
+<h1 style="font-size:20px;margin:0 0 16px;">{{.Heading}}</h1>
+<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 16px;font-size:14px;">
+<tr><td style="padding:2px 12px 2px 0;color:#52525b;">Name</td><td style="padding:2px 0;">{{.Name}}</td></tr>
+<tr><td style="padding:2px 12px 2px 0;color:#52525b;">Email</td><td style="padding:2px 0;">{{.Email}}</td></tr>
+{{if .Business}}<tr><td style="padding:2px 12px 2px 0;color:#52525b;">Business</td><td style="padding:2px 0;">{{.Business}}</td></tr>
+{{end}}{{if .Phone}}<tr><td style="padding:2px 12px 2px 0;color:#52525b;">Phone</td><td style="padding:2px 0;">{{.Phone}}</td></tr>
+{{end}}<tr><td style="padding:2px 12px 2px 0;color:#52525b;">Sent</td><td style="padding:2px 0;">{{.Sent}}</td></tr>
+</table>
+{{range .Message}}<p style="margin:0 0 8px;white-space:pre-wrap;">{{.}}</p>
+{{end}}
+<p style="margin:16px 0 0;font-size:13px;color:#52525b;">Reply to this email to answer. Request #{{.ID}}.</p>
+{{end}}

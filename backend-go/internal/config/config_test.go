@@ -246,6 +246,7 @@ func TestMailSettings(t *testing.T) {
 		"deny cidrs": {"SMTP_DENY_CIDRS", "10.0.0.0/33"},
 		"host":       {"SMTP_HOST", "smtp host"},
 		"user only":  {"SMTP_USERNAME", "apikey"},
+		"contact":    {"CONTACT_EMAIL", "Sales <sales@pos.test>"},
 	} {
 		v := validVars(t)
 		v[kv[0]] = kv[1]

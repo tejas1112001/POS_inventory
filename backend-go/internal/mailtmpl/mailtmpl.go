@@ -29,7 +29,7 @@ var (
 )
 
 func init() {
-	for _, name := range []string{"receipt", "link", "welcome", "billing"} {
+	for _, name := range []string{"receipt", "link", "welcome", "billing", "findshop", "contact"} {
 		htmlSets[name] = htmltemplate.Must(htmltemplate.ParseFS(fsys, "templates/layout.html.tmpl", "templates/"+name+".html.tmpl"))
 		textSets[name] = texttemplate.Must(texttemplate.New(name+".txt.tmpl").ParseFS(fsys, "templates/"+name+".txt.tmpl"))
 	}

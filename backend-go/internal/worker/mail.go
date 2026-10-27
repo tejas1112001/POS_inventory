@@ -842,6 +842,10 @@ func (m *Mailer) deliverPlatformRow(ctx context.Context, r row) outcome {
 		return m.deliverBillingNotice(ctx, r)
 	case mailtmpl.RestoreNoticeTemplate:
 		return m.deliverRestoreNotice(ctx, r)
+	case mailtmpl.FindShopTemplate:
+		return m.deliverFindShop(ctx, r)
+	case mailtmpl.ContactRequestTemplate:
+		return m.deliverContactRequest(ctx, r)
 	default:
 		return outcome{status: "dead", class: "permanent", detail: "unknown template " + keySafe.ReplaceAllString(r.template, "?")}
 	}
