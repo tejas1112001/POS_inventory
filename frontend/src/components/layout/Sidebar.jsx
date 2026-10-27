@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
+  CreditCard,
+  SlidersHorizontal,
   ShoppingCart,
   ReceiptText,
   RotateCcw,
@@ -34,7 +36,7 @@ import { initials } from '@/lib/format';
 const navSections = [
   {
     title: 'Overview',
-    items: [{ label: 'Dashboard', path: '/', icon: LayoutDashboard, menuKey: 'dashboard' }],
+    items: [{ label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard, menuKey: 'dashboard' }],
   },
   {
     title: 'Sales',
@@ -50,6 +52,7 @@ const navSections = [
     items: [
       { label: 'Products', path: '/products', icon: Package, menuKey: 'products' },
       { label: 'Inventory', path: '/inventory', icon: Boxes, menuKey: 'inventory' },
+      { label: 'Stock Adjustments', path: '/stock-adjustments', icon: SlidersHorizontal, menuKey: 'stock_adjustments' },
       { label: 'Purchases', path: '/purchases', icon: Truck, menuKey: 'purchases' },
     ],
   },
@@ -83,7 +86,8 @@ const navSections = [
       { label: 'Product Showcase', path: '/showcase-settings', icon: Globe, menuKey: 'stores' },
       { label: 'Users', path: '/users', icon: UserCog, menuKey: 'users' },
       { label: 'Roles & Permissions', path: '/roles', icon: ShieldCheck, menuKey: 'roles' },
-      { label: 'Settings', path: '/settings', icon: Settings, menuKey: 'stores' },
+      { label: 'Billing', path: '/billing', icon: CreditCard, menuKey: 'billing' },
+      { label: 'Settings', path: '/settings', icon: Settings, menuKey: 'settings' },
     ],
   },
 ];
@@ -92,13 +96,13 @@ export default function Sidebar({ mobileOpen, setMobileOpen, collapsed: controll
   const [internalCollapsed, setInternalCollapsed] = useState(false);
   const collapsed = controlledCollapsed ?? internalCollapsed;
   const setCollapsed = onCollapsedChange ?? setInternalCollapsed;
-  const { currentUser, logout } = usePos();
+  const { currentUser, logout, tenant } = usePos();
   const { canAccessMenu } = usePermission();
   const navigate = useNavigate();
 
-  const handleSignOut = () => {
-    logout();
-    navigate('/signin');
+  const handleSignOut = async () => {
+    await logout();
+    navigate('/login', { replace: true });
   };
 
   const visibleSections = navSections
@@ -145,8 +149,10 @@ export default function Sidebar({ mobileOpen, setMobileOpen, collapsed: controll
                   <ShoppingCart className="size-5" />
                 </div>
                 <div className="flex flex-col leading-tight">
-                  <span className="text-sm font-bold tracking-tight text-foreground">ReactronPOS</span>
-                  <span className="text-[10px] font-medium text-muted-foreground">Retail Suite</span>
+                  <span className="max-w-[150px] truncate text-sm font-bold tracking-tight text-foreground" title={tenant?.name || ''}>
+                    {tenant?.name || 'Point of Sale'}
+                  </span>
+                  <span className="text-[10px] font-medium text-muted-foreground">Point of sale</span>
                 </div>
               </div>
               <div className="flex items-center gap-1">
@@ -190,7 +196,6 @@ export default function Sidebar({ mobileOpen, setMobileOpen, collapsed: controll
                       <li key={item.path}>
                         <NavLink
                           to={item.path}
-                          end={item.path === '/'}
                           onClick={() => setMobileOpen(false)}
                           className={({ isActive }) =>
                             cn(

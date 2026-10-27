@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { IndianRupee, ShoppingBag, Users, Package, Banknote, CheckCircle2, Clock, AlertCircle } from 'lucide-react';
+import { TrendingUp, ShoppingBag, Users, Package, Banknote, CheckCircle2, Clock, AlertCircle } from 'lucide-react';
 import { Bar, Pie } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -18,7 +18,7 @@ import { KpiCard } from '@/components/shared/kpi-card';
 import { SectionCard } from '@/components/shared/section-card';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
-import { formatCurrency } from '@/lib/format';
+import { formatCurrency, currencySymbol, formatNumber } from '@/lib/format';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, ArcElement);
 
@@ -94,7 +94,7 @@ export default function Dashboard() {
       y: {
         beginAtZero: true,
         ticks: {
-          callback: (value) => (activeChart === 'revenue' ? `₹${value}` : value),
+          callback: (value) => (activeChart === 'revenue' ? `${currencySymbol()}${formatNumber(value, 0)}` : value),
         },
       },
     },
@@ -164,7 +164,7 @@ export default function Dashboard() {
       />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard label="Total Revenue" value={formatCurrency(data.stats.totalRevenue)} icon={IndianRupee} accent="emerald" />
+        <KpiCard label="Total Revenue" value={formatCurrency(data.stats.totalRevenue)} icon={TrendingUp} accent="emerald" />
         <KpiCard label="Total Orders" value={String(data.stats.totalOrders)} icon={ShoppingBag} accent="sky" />
         <KpiCard label="Total Customers" value={String(data.stats.totalCustomers)} icon={Users} accent="violet" />
         <KpiCard label="Total Products" value={String(data.stats.totalProducts)} icon={Package} accent="amber" />

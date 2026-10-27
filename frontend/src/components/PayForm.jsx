@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, CheckCircle2 } from 'lucide-react';
+import { X, CheckCircle2, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -12,7 +12,7 @@ import {
 import { formatCurrency } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
-export default function PayForm({ isOpen, onClose, total, onPaySubmit }) {
+export default function PayForm({ isOpen, onClose, total, onPaySubmit, customerEmail = '' }) {
   const [formData, setFormData] = useState({
     receivedAmount: '',
     payingAmount: total.toFixed(2),
@@ -22,6 +22,8 @@ export default function PayForm({ isOpen, onClose, total, onPaySubmit }) {
     saleNote: '',
     quickCash: '10',
   });
+  const [receiptEmail, setReceiptEmail] = useState(customerEmail);
+  const [submitting, setSubmitting] = useState(false);
 
   const [showQuickCash, setShowQuickCash] = useState(true);
 
@@ -67,15 +69,24 @@ export default function PayForm({ isOpen, onClose, total, onPaySubmit }) {
     }));
   };
 
-  const handleSubmit = (e) => {
+  // The POS shows any error after the form closes; the button stays
+  // disabled while the sale is being saved, so it cannot be sent twice.
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    onPaySubmit({
-      ...formData,
-      method: formData.paymentType,
-      amountTendered: parseFloat(formData.receivedAmount) || 0,
-      total: total.toFixed(2),
-    });
-    onClose();
+    if (submitting) return;
+    setSubmitting(true);
+    try {
+      await onPaySubmit({
+        method: formData.paymentType,
+        amountTendered: parseFloat(formData.receivedAmount) || 0,
+        paymentNote: formData.paymentNote,
+        saleNote: formData.saleNote,
+        receiptEmail: receiptEmail.trim(),
+      });
+    } finally {
+      setSubmitting(false);
+      onClose();
+    }
   };
 
   return (
@@ -179,12 +190,24 @@ export default function PayForm({ isOpen, onClose, total, onPaySubmit }) {
             </div>
           </div>
 
+          <div className="space-y-1.5">
+            <Label className="text-xs" htmlFor="receipt-email">Email the receipt to (optional)</Label>
+            <Input
+              id="receipt-email"
+              type="email"
+              value={receiptEmail}
+              onChange={(e) => setReceiptEmail(e.target.value)}
+              placeholder="customer@example.com"
+              autoComplete="off"
+            />
+          </div>
+
           <div className="flex gap-2 pt-2">
             <Button type="button" variant="outline" className="flex-1" onClick={onClose}>
               <X className="size-4" /> Cancel
             </Button>
-            <Button type="submit" className="flex-1 h-11 font-bold">
-              <CheckCircle2 className="size-4" /> Process Payment
+            <Button type="submit" className="flex-1 h-11 font-bold" disabled={submitting}>
+              {submitting ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />} Process Payment
             </Button>
           </div>
         </form>

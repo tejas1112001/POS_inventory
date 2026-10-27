@@ -1,0 +1,49 @@
+# Development: Caddy's internal CA issues certificates for localhost and
+# *.localhost. Production config: TENANCY §7.2.
+{
+	local_certs
+}
+
+localhost, *.localhost {
+	tls internal
+	request_body {
+		max_size 10MB
+	}
+
+	@app path /api/* /healthz /health /readyz /files/*
+	handle @app {
+		reverse_proxy app:8080 {
+			header_up X-Forwarded-Host {hostport}
+			header_up X-Forwarded-Proto {scheme}
+		}
+	}
+	handle {
+		reverse_proxy {$FRONTEND_UPSTREAM} {
+			header_up X-Forwarded-Host {hostport}
+			header_up X-Forwarded-Proto {scheme}
+		}
+	}
+}
+
+# The Super Admin console. ADMIN_UPSTREAM=host.docker.internal:5174 puts
+# the console's Vite dev server here; /api still goes to the app.
+admin.localhost {
+	tls internal
+	request_body {
+		max_size 10MB
+	}
+
+	@app path /api/* /healthz /health /readyz
+	handle @app {
+		reverse_proxy app:8080 {
+			header_up X-Forwarded-Host {hostport}
+			header_up X-Forwarded-Proto {scheme}
+		}
+	}
+	handle {
+		reverse_proxy {$ADMIN_UPSTREAM} {
+			header_up X-Forwarded-Host {hostport}
+			header_up X-Forwarded-Proto {scheme}
+		}
+	}
+}

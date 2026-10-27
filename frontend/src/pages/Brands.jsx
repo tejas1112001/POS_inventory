@@ -3,6 +3,7 @@ import ListPageShell from '../components/layout/ListPageShell';
 import BrandList from '../components/lists/BrandList';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
+import { formatDate } from '@/lib/format';
 
 export default function Brands() {
   const [brands, setBrands] = useState([]);
@@ -23,11 +24,7 @@ export default function Brands() {
       // Format dates for display
       const formattedData = brandRows.map(brand => ({
         ...brand,
-        createdAt: new Date(brand.createdAt).toLocaleDateString('en-US', {
-          year: 'numeric',
-          month: 'short',
-          day: 'numeric'
-        })
+        createdAt: formatDate(brand.createdAt)
       }));
       
       setBrands(formattedData);

@@ -7,6 +7,7 @@ import ListPageLayout from '../ListComponents/ListPageLayout';
 import SearchInput from '../ListComponents/SearchInput';
 import SelectField from '../ListComponents/SelectField';
 import ListControlButtons from '../ListComponents/ListControlButtons';
+import { formatCurrency } from '@/lib/format';
 
 export default function InvoiceList({ invoices }) {
   const [search, setSearch] = useState('');
@@ -62,19 +63,19 @@ export default function InvoiceList({ invoices }) {
     {
       accessorKey: 'amount',
       header: 'Amount',
-      cell: ({ getValue }) => <span>${getValue()}</span>,
+      cell: ({ getValue }) => <span>{formatCurrency(getValue())}</span>,
       size: 100,
     },
     {
       accessorKey: 'paid',
       header: 'Paid',
-      cell: ({ getValue }) => <span>${getValue()}</span>,
+      cell: ({ getValue }) => <span>{formatCurrency(getValue())}</span>,
       size: 100,
     },
     {
       accessorKey: 'amountDue',
       header: 'Amount Due',
-      cell: ({ getValue }) => <span>${getValue()}</span>,
+      cell: ({ getValue }) => <span>{formatCurrency(getValue())}</span>,
       size: 120,
     },
     statusColumn('status', 'Status'),

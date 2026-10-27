@@ -15,7 +15,6 @@ import {
   statusColumn
 } from '../ListComponents/columnHelpers';
 
-import { usePos } from '../../hooks/usePos';
 import { usePermission } from '../../hooks/usePermission';
 import { api } from '../../services/api';
 import { formatCurrency } from '@/lib/format';
@@ -132,7 +131,7 @@ const columns = [
   columns,
   rowSelection,
   setRowSelection,
-  onImportItem: hasPermission('products', 'create') ? () => setShowForm(true) : null,
+  onImportItem: hasPermission('products', 'import') ? () => setShowForm(true) : null,
   onAddItem: () => navigate('/add-product'),
   isAddDisabled: !hasPermission('products', 'create'),
   onRefresh,

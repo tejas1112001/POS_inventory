@@ -1,0 +1,16 @@
+# Overlay: posd also serves the tenant app (frontend/dist) and the Super
+# Admin console (frontend/dist-admin), so each shares one origin with /api
+# as in production. Build both first (npm run build, npm run build:admin).
+#
+#   make up-web          # = docker compose -f docker-compose.yml -f docker-compose.web.yml up
+#
+# FRONTEND_DIST / FRONTEND_ADMIN_DIST point elsewhere if a build lives in
+# another folder.
+
+services:
+  app:
+    environment:
+      STATIC_DIR: /static
+    volumes:
+      - ${FRONTEND_DIST:-../../frontend/dist}:/static/tenant:ro
+      - ${FRONTEND_ADMIN_DIST:-../../frontend/dist-admin}:/static/admin:ro

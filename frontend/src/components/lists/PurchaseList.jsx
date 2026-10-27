@@ -1,5 +1,4 @@
 import React, { useState, useMemo } from 'react';
-import { usePos } from '../../hooks/usePos';
 import { usePermission } from '../../hooks/usePermission';
 // Reusable components
 import ListPageLayout from '../ListComponents/ListPageLayout';
@@ -8,6 +7,7 @@ import SearchInput from '../ListComponents/SearchInput';
 import SelectFilters from '../ListComponents/SelectFilters';
 import { useUI } from "../ListComponents/useUI";
 import { selectColumn, indexColumn, statusColumn, actionsColumn } from '../ListComponents/columnHelpers';
+import { formatDate } from '@/lib/format';
 
 const PurchaseList = ({ purchases = [], onAddPurchase }) => {
   const [search, setSearch] = useState('');
@@ -46,11 +46,7 @@ const PurchaseList = ({ purchases = [], onAddPurchase }) => {
       size: 120,
       cell: ({ getValue }) => {
         const date = getValue();
-        return date ? new Date(date).toLocaleDateString('en-US', {
-          year: 'numeric',
-          month: 'short',
-          day: 'numeric'
-        }) : '-';
+        return date ? formatDate(date) : '-';
       }
     },
     statusColumn('status', 'Status'),

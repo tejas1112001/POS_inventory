@@ -1,131 +1,71 @@
-import React, { useState, useMemo } from 'react';
-import { useUI } from "../ListComponents/useUI";
+import React, { useEffect, useMemo, useState } from 'react';
+import { useUI } from '../ListComponents/useUI';
 import { indexColumn } from '../ListComponents/columnHelpers';
-
-// Reusable components
 import ListPageLayout from '../ListComponents/ListPageLayout';
 import DateRangePicker from '../ListComponents/DateRangePicker';
 import SelectField from '../ListComponents/SelectField';
-import GenerateButton from '../ListComponents/GenerateButton';
-import { exportToPDF } from '../ListComponents/exportFunctions';
 import ListControlButtons from '../ListComponents/ListControlButtons';
 import SearchInput from '../ListComponents/SearchInput';
+import ReportExportButtons from '../ListComponents/ReportExportButtons';
+import { useServerReport } from '@/hooks/useServerReport';
+import { api } from '@/services/api';
+import { formatDate, formatCurrency } from '@/lib/format';
 
-export default function PurchaseReportList({ reports }) {
+const n = (v) => Number(v) || 0;
+
+// PurchaseReportList: one row per purchased line (GET /api/purchase/report).
+// Dates, supplier and store are filtered by the server; product and text
+// search filter the rows here.
+export default function PurchaseReportList() {
   const [search, setSearch] = useState('');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
-  const [supplierFilter, setSupplierFilter] = useState('All');
+  const [supplierName, setSupplierName] = useState('All');
+  const [storeName, setStoreName] = useState('All');
   const [productFilter, setProductFilter] = useState('All');
-  const handleGenerate = () => {
-    exportToPDF(filteredData, 'purchase_report');
-  };
-  
-  // Supplier options
-  const supplierOptions = ['All', 'Main Supplier', 'Electro Mart', 'Prime Suppliers'];
-  
-  // Product options
-  const productOptions = useMemo(() => {
-    const products = [...new Set(reports.map(report => report.product?.name).filter(Boolean))];
-    return ['All', ...products];
-  }, [reports]);
+  const [suppliers, setSuppliers] = useState([]);
+  const [stores, setStores] = useState([]);
 
-  // Columns configuration
-  const columns = [
-    indexColumn(),
-    {
-      accessorKey: 'reference',
-      header: 'Reference',
-      size: 100,
-      cell: ({ getValue }) => (
-        <a href="#" className="text-blue-600 hover:underline">{getValue() || 'N/A'}</a>
-      )
-    },
-    {
-      accessorKey: 'sku',
-      header: 'SKU',
-      size: 80,
-      cell: ({ getValue }) => <span>{getValue() || 'N/A'}</span>,
-    },
-    {
-      accessorKey: 'dueDate',
-      header: 'Date',
-      cell: ({ getValue }) => getValue ? new Date(getValue()).toLocaleDateString() : 'N/A',
-      size: 120,
-    },
-    {
-      accessorKey: 'product',
-      header: 'Product Name',
-      cell: ({ row }) => (
-        <div className="flex items-center">
-          {row.original.product?.image && (
-            <div className="bg-gray-100 rounded-full p-1 mr-3">
-              <img 
-                src={row.original.product.image} 
-                alt={row.original.product.name} 
-                className="w-8 h-8 rounded-full object-cover"
-              />
-            </div>
-          )}
-          <span>{row.original.product?.name || 'Unknown Product'}</span>
-        </div>
-      ),
-      size: 200,
-    },
-    {
-      accessorKey: 'category',
-      header: 'Category',
-      cell: ({ getValue }) => <span>{getValue() || 'Uncategorized'}</span>,
-      size: 100,
-    },
-    {
-      accessorKey: 'stockQty',
-      header: 'Instock Qty',
-      cell: ({ getValue }) => <span className="text-center block">{getValue() || 0}</span>,
-      size: 100,
-      meta: { align: 'center' }
-    },
-    {
-      accessorKey: 'purchaseQty',
-      header: 'Purchase Qty',
-      cell: ({ getValue }) => <span className="text-center block">{getValue() || 0}</span>,
-      size: 100,
-      meta: { align: 'center' }
-    },
-    {
-      accessorKey: 'purchaseAmount',
-      header: 'Purchase Amount',
-      cell: ({ getValue }) => <span>${getValue() || 0}</span>,
-      size: 120,
-    }
-  ];
+  useEffect(() => {
+    api.get('/api/suppliers', { quiet: true }).then((s) => setSuppliers(s || [])).catch(() => {});
+    api.get('/api/stores', { quiet: true }).then((s) => setStores(s || [])).catch(() => {});
+  }, []);
+  const supplierId = suppliers.find((s) => s.name === supplierName)?.id;
+  const storeId = stores.find((s) => s.name === storeName)?.id;
+  const { rows, loading, error, qs } = useServerReport('/api/purchase/report', { startDate: fromDate, endDate: toDate, supplierId, storeId });
 
-  // Filtered data
+  const productOptions = useMemo(() => ['All', ...new Set(rows.map((r) => r.product?.name).filter(Boolean))], [rows]);
+
+  const columns = useMemo(
+    () => [
+      indexColumn(),
+      { accessorKey: 'date', header: 'Date', size: 110, cell: ({ getValue }) => formatDate(getValue(), 'N/A') },
+      { accessorKey: 'reference', header: 'Reference', size: 110 },
+      { accessorKey: 'sku', header: 'SKU', size: 90 },
+      { id: 'product', accessorFn: (r) => r.product?.name || '', header: 'Product', size: 200 },
+      { accessorKey: 'category', header: 'Category', size: 110 },
+      { id: 'supplier', accessorFn: (r) => r.supplierName || r.supplier?.name || '', header: 'Supplier', size: 140 },
+      { id: 'store', accessorFn: (r) => r.store?.name || '', header: 'Store', size: 120 },
+      { accessorKey: 'status', header: 'Status', size: 100 },
+      { accessorKey: 'purchaseQty', header: 'Qty', size: 70, meta: { align: 'center' } },
+      { accessorKey: 'purchaseAmount', header: 'Amount', size: 120, cell: ({ getValue }) => formatCurrency(getValue()) },
+      { accessorKey: 'stockQty', header: 'In stock', size: 80, meta: { align: 'center' } },
+    ],
+    []
+  );
+
   const filteredData = useMemo(() => {
-    return reports.filter(report => {
-      const passesSupplier = supplierFilter === 'All' || report.supplier === supplierFilter;
-      const passesProduct = productFilter === 'All' || report.product?.name === productFilter;
-      const passesSearch = `${report.reference || ''} ${report.sku || ''} ${report.product?.name || ''} ${report.category || ''}`
-                          .toLowerCase()
-                          .includes(search.toLowerCase());
-      
-      const reportDate = report.dueDate ? new Date(report.dueDate) : null;
-      const from = fromDate ? new Date(fromDate) : null;
-      const to = toDate ? new Date(toDate) : null;
-
-      const passesFrom = from && reportDate ? reportDate >= from : true;
-      const passesTo = to && reportDate ? reportDate <= to : true;
-
-      return passesSupplier && passesProduct && passesSearch && passesFrom && passesTo;
+    const q = search.trim().toLowerCase();
+    return rows.filter((r) => {
+      const passesProduct = productFilter === 'All' || r.product?.name === productFilter;
+      const text = `${r.reference} ${r.sku} ${r.product?.name} ${r.category} ${r.supplierName}`.toLowerCase();
+      return passesProduct && (!q || text.includes(q));
     });
-  }, [reports, search, supplierFilter, productFilter, fromDate, toDate]);
+  }, [rows, search, productFilter]);
 
-  // Use UI hook
-  const {
-    table,
-    controlButtons,
-    emptyState
-  } = useUI({
+  const total = useMemo(() => filteredData.reduce((t, r) => t + n(r.purchaseAmount), 0), [filteredData]);
+
+  const { table, controlButtons, emptyState } = useUI({
     moduleName: 'purchase reports',
     filteredData,
     columns,
@@ -134,49 +74,38 @@ export default function PurchaseReportList({ reports }) {
     onAddItem: false,
     resetFilters: () => {
       setSearch('');
-      setSupplierFilter('All');
+      setSupplierName('All');
+      setStoreName('All');
       setProductFilter('All');
       setFromDate('');
       setToDate('');
-    }
+    },
   });
 
   return (
     <ListPageLayout
       title="Purchase Report"
-      description="Manage your purchase reports"
+      description={`Purchased lines. Total shown: ${formatCurrency(total)}. Cancelled purchases are left out.`}
       controlButtons={<ListControlButtons buttons={controlButtons} />}
-      filters={
-        <>
-          <SearchInput search={search} setSearch={setSearch} placeholder="Search purchase reports..." />
-          <DateRangePicker
-            fromDate={fromDate}
-            toDate={toDate}
-            setFromDate={setFromDate}
-            setToDate={setToDate}
-          />
-          <SelectField
-            name="supplier"
-            label="Supplier"
-            value={supplierFilter}
-            onChange={setSupplierFilter}
-            options={supplierOptions}
-            placeholder="All Suppliers"
-            widthClass="w-full md:w-40"
-          />
-          <SelectField
-            name="product"
-            label="Product"
-            value={productFilter}
-            onChange={setProductFilter}
-            options={productOptions}
-            placeholder="All Products"
-            widthClass="w-full md:w-40"
-          />
-          <GenerateButton onClick={handleGenerate} label="Generate PDF" />
-        </>
+      filters={<SearchInput search={search} setSearch={setSearch} placeholder="Search purchase reports..." />}
+      filterRow={
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-12">
+          <DateRangePicker fromDate={fromDate} toDate={toDate} setFromDate={setFromDate} setToDate={setToDate} />
+          <div className="md:col-span-2">
+            <SelectField name="supplier" label="Supplier" value={supplierName} onChange={setSupplierName} options={['All', ...suppliers.map((s) => s.name)]} placeholder="All" colClass="" />
+          </div>
+          <div className="md:col-span-2">
+            <SelectField name="store" label="Store" value={storeName} onChange={setStoreName} options={['All', ...stores.map((s) => s.name)]} placeholder="All" colClass="" />
+          </div>
+          <div className="md:col-span-2">
+            <SelectField name="product" label="Product" value={productFilter} onChange={setProductFilter} options={productOptions} placeholder="All" colClass="" />
+          </div>
+          <ReportExportButtons path="/api/purchase/report/export" qs={qs} name="purchase-report" />
+        </div>
       }
+      extraContent={error && <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</div>}
       table={table}
+      isLoading={loading}
       emptyState={emptyState}
       dataLength={filteredData.length}
     />

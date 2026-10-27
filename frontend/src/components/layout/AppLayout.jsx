@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
+import BannerArea from './BannerArea';
 import { MainLayout } from './AppShell';
 import { getRouteTitle } from './routeTitles';
 
@@ -24,6 +25,7 @@ export default function AppLayout({ children, fullBleed = false }) {
         />
       }
       topbar={<Topbar title={title} onOpenMobileMenu={() => setMobileOpen(true)} />}
+      banner={<BannerArea />}
     >
       {children}
     </MainLayout>

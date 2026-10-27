@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Title}}</title>
+<meta name="description" content="{{.Description}}">
+{{if .Noindex}}<meta name="robots" content="noindex">
+{{end}}{{if .Canonical}}<link rel="canonical" href="{{.Canonical}}">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="{{.Site.Name}}">
+<meta property="og:title" content="{{.Title}}">
+<meta property="og:description" content="{{.Description}}">
+<meta property="og:url" content="{{.Canonical}}">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="{{.Title}}">
+<meta name="twitter:description" content="{{.Description}}">
+{{end}}<meta name="theme-color" content="#3730a3">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="{{.Site.CSS}}">
+{{if .JSONLD}}<script type="application/ld+json">{{.JSONLD}}</script>
+{{end}}</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="top">
+<div class="wrap bar">
+<a class="brand" href="/">{{icon "store"}}<span>{{.Site.Name}}</span></a>
+<nav class="nav" aria-label="Main">
+<ul>
+<li><a href="/#features">Features</a></li>
+<li><a href="/#pricing">Pricing</a></li>
+<li><a href="/#faq">FAQ</a></li>
+<li><a href="/find-my-shop">Find my shop</a></li>
+<li><a class="nav-login" href="/login">Staff login</a></li>
+</ul>
+</nav>
+</div>
+</header>
+<main id="main" tabindex="-1">
+{{template "main" .}}
+</main>
+<footer class="foot">
+<div class="wrap foot-grid">
+<p class="foot-brand">{{.Site.Name}}</p>
+<nav aria-label="Footer">
+<ul>
+<li><a href="/contact">Request a demo</a></li>
+<li><a href="/find-my-shop">Find my shop</a></li>
+<li><a href="/login">Staff login</a></li>
+<li><a href="/terms">Terms</a></li>
+<li><a href="/privacy">Privacy</a></li>
+</ul>
+</nav>
+<p class="muted">© {{.Year}} {{.Site.Name}}</p>
+</div>
+</footer>
+</body>
+</html>
+{{define "alert"}}{{if .}}<p class="alert" role="alert">{{.}}</p>{{end}}{{end}}
+{{define "findform"}}
+<form class="form" method="post" action="/find-my-shop" novalidate>
+{{template "alert" .Find.Alert}}
+<input type="hidden" name="ft" value="{{.Find.Token}}">
+<div class="hp" aria-hidden="true"><label for="find-website">Leave this empty</label><input id="find-website" name="website" type="text" tabindex="-1" autocomplete="off"></div>
+<div class="field">
+<label for="find-email">Owner or billing email</label>
+<input id="find-email" name="email" type="email" inputmode="email" autocomplete="email" required maxlength="254" value="{{.Find.Value "email"}}"{{if .Find.Error "email"}} aria-invalid="true" aria-describedby="find-email-err"{{end}}>
+{{with .Find.Error "email"}}<p class="err" id="find-email-err">{{.}}</p>{{end}}
+</div>
+<button class="btn" type="submit">Email me my shop address</button>
+</form>
+{{end}}
+{{define "contactform"}}
+<form class="form" method="post" action="/contact" novalidate>
+{{template "alert" .Contact.Alert}}
+<input type="hidden" name="ft" value="{{.Contact.Token}}">
+<div class="hp" aria-hidden="true"><label for="contact-website">Leave this empty</label><input id="contact-website" name="website" type="text" tabindex="-1" autocomplete="off"></div>
+<fieldset class="field choice">
+<legend>What do you need?</legend>
+<label><input type="radio" name="topic" value="demo"{{if ne (.Contact.Value "topic") "question"}} checked{{end}}> A demo</label>
+<label><input type="radio" name="topic" value="question"{{if eq (.Contact.Value "topic") "question"}} checked{{end}}> An answer to a question</label>
+</fieldset>
+<div class="row">
+<div class="field">
+<label for="contact-name">Your name</label>
+<input id="contact-name" name="name" type="text" autocomplete="name" required maxlength="120" value="{{.Contact.Value "name"}}"{{if .Contact.Error "name"}} aria-invalid="true" aria-describedby="contact-name-err"{{end}}>
+{{with .Contact.Error "name"}}<p class="err" id="contact-name-err">{{.}}</p>{{end}}
+</div>
+<div class="field">
+<label for="contact-email">Email</label>
+<input id="contact-email" name="email" type="email" inputmode="email" autocomplete="email" required maxlength="254" value="{{.Contact.Value "email"}}"{{if .Contact.Error "email"}} aria-invalid="true" aria-describedby="contact-email-err"{{end}}>
+{{with .Contact.Error "email"}}<p class="err" id="contact-email-err">{{.}}</p>{{end}}
+</div>
+</div>
+<div class="row">
+<div class="field">
+<label for="contact-business">Business name <span class="opt">(optional)</span></label>
+<input id="contact-business" name="business" type="text" autocomplete="organization" maxlength="120" value="{{.Contact.Value "business"}}"{{if .Contact.Error "business"}} aria-invalid="true" aria-describedby="contact-business-err"{{end}}>
+{{with .Contact.Error "business"}}<p class="err" id="contact-business-err">{{.}}</p>{{end}}
+</div>
+<div class="field">
+<label for="contact-phone">Phone <span class="opt">(optional)</span></label>
+<input id="contact-phone" name="phone" type="tel" autocomplete="tel" maxlength="40" value="{{.Contact.Value "phone"}}"{{if .Contact.Error "phone"}} aria-invalid="true" aria-describedby="contact-phone-err"{{end}}>
+{{with .Contact.Error "phone"}}<p class="err" id="contact-phone-err">{{.}}</p>{{end}}
+</div>
+</div>
+<div class="field">
+<label for="contact-message">Message <span class="opt">(optional for a demo)</span></label>
+<textarea id="contact-message" name="message" rows="5" maxlength="2000"{{if .Contact.Error "message"}} aria-invalid="true" aria-describedby="contact-message-err"{{end}}>{{.Contact.Value "message"}}</textarea>
+{{with .Contact.Error "message"}}<p class="err" id="contact-message-err">{{.}}</p>{{end}}
+</div>
+<p class="muted small">We use these details only to answer you. See the <a href="/privacy">Privacy Policy</a>.</p>
+<button class="btn" type="submit">Send</button>
+</form>
+{{end}}

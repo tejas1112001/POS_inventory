@@ -1,426 +1,445 @@
-import React, { useState, useEffect } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { PlusCircleIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import PageHeader from '../components/forms/PageHeader';
 import FormFooter from '../components/forms/FormFooter';
 import FormPageLayout, { FormCard, FormBody } from '../components/forms/FormPageLayout';
 import FormStepper from '../components/forms/FormStepper';
 import { useFormWizard } from '../hooks/useFormWizard';
-import { useNavigate } from 'react-router-dom';
-import { usePos } from '../hooks/usePos';
+import { usePermission } from '../context/PermissionContext';
 import { api } from '../services/api';
-import {
-  PlusCircleIcon,
-  XMarkIcon
-} from '@heroicons/react/24/outline';
+import { currencySymbol, formatCurrency, formatDate } from '@/lib/format';
+import { newIdempotencyKey } from '@/lib/checkout';
 
-const SALES_RETURN_STEPS = [
-  { id: 'info', title: 'Return Info', description: 'Customer and date' },
-  { id: 'items', title: 'Return Items', description: 'Products to return' },
-  { id: 'payment', title: 'Payment', description: 'Refund details' },
+const STEPS = [
+  { id: 'sale', title: 'Sale', description: 'What is returned' },
+  { id: 'items', title: 'Items', description: 'Quantities and reasons' },
+  { id: 'refund', title: 'Refund', description: 'Money back' },
 ];
+const inputCls = 'w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-blue-500';
+const today = () => new Date().toLocaleDateString('en-CA');
+let seq = 0;
+const freeLine = () => ({ key: ++seq, productId: '', variantId: '', quantity: 1, unitPrice: '', reason: '' });
 
-const AddSalesReturn = () => {
-  const [customers, setCustomers] = useState([]);
-  const [products, setProducts] = useState([]);
-  const [stores, setStores] = useState([]);
-  const [sales, setSales] = useState([]);
-  const [returnItems, setReturnItems] = useState([]);
-  const { currentUser } = usePos();
-  const { currentStep, goNext, goBack, goToStep } = useFormWizard(3);
-  
+// AddSalesReturn records a return (C-13). A return linked to a sale lists
+// that sale's lines with what is left to return; the server refunds the
+// price the customer paid and refuses more than was sold. A return
+// without a sale needs sales:price_override.
+export default function AddSalesReturn() {
   const navigate = useNavigate();
+  const { hasPermission } = usePermission();
+  const canUnlinked = hasPermission('sales', 'price_override');
+  const { currentStep, goNext, goBack, goToStep } = useFormWizard(3);
+
+  const [mode, setMode] = useState('linked');
+  const [search, setSearch] = useState('');
+  const [found, setFound] = useState([]);
+  const [sale, setSale] = useState(null);
+  const [qty, setQty] = useState({}); // order item id -> {quantity, reason}
+  const [info, setInfo] = useState({ date: today(), status: 'Completed', note: '', customerId: '', storeId: '' });
+  const [lines, setLines] = useState([freeLine()]);
+  const [paid, setPaid] = useState('');
+  const [lookups, setLookups] = useState({ customers: [], stores: [], products: [] });
+  const [error, setError] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const idemKey = useRef(null);
+
+  // Recent sales, or those matching the search (reference or customer).
+  useEffect(() => {
+    const t = setTimeout(() => {
+      const q = search.trim() ? `&search=${encodeURIComponent(search.trim())}` : '';
+      api
+        .get(`/api/sales?page=1&limit=20${q}`, { quiet: true })
+        .then((res) => setFound(Array.isArray(res) ? res : res?.data || []))
+        .catch(() => setFound([]));
+    }, 250);
+    return () => clearTimeout(t);
+  }, [search]);
 
   useEffect(() => {
-    const fetchOptions = async () => {
-      try {
-        const [customersResponse, productsResponse, storesResponse, salesResponse] = await Promise.all([
-          api.get('/api/customers'),
-          api.get('/api/products'),
-          api.get('/api/stores'),
-          api.get('/api/sales')
-        ]);
-        setCustomers(customersResponse);
-        setProducts(productsResponse);
-        setStores(storesResponse);
-        setSales(salesResponse);
-      } catch (error) {
-        console.error('Error fetching options:', error);
-      }
-    };
-    fetchOptions();
-  }, []);
+    if (mode !== 'unlinked' || lookups.products.length) return;
+    Promise.all([api.get('/api/customers'), api.get('/api/stores'), api.get('/api/products')])
+      .then(([customers, stores, products]) => setLookups({ customers: customers || [], stores: stores || [], products: products || [] }))
+      .catch(() => {});
+  }, [mode, lookups.products.length]);
 
-  const generateReference = () => {
-    const randomNumber = Math.floor(Math.random() * 1000000);
-    return `RET${randomNumber}`;
-  };
+  useEffect(() => {
+    idemKey.current = null;
+  }, [mode, sale, qty, info, lines, paid]);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    
+  const pickSale = async (id, keepError = false) => {
+    if (!keepError) setError(null);
     try {
-      const formData = new FormData(e.target);
-      const data = Object.fromEntries(formData.entries());
-      
-      if (!currentUser || !currentUser.id) throw new Error('Current user ID not found');
-      
-      // Prepare return items
-      const items = [];
-      let subtotal = 0;
-      
-      returnItems.forEach((item, index) => {
-        const quantity = parseFloat(data[`quantity_${index}`]) || item.quantity || 0;
-        const unitPrice = parseFloat(data[`unitPrice_${index}`]) || item.unitPrice || 0;
-        const reason = data[`reason_${index}`] || item.reason || '';
-        const total = quantity * unitPrice;
-        
-        items.push({
-          productId: item.productId,
-          variantId: item.variantId || null,
-          quantity: quantity,
-          unitPrice: unitPrice,
-          reason: reason,
-          total: total
-        });
-        
-        subtotal += total;
-      });
-      
-      // Calculate totals
-      const total = subtotal;
-      const paid = parseFloat(data.paid) || 0;
-      const due = total - paid;
-      
-      const salesReturnData = {
-        reference: data.reference,
-        date: data.date || new Date().toISOString().split('T')[0],
-        status: data.status || 'Pending',
-        payment_status: data.payment_status || 'Unpaid',
-        total: total,
-        paid: paid,
-        due: due,
-        customerId: data.customerId,
-        storeId: data.storeId,
-        saleId: data.saleId || null,
-        returnItems: items
-      };
-      
-      await api.post('/api/sales/returns', salesReturnData);
-      navigate('/sales-return');
-    } catch (error) {
-      console.error('Error creating sales return:', error);
+      const s = await api.get(`/api/sales/${id}`, { quiet: true });
+      setSale(s);
+      setQty({});
+    } catch (err) {
+      setError({ message: err.message });
     }
   };
 
-  const addReturnItem = () => {
-    setReturnItems([...returnItems, { productId: '', variantId: '', quantity: 1, unitPrice: 0, reason: '' }]);
+  const left = (item) => Math.max(0, (Number(item.quantity) || 0) - (Number(item.returnedQty) || 0));
+  const linkedTotal = useMemo(
+    () => (sale?.items || []).reduce((sum, i) => sum + (Number(qty[i.id]?.quantity) || 0) * (Number(i.unit_price) || 0), 0),
+    [sale, qty]
+  );
+  const freeTotal = useMemo(() => lines.reduce((s, l) => s + (Number(l.quantity) || 0) * (Number(l.unitPrice) || 0), 0), [lines]);
+  const estimate = mode === 'linked' ? linkedTotal : freeTotal;
+
+  const variantsOf = (pid) => lookups.products.find((p) => String(p.id) === String(pid))?.ProductVariants || [];
+  const setLine = (key, patch) => setLines((prev) => prev.map((l) => (l.key === key ? { ...l, ...patch } : l)));
+
+  const validate = () => {
+    if (mode === 'linked') {
+      if (!sale) return { message: 'Choose the sale the goods come from.', step: 0 };
+      const chosen = (sale.items || []).filter((i) => Number(qty[i.id]?.quantity) > 0);
+      if (!chosen.length) return { message: 'Enter how many of at least one item come back.', step: 1 };
+      const over = chosen.find((i) => Number(qty[i.id].quantity) > left(i));
+      if (over) return { message: `Only ${left(over)} of ${over.product_name} can still be returned.`, step: 1 };
+      return null;
+    }
+    if (!info.customerId || !info.storeId) return { message: 'Choose the customer and the store.', step: 0 };
+    if (!lines.some((l) => l.variantId && Number(l.quantity) > 0)) return { message: 'Add at least one product.', step: 1 };
+    return null;
   };
 
-  const removeReturnItem = (index) => {
-    const newItems = [...returnItems];
-    newItems.splice(index, 1);
-    setReturnItems(newItems);
+  const body = () => {
+    const common = { date: info.date || undefined, status: info.status, note: info.note || undefined, paid: paid === '' ? undefined : Number(paid) };
+    if (mode === 'linked') {
+      return {
+        ...common,
+        saleId: sale.id,
+        customerId: sale.customer_id,
+        storeId: sale.store_id,
+        // Linked lines name the sale line; the server uses its price.
+        returnItems: (sale.items || [])
+          .filter((i) => Number(qty[i.id]?.quantity) > 0)
+          .map((i) => ({ orderItemId: i.id, quantity: Number(qty[i.id].quantity), reason: qty[i.id].reason || undefined })),
+      };
+    }
+    return {
+      ...common,
+      customerId: Number(info.customerId),
+      storeId: Number(info.storeId),
+      returnItems: lines
+        .filter((l) => l.variantId && Number(l.quantity) > 0)
+        .map((l) => ({ productId: Number(l.productId), variantId: Number(l.variantId), quantity: Number(l.quantity), unitPrice: Number(l.unitPrice) || 0, reason: l.reason || undefined })),
+    };
   };
 
-  const updateReturnItem = (index, field, value) => {
-    const newItems = [...returnItems];
-    newItems[index][field] = value;
-    setReturnItems(newItems);
+  const submit = async (e) => {
+    e.preventDefault();
+    const problem = validate();
+    if (problem) {
+      setError(problem);
+      goToStep(problem.step);
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    if (!idemKey.current) idemKey.current = newIdempotencyKey();
+    try {
+      await api.post('/api/sales/returns', body(), { headers: { 'Idempotency-Key': idemKey.current }, quiet: true });
+      navigate('/sales-return');
+    } catch (err) {
+      if (err.code === 'RETURN_EXCEEDS_SOLD') {
+        // Someone returned items of this sale meanwhile: show the server's
+        // explanation and reload what is left.
+        setError({ message: `${err.message} The quantities that can still come back are updated below.` });
+        if (sale) pickSale(sale.id, true);
+        goToStep(1);
+      } else {
+        setError({ message: err.message, list: err.fields ? Object.values(err.fields) : null });
+      }
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
     <FormPageLayout>
       <PageHeader />
-
-      <form className="flex min-h-0 flex-1 flex-col" onSubmit={handleSubmit}>
+      <form className="flex min-h-0 flex-1 flex-col" onSubmit={submit} noValidate>
         <FormCard>
           <FormBody>
-            <FormStepper
-              steps={SALES_RETURN_STEPS}
-              currentStep={currentStep}
-              onStepClick={goToStep}
-            />
+            <FormStepper steps={STEPS} currentStep={currentStep} onStepClick={goToStep} />
 
-          <div className={currentStep === 0 ? 'block' : 'hidden'}>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Reference <span className="text-red-500">*</span>
-                </label>
-                <div className="flex">
-                  <input 
-                    name="reference"
-                    type="text" 
-                    className="w-full px-3 py-2 border border-gray-600 rounded-l-lg focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Enter reference"
-                    required
-                  />
-                  <button 
-                    type="button" 
-                    className="px-4 py-2 bg-black text-white rounded-r-lg hover:bg-gray-700"
-                    onClick={(e) => {
-                      const refInput = e.target.closest('div').querySelector('input[name="reference"]');
-                      refInput.value = generateReference();
-                    }}
-                  >
-                    Generate
-                  </button>
-                </div>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Date <span className="text-red-500">*</span>
-                </label>
-                <input 
-                  name="date"
-                  type="date" 
-                  className="w-full px-3 py-2 border border-gray-600 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-                  defaultValue={new Date().toISOString().split('T')[0]}
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Original Sale (Optional Link)
-                </label>
-                <select 
-                  name="saleId" 
-                  className="w-full px-3 py-2 border border-gray-600 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-                  onChange={(e) => {
-                    const selectedSale = sales.find(s => String(s.id) === e.target.value);
-                    if (selectedSale) {
-                      const custSelect = document.querySelector('[name="customerId"]');
-                      const storeSelect = document.querySelector('[name="storeId"]');
-                      if (custSelect && selectedSale.customer_id) custSelect.value = selectedSale.customer_id;
-                      if (storeSelect && selectedSale.store_id) storeSelect.value = selectedSale.store_id;
-                    }
-                  }}
-                >
-                  <option value="">Select Original Sale</option>
-                  {sales.map(sale => (
-                    <option key={sale.id} value={sale.id}>
-                      {sale.reference || `Sale #${sale.id}`} - ₹{sale.total}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Customer <span className="text-red-500">*</span>
-                </label>
-                <select 
-                  name="customerId" 
-                  className="w-full px-3 py-2 border border-gray-600 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-                  required
-                >
-                  <option value="">Select Customer</option>
-                  {customers.map(customer => (
-                    <option key={customer.id} value={customer.id}>{customer.name}</option>
-                  ))}
-                </select>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Store <span className="text-red-500">*</span>
-                </label>
-                <select 
-                  name="storeId" 
-                  className="w-full px-3 py-2 border border-gray-600 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-                  required
-                >
-                  <option value="">Select Store</option>
-                  {stores.map(store => (
-                    <option key={store.id} value={store.id}>{store.name}</option>
-                  ))}
-                </select>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Status <span className="text-red-500">*</span>
-                </label>
-                <select 
-                  name="status" 
-                  className="w-full px-3 py-2 border border-gray-600 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-                  required
-                >
-                  <option value="Pending">Pending</option>
-                  <option value="Completed">Completed</option>
-                </select>
-              </div>
-            </div>
-          </div>
-
-          <div className={currentStep === 1 ? 'block' : 'hidden'}>
-            <div className="mb-4">
-              <button 
-                type="button" 
-                className="flex items-center text-black text-sm p-2 bg-gray-100 rounded-lg hover:bg-gray-200"
-                onClick={addReturnItem}
-              >
-                <PlusCircleIcon className="w-4 h-4 mr-1" />
-                Add Return Item
-              </button>
-            </div>
-            
-            {returnItems.length > 0 ? (
-              <div className="pos-table-wrap">
-                <table className="pos-table">
-                  <thead>
-                    <tr>
-                      <th>Product</th>
-                      <th>Quantity</th>
-                      <th>Unit Price</th>
-                      <th>Reason</th>
-                      <th>Total</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {returnItems.map((item, index) => (
-                      <tr key={index}>
-                        <td className="px-4 py-3">
-                          <select 
-                            name={`productId_${index}`}
-                            className="w-full px-2 py-1 border border-gray-600 rounded focus:ring-blue-500 focus:border-blue-500"
-                            value={item.productId}
-                            onChange={(e) => updateReturnItem(index, 'productId', e.target.value)}
-                            required
-                          >
-                            <option value="">Select Product</option>
-                            {products.map(product => (
-                              <option key={product.id} value={product.id}>{product.name}</option>
-                            ))}
-                          </select>
-                        </td>
-                        <td className="px-4 py-3">
-                          <input 
-                            name={`quantity_${index}`}
-                            type="number" 
-                            className="w-full px-2 py-1 border border-gray-600 rounded focus:ring-blue-500 focus:border-blue-500"
-                            min="1"
-                            defaultValue="1"
-                            onChange={(e) => updateReturnItem(index, 'quantity', parseFloat(e.target.value) || 0)}
-                            required
-                          />
-                        </td>
-                        <td className="px-4 py-3">
-                          <input 
-                            name={`unitPrice_${index}`}
-                            type="number" 
-                            className="w-full px-2 py-1 border border-gray-600 rounded focus:ring-blue-500 focus:border-blue-500"
-                            step="0.01"
-                            min="0"
-                            onChange={(e) => updateReturnItem(index, 'unitPrice', parseFloat(e.target.value) || 0)}
-                            required
-                          />
-                        </td>
-                        <td className="px-4 py-3">
-                          <input 
-                            name={`reason_${index}`}
-                            type="text" 
-                            className="w-full px-2 py-1 border border-gray-600 rounded focus:ring-blue-500 focus:border-blue-500"
-                            placeholder="Return reason"
-                            onChange={(e) => updateReturnItem(index, 'reason', e.target.value)}
-                          />
-                        </td>
-                        <td className="px-4 py-3">
-                          <input 
-                            type="text" 
-                            className="w-full px-2 py-1 border border-gray-600 rounded bg-gray-100"
-                            readOnly
-                            value={(item.quantity * item.unitPrice).toFixed(2)}
-                          />
-                        </td>
-                        <td className="px-4 py-3">
-                          <button 
-                            type="button" 
-                            className="p-1 text-red-600 hover:bg-red-50 rounded"
-                            onClick={() => removeReturnItem(index)}
-                          >
-                            <XMarkIcon className="w-5 h-5" />
-                          </button>
-                        </td>
-                      </tr>
+            {error && (
+              <div role="alert" className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                {error.message}
+                {error.list?.length > 0 && (
+                  <ul className="mt-1 list-disc pl-5">
+                    {error.list.map((x) => (
+                      <li key={x}>{x}</li>
                     ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div className="text-center py-4 text-gray-500">
-                No items added yet. Click "Add Return Item" to get started.
+                  </ul>
+                )}
               </div>
             )}
-          </div>
 
-          <div className={currentStep === 2 ? 'block' : 'hidden'}>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {currentStep === 0 && (
+              <div className="space-y-4">
+                {canUnlinked && (
+                  <div className="flex gap-4 text-sm">
+                    <label className="flex items-center gap-2">
+                      <input type="radio" checked={mode === 'linked'} onChange={() => setMode('linked')} /> From a sale
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <input type="radio" checked={mode === 'unlinked'} onChange={() => setMode('unlinked')} /> Without a sale
+                    </label>
+                  </div>
+                )}
+
+                {mode === 'linked' ? (
+                  <div className="space-y-2">
+                    <input
+                      className={inputCls}
+                      placeholder="Search by receipt number or customer"
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      aria-label="Search sales"
+                    />
+                    <div className="max-h-72 divide-y overflow-y-auto rounded-lg border">
+                      {found.filter((s) => s.status !== 'Void').map((s) => (
+                        <button
+                          type="button"
+                          key={s.id}
+                          onClick={() => pickSale(s.id)}
+                          className={`flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm hover:bg-accent ${sale?.id === s.id ? 'bg-primary/10' : ''}`}
+                        >
+                          <span>
+                            <span className="font-medium">{s.reference}</span> · {s.customer?.name || 'Walk-in Customer'}
+                          </span>
+                          <span className="whitespace-nowrap text-muted-foreground">
+                            {formatDate(s.date)} · {formatCurrency(s.total)}
+                          </span>
+                        </button>
+                      ))}
+                      {found.length === 0 && <p className="px-3 py-4 text-sm text-muted-foreground">No sales found.</p>}
+                    </div>
+                    {sale && (
+                      <p className="text-sm">
+                        Selected: <strong>{sale.reference}</strong>, {sale.customer?.name || 'Walk-in Customer'}, {sale.Store?.name}
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <Field label="Customer">
+                      <select className={inputCls} value={info.customerId} onChange={(e) => setInfo({ ...info, customerId: e.target.value })}>
+                        <option value="">Select customer</option>
+                        {lookups.customers.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+                    <Field label="Store">
+                      <select className={inputCls} value={info.storeId} onChange={(e) => setInfo({ ...info, storeId: e.target.value })}>
+                        <option value="">Select store</option>
+                        {lookups.stores.map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.name}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+                  </div>
+                )}
+
+                <div className="grid gap-3 md:grid-cols-2">
+                  <Field label="Date">
+                    <input type="date" className={inputCls} value={info.date} onChange={(e) => setInfo({ ...info, date: e.target.value })} />
+                  </Field>
+                  <Field label="Status">
+                    <select className={inputCls} value={info.status} onChange={(e) => setInfo({ ...info, status: e.target.value })}>
+                      <option value="Completed">Completed</option>
+                      <option value="Pending">Pending</option>
+                    </select>
+                  </Field>
+                </div>
+                <Field label="Note">
+                  <textarea className={`${inputCls} min-h-[70px]`} value={info.note} onChange={(e) => setInfo({ ...info, note: e.target.value })} />
+                </Field>
+              </div>
+            )}
+
+            {currentStep === 1 && mode === 'linked' && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Payment Status <span className="text-red-500">*</span>
-                </label>
-                <select 
-                  name="payment_status" 
-                  className="w-full px-3 py-2 border border-gray-600 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-                  required
-                >
-                  <option value="Unpaid">Unpaid</option>
-                  <option value="Paid">Paid</option>
-                  <option value="Partial">Partial</option>
-                </select>
+                {!sale ? (
+                  <p className="py-4 text-sm text-muted-foreground">Choose a sale first.</p>
+                ) : (
+                  <div className="pos-table-wrap">
+                    <table className="pos-table">
+                      <thead>
+                        <tr>
+                          <th>Item</th>
+                          <th>Price paid</th>
+                          <th>Sold</th>
+                          <th>Returned before</th>
+                          <th>Return now</th>
+                          <th>Reason</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(sale.items || []).map((i) => (
+                          <tr key={i.id}>
+                            <td className="px-2 py-2">
+                              {i.product_name}
+                              <div className="text-xs text-muted-foreground">{i.sku}</div>
+                            </td>
+                            <td className="px-2 py-2">{formatCurrency(i.unit_price)}</td>
+                            <td className="px-2 py-2">{i.quantity}</td>
+                            <td className="px-2 py-2">{i.returnedQty || 0}</td>
+                            <td className="px-2 py-2">
+                              {left(i) > 0 ? (
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max={left(i)}
+                                  step="1"
+                                  className={inputCls}
+                                  value={qty[i.id]?.quantity ?? ''}
+                                  placeholder={`0–${left(i)}`}
+                                  onChange={(e) => setQty({ ...qty, [i.id]: { ...qty[i.id], quantity: e.target.value } })}
+                                  aria-label={`Return quantity for ${i.product_name}`}
+                                />
+                              ) : (
+                                <span className="text-xs text-muted-foreground">All returned</span>
+                              )}
+                            </td>
+                            <td className="px-2 py-2">
+                              <input
+                                className={inputCls}
+                                maxLength={200}
+                                value={qty[i.id]?.reason ?? ''}
+                                onChange={(e) => setQty({ ...qty, [i.id]: { ...qty[i.id], reason: e.target.value } })}
+                                placeholder="Optional"
+                                aria-label={`Reason for ${i.product_name}`}
+                              />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
-              
+            )}
+
+            {currentStep === 1 && mode === 'unlinked' && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Refund Amount (₹)
-                </label>
-                <input 
-                  name="paid"
-                  type="number" 
-                  step="0.01"
-                  min="0"
-                  className="w-full px-3 py-2 border border-gray-600 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="0.00"
-                />
+                <div className="pos-table-wrap">
+                  <table className="pos-table">
+                    <thead>
+                      <tr>
+                        <th>Product</th>
+                        <th>Variant</th>
+                        <th>Quantity</th>
+                        <th>Refund per unit</th>
+                        <th>Reason</th>
+                        <th />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {lines.map((l) => {
+                        const vs = variantsOf(l.productId);
+                        return (
+                          <tr key={l.key}>
+                            <td className="px-2 py-2">
+                              <select
+                                className={inputCls}
+                                value={l.productId}
+                                aria-label="Product"
+                                onChange={(e) => {
+                                  const v = variantsOf(e.target.value);
+                                  setLine(l.key, { productId: e.target.value, variantId: v.length === 1 ? String(v[0].id) : '', unitPrice: v.length === 1 ? String(v[0].price) : '' });
+                                }}
+                              >
+                                <option value="">Select product</option>
+                                {lookups.products.map((p) => (
+                                  <option key={p.id} value={p.id}>
+                                    {p.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </td>
+                            <td className="px-2 py-2">
+                              <select className={inputCls} value={l.variantId} disabled={vs.length <= 1} aria-label="Variant" onChange={(e) => setLine(l.key, { variantId: e.target.value })}>
+                                <option value="">{vs.length ? 'Select variant' : '—'}</option>
+                                {vs.map((v) => (
+                                  <option key={v.id} value={v.id}>
+                                    {v.sku}
+                                  </option>
+                                ))}
+                              </select>
+                            </td>
+                            <td className="px-2 py-2">
+                              <input type="number" min="1" className={inputCls} value={l.quantity} aria-label="Quantity" onChange={(e) => setLine(l.key, { quantity: e.target.value })} />
+                            </td>
+                            <td className="px-2 py-2">
+                              <input type="number" min="0" step="0.01" className={inputCls} value={l.unitPrice} aria-label="Refund per unit" onChange={(e) => setLine(l.key, { unitPrice: e.target.value })} />
+                            </td>
+                            <td className="px-2 py-2">
+                              <input className={inputCls} maxLength={200} value={l.reason} aria-label="Reason" onChange={(e) => setLine(l.key, { reason: e.target.value })} />
+                            </td>
+                            <td className="px-2 py-2">
+                              <button type="button" className="rounded p-1 text-red-600 hover:bg-red-50" aria-label="Remove line"
+                                onClick={() => setLines((prev) => (prev.length > 1 ? prev.filter((x) => x.key !== l.key) : [freeLine()]))}>
+                                <XMarkIcon className="size-5" />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <button type="button" className="mt-3 flex items-center rounded-lg bg-gray-100 p-2 text-sm hover:bg-gray-200" onClick={() => setLines((p) => [...p, freeLine()])}>
+                  <PlusCircleIcon className="mr-1 size-4" /> Add item
+                </button>
               </div>
-            </div>
-            
-            <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-              <h3 className="text-sm font-medium text-gray-700 mb-2">Return Summary</h3>
-              <div className="space-y-1 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Total Items:</span>
-                  <span className="font-medium">{returnItems.length}</span>
+            )}
+
+            {currentStep === 2 && (
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="rounded-lg border p-3 text-sm md:col-span-2">
+                  Items back, before tax: <strong>{formatCurrency(estimate)}</strong>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    The refund, including tax, is worked out when the return is saved
+                    {mode === 'linked' ? ', from the prices on the original sale' : ''}.
+                  </p>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Total Quantity:</span>
-                  <span className="font-medium">{returnItems.reduce((sum, item) => sum + (item.quantity || 0), 0)}</span>
-                </div>
-                <div className="flex justify-between pt-2 border-t">
-                  <span className="text-gray-700 font-medium">Total Amount:</span>
-                  <span className="font-bold">₹{returnItems.reduce((sum, item) => sum + (item.quantity * item.unitPrice || 0), 0).toFixed(2)}</span>
-                </div>
+                <Field label={`Refunded now (${currencySymbol()})`} hint="Leave empty if the full refund is paid out now.">
+                  <input type="number" min="0" step="0.01" className={inputCls} value={paid} onChange={(e) => setPaid(e.target.value)} />
+                </Field>
               </div>
-            </div>
-          </div>
+            )}
           </FormBody>
 
-        <FormFooter 
-          cancelPath="/sales-return" 
-          submitLabel="Create Sales Return"
-          showStepNav
-          currentStep={currentStep}
-          totalSteps={3}
-          onBack={goBack}
-          onNext={goNext}
-        />
+          <FormFooter
+            cancelPath="/sales-return"
+            submitLabel={saving ? 'Saving...' : 'Create Return'}
+            disabled={saving}
+            showStepNav
+            currentStep={currentStep}
+            totalSteps={3}
+            onBack={goBack}
+            onNext={goNext}
+          />
         </FormCard>
       </form>
     </FormPageLayout>
   );
-};
+}
 
-export default AddSalesReturn;
+function Field({ label, hint, children }) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-sm font-medium text-gray-700">{label}</span>
+      {children}
+      {hint && <span className="mt-1 block text-xs text-gray-500">{hint}</span>}
+    </label>
+  );
+}

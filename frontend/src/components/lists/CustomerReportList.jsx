@@ -46,10 +46,10 @@ export default function CustomerReportList({ reports }) {
       indexColumn(),
       {
         accessorKey: 'reference',
-        header: 'Reference',
+        header: 'Last receipt',
         size: 120,
         cell: ({ getValue }) => (
-          <a href="#" className="text-blue-600 hover:underline">{getValue()}</a>
+          <span>{getValue()}</span>
         )
       },
       {
@@ -57,13 +57,6 @@ export default function CustomerReportList({ reports }) {
         header: 'Customer',
         cell: ({ row }) => (
           <div className="flex items-center">
-            <div className="bg-gray-100 rounded-full p-1 mr-3">
-              <img 
-                src={row.original.customer.image} 
-                alt={row.original.customer.name} 
-                className="w-8 h-8 rounded-full object-cover"
-              />
-            </div>
             <span>{row.original.customer.name}</span>
           </div>
         ),
@@ -71,13 +64,13 @@ export default function CustomerReportList({ reports }) {
       },
       {
         accessorKey: 'totalOrders',
-        header: 'Total Orders',
+        header: 'Sales',
         size: 100,
         meta: { align: 'center' }
       },
       {
         accessorKey: 'amount',
-        header: 'Amount',
+        header: 'Net amount',
         cell: ({ getValue }) => <span>{formatCurrency(getValue())}</span>,
         size: 110,
       },
@@ -141,7 +134,6 @@ export default function CustomerReportList({ reports }) {
   const {
     table,
     controlButtons,
-    primaryButtons,
     emptyState
   } = useUI({
     moduleName: 'customer reports',

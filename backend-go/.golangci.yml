@@ -1,0 +1,59 @@
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  default: none
+  enable:
+    - bodyclose
+    - copyloopvar
+    - errcheck
+    - errorlint
+    - forbidigo
+    - gosec
+    - govet
+    - ineffassign
+    - misspell
+    - noctx
+    - revive
+    - sqlclosecheck
+    - staticcheck
+    - unused
+  settings:
+    errcheck:
+      exclude-functions:
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+    forbidigo:
+      forbid:
+        # Use the redacting slog logger, never print to stdout.
+        - pattern: ^fmt\.Print(f|ln)?$
+          msg: use log/slog (cmd/ may write to stdout/stderr through fmt.Fprint)
+        - pattern: ^log\.(Print|Fatal|Panic)(f|ln)?$
+          msg: use log/slog
+        # Prepared statements would cache per connection across tenants (TENANCY §5.2).
+        - pattern: ^pgx\.QueryExecModeCacheStatement$
+          msg: tenant connections must use QueryExecModeExec
+    gosec:
+      excludes:
+        - G104 # covered by errcheck
+    revive:
+      rules:
+        - name: exported
+        - name: unused-parameter
+          disabled: true
+    staticcheck:
+      checks: ["all", "-ST1000"]
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters: [gosec, noctx, forbidigo]
+      - path: tools/analyzers/constsql/testdata/
+        linters: [revive, unused]
+
+formatters:
+  enable:
+    - gofmt

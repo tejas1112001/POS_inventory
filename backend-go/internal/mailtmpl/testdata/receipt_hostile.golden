@@ -1,0 +1,50 @@
+Subject: Voided receipt from <script>alert('x')</script> {{.Secret}} Bcc: victim@evil.test (POS-INV-000042)
+
+--- text ---
+<script>alert('x')</script> {{.Secret}} Bcc: victim@evil.test
+<script>alert('x')</script> {{.Secret}} Bcc: victim@evil.test
+
+This sale was voided. The attached receipt is marked VOID.
+
+Hello <script>alert('x')</script> {{.Secret}} Bcc: victim@evil.test,
+
+Thank you for your purchase.
+
+Receipt: POS-INV-000042
+Date:    20 Oct 2026, 23:30
+Total:   ₹1,859.93
+
+Your receipt could not be attached. Please ask the store for a copy.
+
+<script>alert('x')</script> {{.Secret}} Bcc: victim@evil.test, 12 MG Road, Pune · 020 1234
+<script>alert('x')</script> {{.Secret}} Bcc: victim@evil.test
+
+
+--- html ---
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Voided receipt from &lt;script&gt;alert(&#39;x&#39;)&lt;/script&gt; {{.Secret}} Bcc: victim@evil.test (POS-INV-000042)</title></head>
+<body style="margin:0;padding:24px;background:#f4f4f5;font-family:Arial,Helvetica,sans-serif;color:#18181b;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:8px;">
+<tr><td style="padding:24px;">
+<img src="#ZgotmplZ" alt="" height="48" style="display:block;margin-bottom:16px;">
+
+<h1 style="font-size:20px;margin:0 0 4px;">&lt;script&gt;alert(&#39;x&#39;)&lt;/script&gt; {{.Secret}} Bcc: victim@evil.test</h1>
+<p style="margin:0;color:#52525b;font-size:13px;">&lt;script&gt;alert(&#39;x&#39;)&lt;/script&gt; {{.Secret}} Bcc: victim@evil.test</p>
+<p style="margin:16px 0;padding:8px 12px;background:#fee2e2;color:#991b1b;font-weight:bold;">This sale was voided. The attached receipt is marked VOID.</p>
+<p style="margin:16px 0 0;">Hello &lt;script&gt;alert(&#39;x&#39;)&lt;/script&gt; {{.Secret}} Bcc: victim@evil.test,</p>
+<p style="margin:8px 0 0;">Thank you for your purchase.</p>
+<table role="presentation" cellpadding="0" cellspacing="0" style="margin:16px 0;font-size:14px;">
+<tr><td style="padding:2px 16px 2px 0;color:#52525b;">Receipt</td><td>POS-INV-000042</td></tr>
+<tr><td style="padding:2px 16px 2px 0;color:#52525b;">Date</td><td>20 Oct 2026, 23:30</td></tr>
+<tr><td style="padding:2px 16px 2px 0;color:#52525b;">Total</td><td><strong>₹1,859.93</strong></td></tr>
+</table>
+<p style="margin:0;">Your receipt could not be attached. Please ask the store for a copy.</p>
+<p style="margin:16px 0 0;font-size:13px;color:#52525b;">&lt;script&gt;alert(&#39;x&#39;)&lt;/script&gt; {{.Secret}} Bcc: victim@evil.test, 12 MG Road, Pune · 020 1234</p>
+<p style="margin:4px 0 0;font-size:12px;color:#71717a;">&lt;script&gt;alert(&#39;x&#39;)&lt;/script&gt; {{.Secret}} Bcc: victim@evil.test</p>
+
+</td></tr>
+</table>
+<p style="max-width:560px;margin:16px auto 0;font-size:12px;color:#71717a;text-align:center;">You received this email because you made a purchase at &lt;script&gt;alert(&#39;x&#39;)&lt;/script&gt; {{.Secret}} Bcc: victim@evil.test.</p>
+</body>
+</html>

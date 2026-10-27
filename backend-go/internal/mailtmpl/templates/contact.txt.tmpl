@@ -1,0 +1,14 @@
+{{.Heading}}
+
+Name: {{.Name}}
+Email: {{.Email}}
+{{if .Business}}Business: {{.Business}}
+{{end}}{{if .Phone}}Phone: {{.Phone}}
+{{end}}Sent: {{.Sent}}
+
+{{range .Message}}{{.}}
+{{end}}
+Reply to this email to answer. Request #{{.ID}}.
+
+-- 
+{{.Footnote}}

@@ -1,0 +1,121 @@
+# Development stack (TENANCY §7.3). Production uses managed Postgres and real
+# S3; see OPERATIONS. Every image is pinned by digest.
+#
+#   cp deploy/.env.example deploy/.env   # then fill in generated values
+#   make up
+#
+# Browse https://tenant1.localhost:8443 and https://admin.localhost:8443 (Caddy's local
+# CA; trust it once with `docker compose exec caddy caddy trust` or accept the
+# browser warning).
+
+name: posd-dev
+
+services:
+  postgres:
+    image: postgres:18.6@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336
+    environment:
+      POSTGRES_DB: pos
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/.env}
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - max_locks_per_transaction=1024
+      - -c
+      - log_min_duration_statement=500ms
+    volumes:
+      - pgdata:/var/lib/postgresql
+    ports:
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-55432}:5432"   # loopback only; 5432 is often taken
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d pos"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [backend]
+
+  app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    env_file: .env
+    environment:
+      APP_ENV: development
+      PUBLIC_SCHEME: https
+      PUBLIC_PORT: ${HTTPS_PORT:-8443}   # links in emails carry Caddy's port
+      HTTP_ADDR: ":8080"
+      METRICS_ADDR: "0.0.0.0:9090"   # reachable only inside the compose network
+      TRUSTED_PROXY_CIDRS: 172.28.0.0/24
+      STORAGE_DRIVER: s3
+      # Roles from TENANCY §5.3. Create them once with `make db-init`.
+      DATABASE_URL: postgres://pos_app:${POS_APP_PASSWORD:?set POS_APP_PASSWORD}@postgres:5432/pos?sslmode=disable
+      DATABASE_JOBS_URL: postgres://pos_jobs:${POS_JOBS_PASSWORD:?set POS_JOBS_PASSWORD}@postgres:5432/pos?sslmode=disable
+      DATABASE_MIGRATOR_URL: postgres://pos_migrator:${POS_MIGRATOR_PASSWORD:?set POS_MIGRATOR_PASSWORD}@postgres:5432/pos?sslmode=disable
+      # Used only by `posctl db bootstrap` / `db preflight`, never by posd.
+      DATABASE_ADMIN_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/pos?sslmode=disable
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      SMTP_TLS: none                  # Mailpit has no TLS; refused in production
+      S3_ENDPOINT: http://s3:7070
+      S3_BUCKET: posd-dev
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    stop_grace_period: 60s
+    networks: [backend]
+
+  caddy:
+    image: caddy:2.11@sha256:685ae3d7c34d9b5f8caeddc5d14051db7bbd88ff1f5a2fa0c16bd8ca328fb7af
+    environment:
+      # Set FRONTEND_UPSTREAM=host.docker.internal:5173 to put the Vite dev
+      # server behind Caddy (same origin, /api still goes to the app).
+      FRONTEND_UPSTREAM: ${FRONTEND_UPSTREAM:-app:8080}
+      ADMIN_UPSTREAM: ${ADMIN_UPSTREAM:-app:8080}   # host.docker.internal:5174 for the console's Vite dev server
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./Caddyfile.dev:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    ports:
+      - "127.0.0.1:${HTTPS_PORT:-8443}:443"   # 443/80 are often taken on Windows
+    depends_on: [app]
+    networks: [backend]
+
+  # S3-compatible storage for development. MinIO's images are no longer
+  # published publicly, so this uses Versity S3 Gateway (Apache-2.0). The app
+  # talks plain S3, so any compatible service works.
+  s3:
+    image: versity/versitygw:v1.9.0@sha256:eb7f786fcd91e72194e48fcf1ac16302d686bf8e3a71434bdbc067a6efd3fdc7
+    command: ["posix", "/data"]
+    environment:
+      ROOT_ACCESS_KEY_ID: ${S3_ACCESS_KEY:?set S3_ACCESS_KEY in deploy/.env}
+      ROOT_SECRET_ACCESS_KEY: ${S3_SECRET_KEY:?set S3_SECRET_KEY in deploy/.env}
+    volumes:
+      - s3data:/data
+    ports:
+      - "127.0.0.1:7070:7070"
+    networks: [backend]
+
+  mailpit:
+    image: axllent/mailpit:v1.31.6@sha256:23fe39e81bde596a918000b3135c0f85dc8bb4c9ea6be274b051143f3e300387
+    ports:
+      - "127.0.0.1:8026:8025"   # web UI and API (8025 is often taken)
+    networks: [backend]
+
+volumes:
+  pgdata:
+  caddy_data:
+  s3data:
+
+networks:
+  backend:
+    ipam:
+      config:
+        - subnet: 172.28.0.0/24

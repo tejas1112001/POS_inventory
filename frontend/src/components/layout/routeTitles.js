@@ -1,5 +1,5 @@
 export const routeTitles = {
-  '/': 'Dashboard',
+  '/dashboard': 'Dashboard',
   '/pos': 'POS Checkout',
   '/sales': 'Sales',
   '/add-sale': 'Add Sale',
@@ -8,6 +8,7 @@ export const routeTitles = {
   '/products': 'Products',
   '/add-product': 'Add Product',
   '/inventory': 'Inventory',
+  '/stock-adjustments': 'Stock Adjustments',
   '/purchases': 'Purchases',
   '/add-purchase': 'Add Purchase',
   '/categories': 'Categories',
@@ -26,12 +27,13 @@ export const routeTitles = {
   '/customer-report': 'Customer Report',
   '/customer-due-report': 'Customer Due Report',
   '/settings': 'Settings',
+  '/billing': 'Billing',
 };
 
 export function getRouteTitle(pathname) {
   if (routeTitles[pathname]) return routeTitles[pathname];
   const match = Object.keys(routeTitles).find(
-    (route) => route !== '/' && pathname.startsWith(route)
+    (route) => pathname.startsWith(route)
   );
   return match ? routeTitles[match] : 'Dashboard';
 }

@@ -1,11 +1,11 @@
 import GlobalErrorHandler from './components/GlobalErrorHandler';
 import React, { useEffect } from 'react';
-import { HashRouter as Router, Routes, Route } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { ErrorProvider } from './context/ErrorContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import { PosProvider } from './context/PosContext';
 import { PermissionProvider } from './context/PermissionContext';
 import { ThemeProvider } from './context/ThemeContext';
-import { useError } from './context/ErrorContext';
 import AppLayout from './components/layout/AppLayout';
 import Dashboard from './pages/Dashboard';
 import Products from './pages/Products';
@@ -37,10 +37,15 @@ import Inventory from './pages/Inventory';
 import Roles from './pages/Roles';
 import AddRole from './pages/AddRole';
 import SignIn from './pages/SignIn';
-import SignUp from './pages/SignUp';
+import ForgotPassword from './pages/ForgotPassword';
+import SetPassword from './pages/SetPassword';
 import Settings from './pages/Settings';
+import Billing from './pages/Billing';
+import StockAdjustments from './pages/StockAdjustments';
 import ShowcaseSettings from './pages/ShowcaseSettings';
-import PublicShopPage from './pages/PublicShopPage';
+
+// The staff app: sign-in and back office. Root.jsx loads it on every path
+// that is not the public shop.
 
 function ProtectedLayout({ children, fullBleed = false, module, action = 'view' }) {
   return (
@@ -50,20 +55,33 @@ function ProtectedLayout({ children, fullBleed = false, module, action = 'view' 
   );
 }
 
-function AppRoutes() {
-  const { showError } = useError();
+// /signin was the sign-in path before /login.
+function SignInRedirect() {
+  const { search, hash, state } = useLocation();
+  return <Navigate to={{ pathname: '/login', search, hash }} state={state} replace />;
+}
 
+// Search engines must not list staff pages (the server also sends
+// X-Robots-Tag: noindex for them).
+function useNoindex() {
   useEffect(() => {
-    window.electronAPI?.onBackendError((message) => {
-      showError(`Backend failed: ${message}`);
-    });
-  }, [showError]);
+    const meta = document.createElement('meta');
+    meta.name = 'robots';
+    meta.content = 'noindex';
+    document.head.appendChild(meta);
+    return () => meta.remove();
+  }, []);
+}
 
+function AppRoutes() {
   return (
     <Routes>
-      <Route path="/signin" element={<SignIn />} />
-      <Route path="/signup" element={<SignUp />} />
-      <Route path="/" element={<ProtectedLayout module="dashboard"><Dashboard /></ProtectedLayout>} />
+      <Route path="/login" element={<SignIn />} />
+      <Route path="/signin" element={<SignInRedirect />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<SetPassword purpose="reset" />} />
+      <Route path="/accept-invite" element={<SetPassword purpose="invite" />} />
+      <Route path="/dashboard" element={<ProtectedLayout module="dashboard"><Dashboard /></ProtectedLayout>} />
       <Route path="/categories" element={<ProtectedLayout module="categories" action="view"><Categories /></ProtectedLayout>} />
       <Route path="/add-category" element={<ProtectedLayout module="categories" action="create"><AddCategory /></ProtectedLayout>} />
       <Route path="/products" element={<ProtectedLayout module="products" action="view"><Products /></ProtectedLayout>} />
@@ -94,26 +112,29 @@ function AppRoutes() {
       <Route path="/add-customer" element={<ProtectedLayout module="customers" action="create"><AddCustomer /></ProtectedLayout>} />
       <Route path="/customer-report" element={<ProtectedLayout module="reports" action="view"><CustomerReport /></ProtectedLayout>} />
       <Route path="/inventory" element={<ProtectedLayout module="inventory" action="view"><Inventory /></ProtectedLayout>} />
-      <Route path="/settings" element={<ProtectedLayout module="stores" action="view"><Settings /></ProtectedLayout>} />
+      <Route path="/stock-adjustments" element={<ProtectedLayout module="stock_adjustments" action="view"><StockAdjustments /></ProtectedLayout>} />
+      <Route path="/settings" element={<ProtectedLayout><Settings /></ProtectedLayout>} />
+      <Route path="/billing" element={<ProtectedLayout module="billing" action="view"><Billing /></ProtectedLayout>} />
       <Route path="/showcase-settings" element={<ProtectedLayout module="stores" action="view"><ShowcaseSettings /></ProtectedLayout>} />
-      <Route path="/shop/:slug" element={<PublicShopPage />} />
-      <Route path="/shop/:slug/product/:productId" element={<PublicShopPage />} />
+      {/* Unknown addresses go to the main address (the shop or the sign-in). */}
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }
 
 function App() {
+  useNoindex();
   return (
-    <ThemeProvider>
-      <PosProvider>
-        <PermissionProvider>
-          <GlobalErrorHandler />
-          <Router>
+    <ErrorProvider>
+      <ThemeProvider>
+        <PosProvider>
+          <PermissionProvider>
+            <GlobalErrorHandler />
             <AppRoutes />
-          </Router>
-        </PermissionProvider>
-      </PosProvider>
-    </ThemeProvider>
+          </PermissionProvider>
+        </PosProvider>
+      </ThemeProvider>
+    </ErrorProvider>
   );
 }
 

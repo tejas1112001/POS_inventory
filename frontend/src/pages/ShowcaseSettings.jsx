@@ -13,6 +13,7 @@ import {
   Filter,
   Save,
   RefreshCw,
+  Star,
 } from 'lucide-react';
 import { SectionCard } from '@/components/shared/section-card';
 import { Button } from '@/components/ui/button';
@@ -21,9 +22,14 @@ import { Switch } from '@/components/ui/switch';
 import { formatCurrency } from '@/lib/format';
 import { api } from '@/services/api';
 import { usePos } from '@/hooks/usePos';
+import { usePermission } from '@/context/PermissionContext';
+
+// Store slugs: lowercase letters, digits and dashes (the server's rule).
+const toSlug = (v) => v.toLowerCase().replace(/[^a-z0-9-]/g, '');
 
 export default function ShowcaseSettings() {
   const { currentStore } = usePos();
+  const { hasPermission } = usePermission();
   const [storeData, setStoreData] = useState({
     name: '',
     slug: '',
@@ -41,13 +47,31 @@ export default function ShowcaseSettings() {
   const [copied, setCopied] = useState(false);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
-  const [showQR, setShowQR] = useState(false);
 
-  const selectedStoreId = currentStore?.id || 1;
+  // Every store has its own showcase; pick which one to manage.
+  const [stores, setStores] = useState([]);
+  const [pickedStoreId, setPickedStoreId] = useState(null);
+  const selectedStoreId = pickedStoreId || currentStore?.id || stores[0]?.id || 1;
+  // What the server has: links use the saved slug, not the one being typed.
+  const [saved, setSaved] = useState({ slug: '', isPublicEnabled: false, status: '' });
+  // isDefault: this is the default public store; homePage "shop" puts it at /.
+  const [home, setHome] = useState({ isDefault: false, homePage: 'login' });
+  const [settingDefault, setSettingDefault] = useState(false);
 
   useEffect(() => {
     fetchShowcaseData();
   }, [selectedStoreId]);
+
+  useEffect(() => {
+    let live = true;
+    api
+      .get('/api/stores', { quiet: true })
+      .then((list) => live && setStores(Array.isArray(list) ? list : []))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, []);
 
   const fetchShowcaseData = async () => {
     try {
@@ -56,7 +80,7 @@ export default function ShowcaseSettings() {
       if (res.store) {
         setStoreData({
           name: res.store.name || '',
-          slug: res.store.slug || `store-${res.store.id}`,
+          slug: res.store.slug,
           description: res.store.description || '',
           phone: res.store.phone || '',
           address: res.store.address || '',
@@ -65,6 +89,8 @@ export default function ShowcaseSettings() {
           banner: res.store.banner || '',
           isPublicEnabled: res.store.isPublicEnabled ?? true,
         });
+        setSaved({ slug: res.store.slug, isPublicEnabled: !!res.store.isPublicEnabled, status: res.store.status });
+        setHome({ isDefault: !!res.isDefault, homePage: res.homePage || 'login' });
       }
       setProducts(res.products || []);
     } catch (err) {
@@ -85,6 +111,18 @@ export default function ShowcaseSettings() {
       alert(err.message || 'Failed to save settings');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleSetDefault = async () => {
+    try {
+      setSettingDefault(true);
+      await api.post(`/api/stores/${selectedStoreId}/showcase/default`);
+      await fetchShowcaseData();
+    } catch (err) {
+      alert(err.message || 'Failed to set the default store');
+    } finally {
+      setSettingDefault(false);
     }
   };
 
@@ -115,7 +153,10 @@ export default function ShowcaseSettings() {
     }
   };
 
-  const publicUrl = `${window.location.origin}/#/shop/${storeData.slug || selectedStoreId}`;
+  // The default store's shop is at / when the home page shows the shop.
+  const atHome = home.isDefault && home.homePage === 'shop';
+  const publicUrl = atHome ? `${window.location.origin}/` : `${window.location.origin}/shop/${saved.slug}`;
+  const canBeDefault = saved.status === 'Active' && saved.isPublicEnabled;
 
   const copyLink = () => {
     navigator.clipboard.writeText(publicUrl);
@@ -150,7 +191,23 @@ export default function ShowcaseSettings() {
             Manage your public shop profile and control which products are visible to physical store customers.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {stores.length > 1 && (
+            <label className="flex items-center gap-2 text-sm">
+              <span className="text-muted-foreground">Store</span>
+              <select
+                value={String(selectedStoreId)}
+                onChange={(e) => setPickedStoreId(Number(e.target.value))}
+                className="rounded-md border border-input bg-background px-3 py-1.5 text-sm focus:outline-none"
+              >
+                {stores.map((st) => (
+                  <option key={st.id} value={String(st.id)}>
+                    {st.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <Button variant="outline" size="sm" onClick={copyLink} className="gap-2">
             {copied ? <Check className="size-4 text-emerald-500" /> : <Copy className="size-4" />}
             {copied ? 'Copied Link' : 'Copy Public Link'}
@@ -195,12 +252,37 @@ export default function ShowcaseSettings() {
           </div>
         </div>
 
-        <div className="flex items-center gap-3 w-full md:w-auto">
+        <div className="flex flex-col items-start md:items-end gap-2 w-full md:w-auto">
           <Switch
             checked={storeData.isPublicEnabled}
             onCheckedChange={(checked) => setStoreData({ ...storeData, isPublicEnabled: checked })}
             label="Enable Public Showcase"
           />
+          {home.isDefault ? (
+            <span className="text-xs px-2.5 py-0.5 rounded-full font-medium bg-amber-500/15 text-amber-700 dark:text-amber-400 flex items-center gap-1">
+              <Star className="size-3" />
+              Default store
+            </span>
+          ) : (
+            hasPermission('stores', 'edit') && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleSetDefault}
+                disabled={!canBeDefault || settingDefault}
+                title={canBeDefault ? undefined : 'Turn the public showcase on and save first.'}
+                className="gap-1.5 text-xs"
+              >
+                <Star className="size-3.5" />
+                {settingDefault ? 'Saving...' : 'Set as default store'}
+              </Button>
+            )
+          )}
+          {home.isDefault && home.homePage !== 'shop' && (
+            <p className="text-[11px] text-muted-foreground max-w-xs md:text-right">
+              The main address shows the staff sign-in. To show this shop there, choose Online shop in Settings, Home page.
+            </p>
+          )}
         </div>
       </div>
 
@@ -214,13 +296,26 @@ export default function ShowcaseSettings() {
               </label>
               <Input
                 value={storeData.slug}
-                onChange={(e) => setStoreData({ ...storeData, slug: e.target.value })}
+                onChange={(e) => setStoreData({ ...storeData, slug: toSlug(e.target.value) })}
                 placeholder="e.g. abc-fashion"
+                maxLength={60}
+                autoCapitalize="none"
+                spellCheck={false}
               />
               <p className="text-[11px] text-muted-foreground mt-1">
-                Your store link will be: {window.location.origin}/#/shop/
-                <span className="font-semibold text-foreground">{storeData.slug || 'slug'}</span>
+                {atHome ? (
+                  <>
+                    Your store link: <span className="font-semibold text-foreground">{window.location.origin}/</span>{' '}
+                    (default store; {window.location.origin}/shop/{saved.slug} also opens it)
+                  </>
+                ) : (
+                  <>
+                    Your store link will be: {window.location.origin}/shop/
+                    <span className="font-semibold text-foreground">{storeData.slug || 'slug'}</span>
+                  </>
+                )}
               </p>
+              <p className="text-[11px] text-muted-foreground">Lowercase letters, digits and dashes.</p>
             </div>
             <div>
               <label className="text-xs font-semibold uppercase text-muted-foreground mb-1 block">
