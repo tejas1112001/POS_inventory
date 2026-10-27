@@ -174,6 +174,11 @@ func TenantURL(scheme, slug, baseDomain, port string) string {
 	return canonicalOrigin(scheme, slug+"."+baseDomain, port)
 }
 
+// OriginURL is scheme://host[:port], leaving out the scheme's default port.
+func OriginURL(scheme, host, port string) string {
+	return canonicalOrigin(scheme, host, port)
+}
+
 func portOf(hostport string) string {
 	if _, p, err := net.SplitHostPort(hostport); err == nil {
 		return p

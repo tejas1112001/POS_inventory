@@ -182,6 +182,9 @@ const (
 	permsPolicy = "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=(), interest-cohort=()"
 )
 
+// CSPStrict is the policy of the admin console and the main address.
+const CSPStrict = cspStrict
+
 // IsAPIPath reports whether a path is an API or health endpoint (JSON).
 func IsAPIPath(p string) bool {
 	return strings.HasPrefix(p, "/api/") || p == "/api" ||

@@ -156,7 +156,7 @@ func TestWelcomeEmailsAtProvisioning(t *testing.T) {
 		require.Equal(t, "<platform.tenant:"+tenants[l].ID+":welcome@pos.test>", m.Header.Get("Message-Id"), "stable Message-ID")
 	}
 	var status string
-	require.NoError(t, admin(t).QueryRow(context.Background(), `SELECT string_agg(DISTINCT status, ',') FROM platform.email_outbox`).Scan(&status))
+	require.NoError(t, admin(t).QueryRow(context.Background(), `SELECT string_agg(DISTINCT status, ',') FROM platform.email_outbox WHERE template = 'tenant_welcome'`).Scan(&status))
 	require.Equal(t, "sent", status)
 }
 

@@ -28,6 +28,7 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/db"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/files"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/httpx"
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/landing"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/mailer"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/migrate"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/obs"
@@ -161,7 +162,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger, opts ...Opti
 	})
 
 	spas := map[string]http.Handler{}
-	for _, name := range []string{"tenant", "admin", "landing"} {
+	for _, name := range []string{"tenant", "admin"} {
 		dir := ""
 		if cfg.StaticDir != "" {
 			dir = filepath.Join(cfg.StaticDir, name)
@@ -175,8 +176,6 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger, opts ...Opti
 			switch name {
 			case "tenant":
 				spa.WithNoindex(httpx.TenantStaffPage)
-			case "admin":
-				spa.WithNoindex(func(string) bool { return true })
 			}
 			spas[name] = spa
 		}
@@ -213,6 +212,23 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger, opts ...Opti
 		a.closePools()
 		return nil, err
 	}
+	site, err := landing.New(landing.Deps{
+		Sessions: a.sessions, Network: network, PublicScheme: cfg.PublicScheme, PublicPort: cfg.PublicPort,
+		BaseDomain: cfg.BaseDomain, PlatformName: cfg.PlatformName, ContactEmail: cfg.ContactEmail,
+		FormKey: landing.FormKey(cfg.MasterKeys.Current().Bytes()), Metrics: a.metrics, Log: log,
+		MailQueued: func(ctx context.Context) {
+			if err := a.worker.EnqueueMail(ctx, nil, true); err != nil {
+				log.Warn("platform mail job not queued; the sweep will pick it up", slog.Any("err", err))
+			}
+		},
+	})
+	if err != nil {
+		a.closePools()
+		return nil, err
+	}
+	if cfg.ContactEmail == "" {
+		log.Warn("CONTACT_EMAIL is not set: landing page contact requests are stored but nobody is emailed")
+	}
 	var mountErr error
 	handler := httpx.NewRouter(httpx.RouterDeps{
 		Logger:         log,
@@ -233,9 +249,10 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger, opts ...Opti
 				mountErr = err
 			}
 		},
-		TenantSPA:  spas["tenant"],
-		AdminSPA:   spas["admin"],
-		LandingSPA: spas["landing"],
+		TenantSPA:    spas["tenant"],
+		AdminSPA:     spas["admin"],
+		Apex:         site.Mount,
+		ApexNotFound: http.HandlerFunc(site.NotFound),
 	})
 
 	if mountErr != nil {

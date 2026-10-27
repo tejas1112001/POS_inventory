@@ -31,8 +31,13 @@ type RouterDeps struct {
 	// TenantResolver runs first on every tenant-host request (step 2).
 	TenantResolver func(http.Handler) http.Handler
 
-	// Optional static builds (STATIC_DIR/tenant, /admin, /landing).
-	TenantSPA, AdminSPA, LandingSPA http.Handler
+	// Optional static builds (STATIC_DIR/tenant, /admin).
+	TenantSPA, AdminSPA http.Handler
+
+	// Apex registers the landing site on the main address; ApexNotFound
+	// answers every other path there.
+	Apex         func(r chi.Router)
+	ApexNotFound http.Handler
 }
 
 // NewRouter builds the root handler:
@@ -54,8 +59,9 @@ func NewRouter(d RouterDeps) http.Handler {
 	if d.TenantResolver != nil {
 		tenant = d.TenantResolver(tenant)
 	}
-	platform := hostRouter(d, d.Platform, d.AdminSPA, nil)
-	apex := hostRouter(d, nil, d.LandingSPA, nil)
+	// The Super Admin console is never listed by search engines.
+	platform := Noindex(hostRouter(d, d.Platform, d.AdminSPA, nil))
+	apex := hostRouter(d, nil, d.ApexNotFound, d.Apex)
 
 	root.Group(func(r chi.Router) {
 		r.Use(RejectUnknownHost)
@@ -73,6 +79,14 @@ func NewRouter(d RouterDeps) http.Handler {
 	root.NotFound(func(w http.ResponseWriter, r *http.Request) { WriteError(w, r, apperr.NotFound()) })
 	root.MethodNotAllowed(func(w http.ResponseWriter, r *http.Request) { WriteError(w, r, apperr.NotFound()) })
 	return root
+}
+
+// Noindex adds "X-Robots-Tag: noindex, nofollow" to every response.
+func Noindex(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Robots-Tag", "noindex, nofollow")
+		next.ServeHTTP(w, r)
+	})
 }
 
 func hostRouter(d RouterDeps, mount func(chi.Router), spa http.Handler, root func(chi.Router)) http.Handler {

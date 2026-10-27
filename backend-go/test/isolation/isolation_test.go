@@ -133,6 +133,7 @@ func run(m *testing.M) (int, error) {
 		"TRUSTED_PROXY_CIDRS": "127.0.0.1/32", "SHUTDOWN_DRAIN_DELAY": "0s",
 		"STORAGE_FS_ROOT": storageDir, "RAZORPAY_WEBHOOK_SECRET": webhookSecret,
 		"SMTP_HOST": "127.0.0.2", "SMTP_PORT": strconv.Itoa(platSrv.Port), "SMTP_TLS": "none",
+		"CONTACT_EMAIL": "sales@pos.test",
 	})
 	if err != nil {
 		return 0, err

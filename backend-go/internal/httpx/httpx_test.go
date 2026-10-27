@@ -350,7 +350,7 @@ func TestSecureHeadersPerHost(t *testing.T) {
 	spa, err := NewSPA(dir)
 	require.NoError(t, err)
 	h := newHarness(t, func(d *RouterDeps) {
-		d.TenantSPA, d.AdminSPA, d.LandingSPA = spa, spa, spa
+		d.TenantSPA, d.AdminSPA, d.ApexNotFound = spa, spa, spa
 	})
 
 	common := func(rec *httptest.ResponseRecorder) {
@@ -370,6 +370,8 @@ func TestSecureHeadersPerHost(t *testing.T) {
 	require.Equal(t, cspStrict, csp)
 	require.NotContains(t, csp, "unsafe-inline")
 	require.NotContains(t, csp, "unsafe-eval")
+	require.Equal(t, "noindex, nofollow", rec.Header().Get("X-Robots-Tag"), "the console is never indexed")
+	require.Equal(t, "noindex, nofollow", h.do(t, "GET", "admin.pos.test", "/api/x", nil, nil).Header().Get("X-Robots-Tag"))
 
 	rec = h.do(t, "GET", "acme.pos.test", "/pos", nil, nil)
 	common(rec)
