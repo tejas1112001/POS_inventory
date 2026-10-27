@@ -6,6 +6,7 @@ package settings
 import (
 	"context"
 	"crypto/x509"
+	"errors"
 	"net/http"
 	"regexp"
 	"strings"
@@ -95,7 +96,7 @@ type Business struct {
 	MaxDiscountPct                                                      decimal.Decimal
 	DefaultCustomerID                                                   *int64
 	HomePage                                                            string // "login" or "shop"
-	ShopStoreID                                                         *int64 // store shown at /; nil: 'main' or the oldest
+	ShopStoreID                                                         *int64 // chosen default store; nil: see DefaultStore
 	UpdatedAt                                                           time.Time
 }
 
@@ -104,6 +105,25 @@ const (
 	HomeLogin = "login"
 	HomeShop  = "shop"
 )
+
+// qDefaultStore picks the default public store: the chosen one
+// (shop_store_id), else the store with slug 'main', else the oldest. Each
+// must be active and public, so a chosen store that is turned off or
+// inactive falls back to the next one.
+const qDefaultStore = `SELECT s.id, s.slug::text FROM stores s CROSS JOIN settings g
+	WHERE g.id = 1 AND s.deleted_at IS NULL AND s.status = 'Active' AND s.is_public_enabled
+	ORDER BY (s.id = g.shop_store_id) IS TRUE DESC, s.slug = 'main' DESC, s.id
+	LIMIT 1`
+
+// DefaultStore returns the tenant's default public store, in the caller's
+// tenant transaction. ok is false when no store is active and public.
+func DefaultStore(ctx context.Context, tx tenancy.TenantTx) (id int64, slug string, ok bool, err error) {
+	err = tx.QueryRow(ctx, qDefaultStore).Scan(&id, &slug)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, "", false, nil
+	}
+	return id, slug, err == nil, err
+}
 
 const qLoad = `SELECT business_name, legal_name, address, phone, email::text, logo_file_id, currency, locale, timezone,
 		tax_label, tax_registration_no, tax_split, prices_include_tax_default, max_discount_pct_without_override,

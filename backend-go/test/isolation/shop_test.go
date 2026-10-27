@@ -265,6 +265,14 @@ func TestPublicShopIsolationAcrossTenants(t *testing.T) {
 	require.NotEqual(t, pub(t, "c", "/"+w.slug, nil).Header.Get("ETag"), pub(t, "a", "/"+aSlug, nil).Header.Get("ETag"))
 }
 
+// showcaseOn turns store id's public showcase on or off in tenant C.
+func showcaseOn(t *testing.T, tok string, id float64, on bool) {
+	t.Helper()
+	r := do(t, rq{method: "PUT", host: tenants["c"].Host, path: fmt.Sprintf("/api/stores/%s/showcase", jsonID(id)), token: tok,
+		body: map[string]any{"isPublicEnabled": on}})
+	require.Equal(t, 200, r.Code, r.Raw)
+}
+
 func TestPublicHomePage(t *testing.T) {
 	w := shopWindow(t)
 	host := tenants["c"].Host
@@ -303,17 +311,30 @@ func TestPublicHomePage(t *testing.T) {
 	require.Equal(t, 400, put(map[string]any{"homePage": "landing"}).Code)
 	require.Equal(t, 400, put(map[string]any{"shopStoreId": 999999}).Code)
 
-	// No public shop → the sign-in: showcase off, tenant suspended.
-	off := func(on bool) {
-		r := do(t, rq{method: "PUT", host: host, path: fmt.Sprintf("/api/stores/%s/showcase", jsonID(w.id)), token: w.tok,
-			body: map[string]any{"isPublicEnabled": on}})
-		require.Equal(t, 200, r.Code, r.Raw)
+	// The chosen store turned off: the next active public store ("main").
+	showcaseOn(t, w.tok, w.id, false)
+	t.Cleanup(func() { showcaseOn(t, w.tok, w.id, true) })
+	require.JSONEq(t, `{"homePage":"shop","slug":"main"}`, home("c").Raw)
+	showcaseOn(t, w.tok, w.id, true)
+	require.Equal(t, w.slug, home("c").Body["slug"], "back on: the chosen store again")
+
+	// No active public store left: the sign-in.
+	ids := storeIDs(t, "c", w.tok)
+	for _, id := range ids {
+		showcaseOn(t, w.tok, id, false)
 	}
-	off(false)
-	t.Cleanup(func() { off(true) })
+	t.Cleanup(func() {
+		for _, id := range ids {
+			showcaseOn(t, w.tok, id, true)
+		}
+	})
 	require.JSONEq(t, `{"homePage":"login"}`, home("c").Raw)
-	off(true)
+	for _, id := range ids {
+		showcaseOn(t, w.tok, id, true)
+	}
 	require.Equal(t, w.slug, home("c").Body["slug"])
+
+	// Tenant suspended: the sign-in.
 	setStatus(t, "c", "suspended")
 	t.Cleanup(func() { setStatus(t, "c", "trialing") })
 	eventually(t, func() bool { return home("c").Body["homePage"] == "login" }, "suspended shows the sign-in")
@@ -322,4 +343,103 @@ func TestPublicHomePage(t *testing.T) {
 
 	// Other tenants are not affected.
 	require.JSONEq(t, `{"homePage":"login"}`, home("a").Raw)
+}
+
+func TestPublicShopsAndDefaultStore(t *testing.T) {
+	w := shopWindow(t)
+	host := tenants["c"].Host
+	shops := func(l string) (int, []string) {
+		t.Helper()
+		r := do(t, rq{method: "GET", host: tenants[l].Host, path: "/api/public/shops"})
+		if r.Code != 200 {
+			return r.Code, nil
+		}
+		require.Equal(t, "no-cache", r.Header.Get("Cache-Control"))
+		var slugs []string
+		for _, x := range r.Body["stores"].([]any) {
+			m := x.(map[string]any)
+			require.ElementsMatch(t, []string{"name", "slug"}, keys(m), "only the name and slug are public")
+			slugs = append(slugs, m["slug"].(string))
+		}
+		return 200, slugs
+	}
+	showcase := func(id float64) resp {
+		t.Helper()
+		r := get(t, host, fmt.Sprintf("/api/stores/%s/showcase", jsonID(id)), w.tok)
+		require.Equal(t, 200, r.Code, r.Raw)
+		return r
+	}
+	setDefault := func(tok string, id any) resp {
+		return do(t, rq{method: "POST", host: host, path: fmt.Sprintf("/api/stores/%v/showcase/default", id), token: tok})
+	}
+	t.Cleanup(func() {
+		do(t, rq{method: "PUT", host: host, path: "/api/settings", token: w.tok, body: map[string]any{"homePage": "login", "shopStoreId": nil}})
+	})
+	mainID := storeIDs(t, "c", w.tok)[0]
+
+	// The switcher lists C's public stores only.
+	code, slugs := shops("c")
+	require.Equal(t, 200, code)
+	require.Contains(t, slugs, "main")
+	require.Contains(t, slugs, w.slug)
+	_, aSlugs := shops("a")
+	require.NotContains(t, aSlugs, w.slug)
+	showcaseOn(t, w.tok, w.id, false)
+	t.Cleanup(func() { showcaseOn(t, w.tok, w.id, true) })
+	_, slugs = shops("c")
+	require.NotContains(t, slugs, w.slug, "turned off: not listed")
+	require.Equal(t, 400, setDefault(w.tok, jsonID(w.id)).Code, "a store with its showcase off can't be the default")
+	showcaseOn(t, w.tok, w.id, true)
+
+	// Nothing chosen: "main" is the default.
+	require.Equal(t, true, showcase(mainID).Body["isDefault"])
+	require.Equal(t, false, showcase(w.id).Body["isDefault"])
+	require.Equal(t, "login", showcase(w.id).Body["homePage"])
+
+	// Set as default: stored in the settings and audited.
+	r := setDefault(w.tok, jsonID(w.id))
+	require.Equal(t, 200, r.Code, r.Raw)
+	require.Equal(t, w.id, get(t, host, "/api/settings", w.tok).Body["shopStoreId"])
+	require.Equal(t, true, showcase(w.id).Body["isDefault"])
+	require.Equal(t, false, showcase(mainID).Body["isDefault"])
+	require.Equal(t, 200, setDefault(w.tok, jsonID(w.id)).Code, "setting it again is fine")
+	var n int
+	require.NoError(t, admin(t).QueryRow(context.Background(), `SELECT count(*) FROM `+schema("c")+`.audit_log
+		WHERE action = 'settings.update' AND after->>'shopStoreId' = $1`, jsonID(w.id)).Scan(&n))
+	require.Equal(t, 1, n, "one audit entry; the repeat changed nothing")
+
+	// Its showcase turned off: the default falls back to "main".
+	showcaseOn(t, w.tok, w.id, false)
+	require.Equal(t, true, showcase(mainID).Body["isDefault"])
+	showcaseOn(t, w.tok, w.id, true)
+
+	// Unknown store, no permission, other tenant.
+	require.Equal(t, 404, setDefault(w.tok, 999999).Code)
+	createUser(t, "c", w.tok, "biller-showcase@iso-c.test", "biller", "biller-showcase-pass-1")
+	btok, _ := login(t, "c", "biller-showcase@iso-c.test", "biller-showcase-pass-1")
+	require.Equal(t, 403, setDefault(btok, jsonID(w.id)).Code)
+	aTok, _ := ownerLogin(t, "a")
+	require.Equal(t, 401, do(t, rq{method: "POST", host: host, path: fmt.Sprintf("/api/stores/%s/showcase/default", jsonID(w.id)), token: aTok}).Code)
+
+	// Suspended tenants have no switcher either.
+	setStatus(t, "c", "suspended")
+	t.Cleanup(func() { setStatus(t, "c", "trialing") })
+	eventually(t, func() bool { c, _ := shops("c"); return c == 404 }, "suspended hides the switcher")
+	setStatus(t, "c", "trialing")
+	eventually(t, func() bool { c, _ := shops("c"); return c == 200 }, "active again")
+
+	// Unknown API paths stay a JSON 404, never the app or a redirect.
+	for _, p := range []string{"/api/public/nope", "/api/shop/main", "/api"} {
+		r := do(t, rq{method: "GET", host: host, path: p})
+		require.Equal(t, 404, r.Code, p)
+		require.Equal(t, "NOT_FOUND", r.Body["code"], p)
+	}
+}
+
+func keys(m map[string]any) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
 }

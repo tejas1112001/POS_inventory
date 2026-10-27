@@ -20,6 +20,7 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/httpx"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/plans"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/rbac"
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/settings"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/tenancy"
 )
 
@@ -284,13 +285,23 @@ func (a *API) getShowcase(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var (
-		s        storeJSON
-		products any = []any{}
+		s         storeJSON
+		products  any = []any{}
+		isDefault bool
+		homePage  string
 	)
 	err = a.ro(r.Context(), tenant(r), func(tx tenancy.TenantTx) error {
 		var err error
 		if s, err = scanStore(tx.QueryRow(r.Context(), qStoreGet, id)); err != nil {
 			return notFound(err)
+		}
+		def, _, found, err := settings.DefaultStore(r.Context(), tx)
+		if err != nil {
+			return err
+		}
+		isDefault = found && def == id
+		if err := tx.QueryRow(r.Context(), `SELECT home_page FROM settings WHERE id = 1`).Scan(&homePage); err != nil {
+			return err
 		}
 		if a.d.ShowcaseProducts != nil {
 			products, err = a.d.ShowcaseProducts(r.Context(), tx, id)
@@ -302,7 +313,49 @@ func (a *API) getShowcase(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// GET never writes any more: every store got its slug at creation (C-08).
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{"store": s, "products": products})
+	// isDefault: this store is the default public store (shown at / when
+	// homePage is "shop").
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"store": s, "products": products, "isDefault": isDefault, "homePage": homePage})
+}
+
+// setDefault is POST /api/stores/{id}/showcase/default: make this store the
+// default public store (settings.shop_store_id). Only an active store with
+// its showcase turned on can be chosen.
+func (a *API) setDefault(w http.ResponseWriter, r *http.Request) {
+	id, err := idParam(r)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	p := principal(r)
+	err = a.rw(r.Context(), tenant(r), func(tx tenancy.TenantTx) error {
+		ctx := r.Context()
+		s, err := scanStore(tx.QueryRow(ctx, qStoreGetLock, id))
+		if err != nil {
+			return notFound(err)
+		}
+		if s.Status != "Active" || !s.IsPublicEnabled {
+			return apperr.Invalid("store", "Only an active store with its public showcase turned on can be the default store.")
+		}
+		var before *int64
+		if err := tx.QueryRow(ctx, `SELECT shop_store_id FROM settings WHERE id = 1 FOR UPDATE`).Scan(&before); err != nil {
+			return err
+		}
+		if before != nil && *before == id {
+			return nil
+		}
+		if _, err := tx.Exec(ctx, `UPDATE settings SET shop_store_id = $1, updated_at = now() WHERE id = 1`, id); err != nil {
+			return err
+		}
+		return audit.Write(ctx, tx, audit.Entry{ActorID: p.UserID, Action: "settings.update", Entity: "settings",
+			EntityID: "1", After: map[string]any{"fields": []string{"shopStoreId"}, "shopStoreId": id},
+			RequestID: httpx.RequestID(ctx), UserAgent: r.UserAgent()})
+	})
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"isDefault": true, "storeId": id})
 }
 
 type showcaseIn struct {
@@ -520,6 +573,7 @@ func (a *API) Mount(rt *rbac.Router) {
 	rt.Handle(del, "/stores/{id}", req("stores", "delete"), a.deleteStore)
 	rt.Handle(get, "/stores/{id}/showcase", req("stores", "view"), a.getShowcase)
 	rt.Handle(put, "/stores/{id}/showcase", req("stores", "edit").Uploads(), a.putShowcase)
+	rt.Handle(post, "/stores/{id}/showcase/default", req("stores", "edit"), a.setDefault)
 
 	rt.Handle(post, "/files", rbac.Authenticated().Uploads(), a.uploadFile)
 	rt.Handle(get, "/files/{id}", rbac.Authenticated(), a.getFile)

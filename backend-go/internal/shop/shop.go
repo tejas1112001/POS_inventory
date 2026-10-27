@@ -90,6 +90,7 @@ func (a *API) Mount(rt *rbac.Router) {
 	wrap := func(h http.HandlerFunc) http.HandlerFunc { return byIP(byTenant(h)).ServeHTTP }
 	pub := rbac.Public()
 	rt.Handle(http.MethodGet, "/public/home", pub, wrap(a.home))
+	rt.Handle(http.MethodGet, "/public/shops", pub, wrap(a.shops))
 	rt.Handle(http.MethodGet, "/public/shop/{slug}", pub, wrap(a.info))
 	rt.Handle(http.MethodGet, "/public/shop/{slug}/products", pub, wrap(a.products))
 	rt.Handle(http.MethodGet, "/public/shop/{slug}/products/{product}", pub, wrap(a.product))
@@ -251,17 +252,11 @@ type Home struct {
 	Slug     string `json:"slug,omitempty"` // the store whose shop is shown, with "shop"
 }
 
-// qHome finds the store shown at the main address: the chosen store, or
-// with none chosen the store with slug 'main', or else the oldest active
-// one. It must be active and public, and the home page set to the shop.
-const qHome = `SELECT s.slug::text FROM settings g
-	JOIN stores s ON s.id = coalesce(g.shop_store_id, (SELECT id FROM stores WHERE deleted_at IS NULL AND status = 'Active'
-		ORDER BY slug = 'main' DESC, id LIMIT 1))
-	WHERE g.id = 1 AND g.home_page = 'shop' AND s.deleted_at IS NULL AND s.status = 'Active' AND s.is_public_enabled`
-
-// home answers "login" whenever the shop is not shown: home page set to
-// the staff sign-in, tenant suspended, plan without public_shop, or no
-// active public store. The answer does not say which.
+// home answers "login" whenever no shop is shown: home page set to the
+// staff sign-in, tenant suspended, plan without public_shop, or no active
+// public store. The answer does not say which. Otherwise it names the
+// default store (settings.DefaultStore), which falls back to the next
+// active public store when the chosen one is turned off or inactive.
 func (a *API) home(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	t, _ := tenancy.TenantFrom(ctx)
@@ -270,12 +265,15 @@ func (a *API) home(w http.ResponseWriter, r *http.Request) {
 		ok, err := a.d.Plans.Has(ctx, t.PlanID, plans.FeaturePublicShop)
 		if err == nil && ok {
 			err = a.d.Sessions.InTenantTx(ctx, t, tenancy.TxOptions{Access: tenancy.ReadOnly}, func(tx tenancy.TenantTx) error {
-				var slug string
-				err := tx.QueryRow(ctx, qHome).Scan(&slug)
-				if errors.Is(err, pgx.ErrNoRows) {
+				var page string
+				if err := tx.QueryRow(ctx, `SELECT home_page FROM settings WHERE id = 1`).Scan(&page); err != nil {
+					return err
+				}
+				if page != settings.HomeShop {
 					return nil
 				}
-				if err == nil {
+				_, slug, found, err := settings.DefaultStore(ctx, tx)
+				if found {
 					out = Home{HomePage: settings.HomeShop, Slug: slug}
 				}
 				return err
@@ -287,4 +285,54 @@ func (a *API) home(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeCachedAs(w, r, out, homeCacheControl)
+}
+
+// ------------------------------------------------------------------ shops
+
+// StoreRef is one entry of the store switcher.
+type StoreRef struct {
+	Name string `json:"name"`
+	Slug string `json:"slug"`
+}
+
+// qShops lists the store switcher (at most 50; plans allow far fewer).
+const qShops = `SELECT name, slug::text FROM stores
+	WHERE deleted_at IS NULL AND status = 'Active' AND is_public_enabled
+	ORDER BY name, id LIMIT 50`
+
+// shops is GET /api/public/shops: the tenant's active public stores, for
+// the storefront's store switcher. Hidden tenants and plans without
+// public_shop get the generic 404, like a shop.
+func (a *API) shops(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	t, _ := tenancy.TenantFrom(ctx)
+	ok, err := a.d.Plans.Has(ctx, t.PlanID, plans.FeaturePublicShop)
+	if err == nil && (!ok || hiddenStatuses[t.Status]) {
+		err = apperr.NotFound()
+	}
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	out := []StoreRef{}
+	err = a.d.Sessions.InTenantTx(ctx, t, tenancy.TxOptions{Access: tenancy.ReadOnly}, func(tx tenancy.TenantTx) error {
+		rows, err := tx.Query(ctx, qShops)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var s StoreRef
+			if err := rows.Scan(&s.Name, &s.Slug); err != nil {
+				return err
+			}
+			out = append(out, s)
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	writeCachedAs(w, r, map[string]any{"stores": out}, homeCacheControl)
 }
