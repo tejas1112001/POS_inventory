@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"mime"
 	"net/http"
+	"reflect"
 	"strconv"
 	"strings"
 
@@ -43,7 +44,48 @@ func DecodeJSON(r *http.Request, dst any) error {
 		}
 		return apperr.InvalidJSON("Request body must contain a single JSON object")
 	}
+	if hasNUL(reflect.ValueOf(dst)) {
+		return apperr.NULText()
+	}
 	return nil
+}
+
+// hasNUL reports whether any string reachable from v holds a NUL
+// character, or any byte slice (json.RawMessage kept for later decoding or
+// for a jsonb column) holds one, raw or as the \u0000 escape.
+func hasNUL(v reflect.Value) bool {
+	switch v.Kind() {
+	case reflect.String:
+		return strings.IndexByte(v.String(), 0) >= 0
+	case reflect.Pointer, reflect.Interface:
+		return !v.IsNil() && hasNUL(v.Elem())
+	case reflect.Struct:
+		for i := range v.NumField() {
+			if hasNUL(v.Field(i)) {
+				return true
+			}
+		}
+	case reflect.Slice:
+		if v.Type().Elem().Kind() == reflect.Uint8 {
+			b := v.Bytes()
+			return bytes.IndexByte(b, 0) >= 0 || bytes.Contains(b, []byte(`\u0000`))
+		}
+		fallthrough
+	case reflect.Array:
+		for i := range v.Len() {
+			if hasNUL(v.Index(i)) {
+				return true
+			}
+		}
+	case reflect.Map:
+		it := v.MapRange()
+		for it.Next() {
+			if hasNUL(it.Key()) || hasNUL(it.Value()) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func decodeError(err error) error {

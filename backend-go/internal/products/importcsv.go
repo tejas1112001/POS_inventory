@@ -94,6 +94,11 @@ func (a *API) importCSV(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, apperr.TooLarge())
 		return
 	}
+	// Postgres cannot store NUL; a file full of them is usually UTF-16.
+	if bytes.IndexByte(raw, 0) >= 0 {
+		httpx.WriteError(w, r, apperr.Invalid("csvFile", "The file contains NUL characters. Save it as \"CSV UTF-8\" and try again."))
+		return
+	}
 	dry := r.URL.Query().Get("dryRun") == "true"
 	res, rowErrs, err := a.runImport(r.Context(), tenant(r), principal(r).UserID, raw, dry)
 	if err != nil {

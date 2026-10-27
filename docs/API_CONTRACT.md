@@ -15,7 +15,7 @@
 | Origin | SPA and API are served from the **same origin**: `https://<slug>.<BASE_DOMAIN>` (tenant) or `https://admin.<BASE_DOMAIN>` (platform). The frontend uses relative `/api/...` URLs. CORS is only needed in edge cases (see TENANCY_DESIGN §7). |
 | Tenant | Comes from the **Host** header (validated), never from body/query/header fields. A token for tenant A on tenant B's host is rejected with `401`. |
 | Auth | `Authorization: Bearer <access token>` (10 min, held in memory by the SPA). Refresh token in an `HttpOnly; Secure; SameSite=Strict` cookie named `__Host-rt` (host-only, no `Domain`). |
-| Body | JSON only (plus `multipart/form-data` on upload endpoints). Max 1 MiB by default, 8 MiB on uploads. Unknown fields → `400` (see §4 C-04 for the POS payload exception list). Trailing garbage → `400`. |
+| Body | JSON only (plus `multipart/form-data` on upload endpoints). Max 1 MiB by default, 8 MiB on uploads. Unknown fields → `400` (see §4 C-04 for the POS payload exception list). Trailing garbage → `400`. A NUL character anywhere in the path, query, a JSON string, a form value or an imported CSV file → `400 VALIDATION_FAILED` (Postgres cannot store it). |
 | IDs | Integer IDs as today (`BIGINT` identity per tenant schema). IDs are only meaningful inside one tenant. |
 | Money | JSON **numbers** (as today), produced from `NUMERIC` / `decimal.Decimal`, rounded to the tenant currency's minor units. Never computed with floats on the server. |
 | Dates | RFC 3339 timestamps in UTC. Date-only inputs (`YYYY-MM-DD`) are read in the tenant's timezone. |

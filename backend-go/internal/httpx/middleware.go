@@ -235,6 +235,23 @@ func BodyLimit(limit int64) func(http.Handler) http.Handler {
 	}
 }
 
+// RejectNUL refuses a request whose path or query holds a NUL character
+// (raw or %00). Postgres cannot store one in text, so it would otherwise
+// fail as a 500 wherever the value reaches a query.
+func RejectNUL(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		u := r.URL
+		if strings.IndexByte(u.Path, 0) >= 0 || strings.IndexByte(u.RawQuery, 0) >= 0 ||
+			containsFold(u.RawQuery, "%00") || containsFold(u.RawPath, "%00") {
+			WriteError(w, r, apperr.NULText())
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func containsFold(s, sub string) bool { return strings.Contains(strings.ToLower(s), sub) }
+
 // Timeout puts a deadline on the request context. Handlers and DB calls must
 // honour the context; the server WriteTimeout is the hard stop.
 func Timeout(d time.Duration) func(http.Handler) http.Handler {

@@ -110,6 +110,12 @@ func Invalid(field, msg string) *Error {
 	return &Error{Kind: KindValidation, Code: CodeValidationFailed, Message: msg, Fields: map[string]string{field: msg}}
 }
 
+// NULText reports a NUL character in request text. Postgres cannot store
+// one, so it is refused before any handler runs.
+func NULText() *Error {
+	return &Error{Kind: KindValidation, Code: CodeValidationFailed, Message: "Text must not contain NUL characters"}
+}
+
 // InvalidJSON reports a malformed body.
 func InvalidJSON(msg string) *Error {
 	return &Error{Kind: KindValidation, Code: CodeInvalidJSON, Message: msg}

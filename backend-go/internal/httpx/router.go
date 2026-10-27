@@ -43,13 +43,13 @@ type RouterDeps struct {
 // NewRouter builds the root handler:
 //
 //	request-id → access log → recover → host classify → secure headers
-//	→ (health, any host) → reject unknown host → per-host router
+//	→ reject NUL → (health, any host) → reject unknown host → per-host router
 //	  (body limit → timeout → CORS → routes)
 func NewRouter(d RouterDeps) http.Handler {
 	root := chi.NewRouter()
 	// Recover sits inside the access log so a panic is logged as a 500.
 	root.Use(AssignRequestID(d.Network), AccessLog(d.Logger, d.Metrics, d.Network), Recover,
-		ClassifyHost(d.Network), SecureHeaders(d.HSTS))
+		ClassifyHost(d.Network), SecureHeaders(d.HSTS), RejectNUL)
 
 	root.Get("/healthz", d.Health.Live)
 	root.Get("/health", d.Health.Live)
