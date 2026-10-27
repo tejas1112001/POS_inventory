@@ -292,8 +292,20 @@ func schema(l string) string { return "t_" + tenants[l].ID }
 func setPasswordViaInvite(t *testing.T, l string, email, pw string) {
 	t.Helper()
 	ctx := context.Background()
+	db := admin(t)
+	// A new tenant's welcome email issues an owner invite token that
+	// replaces earlier ones. Wait until it has gone out, so it cannot
+	// replace the token inserted below.
+	for deadline := time.Now().Add(30 * time.Second); time.Now().Before(deadline); time.Sleep(100 * time.Millisecond) {
+		var pending int
+		require.NoError(t, db.QueryRow(ctx, `SELECT count(*) FROM platform.email_outbox WHERE idempotency_key = $1
+			AND status IN ('pending', 'sending', 'failed')`, "tenant:"+tenants[l].ID+":welcome").Scan(&pending))
+		if pending == 0 {
+			break
+		}
+	}
 	raw := security.NewToken(32)
-	_, err := admin(t).Exec(ctx, `INSERT INTO `+schema(l)+`.auth_tokens (user_id, purpose, token_hash, expires_at)
+	_, err := db.Exec(ctx, `INSERT INTO `+schema(l)+`.auth_tokens (user_id, purpose, token_hash, expires_at)
 		SELECT id, 'invite', $2, now() + interval '1 hour' FROM `+schema(l)+`.users WHERE email = $1`, email, security.HashToken(raw))
 	require.NoError(t, err)
 	r := do(t, rq{method: "POST", host: tenants[l].Host, path: "/api/auth/invite/accept", body: map[string]string{"token": raw, "password": pw}})
