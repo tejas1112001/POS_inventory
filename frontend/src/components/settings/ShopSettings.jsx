@@ -72,7 +72,7 @@ function toBody(k, v) {
 // storeOptions lists the stores that can be shown at the main address.
 // Without stores:view the list is empty and only the current choice shows.
 function storeOptions(stores, current) {
-  const opts = [{ value: '', label: 'Main store (default)' }];
+  const opts = [{ value: '', label: 'Automatic (the "main" store, else the first public store)' }];
   for (const st of stores) {
     const notes = [st.status !== 'Active' && 'inactive', !st.isPublicEnabled && 'shop turned off'].filter(Boolean);
     opts.push({ value: String(st.id), label: st.name + (notes.length ? ` (${notes.join(', ')})` : '') });
@@ -239,12 +239,13 @@ export default function ShopSettings({ canEdit }) {
         <div className="grid gap-4 md:grid-cols-2">
           <SelectField id="homePage" label={`What ${window.location.host}/ shows`} hint="Staff always sign in at /login." value={form.homePage} onChange={set('homePage')} error={fields.homePage} disabled={dis} options={HOME_PAGES} />
           {form.homePage === 'shop' && (
-            <SelectField id="shopStoreId" label="Store shown" hint="Its shop moves from /shop/... to the main address; the old link still works." value={form.shopStoreId} onChange={set('shopStoreId')} error={fields.shopStoreId} disabled={dis} options={storeOptions(stores, form.shopStoreId)} />
+            <SelectField id="shopStoreId" label="Default store" hint="Its shop moves from /shop/... to the main address; the old link still works." value={form.shopStoreId} onChange={set('shopStoreId')} error={fields.shopStoreId} disabled={dis} options={storeOptions(stores, form.shopStoreId)} />
           )}
         </div>
         {form.homePage === 'shop' && (
           <p className="mt-3 text-xs text-muted-foreground">
-            If that store is inactive or its shop is turned off, or your plan has no online shop, the main address shows the staff login.
+            If that store is inactive or its shop is turned off, the next active public store is shown. With none left, or if your
+            plan has no online shop, the main address shows the staff login. You can also set the default store in Product Showcase.
           </p>
         )}
       </SectionCard>
