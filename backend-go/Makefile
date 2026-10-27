@@ -63,7 +63,7 @@ vuln: ## govulncheck (fails on reachable vulnerabilities)
 gitleaks: ## Scan commits on this branch that are not on main
 	cd .. && go run $(GITLEAKS) git --redact --log-opts="main..HEAD" .
 
-gitleaks-history: ## Scan the whole history (fails until the P0-1 history rewrite runs)
+gitleaks-history: ## Scan the whole history (clean since the P0-1 rewrite, 2026-10-27)
 	cd .. && go run $(GITLEAKS) git --redact .
 
 check: vet constsql lint vuln test ## Everything CI runs, except integration tests and gitleaks
