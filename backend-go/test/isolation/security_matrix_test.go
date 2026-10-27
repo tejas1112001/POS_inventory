@@ -78,15 +78,24 @@ func TestEveryPermissionRouteNamesACatalogPermission(t *testing.T) {
 
 // ---------------------------------------------------------- forged tokens
 
+// forgeFor caches tenant B's owner (ID and token version) for one test.
+var forgeFor struct {
+	t   *testing.T
+	uid int64
+	tv  int
+}
+
 // forge signs claims as the app would, then lets mutate break one thing.
 func forge(t *testing.T, mutate func(h map[string]any, c jwt.MapClaims) (jwt.SigningMethod, any)) string {
 	t.Helper()
 	key, err := base64.StdEncoding.DecodeString(jwtKey)
 	require.NoError(t, err)
-	var uid int64
-	var tv int
-	require.NoError(t, admin(t).QueryRow(context.Background(), `SELECT id, token_version FROM `+schema("b")+`.users WHERE email = $1`,
-		tenants["b"].OwnerEmail).Scan(&uid, &tv))
+	if forgeFor.t != t { // one lookup per test: each admin(t) is a new connection
+		forgeFor.t = t
+		require.NoError(t, admin(t).QueryRow(context.Background(), `SELECT id, token_version FROM `+schema("b")+`.users WHERE email = $1`,
+			tenants["b"].OwnerEmail).Scan(&forgeFor.uid, &forgeFor.tv))
+	}
+	uid, tv := forgeFor.uid, forgeFor.tv
 	now := time.Now()
 	c := jwt.MapClaims{
 		"iss": tenants["b"].Host, "sub": strconv.FormatInt(uid, 10), "aud": []string{authtoken.AudTenant},
