@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   Store,
   MapPin,
@@ -22,12 +22,41 @@ import {
 } from 'lucide-react';
 import { formatCurrency } from '@/lib/format';
 
+// StoreSwitcher moves between the tenant's public stores: the default one
+// lives at /, the others at /shop/:slug. Hidden with fewer than two.
+function StoreSwitcher({ stores, current, homeSlug }) {
+  const navigate = useNavigate();
+  if (stores.length < 2 || !stores.some((s) => s.slug === current)) return null;
+  const path = (slug) =>
+    homeSlug && slug.toLowerCase() === homeSlug.toLowerCase() ? '/' : `/shop/${encodeURIComponent(slug)}`;
+  return (
+    <label className="flex items-center gap-2 bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5">
+      <Store className="size-4 text-emerald-400 shrink-0" />
+      <span className="sr-only">Store</span>
+      <select
+        value={current}
+        onChange={(e) => navigate(path(e.target.value))}
+        className="bg-transparent text-xs text-slate-100 focus:outline-none cursor-pointer"
+      >
+        {stores.map((s) => (
+          <option key={s.slug} value={s.slug} className="bg-slate-900">
+            {s.name}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 // PublicShopPage is a store's public showcase. Root.jsx passes the store
-// slug: the home store at /, any other at /shop/:slug.
-export default function PublicShopPage({ slug }) {
+// slug (the default store at /, any other at /shop/:slug), the default
+// store's slug for the switcher (null when / shows the sign-in), and
+// onMissing for a store that does not exist.
+export default function PublicShopPage({ slug, homeSlug = null, onMissing }) {
   const shopSlug = encodeURIComponent(slug);
 
   const [shop, setShop] = useState(null);
+  const [stores, setStores] = useState([]);
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [categoryIds, setCategoryIds] = useState({});
@@ -57,6 +86,10 @@ export default function PublicShopPage({ slug }) {
       setLoading(true);
       setError(null);
       const res = await fetch(`/api/public/shop/${shopSlug}`);
+      if (res.status === 404 && onMissing) {
+        onMissing();
+        return;
+      }
       if (!res.ok) {
         throw new Error('Shop showcase unavailable or not found.');
       }
@@ -64,6 +97,12 @@ export default function PublicShopPage({ slug }) {
       setShop(data);
 
       if (data.isPublicEnabled) {
+        // The tenant's other public stores, for the switcher.
+        fetch('/api/public/shops')
+          .then((r) => (r.ok ? r.json() : null))
+          .then((d) => setStores(Array.isArray(d?.stores) ? d.stores : []))
+          .catch(() => setStores([]));
+
         // Fetch categories
         const catRes = await fetch(`/api/public/shop/${shopSlug}/categories`);
         if (catRes.ok) {
@@ -182,6 +221,7 @@ export default function PublicShopPage({ slug }) {
 
             {/* Shop Contact Cards */}
             <div className="flex flex-wrap items-center gap-3 text-xs text-slate-300 w-full md:w-auto">
+              <StoreSwitcher stores={stores} current={shop.slug} homeSlug={homeSlug} />
               {shop.address && (
                 <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2">
                   <MapPin className="size-4 text-emerald-400 shrink-0" />

@@ -116,7 +116,8 @@ function AppRoutes() {
       <Route path="/settings" element={<ProtectedLayout><Settings /></ProtectedLayout>} />
       <Route path="/billing" element={<ProtectedLayout module="billing" action="view"><Billing /></ProtectedLayout>} />
       <Route path="/showcase-settings" element={<ProtectedLayout module="stores" action="view"><ShowcaseSettings /></ProtectedLayout>} />
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      {/* Unknown addresses go to the main address (the shop or the sign-in). */}
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }
