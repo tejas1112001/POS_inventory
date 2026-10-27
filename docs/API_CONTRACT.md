@@ -142,10 +142,11 @@ Legend: 🔓 public · 🔑 any valid token · `mod:act` = permission required b
 | POST | `/api/stores` | stores:create (**never seeded** → admins blocked) | `{name,address,status}` | stores:create + plan limit | F |
 | PUT | `/api/stores/:id` | stores:edit | Missing fields overwrite with `undefined` | stores:edit | F |
 | DELETE | `/api/stores/:id` | stores:delete | Hard delete → `{message}` | stores:delete | C-12 |
-| GET | `/api/stores/:id/showcase` | 🔑 | **Mutates** (auto-creates slug) on GET | stores:view (every store gets a slug at creation) | C-08 |
+| GET | `/api/stores/:id/showcase` | 🔑 | **Mutates** (auto-creates slug) on GET | stores:view (every store gets a slug at creation). Also `isDefault` (this is the default public store) and `homePage` | C-08 |
 | PUT | `/api/stores/:id/showcase` | stores:edit | `{slug,logo,banner,description,phone,openingHours,isPublicEnabled}` | stores:edit | F (slug rules, images C-17) |
 | POST | `/api/stores/:id/showcase/toggle-product` | products:edit | Also writes global `products.is_published` (cross-store side effect) | products:edit | F |
 | POST | `/api/stores/:id/showcase/batch-publish` | products:edit | `{publishAll}` or `{productIds,action}`; N+1 upserts; global flag side effect | products:edit | F |
+| POST | `/api/stores/:id/showcase/default` | — | — | stores:edit. Makes the store the default public store (`settings.shop_store_id`) → `{isDefault:true,storeId}`. Only an active store with its showcase on (else 400); audited as `settings.update` | N |
 
 ### 2.10 Public shop — `publicShop.js` (no auth)
 
@@ -156,7 +157,8 @@ Legend: 🔓 public · 🔑 any valid token · `mod:act` = permission required b
 | GET | `/api/public/shop/:slug/products/:productId` | Id or slug; **unpublished visible when `NODE_ENV=development`** | Published only | C-18 |
 | GET | `/api/public/shop/:slug/categories` | All categories (not store-filtered) | Categories that have published products in the store | F |
 | GET | `/api/public/shop/:slug/featured` | Up to 8 | Same | U |
-| GET | `/api/public/home` | — | What the main address shows: `{homePage:"shop",slug}` or `{homePage:"login"}` (home page set to login, tenant suspended, plan without `public_shop`, or store inactive/not public). `Cache-Control: no-cache` + ETag; same rate limits | N |
+| GET | `/api/public/home` | — | What the main address shows: `{homePage:"shop",slug}` or `{homePage:"login"}` (home page set to login, tenant suspended, plan without `public_shop`, or no active public store). The slug is the default store: the chosen one (`shopStoreId`), else slug `main`, else the oldest; each must be active and public, so a store turned off falls back to the next. `Cache-Control: no-cache` + ETag; same rate limits | N |
+| GET | `/api/public/shops` | — | Store switcher: `{stores:[{name,slug}]}`, the active public stores by name (at most 50). 404 for suspended tenants and plans without `public_shop`. `Cache-Control: no-cache` + ETag; same rate limits | N |
 
 ### 2.11 Misc
 
@@ -246,7 +248,7 @@ All approved (Q-6, 2026-10-15). "FE" = frontend change needed.
 | POST | `/api/auth/password/change` | 🔑 | `{currentPassword,newPassword}`; revokes other sessions |
 | POST | `/api/auth/impersonation/exchange` | 🔓 one-time code | Platform impersonation hand-off (TENANCY §9) |
 | POST | `/api/users` | users:create | Replaces signup-as-create |
-| GET/PUT | `/api/settings` | settings:view / settings:edit | Business profile, currency, number format (`locale`, English tags only, `^en-[A-Z]{2}$`), timezone, tax config, receipt template. No language field; `homePage` (`login` default, or `shop`) and `shopStoreId` (store shown at `/`; null: slug `main`, else the oldest active store) |
+| GET/PUT | `/api/settings` | settings:view / settings:edit | Business profile, currency, number format (`locale`, English tags only, `^en-[A-Z]{2}$`), timezone, tax config, receipt template. No language field; `homePage` (`login` default, or `shop`) and `shopStoreId` (the default store, shown at `/`; null: slug `main`, else the oldest active public store; a chosen store that is off or inactive falls back the same way) |
 | GET/PUT/DELETE | `/api/settings/email` | email_settings:* | Tenant SMTP (password write-only; GET returns `passwordSet: true`) |
 | POST | `/api/settings/email/test` | email_settings:edit | Send test email to `{to}` |
 | GET | `/api/sales/:id` | sales:view (+ own-only) | Single sale (receipt page reload) |
