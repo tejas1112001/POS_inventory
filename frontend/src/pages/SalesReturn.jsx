@@ -7,7 +7,6 @@ export default function SalesReturn() {
   const [salesReturns, setSalesReturns] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [showForm, setShowForm] = useState(false);
 
   useEffect(() => {
     fetchSalesReturns();
@@ -33,7 +32,6 @@ export default function SalesReturn() {
     <ListPageShell>
       <SalesReturnList
         salesReturns={salesReturns}
-        setShowForm={setShowForm}
       />
     </ListPageShell>
   );

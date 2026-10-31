@@ -150,7 +150,7 @@ export const actionsColumn = (
 });
 
 // Reusable Image Column - shows image + name (if nameAccessor is provided)
-export const imageColumn = (nameAccessor, header, imageAccessor, size = 'md') => ({
+export const imageColumn = (nameAccessor, header, imageAccessor, _size = 'md') => ({
   accessorKey: imageAccessor,
   header,
   cell: ({ row }) => {

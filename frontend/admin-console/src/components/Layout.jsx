@@ -1,4 +1,5 @@
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
+import ErrorBoundary from './ErrorBoundary';
 import { useSession } from '../session';
 import styles from './Layout.module.css';
 
@@ -12,6 +13,7 @@ const NAV = [
 // Layout: navigation by permission, the signed-in user, sign-out.
 export default function Layout({ children }) {
   const { user, can, signOut } = useSession();
+  const { pathname } = useLocation();
   const allowed = (perm) => (Array.isArray(perm) ? perm.some(can) : can(perm));
   return (
     <div className={styles.shell}>
@@ -33,7 +35,9 @@ export default function Layout({ children }) {
           </button>
         </div>
       </header>
-      <main className={styles.main}>{children}</main>
+      <main className={styles.main}>
+        <ErrorBoundary resetKey={pathname}>{children}</ErrorBoundary>
+      </main>
     </div>
   );
 }

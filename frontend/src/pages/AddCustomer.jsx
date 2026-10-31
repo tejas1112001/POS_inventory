@@ -5,7 +5,6 @@ import FormPageLayout, { FormCard, FormBody } from '../components/forms/FormPage
 import FormStepper from '../components/forms/FormStepper';
 import { useFormWizard, FORM_STEPS } from '../hooks/useFormWizard';
 import { useNavigate } from 'react-router-dom';
-import { usePos } from '../hooks/usePos';
 import { api } from '../services/api';
 import { PhotoIcon } from '@heroicons/react/24/outline';
 

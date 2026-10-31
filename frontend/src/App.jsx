@@ -7,6 +7,7 @@ import { PosProvider } from './context/PosContext';
 import { PermissionProvider } from './context/PermissionContext';
 import { ThemeProvider } from './context/ThemeContext';
 import AppLayout from './components/layout/AppLayout';
+import { NotFound } from './components/errors/ErrorScreens';
 import Dashboard from './pages/Dashboard';
 import Products from './pages/Products';
 import AddProduct from './pages/AddProduct';
@@ -49,8 +50,10 @@ import ShowcaseSettings from './pages/ShowcaseSettings';
 
 function ProtectedLayout({ children, fullBleed = false, module, action = 'view' }) {
   return (
-    <ProtectedRoute module={module} action={action}>
-      <AppLayout fullBleed={fullBleed}>{children}</AppLayout>
+    <ProtectedRoute>
+      <AppLayout fullBleed={fullBleed}>
+        <ProtectedRoute module={module} action={action}>{children}</ProtectedRoute>
+      </AppLayout>
     </ProtectedRoute>
   );
 }
@@ -116,8 +119,8 @@ function AppRoutes() {
       <Route path="/settings" element={<ProtectedLayout><Settings /></ProtectedLayout>} />
       <Route path="/billing" element={<ProtectedLayout module="billing" action="view"><Billing /></ProtectedLayout>} />
       <Route path="/showcase-settings" element={<ProtectedLayout module="stores" action="view"><ShowcaseSettings /></ProtectedLayout>} />
-      {/* Unknown addresses go to the main address (the shop or the sign-in). */}
-      <Route path="*" element={<Navigate to="/" replace />} />
+      {/* Unknown addresses: a real "Page not found" inside the app (sign-in first). */}
+      <Route path="*" element={<ProtectedLayout><NotFound /></ProtectedLayout>} />
     </Routes>
   );
 }

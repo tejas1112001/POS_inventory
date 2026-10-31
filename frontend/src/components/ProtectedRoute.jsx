@@ -2,6 +2,7 @@ import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { usePos } from '../hooks/usePos';
 import { usePermission } from '../context/PermissionContext';
+import { NoAccess } from './errors/ErrorScreens';
 
 export default function ProtectedRoute({ children, module, action = 'view' }) {
   const { currentUser, loading } = usePos();
@@ -21,12 +22,7 @@ export default function ProtectedRoute({ children, module, action = 'view' }) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  if (module && !hasPermission(module, action)) {
-    if (location.pathname === '/dashboard') {
-      return <div className="py-20 text-center text-muted-foreground">You do not have access to this page.</div>;
-    }
-    return <Navigate to="/dashboard" replace />;
-  }
+  if (module && !hasPermission(module, action)) return <NoAccess />;
 
   return children;
 }

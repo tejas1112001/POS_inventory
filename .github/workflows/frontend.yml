@@ -1,0 +1,38 @@
+name: frontend
+
+on:
+  push:
+    branches: [main]
+    paths: ["frontend/**", "package.json", "package-lock.json", "scripts/fix-deps.cjs", ".github/workflows/frontend.yml"]
+  pull_request:
+    paths: ["frontend/**", "package.json", "package-lock.json", "scripts/fix-deps.cjs", ".github/workflows/frontend.yml"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frontend-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install (frontend workspace only)
+        run: npm ci --workspace frontend
+      - name: Lint (errors fail the build)
+        run: npm run lint --workspace frontend
+      - name: Build the shop and staff app
+        run: npm run build --workspace frontend
+      - name: Build the Super Admin console
+        run: npm run build:admin --workspace frontend
+      # Browser tests (frontend/e2e) need the dev stack and run locally with
+      # frontend/e2e/run-in-docker.sh; see frontend/e2e/README.md.

@@ -5,6 +5,8 @@ import Topbar from './Topbar';
 import BannerArea from './BannerArea';
 import { MainLayout } from './AppShell';
 import { getRouteTitle } from './routeTitles';
+import ErrorBoundary from '../errors/ErrorBoundary';
+import { PageError } from '../errors/ErrorScreens';
 
 export default function AppLayout({ children, fullBleed = false }) {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -27,7 +29,9 @@ export default function AppLayout({ children, fullBleed = false }) {
       topbar={<Topbar title={title} onOpenMobileMenu={() => setMobileOpen(true)} />}
       banner={<BannerArea />}
     >
-      {children}
+      <ErrorBoundary resetKey={location.pathname} fallback={(p) => <PageError {...p} />}>
+        {children}
+      </ErrorBoundary>
     </MainLayout>
   );
 }

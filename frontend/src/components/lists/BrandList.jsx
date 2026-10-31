@@ -1,5 +1,4 @@
 import React, { useState, useMemo } from 'react';
-import { usePos } from '../../hooks/usePos';
 import { usePermission } from '../../hooks/usePermission';
 import { useUI } from "../ListComponents/useUI";
 import { selectColumn, indexColumn, imageColumn, statusColumn, actionsColumn } from '../ListComponents/columnHelpers';

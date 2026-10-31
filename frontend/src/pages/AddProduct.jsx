@@ -9,6 +9,7 @@ import SubcategoryModal from '../components/forms/SubcategoryModal';
 import SupplierModal from '../components/forms/SupplierModal'; 
 import StoreModal from '../components/forms/StoreModal';
 import { usePos } from '../hooks/usePos';
+import { usePermission } from '../hooks/usePermission';
 import { api } from '../services/api';
 import {
   ArrowLeftIcon,
@@ -846,7 +847,7 @@ const AddProduct = () => {
         <FormFooter 
           cancelPath="/products" 
           submitLabel="Add Product" 
-          disabled={!isAdmin}
+          disabled={!hasPermission('products', 'create')}
           showStepNav
           currentStep={currentStep}
           totalSteps={4}

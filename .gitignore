@@ -37,3 +37,6 @@ backend/.env
 
 # Super Admin console build
 frontend/dist-admin
+
+# Browser test output
+frontend/test-results/

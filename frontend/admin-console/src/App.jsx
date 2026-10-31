@@ -9,6 +9,7 @@ import Plans from './pages/Plans';
 import Billing from './pages/Billing';
 import Audit from './pages/Audit';
 import { TENANT_TABS } from './pages/tenantTabs';
+import ErrorBoundary from './components/ErrorBoundary';
 
 function Routed() {
   const { loading, user } = useSession();
@@ -31,11 +32,13 @@ function Routed() {
 export default function App() {
   return (
     <BrowserRouter>
+      <ErrorBoundary>
       <SessionProvider>
         <StepUpProvider>
           <Routed />
         </StepUpProvider>
       </SessionProvider>
+      </ErrorBoundary>
     </BrowserRouter>
   );
 }

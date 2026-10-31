@@ -1,7 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useUI } from "../ListComponents/useUI";
 import { selectColumn, indexColumn, statusColumn, actionsColumn } from '../ListComponents/columnHelpers';
-import { usePos } from '../../hooks/usePos';
 import { usePermission } from '../../hooks/usePermission';
 import { api } from '../../services/api';
 import EditCategoryForm from '../forms/EditCategoryForm';

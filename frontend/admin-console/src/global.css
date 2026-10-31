@@ -417,3 +417,21 @@ pre.json {
 .input.narrow-input {
   width: 260px;
 }
+
+/* Error state shown by ErrorBoundary. */
+.error-state {
+  max-width: 32rem;
+  margin: 3rem auto;
+  padding: 0 1rem;
+  text-align: center;
+}
+
+.error-state h1 {
+  font-size: 1.25rem;
+  margin: 0 0 0.5rem;
+}
+
+.error-state .row {
+  justify-content: center;
+  margin-top: 1rem;
+}

@@ -5,7 +5,12 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  globalIgnores(['dist', 'dist-admin', 'build']),
+  {
+    // Node code: the Electron shell and the browser tests.
+    files: ['electron.js', 'preload.js', 'e2e/**/*.{js,cjs}', '*.config.js'],
+    languageOptions: { globals: { ...globals.node } },
+  },
   {
     files: ['**/*.{js,jsx}'],
     extends: [
@@ -23,7 +28,9 @@ export default defineConfig([
       },
     },
     rules: {
-      'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
+      'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]', argsIgnorePattern: '^[A-Z_]', caughtErrors: 'none' }],
+      // Hot-reload hint only (development); not a runtime problem.
+      'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
     },
   },
   {
