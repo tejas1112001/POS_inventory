@@ -1,0 +1,12 @@
+{
+  "screenTotal": "PAY ₹284.38",
+  "receipt1": "Receipt\nDemo Shop\nSwami Samarth\nMain Store\nPune Maharashtra\nPhone: 9130304095\nGST No.: 27ABCDE1234F1Z5\nTAX INVOICE\nReceipt no.\nPOS-INV-000031\nDate\n01 Nov 2026, 02:50 am\nCustomer\nWalk-in Customer\nCashier\nAsha\nItem\tPrice\tQty\tAmount\nUI-AUDIT Lifecycle Tea\nUIA-TEA-1\n\t₹120.50\t2\t₹241.00\nSubtotal\n₹241.00\nCGST\n₹21.69\nSGST\n₹21.69\nTotal\n₹284.38\nPaid (cash)\n₹284.38\nReceived\n₹500.00\nChange\n₹215.62\n\nGoods once sold can be returned within 7 days\n\nPrint\nDownload PDF\nEmail",
+  "ref1": "POS-INV-000031",
+  "pdf": "POS-INV-000031.pdf",
+  "screenSoap": "PAY ₹136.00",
+  "receipt2": "Receipt\nDemo Shop\nSwami Samarth\nMain Store\nPune Maharashtra\nPhone: 9130304095\nGST No.: 27ABCDE1234F1Z5\nTAX INVOICE\nReceipt no.\nPOS-INV-000032\nDate\n01 Nov 2026, 02:50 am\nCustomer\nWalk-in Customer\nCashier\nAsha\nItem\tPrice\tQty\tAmount\nUI-AUDIT Inclusive Soap\nUIA-SOAP-1\n\t₹118.00\t1\t₹118.00\nSubtotal\n₹118.00\nCGST\n₹9.00\nSGST\n₹9.00\nTotal\n₹118.00\nPaid (cash)\n₹118.00\nReceived\n₹200.00\nChange\n₹82.00\n\nGoods once sold can be returned within 7 days\n\nPrint\nDownload PDF\nEmail",
+  "tshirtLine": "Dashboard",
+  "returnEstimate": "Sale\n\nWhat is returned\n\nItems\n\nQuantities and reasons\n\n3\n\nRefund\n\nMoney back\n\nItems back, before tax: ₹120.50\n\nThe refund, including tax, is worked out when the return is saved, from the prices on the original sale.\n\nRefunded now (₹)\nLeave empty if the full refund is paid out now.\nBack\nCancel\nCreate Return",
+  "adjPreview": "New stock adjustment\nStore\nSelect store\nMain Store\nProduct\nSelect product\nUI-AUDIT T-Shirt\nUI-AUDIT Inclusive Soap\nUI-AUDIT Lifecycle Tea\nSmoke Tea\nChange\nRemove\nAdd\n\nIn stock now: 8. After this: 7\n\nReason\nStock count correction\nDamaged\nExpired\nLost or stolen\nReturned to supplier\nFound\nOther\nNote (optional)\nCancel\nSave adjustment\nClose",
+  "adjTooMany": "New stock adjustment\nStore\nSelect store\nMain Store\nProduct\nSelect product\nUI-AUDIT T-Shirt\nUI-AUDIT Inclusive Soap\nUI-AUDIT Lifecycle Tea\nSmoke Tea\nChange\nRemove\nAdd\n\nIn stock now: 7. After this: -992 (not possible)\n\nReason\nStock count correction\nDamaged\nExpired\nLost or stolen\nReturned to supplier\nFound\nOther\nNote (optional)\nCancel\nSave adjustment\nClose"
+}

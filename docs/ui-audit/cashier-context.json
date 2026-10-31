@@ -1,0 +1,16 @@
+{
+  "menu": "Demo Shop | Point of sale | OVERVIEW | Dashboard | SALES | POS | Sales | Invoices | INVENTORY | Products | Inventory | PEOPLE | Customers | REPORTS | Sales Report | Purchase Report | Customer Report | Customer Due | SYSTEM | Product Showcase | Settings | UC | UI-AUDIT Cashier | Biller",
+  "dash": "Welcome back, Admin. Overview of your store performance. | Revenue | Orders | Total Revenue | ₹0.00 | Total Orders | 0 | Total Customers | 2 | Total Products | 4 | Total Amount | ₹0.00 | Total Paid | ₹0.00 | Total Unpaid | ₹0.00 | Total Overdue | ₹0.00 | Revenue Overview | Sales Distribution",
+  "screen1206": "PAY ₹130.13",
+  "bar1206": "Discounts above 10% need the price override permission.",
+  "screen1205": "PAY ₹130.14",
+  "receipt": "Receipt | Demo Shop | Swami Samarth | Main Store | Pune Maharashtra | Phone: 9130304095 | GST No.: 27ABCDE1234F1Z5 | TAX INVOICE | Receipt no. | POS-INV-000034 | Date | 01 Nov 2026, 03:02 am | Customer | Walk-in Customer | Cashier | UI-AUDIT Cashier | Item\tPrice\tQty\tAmount | UI-AUDIT Lifecycle Tea | UIA-TEA-1 | \t₹120.50\t1\t₹108.45 | Subtotal | ₹120.50 | Discount | -₹12.05 | CGST | ₹9.76 | SGST | ₹9.76 | Total | ₹127.97 | Paid (cash) | ₹127.97 | Received | ₹200.00 | Change | ₹72.03 | Goods once sold can be returned within 7 days | Print | Download PDF | Email",
+  "sales": "Showing 1 to 1 of 1 results",
+  "productButtons": [
+    "Select row:enabled",
+    "View:enabled",
+    "Edit:disabled",
+    "Delete:disabled"
+  ],
+  "settings": "Shop | Appearance | Business profile | Business name | Legal name | If different, shown on invoices. | Address | Phone | Email | Logo | Money and time | Currency | INR | USD | EUR | GBP | AED | SAR | SGD | AUD | CAD | NZD | ZAR | KES | NGN | LKR | NP"
+}

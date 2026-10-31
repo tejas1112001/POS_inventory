@@ -1,0 +1,10 @@
+{
+  "editLabelsLinked": 0,
+  "deleteDialog": "Delete Product\nClose\n\nAre you sure you want to delete UI-AUDIT Inclusive Soap? This action cannot be undone.\n\nCancel\nDelete",
+  "slugBefore": "main",
+  "discountBlocked": "maxDiscountPct: Value must be less than or equal to 100.",
+  "bizName": "Demo Shop",
+  "nameBlocked": "businessName: Please fill out this field.",
+  "emailTab": "Shop\nEmail\nAppearance\nEmail (SMTP)\n\nReceipts and staff emails are sent from your own mail account. Without it, they go out through the platform when that is allowed below.\n\nSMTP server\nPort\n587 (STARTTLS)\n465 (TLS)\nEmails per day at most\nUsername\nPassword\n\nOften an app password from your mail provider.\n\nFrom name\nFrom address\n\nUsually the same as the username.\n\nUse this server\nIf it fails, send through the platform\nSend test\nSave changes",
+  "emailBlocked": ""
+}

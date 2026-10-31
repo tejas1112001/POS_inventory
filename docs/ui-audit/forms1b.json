@@ -1,0 +1,55 @@
+[
+  {
+    "step": "Category: duplicate (message)",
+    "url": "/add-category",
+    "messages": [
+      "Category with this name already exists. ×"
+    ],
+    "http": [
+      "401 POST /api/auth/refresh ",
+      "409 POST /api/categories {\"error\":\"Category with this name already exists.\",\"code\":\"CONFLICT\"}\n"
+    ],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "",
+    "shot": "forms1b-01.jpg"
+  },
+  {
+    "step": "Brand: valid \"UI-AUDIT Brand\" (no picture)",
+    "url": "/add-brand",
+    "messages": [
+      "Validation failed ×"
+    ],
+    "http": [
+      "400 POST /api/brands {\"error\":\"Validation failed\",\"code\":\"VALIDATION_FAILED\",\"fields\":{\"image\":\"has the wrong type\"}}\n"
+    ],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "",
+    "shot": "forms1b-02.jpg"
+  },
+  {
+    "step": "Import: check UI-AUDIT file",
+    "url": "/products",
+    "messages": [
+      "The file is fine: 3 products (4 variants) would be created. Nothing was saved yet."
+    ],
+    "http": [],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "",
+    "shot": "forms1b-03.jpg"
+  },
+  {
+    "step": "Import: import",
+    "url": "/products",
+    "messages": [
+      "The file is fine: 3 products (4 variants) would be created. Nothing was saved yet."
+    ],
+    "http": [],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "locator.click: Error: strict mode violation: getByRole('button', { name: 'Import', exact: true }) resolved to 2 elements:",
+    "shot": "forms1b-04.jpg"
+  }
+]

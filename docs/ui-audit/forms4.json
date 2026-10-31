@@ -1,0 +1,148 @@
+[
+  {
+    "step": "Product edit: Inclusive Soap price 118 -> 120",
+    "url": "/products",
+    "messages": [],
+    "http": [
+      "401 POST /api/auth/refresh "
+    ],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "",
+    "shot": "forms4-01.jpg"
+  },
+  {
+    "step": "Product delete: Inclusive Soap (has stock, expect refusal)",
+    "url": "/products",
+    "messages": [
+      "A product that still has stock cannot be deleted. Set its stock to 0 first. ×"
+    ],
+    "http": [
+      "409 DELETE /api/products/16 {\"error\":\"A product that still has stock cannot be deleted. Set its stock to 0 first.\",\"code\":\"INVALID_STATE\"}\n"
+    ],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "",
+    "shot": "forms4-02.jpg"
+  },
+  {
+    "step": "Showcase: publish UI-AUDIT Lifecycle Tea",
+    "url": "/showcase-settings",
+    "messages": [],
+    "http": [],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "locator.click: Timeout 30000ms exceeded.",
+    "shot": "forms4-03.jpg"
+  },
+  {
+    "step": "Showcase: invalid slug \"Bad Slug!\"",
+    "url": "/showcase-settings",
+    "messages": [],
+    "http": [],
+    "dialogs": [
+      "alert: Shop Showcase settings saved successfully!"
+    ],
+    "pageerrors": [],
+    "error": "",
+    "shot": "forms4-04.jpg"
+  },
+  {
+    "step": "Settings Shop: discount 150 (invalid)",
+    "url": "/settings",
+    "messages": [
+      "Please correct the marked fields."
+    ],
+    "http": [
+      "400 PUT /api/settings {\"error\":\"Validation failed\",\"code\":\"VALIDATION_FAILED\",\"fields\":{\"maxDiscountPct\":\"Use a percentage between 0 and 100.\"}}\n"
+    ],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "",
+    "shot": "forms4-05.jpg"
+  },
+  {
+    "step": "Settings Shop: empty business name",
+    "url": "/settings",
+    "messages": [
+      "Please correct the marked fields."
+    ],
+    "http": [
+      "400 PUT /api/settings {\"error\":\"Validation failed\",\"code\":\"VALIDATION_FAILED\",\"fields\":{\"businessName\":\"Business name is required (at most 120 characters).\"}}\n"
+    ],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "",
+    "shot": "forms4-06.jpg"
+  },
+  {
+    "step": "Settings Shop: save unchanged",
+    "url": "/settings",
+    "messages": [
+      "Nothing to save."
+    ],
+    "http": [],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "",
+    "shot": "forms4-07.jpg"
+  },
+  {
+    "step": "Settings Appearance tab",
+    "url": "/settings",
+    "messages": [],
+    "http": [],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "",
+    "shot": "forms4-08.jpg"
+  },
+  {
+    "step": "Settings Email: open tab",
+    "url": "/settings",
+    "messages": [],
+    "http": [],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "",
+    "shot": "forms4-09.jpg"
+  },
+  {
+    "step": "Settings Email: save with no server",
+    "url": "/settings",
+    "messages": [
+      "Please correct the marked fields."
+    ],
+    "http": [
+      "400 PUT /api/settings/email {\"error\":\"Validation failed\",\"code\":\"VALIDATION_FAILED\",\"fields\":{\"fromEmail\":\"Enter a valid email address.\",\"host\":\"Enter a host name such as smtp.gmail.com.\","
+    ],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "",
+    "shot": "forms4-10.jpg"
+  },
+  {
+    "step": "Settings Email: save \"UI-AUDIT\" server, turned off",
+    "url": "/settings",
+    "messages": [
+      "Saved. Send a test email to check that it works."
+    ],
+    "http": [],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "",
+    "shot": "forms4-11.jpg"
+  },
+  {
+    "step": "Settings Email: send test",
+    "url": "/settings",
+    "messages": [
+      "The test failed: the SMTP host name does not resolve. Check the server, port, username and password."
+    ],
+    "http": [],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "",
+    "shot": "forms4-12.jpg"
+  }
+]

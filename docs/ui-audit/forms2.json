@@ -1,0 +1,84 @@
+[
+  {
+    "step": "Import: UI-AUDIT products",
+    "url": "/products",
+    "messages": [],
+    "http": [
+      "401 POST /api/auth/refresh "
+    ],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "",
+    "shot": "forms2-01.jpg"
+  },
+  {
+    "step": "Brand: \"UI-AUDIT Brand\" with a picture",
+    "url": "/brands",
+    "messages": [],
+    "http": [
+      "401 GET /api/files/47f9b2ce-6d69-481d-a479-d61f2f36374b {\"error\":\"Not signed in\",\"code\":\"UNAUTHENTICATED\"}\n"
+    ],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "",
+    "shot": "forms2-02.jpg"
+  },
+  {
+    "step": "Customer page: \"UI-AUDIT Page Customer\"",
+    "url": "/add-customer",
+    "messages": [
+      "Validation failed ×"
+    ],
+    "http": [
+      "400 POST /api/customers {\"error\":\"Validation failed\",\"code\":\"VALIDATION_FAILED\",\"fields\":{\"image\":\"has the wrong type\"}}\n"
+    ],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "",
+    "shot": "forms2-03.jpg"
+  },
+  {
+    "step": "Supplier page: \"UI-AUDIT Page Supplier\"",
+    "url": "/add-supplier",
+    "messages": [
+      "Validation failed ×"
+    ],
+    "http": [
+      "400 POST /api/suppliers {\"error\":\"Validation failed\",\"code\":\"VALIDATION_FAILED\",\"fields\":{\"image\":\"has the wrong type\"}}\n"
+    ],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "",
+    "shot": "forms2-04.jpg"
+  },
+  {
+    "step": "Purchase: quick-add supplier \"UI-AUDIT Supplier\"",
+    "url": "/add-purchase",
+    "messages": [],
+    "http": [],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "",
+    "shot": "forms2-05.jpg"
+  },
+  {
+    "step": "Purchase: fill info (Received) and pick product",
+    "url": "/add-purchase",
+    "messages": [],
+    "http": [],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "",
+    "shot": "forms2-06.jpg"
+  },
+  {
+    "step": "Purchase: save",
+    "url": "/purchases",
+    "messages": [],
+    "http": [],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "",
+    "shot": "forms2-07.jpg"
+  }
+]

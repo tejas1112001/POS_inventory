@@ -1,0 +1,11 @@
+{
+  "requests": [],
+  "priceBefore": "118",
+  "invalid": [
+    "brandId: Please select an item in the list."
+  ],
+  "after": [
+    "brandId: Please select an item in the list."
+  ],
+  "storefront": true
+}

@@ -1,0 +1,192 @@
+[
+  {
+    "step": "POS: quick-add customer \"UI-AUDIT Customer\"",
+    "url": "/pos",
+    "messages": [],
+    "http": [
+      "401 POST /api/auth/refresh "
+    ],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "",
+    "shot": "forms3-01.jpg"
+  },
+  {
+    "step": "POS: Lifecycle Tea x2, read screen totals",
+    "url": "/pos",
+    "messages": [],
+    "http": [],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "",
+    "shot": "forms3-02.jpg"
+  },
+  {
+    "step": "POS: pay cash 500, email ui-audit-walkin@example.test",
+    "url": "/pos",
+    "messages": [],
+    "http": [],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "",
+    "shot": "forms3-03.jpg"
+  },
+  {
+    "step": "Receipt: Download PDF",
+    "url": "/pos",
+    "messages": [],
+    "http": [],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "",
+    "shot": "forms3-04.jpg"
+  },
+  {
+    "step": "Receipt: resend to typed address",
+    "url": "/pos",
+    "messages": [
+      "The receipt will be emailed to ui-audit-resend@example.test."
+    ],
+    "http": [],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "",
+    "shot": "forms3-05.jpg"
+  },
+  {
+    "step": "Receipt: close",
+    "url": "/pos",
+    "messages": [],
+    "http": [],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "",
+    "shot": "forms3-06.jpg"
+  },
+  {
+    "step": "POS: Inclusive Soap x1 (screen vs saved)",
+    "url": "/pos",
+    "messages": [],
+    "http": [],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "",
+    "shot": "forms3-07.jpg"
+  },
+  {
+    "step": "POS: T-Shirt (which size?)",
+    "url": "/pos",
+    "messages": [],
+    "http": [],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "",
+    "shot": "forms3-08.jpg"
+  },
+  {
+    "step": "Add Sale: Lifecycle Tea x1, paid 100, shipping 40, UI-AUDIT Customer",
+    "url": "/sales",
+    "messages": [],
+    "http": [],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "",
+    "shot": "forms3-09.jpg"
+  },
+  {
+    "step": "Return: 1 unit of the POS sale",
+    "url": "/sales-return",
+    "messages": [],
+    "http": [],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "",
+    "shot": "forms3-10.jpg"
+  },
+  {
+    "step": "Return: too many (3 of a sale with 1 left)",
+    "url": "/add-sales-return",
+    "messages": [
+      "Only 1 of UI-AUDIT Lifecycle Tea can still be returned."
+    ],
+    "http": [],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "",
+    "shot": "forms3-11.jpg"
+  },
+  {
+    "step": "Return without a sale: Inclusive Soap x1 at 50",
+    "url": "/sales-return",
+    "messages": [],
+    "http": [],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "",
+    "shot": "forms3-12.jpg"
+  },
+  {
+    "step": "Stock adjustment: Lifecycle Tea remove 1, Damaged",
+    "url": "/stock-adjustments",
+    "messages": [],
+    "http": [],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "",
+    "shot": "forms3-13.jpg"
+  },
+  {
+    "step": "Stock adjustment: remove 999 (too many)",
+    "url": "/stock-adjustments",
+    "messages": [],
+    "http": [],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "",
+    "shot": "forms3-14.jpg"
+  },
+  {
+    "step": "Inventory edit: UIA-TS-L set to 6",
+    "url": "/inventory",
+    "messages": [],
+    "http": [],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "",
+    "shot": "forms3-15.jpg"
+  },
+  {
+    "step": "Product edit: Inclusive Soap price 118 -> 120",
+    "url": "/products",
+    "messages": [],
+    "http": [],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "locator.fill: Timeout 30000ms exceeded.",
+    "shot": "forms3-16.jpg"
+  },
+  {
+    "step": "Product delete: Inclusive Soap (has stock, expect refusal)",
+    "url": "/products",
+    "messages": [],
+    "http": [],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "locator.click: Timeout 30000ms exceeded.",
+    "shot": "forms3-17.jpg"
+  },
+  {
+    "step": "Purchase Pending: UI-AUDIT T-Shirt (sizes)",
+    "url": "/add-purchase",
+    "messages": [
+      "Choose a variant for this product. ×"
+    ],
+    "http": [
+      "400 POST /api/purchases {\"error\":\"Choose a variant for this product.\",\"code\":\"VALIDATION_FAILED\",\"fields\":{\"purchaseItems[0].variantId\":\"Choose a variant for this product.\"}}\n"
+    ],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "",
+    "shot": "forms3-18.jpg"
+  }
+]

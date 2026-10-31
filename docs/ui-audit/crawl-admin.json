@@ -1,0 +1,146 @@
+[
+  {
+    "width": 360,
+    "page": "sign-in (real)",
+    "console": [
+      "Failed to load resource: the server responded with a status of 401 ()"
+    ],
+    "csp": []
+  },
+  {
+    "width": 360,
+    "page": "tenants",
+    "hscroll": false,
+    "console": [],
+    "pageerrors": [],
+    "csp": []
+  },
+  {
+    "width": 360,
+    "page": "tenant",
+    "hscroll": false,
+    "console": [],
+    "pageerrors": [],
+    "csp": []
+  },
+  {
+    "width": 360,
+    "page": "plans",
+    "hscroll": false,
+    "console": [],
+    "pageerrors": [],
+    "csp": []
+  },
+  {
+    "width": 360,
+    "page": "billing",
+    "hscroll": false,
+    "console": [],
+    "pageerrors": [],
+    "csp": []
+  },
+  {
+    "width": 360,
+    "page": "audit",
+    "hscroll": false,
+    "console": [],
+    "pageerrors": [],
+    "csp": []
+  },
+  {
+    "width": 768,
+    "page": "sign-in (real)",
+    "console": [
+      "Failed to load resource: the server responded with a status of 401 ()"
+    ],
+    "csp": []
+  },
+  {
+    "width": 768,
+    "page": "tenants",
+    "hscroll": false,
+    "console": [],
+    "pageerrors": [],
+    "csp": []
+  },
+  {
+    "width": 768,
+    "page": "tenant",
+    "hscroll": false,
+    "console": [],
+    "pageerrors": [],
+    "csp": []
+  },
+  {
+    "width": 768,
+    "page": "plans",
+    "hscroll": false,
+    "console": [],
+    "pageerrors": [],
+    "csp": []
+  },
+  {
+    "width": 768,
+    "page": "billing",
+    "hscroll": false,
+    "console": [],
+    "pageerrors": [],
+    "csp": []
+  },
+  {
+    "width": 768,
+    "page": "audit",
+    "hscroll": false,
+    "console": [],
+    "pageerrors": [],
+    "csp": []
+  },
+  {
+    "width": 1280,
+    "page": "sign-in (real)",
+    "console": [
+      "Failed to load resource: the server responded with a status of 401 ()"
+    ],
+    "csp": []
+  },
+  {
+    "width": 1280,
+    "page": "tenants",
+    "hscroll": false,
+    "console": [],
+    "pageerrors": [],
+    "csp": []
+  },
+  {
+    "width": 1280,
+    "page": "tenant",
+    "hscroll": false,
+    "console": [],
+    "pageerrors": [],
+    "csp": []
+  },
+  {
+    "width": 1280,
+    "page": "plans",
+    "hscroll": false,
+    "console": [],
+    "pageerrors": [],
+    "csp": []
+  },
+  {
+    "width": 1280,
+    "page": "billing",
+    "hscroll": false,
+    "console": [],
+    "pageerrors": [],
+    "csp": []
+  },
+  {
+    "width": 1280,
+    "page": "audit",
+    "hscroll": false,
+    "console": [],
+    "pageerrors": [],
+    "csp": []
+  }
+]
