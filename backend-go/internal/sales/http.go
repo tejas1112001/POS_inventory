@@ -712,6 +712,7 @@ func (a *API) Mount(rt *rbac.Router) {
 	rt.Handle(http.MethodPost, "/sales/returns", req("sales_returns", "create"), a.createReturn)
 	rt.Handle(http.MethodGet, "/sales/{id}", req("sales", "view"), a.get)
 	rt.Handle(http.MethodPost, "/sales", req("sales", "create"), a.create)
+	rt.Handle(http.MethodPost, "/sales/quote", req("sales", "create"), a.quote)
 	rt.Handle(http.MethodPut, "/sales/{id}", req("sales", "edit"), a.update)
 	rt.Handle(http.MethodDelete, "/sales/{id}", req("sales", "delete"), a.void)
 	rt.Handle(http.MethodGet, "/invoices", req("invoices", "view"), a.invoices)

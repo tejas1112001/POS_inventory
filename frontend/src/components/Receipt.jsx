@@ -256,7 +256,7 @@ function ReceiptBody({ sale, store, settings, businessName, taxLabel, logoUrl, n
 // Receipt shows a sale as the server stored it (totals, tax and lines are
 // the server's) in the same layout as the PDF. It prints on A4 or thermal
 // paper, downloads the PDF and emails it again. Pass the sale, or its ID.
-export default function Receipt({ isOpen = true, onClose, sale: given, saleId, store }) {
+export default function Receipt({ isOpen = true, onClose, sale: given, saleId, store, autoPrint = false }) {
   const { hasPermission } = usePermission();
   const { tenant } = usePos();
   const { settings } = useShopSettings();
@@ -299,6 +299,7 @@ export default function Receipt({ isOpen = true, onClose, sale: given, saleId, s
   }, [given, saleId]);
 
   const paperDef = useMemo(() => PAPERS.find((p) => p.value === paper) || PAPERS[0], [paper]);
+  const printed = useRef(false);
 
   const canDownload = hasPermission('receipts', 'view');
   const canResend = hasPermission('receipts', 'resend');
@@ -323,6 +324,21 @@ export default function Receipt({ isOpen = true, onClose, sale: given, saleId, s
       toast.error('Printing did not start. Use Download PDF and print the file.');
     }
   };
+
+  // autoPrint: print once, as soon as the receipt (and the logo) are on screen.
+  const [logoWaitOver, setLogoWaitOver] = useState(false);
+  useEffect(() => {
+    if (!autoPrint) return;
+    const t = setTimeout(() => setLogoWaitOver(true), 1500); // a logo that fails must not block printing
+    return () => clearTimeout(t);
+  }, [autoPrint]);
+  useEffect(() => {
+    if (!autoPrint || printed.current || !sale || !bodyRef.current) return;
+    if (settings?.logo && !logoUrl && !logoWaitOver) return;
+    printed.current = true;
+    print();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- print reads the current paper
+  }, [autoPrint, sale, logoUrl, settings, logoWaitOver]);
 
   const download = async () => {
     setBusy('pdf');

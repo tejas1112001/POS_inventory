@@ -119,3 +119,17 @@ These change only what the menu shows and which page shows "no access"; the serv
 - `usePagedList` accepts an endpoint that already has a query string.
 
 **Checked** — lint (0 errors), both builds, `go test ./...`, the whole isolation suite including the new `test/isolation/stores_page_test.go` (pickers active-only, page extras, filters, last-active rules for turn-off and delete, phone, plan count with an inactive store, cashier refused); dev stack rebuilt. No browser tests (by request).
+
+## S6 – New checkout (behind a per-shop setting)
+
+**Changed**
+- Server:
+  - Migration `tenant/00011_new_checkout.sql`: `settings.new_checkout boolean NOT NULL DEFAULT false` (stored data: approved as "per-shop checkout setting"). `GET/PUT /api/settings` read and write `newCheckout` (settings:edit to change; cashiers can read it).
+  - `POST /api/sales/quote` (sales:create, read-only transaction): the checkout's own validation and pricing (`validate`, `checkParties`, `resolve`, `price`, `pricing.Compute`) without idempotency, stock locks or writes. Returns subtotal, discount, tax, shipping, total and per line unit price, discount share, tax rate, tax, CGST/SGST/IGST, total and units available at the store. Refuses what the sale refuses (inactive store or product, changed price → 409 PRICE_CHANGED, discount permission and cap). Stock is reported, not checked.
+  - Tests: `test/isolation/checkout_quote_test.go` (quote total equals the sale's, no stock change, stock reported, PRICE_CHANGED for a cashier, field errors, cashier allowed, other tenant 401; setting default, owner switch, cashier read-only). The route is covered by the security matrix automatically.
+- Frontend:
+  - `/pos` shows the new checkout (`pages/checkout/`) when the setting is on, else the old POS. Settings → Shop → Checkout has the switch.
+  - New checkout: server totals before PAY (checked 300 ms after the cart settles; PAY waits for it), keyboard shortcuts (F2, F4, F8, F10/Ctrl+Enter, ↑/↓, +/−, Delete, Esc, ?) with a help window, tap-to-type quantity, selected line, flash on add, favourites (per browser), "N in cart" on tiles, customer picker with search and add, payment sheet that stays open on failure and retries with the same key, cash quick notes ₹10–₹2,000 and a keypad on tall touch screens, sale-complete screen (change due, Print, Receipt, New sale with optional 5 s auto start), locks renewed every minute and released on page hide (`keepalive`).
+  - Shared: `components/pos/catalog.jsx` (tiles, pills, "Choose option") and `components/pos/stock.js` (stock and lock helpers), used by both screens. `Receipt` has `autoPrint`. `api` accepts `keepalive`.
+
+**Checked** — lint (0 errors), both builds, `go test ./...`, integration: isolation suite and `internal/...` (provisioning timed out once when every suite ran together; passes alone), dev stack rebuilt, dev shops migrated to version 11 and `migrate drift` clean. No browser tests (by request).

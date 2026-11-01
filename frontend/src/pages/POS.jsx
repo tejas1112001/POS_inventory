@@ -15,84 +15,10 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ProductImage } from '@/components/shared/product-image';
+import { CategoryPill, ProductTile, VariantSheet } from '@/components/pos/catalog';
+import { lockedByOther as isLockedByOther, productStock, variantLabel, variantStock, variantsOf } from '@/components/pos/stock';
 import { formatCurrency } from '@/lib/format';
 import { cn } from '@/lib/utils';
-
-const LOCK_MS = 2 * 60 * 1000;
-const LOW = 5; // "3 left" from this number down
-
-// Stock of a variant in the chosen store (the POS list only carries that store's row).
-const variantStock = (v) => Number(v?.Inventories?.[0]?.qty ?? 0);
-const variantsOf = (p) => p?.ProductVariants || [];
-const productStock = (p) => variantsOf(p).reduce((n, v) => n + Math.max(0, variantStock(v)), 0);
-
-// variantLabel: "Size: M, Colour: Red", or the SKU when a variant has no attributes.
-function variantLabel(v) {
-  const attrs = v?.attributes && typeof v.attributes === 'object' ? Object.entries(v.attributes).filter(([, x]) => x !== '' && x != null) : [];
-  return attrs.length ? attrs.map(([k, x]) => `${k}: ${x}`).join(', ') : v?.sku || `Option ${v?.id}`;
-}
-
-function StockBadge({ qty }) {
-  if (qty <= 0) return <span className="rounded bg-danger-bg px-1.5 py-0.5 text-[11px] font-medium text-danger-fg">Out of stock</span>;
-  if (qty <= LOW) return <span className="rounded bg-warning-bg px-1.5 py-0.5 text-[11px] font-medium text-warning-fg">{qty} left</span>;
-  return null;
-}
-
-function CategoryPill({ active, onClick, children }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={cn(
-        'min-h-9 shrink-0 rounded-full px-4 text-sm font-medium transition-colors',
-        active ? 'bg-primary text-primary-foreground' : 'bg-card text-foreground ring-1 ring-border hover:bg-muted'
-      )}
-    >
-      {children}
-    </button>
-  );
-}
-
-function ProductTile({ product, lockedByOther, onPick }) {
-  const variants = variantsOf(product);
-  const stock = productStock(product);
-  const out = stock <= 0;
-  const disabled = lockedByOther || out;
-  return (
-    <button
-      type="button"
-      onClick={() => !disabled && onPick(product)}
-      disabled={disabled}
-      aria-label={`${product.name}, ${formatCurrency(product.price)}${variants.length > 1 ? `, ${variants.length} options` : ''}${out ? ', out of stock' : ''}${lockedByOther ? ', in use at another till' : ''}`}
-      className="group flex flex-col overflow-hidden rounded-lg border bg-card text-left shadow-xs transition hover:border-primary/40 hover:shadow-sm focus-visible:outline-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-55"
-    >
-      <div className="relative aspect-[4/3] w-full bg-muted">
-        <ProductImage name={product.name} src={product.image} className="!h-full !w-full rounded-none text-lg" size={0} />
-        {variants.length > 1 && (
-          <span className="absolute top-1.5 left-1.5 rounded bg-white/95 px-1.5 py-0.5 text-[11px] font-medium text-slate-700 shadow-xs">
-            {variants.length} options
-          </span>
-        )}
-        {lockedByOther && (
-          <span className="absolute inset-0 flex items-center justify-center bg-white/70">
-            <span className="inline-flex items-center gap-1 rounded bg-slate-800 px-2 py-1 text-xs font-medium text-white">
-              <Lock className="size-3" aria-hidden="true" /> In use
-            </span>
-          </span>
-        )}
-      </div>
-      <div className="flex flex-1 flex-col gap-1 p-2">
-        <p className="line-clamp-2 min-h-[2.5em] text-sm leading-tight font-medium text-foreground">{product.name}</p>
-        {product.category && <p className="truncate text-xs text-muted-foreground">{product.category}</p>}
-        <div className="mt-auto flex items-center justify-between gap-1 pt-1">
-          <span className="font-semibold tabular-nums text-foreground">{formatCurrency(product.price)}</span>
-          <StockBadge qty={stock} />
-        </div>
-      </div>
-    </button>
-  );
-}
 
 export default function POS() {
   const { currentUser } = usePos();
@@ -264,10 +190,7 @@ export default function POS() {
     });
   }, [products, activeCategory, searchTerm]);
 
-  const lockedByOther = useCallback(
-    (p) => p.isLocked && p.locked_by != null && String(p.locked_by) !== String(currentUser?.id) && Date.now() - new Date(p.lockedAt) < LOCK_MS,
-    [currentUser]
-  );
+  const lockedByOther = useCallback((p) => isLockedByOther(p, currentUser?.id), [currentUser]);
 
   const changeQuantity = (key, delta) => {
     setError(null);
@@ -618,48 +541,7 @@ export default function POS() {
       </Dialog>
 
       {/* Choose option (products with several variants) */}
-      <Dialog open={!!choosing} onOpenChange={(o) => !o && setChoosing(null)}>
-        {choosing && (
-          <DialogContent sheet className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle>Choose option</DialogTitle>
-              <DialogDescription>{choosing.name}</DialogDescription>
-            </DialogHeader>
-            <ul className="grid gap-2" aria-label="Options">
-              {variantsOf(choosing).map((v) => {
-                const stock = variantStock(v);
-                const inCart = lines.find((l) => l.variantId === v.id)?.quantity || 0;
-                const full = stock <= 0 || inCart >= stock;
-                return (
-                  <li key={v.id}>
-                    <button
-                      type="button"
-                      disabled={full}
-                      onClick={() => {
-                        addVariant(choosing, v);
-                        setChoosing(null);
-                      }}
-                      className="flex min-h-14 w-full items-center justify-between gap-3 rounded-lg border bg-card px-3 py-2 text-left hover:border-primary hover:bg-accent disabled:cursor-not-allowed disabled:opacity-55"
-                    >
-                      <span className="min-w-0">
-                        <span className="block truncate font-medium">{variantLabel(v)}</span>
-                        <span className="block truncate text-xs text-muted-foreground">
-                          {v.sku}
-                          {inCart ? ` · ${inCart} in cart` : ''}
-                        </span>
-                      </span>
-                      <span className="flex shrink-0 flex-col items-end gap-1">
-                        <span className="font-semibold tabular-nums">{formatCurrency(v.price)}</span>
-                        {stock <= 0 ? <StockBadge qty={0} /> : <span className="text-xs text-muted-foreground tabular-nums">{stock} in stock</span>}
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          </DialogContent>
-        )}
-      </Dialog>
+      <VariantSheet product={choosing} lines={lines} onPick={addVariant} onClose={() => setChoosing(null)} />
 
       {showCustomerForm && (
         <CustomerForm

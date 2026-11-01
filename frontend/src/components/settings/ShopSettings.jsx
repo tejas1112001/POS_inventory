@@ -38,7 +38,7 @@ const MAX_LOGO = 2 * 1024 * 1024;
 const FIELDS = [
   'businessName', 'legalName', 'address', 'phone', 'email', 'currency', 'locale', 'timezone', 'taxLabel',
   'taxRegistrationNo', 'taxSplit', 'pricesIncludeTax', 'maxDiscountPct', 'invoicePrefix', 'receiptHeader', 'receiptFooter',
-  'homePage', 'shopStoreId',
+  'homePage', 'shopStoreId', 'newCheckout',
 ];
 
 function timeZones(current) {
@@ -57,7 +57,7 @@ function withCurrent(values, current) {
 
 function fromSettings(s) {
   const out = {};
-  for (const k of FIELDS) out[k] = s?.[k] ?? (k === 'pricesIncludeTax' ? false : '');
+  for (const k of FIELDS) out[k] = s?.[k] ?? (k === 'pricesIncludeTax' || k === 'newCheckout' ? false : '');
   out.maxDiscountPct = s?.maxDiscountPct != null ? String(s.maxDiscountPct) : '';
   out.homePage = s?.homePage || 'login';
   out.shopStoreId = s?.shopStoreId != null ? String(s.shopStoreId) : '';
@@ -235,6 +235,17 @@ export default function ShopSettings({ canEdit }) {
           <TextArea id="receiptHeader" label="Header" hint="Shown above the shop name." value={form.receiptHeader} onChange={set('receiptHeader')} error={fields.receiptHeader} disabled={dis} maxLength={500} />
           <TextArea id="receiptFooter" label="Footer" hint="For example a return policy or a thank-you note." value={form.receiptFooter} onChange={set('receiptFooter')} error={fields.receiptFooter} disabled={dis} maxLength={500} />
         </div>
+      </SectionCard>
+
+      <SectionCard title="Checkout">
+        <CheckField
+          id="newCheckout"
+          label="Use the new checkout"
+          hint="Every till of the shop switches at once. Totals come from the server before payment, with keyboard shortcuts, favourites and a sale-complete screen. Turn it off to go back to the old screen."
+          checked={form.newCheckout}
+          onChange={set('newCheckout')}
+          disabled={dis}
+        />
       </SectionCard>
 
       <SectionCard title="Home page">

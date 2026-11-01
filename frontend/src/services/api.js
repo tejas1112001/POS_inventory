@@ -84,8 +84,9 @@ function announce(error) {
 
 // request sends one API call. Options: body (JSON), formData, headers,
 // quiet (no global error toast: the caller shows the error), raw (return
-// the Response, for downloads).
-async function request(method, endpoint, { body, formData, headers = {}, quiet = false, raw = false } = {}, retried = false) {
+// the Response, for downloads), keepalive (the call may outlive the page:
+// releasing checkout locks when the tab closes).
+async function request(method, endpoint, { body, formData, headers = {}, quiet = false, raw = false, keepalive = false } = {}, retried = false) {
   if (getAccessToken() && tokenSecondsLeft() < 30 && !isAuthPath(endpoint)) {
     await refreshAccessToken();
   }
@@ -102,7 +103,7 @@ async function request(method, endpoint, { body, formData, headers = {}, quiet =
 
   let response;
   try {
-    response = await fetch(`${API_BASE_URL}${endpoint}`, { method, headers: h, body: payload, credentials: 'include' });
+    response = await fetch(`${API_BASE_URL}${endpoint}`, { method, headers: h, body: payload, credentials: 'include', keepalive });
   } catch {
     const err = new ApiError('Cannot reach the server. Check your connection and try again.', { code: 'NETWORK' });
     if (!quiet) announce(err);

@@ -16,7 +16,7 @@ import Sales from './pages/Sales';
 import AddSales from './pages/AddSales';
 import Purchases from './pages/Purchases';
 import AddPurchase from './pages/AddPurchase';
-import POS from './pages/POS';
+import CheckoutEntry from './pages/checkout/CheckoutEntry';
 import Categories from './pages/Categories';
 import Brands from './pages/Brands';
 import Units from './pages/Units';
@@ -100,7 +100,7 @@ function AppRoutes() {
       <Route path="/add-supplier" element={<ProtectedLayout module="suppliers" action="create"><Suppliers startNew /></ProtectedLayout>} />
       <Route path="/sales-return" element={<ProtectedLayout module="sales_returns" action="view"><SalesReturn /></ProtectedLayout>} />
       <Route path="/add-sales-return" element={<ProtectedLayout module="sales_returns" action="create"><AddSalesReturn /></ProtectedLayout>} />
-      <Route path="/pos" element={<ProtectedLayout fullBleed module="pos" action="view"><POS /></ProtectedLayout>} />
+      <Route path="/pos" element={<ProtectedLayout fullBleed module="pos" action="view"><CheckoutEntry /></ProtectedLayout>} />
       <Route path="/sales" element={<ProtectedLayout module="sales" action="view"><Sales /></ProtectedLayout>} />
       <Route path="/add-sale" element={<ProtectedLayout module="sales" action="create"><AddSales /></ProtectedLayout>} />
       <Route path="/sales-report" element={<ProtectedLayout module="reports" action="view"><SalesReport /></ProtectedLayout>} />
