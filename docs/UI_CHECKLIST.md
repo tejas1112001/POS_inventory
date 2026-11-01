@@ -167,3 +167,13 @@ How to check (console, as owner-console@posdev.test):
 Known problems:
 - Another server instance sees a change up to 30 seconds later (cache); the console's own instance at once.
 - Usage counts are up to 15 minutes old.
+
+## Phase 3 changes you can see
+
+### Item 7 – dependency scan fixes
+1. **Reports → Customers** and **Reports → Customer dues**: the "Generate PDF" button is now **Export to Excel** and downloads an `.xlsx` file (the client-side PDF export used `jspdf`, which had a critical vulnerability; plan question Q15 already chose Excel only).
+2. Lists that had the PDF and Excel icons (old list pages, e.g. Invoices & dues, Roles) now show only the **Excel** icon; the file opens in Excel/LibreOffice with one column per field.
+3. Receipts are unchanged: their PDF comes from the server.
+
+Known problems:
+- None found; Excel files are still built in the browser (write-excel-file v4).

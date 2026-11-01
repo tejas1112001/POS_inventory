@@ -11,7 +11,7 @@ import ListControlButtons from '../ListComponents/ListControlButtons';
 import DateRangePicker from '../ListComponents/DateRangePicker';
 import SelectField from '../ListComponents/SelectField';
 import GenerateButton from '../ListComponents/GenerateButton';
-import { exportToPDF } from '../ListComponents/exportFunctions';
+import { exportToExcel } from '../ListComponents/exportFunctions';
 
 export default function CustomerDueReportList({ reports }) {
   const [search, setSearch] = useState('');
@@ -21,7 +21,7 @@ export default function CustomerDueReportList({ reports }) {
   const [paymentMethodFilter, setPaymentMethodFilter] = useState('All');
   const [paymentStatusFilter, setPaymentStatusFilter] = useState('All');
   const handleGenerate = () => {
-    exportToPDF(filteredData, 'customer_due_report');
+    void exportToExcel(filteredData, 'customer_due_report');
   };
   
   // Customer options
@@ -195,7 +195,7 @@ export default function CustomerDueReportList({ reports }) {
             placeholder="All"
             colClass="md:col-span-2"
           />
-          <GenerateButton onClick={handleGenerate} label="Generate PDF" />
+          <GenerateButton onClick={handleGenerate} label="Export to Excel" />
         </div>
       }
       table={table}

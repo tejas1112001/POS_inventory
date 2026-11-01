@@ -7,7 +7,7 @@ import {
 } from '@tanstack/react-table';
 import { ChevronUpIcon } from '@heroicons/react/24/outline';
 import { RefreshCw as LoopIcon } from 'lucide-react';
-import { exportToPDF, exportToExcel } from './exportFunctions';
+import { exportToExcel } from './exportFunctions';
 
 
 
@@ -37,11 +37,6 @@ export const useUI = ({
   });
 
   const controlButtons = [
-    {
-      icon: <img src="/assets/icons/pdf.svg" alt="pdf" className="w-5 h-5" />,
-      onClick: () => exportToPDF(filteredData, moduleName),
-      title: 'Export to PDF',
-    },
     {
       icon: <img src="/assets/icons/excel.svg" alt="excel" className="w-5 h-5" />,
       onClick: () => { void exportToExcel(filteredData, moduleName); },
