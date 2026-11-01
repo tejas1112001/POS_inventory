@@ -124,7 +124,7 @@ func (a *API) visible(r *http.Request, tx tenancy.TenantTx) (store, error) {
 	if hiddenStatuses[t.Status] {
 		return store{}, apperr.NotFound()
 	}
-	ok, err := a.d.Plans.Has(r.Context(), t.PlanID, plans.FeaturePublicShop)
+	ok, err := a.d.Plans.HasFor(r.Context(), t, plans.FeaturePublicShop)
 	if err != nil {
 		return store{}, err
 	}
@@ -262,7 +262,7 @@ func (a *API) home(w http.ResponseWriter, r *http.Request) {
 	t, _ := tenancy.TenantFrom(ctx)
 	out := Home{HomePage: settings.HomeLogin}
 	if !hiddenStatuses[t.Status] {
-		ok, err := a.d.Plans.Has(ctx, t.PlanID, plans.FeaturePublicShop)
+		ok, err := a.d.Plans.HasFor(ctx, t, plans.FeaturePublicShop)
 		if err == nil && ok {
 			err = a.d.Sessions.InTenantTx(ctx, t, tenancy.TxOptions{Access: tenancy.ReadOnly}, func(tx tenancy.TenantTx) error {
 				var page string
@@ -306,7 +306,7 @@ const qShops = `SELECT name, slug::text FROM stores
 func (a *API) shops(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	t, _ := tenancy.TenantFrom(ctx)
-	ok, err := a.d.Plans.Has(ctx, t.PlanID, plans.FeaturePublicShop)
+	ok, err := a.d.Plans.HasFor(ctx, t, plans.FeaturePublicShop)
 	if err == nil && (!ok || hiddenStatuses[t.Status]) {
 		err = apperr.NotFound()
 	}

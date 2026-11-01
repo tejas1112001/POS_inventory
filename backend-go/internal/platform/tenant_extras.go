@@ -73,6 +73,18 @@ type Overview struct {
 	Notices           []Notice        `json:"notices"`
 	ContactCount      int             `json:"contactCount"`
 	NoteCount         int             `json:"noteCount"`
+	Usage             *Usage          `json:"usage"` // nil until the worker's first snapshot
+}
+
+// Usage is the worker's snapshot of a tenant (counts only).
+type Usage struct {
+	Users            int       `json:"users"`
+	Stores           int       `json:"stores"`
+	Products         int       `json:"products"`
+	ReceiptsSent7d   int       `json:"receiptsSent7d"`
+	ReceiptsFailed7d int       `json:"receiptsFailed7d"`
+	ReceiptsWaiting  int       `json:"receiptsWaiting"`
+	TakenAt          time.Time `json:"takenAt"`
 }
 
 const (
@@ -317,8 +329,20 @@ func (s *Service) TenantOverview(ctx context.Context, id string) (Overview, erro
 		if err := rows.Err(); err != nil {
 			return err
 		}
-		return tx.QueryRow(ctx, `SELECT (SELECT count(*) FROM platform.tenant_contacts WHERE tenant_id = $1),
-				(SELECT count(*) FROM platform.tenant_notes WHERE tenant_id = $1)`, id).Scan(&o.ContactCount, &o.NoteCount)
+		if err := tx.QueryRow(ctx, `SELECT (SELECT count(*) FROM platform.tenant_contacts WHERE tenant_id = $1),
+				(SELECT count(*) FROM platform.tenant_notes WHERE tenant_id = $1)`, id).Scan(&o.ContactCount, &o.NoteCount); err != nil {
+			return err
+		}
+		var u Usage
+		err = tx.QueryRow(ctx, `SELECT users, stores, products, receipts_sent_7d, receipts_failed_7d, receipts_waiting, taken_at
+			FROM platform.tenant_usage WHERE tenant_id = $1`, id).
+			Scan(&u.Users, &u.Stores, &u.Products, &u.ReceiptsSent7d, &u.ReceiptsFailed7d, &u.ReceiptsWaiting, &u.TakenAt)
+		if err == nil {
+			o.Usage = &u
+		} else if !errors.Is(err, pgx.ErrNoRows) {
+			return err
+		}
+		return nil
 	})
 	return o, err
 }

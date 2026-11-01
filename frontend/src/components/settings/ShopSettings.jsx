@@ -244,8 +244,11 @@ export default function ShopSettings({ canEdit }) {
           hint="Every till of the shop switches at once. Totals come from the server before payment, with keyboard shortcuts, favourites and a sale-complete screen. Turn it off to go back to the old screen."
           checked={form.newCheckout}
           onChange={set('newCheckout')}
-          disabled={dis}
+          disabled={dis || settings?.newCheckoutAllowed === false}
         />
+        {settings?.newCheckoutAllowed === false && (
+          <p className="mt-2 text-sm text-muted-foreground">The platform has turned the new checkout off for this shop. Contact support to use it.</p>
+        )}
       </SectionCard>
 
       <SectionCard title="Home page">

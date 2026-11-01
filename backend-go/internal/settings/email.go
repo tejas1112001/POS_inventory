@@ -216,7 +216,7 @@ func (a *API) putEmail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	t, p := tenant(r), principal(r)
-	limits, err := a.d.Plans.For(r.Context(), t.PlanID)
+	limits, err := a.d.Plans.LimitsFor(r.Context(), t)
 	if err != nil {
 		httpx.WriteError(w, r, err)
 		return

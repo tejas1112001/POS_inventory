@@ -60,6 +60,12 @@ type Config struct {
 	// ExportQueued starts the job of a newly queued export (optional: the
 	// worker's export sweep finds queued exports too).
 	ExportQueued func(ctx context.Context, exportID uuid.UUID) error
+	// InboxEmail receives a notice for every override change (UI S9);
+	// empty: no notice.
+	InboxEmail string
+	// OverridesChanged lets this instance forget its cached overrides of a
+	// tenant at once (other instances within 30 seconds).
+	OverridesChanged func(tenantID string)
 }
 
 // Service implements the platform API.

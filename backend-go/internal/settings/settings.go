@@ -174,7 +174,8 @@ type JSON struct {
 	DefaultCustomerID *int64          `json:"defaultCustomerId"`
 	HomePage          string          `json:"homePage"`
 	ShopStoreID       *int64          `json:"shopStoreId"`
-	NewCheckout       bool            `json:"newCheckout"`
+	NewCheckout       bool            `json:"newCheckout"`        // the shop's choice, and allowed (below)
+	NewCheckoutOK     bool            `json:"newCheckoutAllowed"` // false: the platform turned the new checkout off for this shop
 	UpdatedAt         time.Time       `json:"updatedAt"`
 }
 
@@ -198,7 +199,16 @@ func (a *API) get(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, toJSON(b))
+	out := toJSON(b)
+	// A platform flag can turn the new checkout off for this shop (UI S9).
+	ok, err := a.d.Plans.HasFor(r.Context(), tenant(r), plans.FeatureNewCheckout)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	out.NewCheckoutOK = ok
+	out.NewCheckout = out.NewCheckout && ok
+	httpx.WriteJSON(w, http.StatusOK, out)
 }
 
 // ------------------------------------------------------------------ PUT

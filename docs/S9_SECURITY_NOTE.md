@@ -1,6 +1,6 @@
 # S9 security note: feature flags, limit overrides and shop usage in the console
 
-Status: **waiting for approval**. Nothing in this note is built yet. S9 part 1 (console layout, tenant list sort and saved views, contacts, notes, health card) is done and uses platform data only.
+Status: **approved 2026-11-01 (all five decisions, plus an "expiring soon" warning 7 days before the end) and built in S9 part 2.**
 
 ## 1. What is proposed
 

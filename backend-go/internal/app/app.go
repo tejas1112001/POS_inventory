@@ -108,6 +108,7 @@ type App struct {
 	catalog  *catalog.API
 	worker   *worker.Worker
 	billing  *billing.Service
+	plans    *plans.Service // limit and feature checks; the console clears its override cache
 }
 
 // New builds the app. It does not open network listeners.
@@ -318,6 +319,7 @@ func (a *App) tenantAPI(cfg *config.Config, log *slog.Logger, network httpx.Netw
 		PublicScheme: cfg.PublicScheme, PublicPort: cfg.PublicPort, BaseDomain: cfg.BaseDomain, Log: log,
 	})
 	planSvc := plans.NewService(a.sessions)
+	a.plans = planSvc
 	fileSvc := files.NewService(storage, a.sessions, planSvc, log)
 	productAPI := products.New(products.Deps{Sessions: a.sessions, Files: fileSvc, Plans: planSvc, MaxRows: cfg.MaxUnpagedRows})
 	purchaseAPI := purchases.New(purchases.Deps{Sessions: a.sessions, MaxRows: cfg.MaxUnpagedRows})
@@ -431,6 +433,12 @@ func (a *App) platformAPI(cfg *config.Config, log *slog.Logger, network httpx.Ne
 		Hasher:   security.NewHasher(security.PlatformArgon2, 4),
 		Envelope: env, Signer: signer, Sessions: a.sessions, Billing: a.billing,
 		ExportsEnabled: cfg.ExportsEnabled(),
+		InboxEmail:     cfg.ContactEmail,
+		OverridesChanged: func(tenantID string) {
+			if a.plans != nil {
+				a.plans.Forget(tenantID)
+			}
+		},
 		ExportQueued: func(ctx context.Context, id uuid.UUID) error {
 			if a.worker == nil {
 				return errors.New("no job runner")

@@ -36,6 +36,9 @@ type TenantView struct {
 	CreatedAt      time.Time  `json:"createdAt"`
 	Subscription   *SubView   `json:"subscription,omitempty"`
 	Provisioning   *ProvView  `json:"provisioning,omitempty"`
+	// Active overrides (UI S9): how many, and whether one ends within 7 days.
+	ActiveOverrides       int  `json:"activeOverrides,omitempty"`
+	OverridesExpiringSoon bool `json:"overridesExpiringSoon,omitempty"`
 }
 
 // SubView summarizes the subscription.
@@ -68,15 +71,18 @@ func scanTenant(row pgx.Row) (TenantView, error) {
 type ListFilter struct {
 	Status string
 	Q      string
-	Sort   string // a key of tenantSorts; anything else is newest first
-	Limit  int
-	Offset int
+	Sort   string // newest, oldest, name, activity, storage; anything else is newest
+	// Overrides keeps only tenants with an active override (UI S9).
+	Overrides bool
+	Limit     int
+	Offset    int
 }
 
 // The list orders the console offers (UI S9): one constant query each.
 const (
 	qTenantList = `SELECT ` + qTenantCols + ` FROM platform.tenants t LEFT JOIN platform.plans p ON p.id = t.plan_id
-			WHERE ($1 = '' OR t.status = $1) AND ($2 = '' OR lower(t.slug::text) LIKE $2 OR lower(t.name) LIKE $2 OR lower(t.owner_email::text) LIKE $2)`
+			WHERE ($1 = '' OR t.status = $1) AND ($2 = '' OR lower(t.slug::text) LIKE $2 OR lower(t.name) LIKE $2 OR lower(t.owner_email::text) LIKE $2)
+			AND (NOT $5 OR EXISTS (SELECT 1 FROM platform.tenant_overrides o WHERE o.tenant_id = t.id AND o.revoked_at IS NULL AND o.expires_at > now()))`
 	qTenantsNewest   = qTenantList + ` ORDER BY t.created_at DESC, t.id LIMIT $3 OFFSET $4`
 	qTenantsOldest   = qTenantList + ` ORDER BY t.created_at ASC, t.id LIMIT $3 OFFSET $4`
 	qTenantsName     = qTenantList + ` ORDER BY lower(t.name), t.id LIMIT $3 OFFSET $4`
@@ -117,11 +123,12 @@ func (s *Service) ListTenants(ctx context.Context, f ListFilter) ([]TenantView, 
 	)
 	err := s.ro(ctx, func(tx tenancy.PlatformTx) error {
 		if err := tx.QueryRow(ctx, `SELECT count(*) FROM platform.tenants t
-			WHERE ($1 = '' OR t.status = $1) AND ($2 = '' OR lower(t.slug::text) LIKE $2 OR lower(t.name) LIKE $2 OR lower(t.owner_email::text) LIKE $2)`,
-			f.Status, like).Scan(&total); err != nil {
+			WHERE ($1 = '' OR t.status = $1) AND ($2 = '' OR lower(t.slug::text) LIKE $2 OR lower(t.name) LIKE $2 OR lower(t.owner_email::text) LIKE $2)
+			AND (NOT $3 OR EXISTS (SELECT 1 FROM platform.tenant_overrides o WHERE o.tenant_id = t.id AND o.revoked_at IS NULL AND o.expires_at > now()))`,
+			f.Status, like, f.Overrides).Scan(&total); err != nil {
 			return err
 		}
-		rows, err := queryTenants(ctx, tx, f.Sort, f.Status, like, f.Limit, f.Offset)
+		rows, err := queryTenants(ctx, tx, f.Sort, f.Status, like, f.Limit, f.Offset, f.Overrides)
 		if err != nil {
 			return err
 		}
@@ -133,7 +140,11 @@ func (s *Service) ListTenants(ctx context.Context, f ListFilter) ([]TenantView, 
 			}
 			out = append(out, v)
 		}
-		return rows.Err()
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		rows.Close()
+		return overrideCounts(ctx, tx, out, s.now())
 	})
 	return out, total, err
 }
@@ -174,6 +185,11 @@ func (s *Service) GetTenant(ctx context.Context, id string) (TenantView, error) 
 		} else if !errors.Is(err, pgx.ErrNoRows) {
 			return err
 		}
+		one := []TenantView{v}
+		if err := overrideCounts(ctx, tx, one, s.now()); err != nil {
+			return err
+		}
+		v = one[0]
 		return nil
 	})
 	return v, err

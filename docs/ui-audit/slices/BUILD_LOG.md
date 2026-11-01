@@ -182,3 +182,15 @@ These change only what the menu shows and which page shows "no access"; the serv
 **Checked** — lint (0 errors), both builds, `go test ./...`, `make constsql`, isolation and platform suites; dev stack rebuilt; dev platform migrated to 00008 and tenants re-run (`--parallelism 1`). No browser tests (by request).
 
 **Stopped here** for the security note `docs/S9_SECURITY_NOTE.md` (feature flags, limit overrides, shop usage counts).
+
+## S9 (part 2) – Overrides, flags, usage snapshot
+
+**Changed**
+- Platform migration `00009_tenant_overrides_usage.sql`: `platform.tenant_overrides` (fixed keys, JSON number/boolean values, reason 10–500, expiry ≤ 366 days, one open row per key; the app role may only fill the revoke columns, once, enforced by column grants and a trigger) and `platform.tenant_usage` (counts only).
+- `plans`: `LimitsFor`, `HasFor`, `RequireFeatureFor` (plan + active overrides, 30 s cache per tenant, `Forget` after console changes). Every limit and feature check uses them: stores, users, products (incl. CSV import), storage, daily email cap (worker and settings), online shop, report exports. New gates: CSV import (`csv_import`), new checkout (`new_checkout`; settings report `newCheckoutAllowed`).
+- Console API: `GET /override-keys`, `GET /tenants/{id}/overrides` (tenants:view), `POST /tenants/{id}/overrides` and `POST …/{oid}/revoke` (new `tenants:override`, super_admin only, step-up). Bounds: whole numbers 1 to min(cap, 10 × plan). Audit rows with before/after/expiry/reason; a notice email to the platform inbox (`override_notice` template) per change. Tenant views carry `activeOverrides` and `overridesExpiringSoon` (≤ 7 days); `GET /tenants?overrides=1`.
+- Worker: `usage_snapshot` job every 15 minutes (counts in each tenant's own session, written to the platform table).
+- Console: Overrides tab, expiring-soon warnings (tenant page, tab, list), Has overrides filter (saved in views), usage on the health card. Shop: the checkout switch is disabled when the platform turned it off.
+- Tests: `internal/platform/overrides_integration_test.go` (step-up, validation and bounds, replace, revoke once, DB refuses rewrite/reopen/delete, expiring soon, list filter and counts, billing_admin/support refused, inbox notices, cache hook, audit), route matrix rows, `test/isolation/overrides_enforcement_test.go` (raised and lowered limits, expired and revoked ignored, CSV import and new checkout off, usage snapshot).
+
+**Checked** — lint (0 errors), both builds, `go test ./...`, `make constsql`, isolation and platform suites; dev stack rebuilt; dev platform migrated to 00009.

@@ -68,7 +68,7 @@ func (a *API) export(w http.ResponseWriter, r *http.Request, name string,
 		return
 	}
 	t := tenant(r)
-	if err := a.d.Plans.RequireFeature(r.Context(), t.PlanID, plans.FeatureReportsExport, "report exports"); err != nil {
+	if err := a.d.Plans.RequireFeatureFor(r.Context(), t, plans.FeatureReportsExport, "report exports"); err != nil {
 		httpx.WriteError(w, r, err)
 		return
 	}

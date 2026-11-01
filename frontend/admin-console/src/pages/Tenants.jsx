@@ -38,7 +38,7 @@ function writeViews(v) {
 export default function Tenants() {
   const { can } = useSession();
   const navigate = useNavigate();
-  const [filters, setFilters] = useState({ q: '', status: '', sort: 'newest', page: 1 });
+  const [filters, setFilters] = useState({ q: '', status: '', sort: 'newest', overrides: false, page: 1 });
   const [views, setViews] = useState(readViews);
   const [naming, setNaming] = useState(false);
   const [search, setSearch] = useState('');
@@ -54,7 +54,7 @@ export default function Tenants() {
     let active = true;
     setData((d) => ({ ...d, loading: true }));
     api
-      .get(`/tenants${query({ q: filters.q, status: filters.status, sort: filters.sort, page: filters.page, limit: 50 })}`)
+      .get(`/tenants${query({ q: filters.q, status: filters.status, sort: filters.sort, overrides: filters.overrides ? '1' : '', page: filters.page, limit: 50 })}`)
       .then((res) => active && setData({ rows: res.data || [], total: res.pagination?.total || 0, totalPages: res.pagination?.totalPages || 0, loading: false, error: '' }))
       .catch((err) => active && setData({ rows: [], total: 0, totalPages: 0, loading: false, error: err.message }));
     return () => {
@@ -88,6 +88,10 @@ export default function Tenants() {
             </option>
           ))}
         </select>
+        <label className="check">
+          <input type="checkbox" checked={filters.overrides} onChange={(e) => setFilters((f) => ({ ...f, overrides: e.target.checked, page: 1 }))} />
+          <span>Has overrides</span>
+        </label>
         <Button onClick={() => setNaming(true)}>Save view</Button>
         <span className="muted small">{data.total} tenants</span>
       </div>
@@ -100,7 +104,7 @@ export default function Tenants() {
                 className="chip-main"
                 onClick={() => {
                   setSearch(v.q || '');
-                  setFilters({ q: v.q || '', status: v.status || '', sort: v.sort || 'newest', page: 1 });
+                  setFilters({ q: v.q || '', status: v.status || '', sort: v.sort || 'newest', overrides: !!v.overrides, page: 1 });
                 }}
               >
                 {v.name}
@@ -130,7 +134,20 @@ export default function Tenants() {
         columns={[
           { key: 'name', label: 'Name', render: (r) => <strong>{r.name}</strong> },
           { key: 'slug', label: 'Subdomain', render: (r) => <span className="mono">{r.slug}</span> },
-          { key: 'status', label: 'Status', render: (r) => <StatusBadge status={r.status} /> },
+          {
+            key: 'status',
+            label: 'Status',
+            render: (r) => (
+              <span className="row">
+                <StatusBadge status={r.status} />
+                {r.overridesExpiringSoon ? (
+                  <span className="badge badge-warn">override ending soon</span>
+                ) : r.activeOverrides > 0 ? (
+                  <span className="badge badge-muted">{r.activeOverrides} override{r.activeOverrides === 1 ? '' : 's'}</span>
+                ) : null}
+              </span>
+            ),
+          },
           { key: 'plan', label: 'Plan' },
           { key: 'ownerEmail', label: 'Owner' },
           { key: 'lastActivityAt', label: 'Last activity', render: (r) => formatDateTime(r.lastActivityAt, '—'), className: 'nowrap' },
@@ -143,7 +160,7 @@ export default function Tenants() {
         <SaveView
           onClose={() => setNaming(false)}
           onSave={(name) => {
-            const next = [...views.filter((x) => x.name !== name), { name, q: filters.q, status: filters.status, sort: filters.sort }].slice(-12);
+            const next = [...views.filter((x) => x.name !== name), { name, q: filters.q, status: filters.status, sort: filters.sort, overrides: filters.overrides }].slice(-12);
             setViews(next);
             writeViews(next);
             setNaming(false);

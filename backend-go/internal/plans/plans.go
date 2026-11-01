@@ -42,13 +42,14 @@ type Service struct {
 	sessions *tenancy.Sessions
 	cache    *tenancy.TTLCache[int64, Limits]
 	features *tenancy.TTLCache[int64, map[string]bool]
+	ovr      *tenancy.TTLCache[string, overrideSet]
 	ttl      time.Duration
 }
 
 // NewService creates the service.
 func NewService(s *tenancy.Sessions) *Service {
 	return &Service{sessions: s, cache: tenancy.NewTTLCache[int64, Limits](),
-		features: tenancy.NewTTLCache[int64, map[string]bool](), ttl: time.Minute}
+		features: tenancy.NewTTLCache[int64, map[string]bool](), ovr: tenancy.NewTTLCache[string, overrideSet](), ttl: time.Minute}
 }
 
 // Has reports whether a plan includes a feature. Plan 0 (no plan) has
@@ -130,7 +131,7 @@ func errLimit(what string) error {
 // creates, so two requests cannot both take the last slot.
 func (s *Service) Check(ctx context.Context, tx tenancy.TenantTx, resource string) error {
 	t := tx.Tenant()
-	l, err := s.For(ctx, t.PlanID)
+	l, err := s.LimitsFor(ctx, t)
 	if err != nil {
 		return err
 	}
@@ -171,7 +172,7 @@ func (s *Service) Check(ctx context.Context, tx tenancy.TenantTx, resource strin
 
 // CheckStorage verifies that add bytes fit the plan's storage limit.
 func (s *Service) CheckStorage(ctx context.Context, t tenancy.Tenant, add int64) error {
-	l, err := s.For(ctx, t.PlanID)
+	l, err := s.LimitsFor(ctx, t)
 	if err != nil || l.MaxStorageMB <= 0 {
 		return err
 	}

@@ -148,3 +148,22 @@ Known problems:
 - The health card shows plan limits, not the shop's own counts (users, stores, products) and not per-shop email health: reading those needs the decision in `docs/S9_SECURITY_NOTE.md`.
 - Saved views are per browser.
 - Feature flags and limit overrides are not built (waiting for the security note).
+
+## S9 – Super Admin console (part 2: overrides, flags, usage)
+
+Approved in `docs/S9_SECURITY_NOTE.md` (all five decisions, plus an "expiring soon" warning).
+
+How to check (console, as owner-console@posdev.test):
+1. Tenant page → **Overrides** tab: empty history ("this shop uses its plan as it is").
+2. **Add override**: pick a setting (Stores, Users, Products, Emails a day, Storage MB, Online shop, CSV import, New checkout), a value (a whole number, or on/off), the days (default 30, 1–366) and a reason (10+ characters). It asks for a fresh MFA code. Wrong values are refused under the field (0, decimals, above the cap or 10 × the plan, a reason that is too short).
+3. Adding the same setting again replaces the old one (history shows "Replaced"). **Revoke** asks for a reason and an MFA code; the row shows who and why.
+4. Set an override for 3 days: a yellow "ends within 7 days" box appears on the tenant page and the Overrides tab; the tenants list shows "override ending soon" next to the status. Overrides with more time show "N overrides".
+5. Tenants list: tick **Has overrides** to see only those shops; it is kept in saved views.
+6. Health card: "Stores 2 used of 3" style lines and Receipt emails (sent/failed in 7 days, waiting) from the worker's snapshot (every 15 minutes; the time is shown).
+7. Mailpit (http://127.0.0.1:8026): every add or revoke sends "Override set/revoked for <shop>: <setting>" to the platform inbox (if CONTACT_EMAIL is set in deploy/.env).
+8. Shop side: with "CSV import: off", Products → Import CSV says the plan does not include CSV import. With "New checkout: off", Settings → Checkout is greyed out with "The platform has turned the new checkout off", and `/pos` shows the old screen. With "Stores: 1", Settings → Stores → Add store is refused with the plan-limit message.
+9. A billing_admin or support user sees the Overrides tab read-only (no Add / Revoke).
+
+Known problems:
+- Another server instance sees a change up to 30 seconds later (cache); the console's own instance at once.
+- Usage counts are up to 15 minutes old.

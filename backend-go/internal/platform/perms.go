@@ -20,6 +20,7 @@ const (
 	PermImpersonateRO      = "tenants:impersonate_ro"
 	PermImpersonateRW      = "tenants:impersonate_rw"
 	PermTenantsExport      = "tenants:export"
+	PermTenantsOverride    = "tenants:override" // limit overrides and feature flags (S9 security note): super_admin only
 	PermPlansManage        = "plans:manage"
 	PermBillingView        = "billing:view"
 	PermBillingManage      = "billing:manage"
@@ -33,7 +34,7 @@ const (
 
 var rolePerms = map[string]map[string]bool{
 	RoleSuperAdmin: set(PermTenantsView, PermTenantsCreate, PermTenantsEdit, PermTenantsSuspend, PermTenantsDelete,
-		PermImpersonateRO, PermImpersonateRW, PermTenantsExport, PermPlansManage, PermBillingView, PermBillingManage,
+		PermImpersonateRO, PermImpersonateRW, PermTenantsExport, PermTenantsOverride, PermPlansManage, PermBillingView, PermBillingManage,
 		PermNotificationsSend, PermMigrationsView, PermMigrationsRun, PermAuditViewAll, PermAuditViewOwn, PermPlatformUsersAdmin),
 	RoleBillingAdmin: set(PermTenantsView, PermTenantsSuspend, PermPlansManage, PermBillingView, PermBillingManage,
 		PermNotificationsSend, PermAuditViewOwn),

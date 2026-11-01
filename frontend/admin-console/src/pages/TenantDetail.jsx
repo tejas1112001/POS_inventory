@@ -53,6 +53,11 @@ export default function TenantDetail({ extraTabs = [] }) {
         </div>
         <span className="mono muted">{tenant.slug}</span>
       </div>
+      {tenant.overridesExpiringSoon ? (
+        <Notice kind="warn">An override of this shop ends within 7 days. See the Overrides tab.</Notice>
+      ) : tenant.activeOverrides > 0 ? (
+        <Notice kind="info">This shop has {tenant.activeOverrides} active override{tenant.activeOverrides === 1 ? '' : 's'} (Overrides tab).</Notice>
+      ) : null}
       <Tabs tabs={tabs} value={tab} onChange={setTab} />
       {tab === 'overview' ? <Overview tenant={tenant} reload={load} /> : Extra ? <Extra tenant={tenant} reload={load} /> : null}
     </div>
@@ -288,10 +293,30 @@ function Health({ tenant }) {
       </div>
       {limits.length > 0 && (
         <>
-          <h3>Plan limits</h3>
-          <Facts items={limits.map(([k, v]) => [LIMIT_LABELS[k], Number(v) > 0 ? v : 'No limit'])} />
-          <p className="muted small">The shop's own counts (users, stores, products) are not read from the console.</p>
+          <h3>Plan limits and use</h3>
+          <Facts
+            items={limits.map(([k, v]) => {
+              const used = o.usage && { max_stores: o.usage.stores, max_users: o.usage.users, max_products: o.usage.products }[k];
+              const lim = Number(v) > 0 ? v : 'no limit';
+              return [LIMIT_LABELS[k], used != null ? `${used} used of ${lim}` : lim];
+            })}
+          />
         </>
+      )}
+      {o.usage ? (
+        <>
+          <h3>Receipt emails</h3>
+          <Facts
+            items={[
+              ['Sent (7 days)', o.usage.receiptsSent7d],
+              ['Failed (7 days)', o.usage.receiptsFailed7d],
+              ['Waiting', o.usage.receiptsWaiting],
+            ]}
+          />
+          <p className="muted small">Counts from the worker's snapshot of {formatDateTime(o.usage.takenAt)} (every 15 minutes; the console never reads shop data).</p>
+        </>
+      ) : (
+        <p className="muted small">No usage snapshot yet (the worker writes one every 15 minutes).</p>
       )}
       {o.notices.length > 0 && (
         <>

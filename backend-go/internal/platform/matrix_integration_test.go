@@ -69,6 +69,12 @@ var consoleMatrix = map[string]consoleSpec{
 	"PUT /tenants/{id}/contacts/{cid}":    {roles: roles(sa)},
 	"DELETE /tenants/{id}/contacts/{cid}": {roles: roles(sa)},
 	"POST /tenants/{id}/notes":            {roles: roles(sa)},
+	// Overrides (S9 security note): read with tenants:view; change only as
+	// super_admin (tenants:override) with step-up.
+	"GET /override-keys":                        {roles: roles(sa, ba, sup)},
+	"GET /tenants/{id}/overrides":               {roles: roles(sa, ba, sup)},
+	"POST /tenants/{id}/overrides":              {roles: roles(sa), stepUp: true},
+	"POST /tenants/{id}/overrides/{oid}/revoke": {roles: roles(sa), stepUp: true},
 	// suspend / reactivate: super_admin and billing_admin, step-up.
 	"POST /tenants/{id}/suspend":    {roles: roles(sa, ba), stepUp: true},
 	"POST /tenants/{id}/reactivate": {roles: roles(sa, ba), stepUp: true},

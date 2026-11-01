@@ -117,6 +117,7 @@ const (
 	JobBillingReminders   = "billing_reminders"
 	JobDeletionClock      = "deletion_clock"
 	JobExportSweep        = "export_sweep"
+	JobUsageSnapshot      = "usage_snapshot"
 )
 
 // ---------------------------------------------------------------- workers
@@ -212,6 +213,8 @@ func (k *maintenanceWorker) Work(ctx context.Context, job *river.Job[maintenance
 		}
 	case JobLedgerReconcile:
 		_, err = m.ReconcileLedgers(ctx)
+	case JobUsageSnapshot:
+		_, err = m.SnapshotUsage(ctx)
 	case JobBillingLifecycle, JobBillingReminders:
 		if k.w.cfg.Billing == nil || k.w.cfg.Billing.Provider == nil {
 			return nil
@@ -334,6 +337,7 @@ func New(cfg Config) (*Worker, error) {
 			periodic(JobMailSweep, river.PeriodicInterval(cfg.SweepInterval), true),
 			periodic(JobPOSLockSweep, river.PeriodicInterval(5*time.Minute), false),
 			periodic(JobIdempotencyCleanup, river.PeriodicInterval(time.Hour), true),
+			periodic(JobUsageSnapshot, river.PeriodicInterval(15*time.Minute), true),
 			periodic(JobLedgerReconcile, dailyAt{hour: 21, minute: 0}, false), // 02:30 in India
 			periodic(JobBillingLifecycle, river.PeriodicInterval(time.Hour), true),
 			periodic(JobBillingReminders, dailyAt{hour: 3, minute: 30}, false), // BILLING_NOTIFY_HOUR: 09:00 in India

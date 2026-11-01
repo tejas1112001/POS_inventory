@@ -383,7 +383,7 @@ func (m *Mailer) loadTenant(ctx context.Context, t tenancy.Tenant) (*tenantState
 	if err != nil {
 		return nil, err
 	}
-	limits, err := m.c.Plans.For(ctx, t.PlanID)
+	limits, err := m.c.Plans.LimitsFor(ctx, t)
 	if err != nil {
 		return nil, err
 	}
@@ -846,6 +846,8 @@ func (m *Mailer) deliverPlatformRow(ctx context.Context, r row) outcome {
 		return m.deliverFindShop(ctx, r)
 	case mailtmpl.ContactRequestTemplate:
 		return m.deliverContactRequest(ctx, r)
+	case mailtmpl.OverrideNoticeTemplate:
+		return m.deliverOverrideNotice(ctx, r)
 	default:
 		return outcome{status: "dead", class: "permanent", detail: "unknown template " + keySafe.ReplaceAllString(r.template, "?")}
 	}

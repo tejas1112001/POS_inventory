@@ -69,6 +69,11 @@ func (a *API) importTemplate(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (a *API) importCSV(w http.ResponseWriter, r *http.Request) {
+	// A platform flag can turn CSV import off for this shop (UI S9).
+	if err := a.d.Plans.RequireFeatureFor(r.Context(), tenant(r), plans.FeatureCSVImport, "CSV import"); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
 	r.Body = http.MaxBytesReader(w, r.Body, importBodyLimit)
 	if err := r.ParseMultipartForm(1 << 20); err != nil { //nolint:gosec // G120: body capped above
 		var tooBig *http.MaxBytesError
@@ -371,7 +376,7 @@ func (a *API) runImport(ctx context.Context, t tenancy.Tenant, uid int64, raw []
 }
 
 func (a *API) checkImportLimit(ctx context.Context, tx tenancy.TenantTx, adding int) error {
-	l, err := a.d.Plans.For(ctx, tx.Tenant().PlanID)
+	l, err := a.d.Plans.LimitsFor(ctx, tx.Tenant())
 	if err != nil || l.MaxProducts <= 0 {
 		return err
 	}
