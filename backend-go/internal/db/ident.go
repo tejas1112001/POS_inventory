@@ -166,6 +166,15 @@ func GrantTenantPrivileges(ctx context.Context, c Execer, schema, role, owner st
 	if err != nil {
 		return err
 	}
+	// Every tenant role is granted USAGE on the one shared extensions
+	// schema: concurrent grants update the same catalog row and fail with
+	// "tuple concurrently updated" (seen with migrate --parallelism 4).
+	// A transaction-scoped advisory lock serialises this short step; the
+	// callers that matter (tenant migrations, replace restores) run in a
+	// transaction, so the lock holds until commit.
+	if _, err := c.Exec(ctx, "SELECT pg_advisory_xact_lock(7340043)"); err != nil {
+		return err
+	}
 	stmts := []string{
 		"REVOKE ALL ON SCHEMA " + s + " FROM PUBLIC",
 		"GRANT USAGE ON SCHEMA " + s + " TO " + r,
@@ -371,6 +380,11 @@ func RevokeTenantPrivileges(ctx context.Context, c Execer, schema, role, owner s
 	}
 	o, err := quote(owner)
 	if err != nil {
+		return err
+	}
+	// Same lock as GrantTenantPrivileges: both change the shared
+	// extensions schema's privileges.
+	if _, err := c.Exec(ctx, "SELECT pg_advisory_xact_lock(7340043)"); err != nil {
 		return err
 	}
 	for _, q := range []string{
