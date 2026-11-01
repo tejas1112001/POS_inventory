@@ -142,3 +142,14 @@ These change only what the menu shows and which page shows "no access"; the serv
 - Frontend `pages/Dashboard.jsx` rebuilt: greeting, store picker, date presets kept in the address, KPI rows with change, money row, sales chart (line by hour/day, bars by month, revenue/orders switch), top products (horizontal bars), action cards, empty-today prompt, skeleton loading, error with Retry.
 
 **Checked** — lint (0 errors), both builds, `go test ./...`, isolation suite; dev stack rebuilt. No browser tests (by request).
+
+## S8a – Orders and order page
+
+- `/sales` rebuilt on the kit (server paging, search by number or customer, status/payment/store/date filters); `/sales/:id` order page with items, returned counts, totals, returns and actions (receipt, print, return items, void with a required reason via `DELETE /api/sales/{id}?reason=`).
+- Server (read-only): `GET /api/sales` adds `?paymentStatus=`, `?status=` (Void implies voided) and customer-name search. Test `orders_filters_test.go`.
+- `FilterBar` has an `extra` slot (date boxes). New return accepts `?saleId=`. Old `pages/Sales.jsx` and `lists/SalesList.jsx` removed.
+
+## S8b – Products and product page
+
+- Server (read-only): `GET /api/products/{id}` (products:view): one product with variants and stock in every store. Test `product_page_test.go` (found, 404, POS list still answers, cashier allowed, other tenant refused); the security matrix covers the route.
+- `/products` rebuilt on the kit (server paging, name/SKU search, category/brand/status filters, import, add, edit in a sheet, delete); `/products/:id` product page with options and stock per store. Old `lists/ProductList.jsx` and `lists/ProductDetails.jsx` removed.

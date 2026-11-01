@@ -70,3 +70,18 @@ How to check:
 Known problems:
 - Order editing is not offered (Q6: use a return and a new sale); the server still accepts edits from the old form.
 - The order page shows the receipt in the window used everywhere; there is no separate "share" link.
+
+### S8b – Products and product page
+
+How to check:
+1. **Products** (`/products`): server pages; each row shows the picture (or initials), name, first SKU with "N options", category, brand (wide screens), price (a range when options differ), units in stock over all stores, status.
+2. Search a name or a SKU. Filters: Category, Brand, Status (category/brand filters only appear for roles that may see those lists). Chips and "Clear filters" as elsewhere; on phones in the Filters sheet.
+3. Header: **Import CSV** (opens the import window; same-name rows become options) and **Add product** (the existing add wizard).
+4. Row menu: Open, Edit (the existing edit form in a sheet; Save keeps you on the list and refreshes it), Delete (asks first).
+5. **Product page** (`/products/<id>`): picture, name, status, category · brand · unit. Options table: option label (attributes or SKU), SKU, price, cost (editors only), stock per store with low stock in amber and zero in red, and a total with more than one store. Details: tax, HSN, sold at, online shop published, added by, description.
+6. Buttons: **Stock** (opens Stock searched by the SKU), **Edit**, **Delete** (back to the list after deleting).
+7. As the cashier: the list and the page open (read only); no Import, Add, Edit, Delete or cost column.
+
+Known problems:
+- The add-product wizard and the edit form are the existing ones (restyled in S4b, not rebuilt).
+- Barcode labels stay deferred.

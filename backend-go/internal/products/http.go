@@ -509,6 +509,7 @@ func (a *API) Mount(rt *rbac.Router) {
 	req := rbac.Require
 	rt.Handle(http.MethodGet, "/products", req("products", "view"), a.list)
 	rt.Handle(http.MethodGet, "/products/pos", req("pos", "view"), a.pos)
+	rt.Handle(http.MethodGet, "/products/{id}", req("products", "view"), a.getOne)
 	rt.Handle(http.MethodGet, "/products/barcode/{barcode}", req("pos", "view"), a.barcode)
 	rt.Handle(http.MethodPost, "/products", req("products", "create").Uploads(), a.create)
 	rt.Handle(http.MethodPut, "/products/{id}", req("products", "edit").Uploads(), a.update)
@@ -534,4 +535,31 @@ func sortedKeys(m map[string]string) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// getOne is GET /api/products/{id} (UI S8 product page): one product with
+// its variants and their stock in every store.
+func (a *API) getOne(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r, "id")
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	var out ProductJSON
+	err = a.ro(r.Context(), tenant(r), func(tx tenancy.TenantTx) error {
+		p, ok, err := loadOne(r.Context(), tx, id, loadOpts{})
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return apperr.NotFound()
+		}
+		out = p
+		return nil
+	})
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, out)
 }
