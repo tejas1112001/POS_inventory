@@ -32,3 +32,23 @@ Known problems:
 - Hold/recall, split payments and UPI are S10 items; WhatsApp share and barcode scanning stay deferred.
 - Dev only: `make migrate-dev` with the default parallelism hit "tuple concurrently updated" in the post-step on 2 of 8 shops; `--resume 11 --parallelism 1` finished them. To be looked at in Phase 3.
 - Running every database test suite at once made the provisioning tests time out once; they pass on their own.
+
+## S7 – Dashboard
+
+How to check:
+1. Open **Dashboard** as the owner. The heading greets you by first name ("Good morning/afternoon/evening", by the shop's clock) and says "Sales of the whole shop."
+2. Date range buttons: **Today** (default), **Yesterday**, **Last 7 days**, **This month**, **Custom** (two date boxes, "to" cannot be after today). The address keeps the choice (`?range=…`); reload keeps it.
+3. With more than one store, the store picker shows "All stores" and each store; the figures follow it.
+4. Row 1: Net sales (after returns), Orders, Average bill, Items sold, each with a green/red change against the period of the same length just before (for Today: yesterday). "new" when the previous period had nothing.
+5. Row 2: Collected, Due from customers (click → Customer dues), Refunds, Discounts given. Compare with Reports → Sales for the same dates: the totals match.
+6. Chart: Today and Yesterday show sales by hour (24 points), 7 days and This month by day; the Revenue/Orders switch changes the line. Top products is a horizontal bar chart (top 5).
+7. "Needs attention" cards: Low stock and Out of stock (click → Stock filtered), Purchases to receive (ordered or pending → Purchases), Customers with dues (→ Customer dues), Plan & billing when the shop is not active (trial, past due). Cards with nothing to show are hidden.
+8. With no sale today: a dashed box "No sales yet today" with **Open Checkout**.
+9. As the cashier: "Your own sales."; no "Due from customers" card; no Purchases or Customers-with-dues cards; the figures are only the cashier's sales.
+10. Phone (360 px): two figures per row, the range buttons scroll sideways, charts fit the width.
+11. Stop the server and reload: "Could not load" with **Retry**; start it and press Retry.
+
+Known problems:
+- "Purchases to receive" counts the whole shop (purchases have no store), whatever store is picked.
+- The plan card shows only the shop status (trial, past due…), not days left; the banner at the top still has the details.
+- Payment-method split (donut) waits for split payments (S10).

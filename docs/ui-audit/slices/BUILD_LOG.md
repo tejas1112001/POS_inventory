@@ -133,3 +133,12 @@ These change only what the menu shows and which page shows "no access"; the serv
   - Shared: `components/pos/catalog.jsx` (tiles, pills, "Choose option") and `components/pos/stock.js` (stock and lock helpers), used by both screens. `Receipt` has `autoPrint`. `api` accepts `keepalive`.
 
 **Checked** — lint (0 errors), both builds, `go test ./...`, integration: isolation suite and `internal/...` (provisioning timed out once when every suite ran together; passes alone), dev stack rebuilt, dev shops migrated to version 11 and `migrate drift` clean. No browser tests (by request).
+
+## S7 – Dashboard
+
+**Changed**
+- Server (`internal/reports/dashboard.go`, read-only, additive `extra` object on `GET /api/dashboard`): current period figures (revenue, returns, net, paid, due, discounts, orders, items sold); the previous period of the same length when both dates are given; a chart series by hour (≤ 26 h), by day (≤ 62 days) or by month, zero-filled in the shop's time zone; counts for low stock / out of stock (inventory:view, same rule as the Stock page), purchases waiting (purchases:view) and customers with dues (reports:view and sales:view_all), each null without the permission. Existing fields unchanged.
+- Test `test/isolation/dashboard_extra_test.go`: figures, previous period, hour/day/month series, permission-limited counts, cashier own sales only. Existing dashboard tests pass.
+- Frontend `pages/Dashboard.jsx` rebuilt: greeting, store picker, date presets kept in the address, KPI rows with change, money row, sales chart (line by hour/day, bars by month, revenue/orders switch), top products (horizontal bars), action cards, empty-today prompt, skeleton loading, error with Retry.
+
+**Checked** — lint (0 errors), both builds, `go test ./...`, isolation suite; dev stack rebuilt. No browser tests (by request).
