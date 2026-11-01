@@ -10,6 +10,7 @@ import Billing from './pages/Billing';
 import Audit from './pages/Audit';
 import { TENANT_TABS } from './pages/tenantTabs';
 import ErrorBoundary from './components/ErrorBoundary';
+import Toaster from '../../shared/toast/Toaster';
 
 function Routed() {
   const { loading, user } = useSession();
@@ -36,6 +37,7 @@ export default function App() {
       <SessionProvider>
         <StepUpProvider>
           <Routed />
+          <Toaster />
         </StepUpProvider>
       </SessionProvider>
       </ErrorBoundary>

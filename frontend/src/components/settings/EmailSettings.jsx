@@ -1,3 +1,5 @@
+import { toast } from '../../../shared/toast/store';
+import { useConfirm } from '../feedback/ConfirmDialog';
 import { useEffect, useState } from 'react';
 import { Loader2, Send, Trash2 } from 'lucide-react';
 import { SectionCard } from '@/components/shared/section-card';
@@ -34,6 +36,7 @@ function fromServer(s) {
 // emails (GET/PUT/DELETE /api/settings/email, POST .../test). The
 // password is write-only: the server only says whether one is saved.
 export default function EmailSettings({ canEdit }) {
+  const confirm = useConfirm();
   const [server, setServer] = useState(null);
   const [form, setForm] = useState(empty);
   const [fields, setFields] = useState({});
@@ -76,7 +79,7 @@ export default function EmailSettings({ canEdit }) {
     try {
       await api.put('/api/settings/email', body, { quiet: true });
       await load();
-      setNotice({ kind: 'ok', text: 'Saved. Send a test email to check that it works.' });
+      toast.success('Saved. Send a test email to check that it works.');
     } catch (err) {
       setFields(err.fields || {});
       setNotice(errorNotice(err));
@@ -90,11 +93,8 @@ export default function EmailSettings({ canEdit }) {
     setNotice(null);
     try {
       const r = await api.post('/api/settings/email/test', testTo.trim() ? { to: testTo.trim() } : {}, { quiet: true });
-      setNotice(
-        r.ok
-          ? { kind: 'ok', text: r.message || 'Test email sent. Check the inbox.' }
-          : { kind: 'error', text: `The test failed: ${r.message || 'no details'}. Check the server, port, username and password.` }
-      );
+      if (r.ok) toast.success(r.message || 'Test email sent. Check the inbox.');
+      else setNotice({ kind: 'error', text: `The test failed: ${r.message || 'no details'}. Check the server, port, username and password.` });
       await load();
     } catch (err) {
       setNotice(err.code === 'RATE_LIMITED' ? { kind: 'error', text: 'Too many tests. Wait a few minutes.' } : errorNotice(err));
@@ -104,13 +104,19 @@ export default function EmailSettings({ canEdit }) {
   };
 
   const remove = async () => {
-    if (!window.confirm('Remove the SMTP settings? Emails then go out through the platform, if allowed.')) return;
+    const ok = await confirm({
+      title: 'Remove the email server settings?',
+      body: 'Emails then go out through the platform, if your plan allows it.',
+      confirmLabel: 'Remove',
+      destructive: true,
+    });
+    if (!ok) return;
     setBusy('delete');
     setNotice(null);
     try {
       await api.delete('/api/settings/email', { quiet: true });
       await load();
-      setNotice({ kind: 'ok', text: 'SMTP settings removed.' });
+      toast.success('Email server settings removed.');
     } catch (err) {
       setNotice(errorNotice(err));
     } finally {

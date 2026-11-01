@@ -1,3 +1,4 @@
+import { toast } from '../../shared/toast/store';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PlusCircleIcon, XMarkIcon } from '@heroicons/react/24/outline';
@@ -140,6 +141,7 @@ export default function AddSalesReturn() {
     if (!idemKey.current) idemKey.current = newIdempotencyKey();
     try {
       await api.post('/api/sales/returns', body(), { headers: { 'Idempotency-Key': idemKey.current }, quiet: true });
+      toast.success('Return saved. The goods are back in stock.');
       navigate('/sales-return');
     } catch (err) {
       if (err.code === 'RETURN_EXCEEDS_SOLD') {

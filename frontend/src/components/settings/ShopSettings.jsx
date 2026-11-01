@@ -1,3 +1,4 @@
+import { toast } from '../../../shared/toast/store';
 import { useEffect, useMemo, useState } from 'react';
 import { SectionCard } from '@/components/shared/section-card';
 import { api } from '@/services/api';
@@ -147,7 +148,7 @@ export default function ShopSettings({ canEdit }) {
     }
     if (logo) body.logo = logo;
     if (Object.keys(body).length === 0) {
-      setNotice({ kind: 'ok', text: 'Nothing to save.' });
+      toast.info('Nothing to save.');
       return;
     }
     setBusy(true);
@@ -158,7 +159,7 @@ export default function ShopSettings({ canEdit }) {
       setShopSettings(saved);
       setLogo(null);
       if ('currency' in body || 'locale' in body || 'timezone' in body || 'businessName' in body) await reloadMe();
-      setNotice({ kind: 'ok', text: 'Settings saved.' });
+      toast.success('Settings saved.');
     } catch (err) {
       setFields(err.fields || {});
       setNotice(errorNotice(err));

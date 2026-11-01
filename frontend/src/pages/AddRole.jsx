@@ -1,3 +1,4 @@
+import { toast } from '../../shared/toast/store';
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ShieldCheck, Check, ArrowLeft } from 'lucide-react';
@@ -119,6 +120,7 @@ export default function AddRole() {
       }
 
       await refreshPermissions();
+      toast.success(isEditing ? 'Role updated.' : 'Role created.');
       navigate('/roles');
     } catch (err) {
       setError(err?.message || 'Failed to save role');

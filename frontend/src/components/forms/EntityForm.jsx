@@ -1,3 +1,4 @@
+import { toast } from '../../../shared/toast/store';
 import React, { useEffect, useState } from 'react';
 
 const toBase64 = (file) => {
@@ -19,6 +20,7 @@ const normalizeOptions = (options = []) => {
 };
 
 export default function EntityForm({
+  successMessage = 'Changes saved.',
   initialValues = {},
   fields = [],
   onSubmit,
@@ -58,6 +60,7 @@ export default function EntityForm({
     setIsSubmitting(true);
     try {
       const result = await onSubmit(formData);
+      toast.success(successMessage);
       if (typeof onSuccess === 'function') {
         onSuccess(result);
       }

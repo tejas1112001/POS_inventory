@@ -1,3 +1,4 @@
+import { toast } from '../../shared/toast/store';
 import React, { useState, useEffect } from 'react';
 import PageHeader from '../components/forms/PageHeader';
 import FormFooter from '../components/forms/FormFooter';
@@ -90,6 +91,7 @@ const AddPurchase = () => {
       };
       
       await api.post('/api/purchases', purchaseData);
+      toast.success('Purchase saved.');
       navigate('/purchases');
     } catch (error) {
       console.error('Error creating purchase:', error);

@@ -1,3 +1,4 @@
+import { toast } from '../../../shared/toast/store';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../api';
@@ -67,7 +68,8 @@ function Overview({ tenant: t, reload }) {
   const path = `/tenants/${encodeURIComponent(t.id)}`;
   const done = (text) => () => {
     setDialog(null);
-    setNotice({ kind: 'ok', text });
+    setNotice(null);
+    toast.success(text);
     reload();
   };
 
@@ -129,7 +131,8 @@ function Overview({ tenant: t, reload }) {
   const retry = async () => {
     try {
       await api.post(`${path}/provisioning/retry`);
-      setNotice({ kind: 'ok', text: 'Provisioning started again.' });
+      setNotice(null);
+    toast.success('Provisioning started again.');
       reload();
     } catch (err) {
       setNotice({ kind: 'error', text: err.message });

@@ -1,3 +1,5 @@
+import { useConfirm } from '../components/feedback/ConfirmDialog';
+import { toast } from '../../shared/toast/store';
 import React, { useState, useEffect } from 'react';
 import {
   Globe,
@@ -29,6 +31,7 @@ const toSlug = (v) => v.toLowerCase().replace(/[^a-z0-9-]/g, '');
 
 export default function ShowcaseSettings() {
   const { currentStore } = usePos();
+  const confirm = useConfirm();
   const { hasPermission } = usePermission();
   const [storeData, setStoreData] = useState({
     name: '',
@@ -104,18 +107,21 @@ export default function ShowcaseSettings() {
     e.preventDefault();
     // A new web address breaks links people already have: ask first.
     if (saved.slug && storeData.slug !== saved.slug) {
-      const ok = window.confirm(
-        `Change this store's web address from /shop/${saved.slug} to /shop/${storeData.slug}? Links and QR codes that use the old address stop working.`
-      );
+      const ok = await confirm({
+        title: 'Change the web address?',
+        body: `From /shop/${saved.slug} to /shop/${storeData.slug}. Links and QR codes that use the old address stop working.`,
+        confirmLabel: 'Change address',
+        destructive: true,
+      });
       if (!ok) return;
     }
     try {
       setSaving(true);
-      await api.put(`/api/stores/${selectedStoreId}/showcase`, storeData);
-      alert('Shop Showcase settings saved successfully!');
+      await api.put(`/api/stores/${selectedStoreId}/showcase`, storeData, { quiet: true });
+      toast.success('Online shop details saved.');
       fetchShowcaseData();
     } catch (err) {
-      alert(err.message || 'Failed to save settings');
+      toast.error(err.message || 'The details could not be saved.');
     } finally {
       setSaving(false);
     }
@@ -124,10 +130,11 @@ export default function ShowcaseSettings() {
   const handleSetDefault = async () => {
     try {
       setSettingDefault(true);
-      await api.post(`/api/stores/${selectedStoreId}/showcase/default`);
+      await api.post(`/api/stores/${selectedStoreId}/showcase/default`, undefined, { quiet: true });
       await fetchShowcaseData();
+      toast.success('This store is now the default online shop.');
     } catch (err) {
-      alert(err.message || 'Failed to set the default store');
+      toast.error(err.message || 'The default store could not be changed.');
     } finally {
       setSettingDefault(false);
     }

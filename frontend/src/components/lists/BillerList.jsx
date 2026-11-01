@@ -1,3 +1,4 @@
+import { toast } from '../../../shared/toast/store';
 import React, { useState, useMemo } from 'react';
 import { useUI } from "../ListComponents/useUI";
 import { selectColumn, statusColumn, actionsColumn } from '../ListComponents/columnHelpers';
@@ -58,6 +59,7 @@ export default function BillerList({ billers = [], showForm, setShowForm, onRefr
   const handleDelete = async (biller) => {
     try {
       await api.delete(`/api/billers/${biller.id}`);
+      toast.success('User deleted.');
       if (typeof onRefresh === 'function') {
         onRefresh();
       }

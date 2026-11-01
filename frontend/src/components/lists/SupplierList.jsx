@@ -1,3 +1,4 @@
+import { toast } from '../../../shared/toast/store';
 import React, { useState, useMemo } from 'react';
 import { usePermission } from '../../hooks/usePermission';
 import { useUI } from "../ListComponents/useUI";
@@ -80,6 +81,7 @@ export default function SupplierList({ suppliers = [], setShowForm, onRefresh })
   const handleDelete = async (supplier) => {
     try {
       await api.delete(`/api/suppliers/${supplier.id}`);
+      toast.success('Supplier deleted.');
       if (typeof onRefresh === 'function') {
         onRefresh();
       }

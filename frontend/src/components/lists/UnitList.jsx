@@ -1,3 +1,4 @@
+import { toast } from '../../../shared/toast/store';
 import React, { useState, useMemo } from 'react';
 import { usePermission } from '../../hooks/usePermission';
 import { useUI } from "../ListComponents/useUI";
@@ -68,6 +69,7 @@ export default function UnitList({ units = [], setShowForm, onRefresh }) {
   const handleDelete = async (unit) => {
     try {
       await api.delete(`/api/units/${unit.id}`);
+      toast.success('Unit deleted.');
       if (typeof onRefresh === 'function') {
         onRefresh();
       }

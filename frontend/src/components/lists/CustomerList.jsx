@@ -1,3 +1,4 @@
+import { toast } from '../../../shared/toast/store';
 import React, { useState, useMemo } from 'react';
 import { useUI } from "../ListComponents/useUI";
 import { selectColumn, statusColumn, actionsColumn } from '../ListComponents/columnHelpers';
@@ -77,6 +78,7 @@ export default function CustomerList({ customers = [], setShowForm, onRefresh })
   const handleDelete = async (customer) => {
     try {
       await api.delete(`/api/customers/${customer.id}`);
+      toast.success('Customer deleted.');
       if (typeof onRefresh === 'function') {
         onRefresh();
       }

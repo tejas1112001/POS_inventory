@@ -1,3 +1,4 @@
+import { toast } from '../../../shared/toast/store';
 import { AuthImage } from '@/components/shared/auth-image';
 import React, { useState, useMemo } from 'react';
 import { useUI } from "../ListComponents/useUI";
@@ -68,6 +69,7 @@ export default function CategoryList({ categories = [], setShowForm, onRefresh }
   const handleDelete = async (category) => {
     try {
       await api.delete(`/api/categories/${category.id}`);
+      toast.success('Category deleted.');
       if (typeof onRefresh === 'function') {
         onRefresh();
       }

@@ -1,3 +1,4 @@
+import { toast } from '../../shared/toast/store';
 import React, { useState } from 'react';
 import Accordion from '../components/forms/Accordion';
 import PageHeader from '../components/forms/PageHeader';
@@ -31,6 +32,7 @@ const AddBrand = () => {
       data.createdBy = currentUser.id;
       
       await api.post('/api/brands', data);
+      toast.success('Brand added.');
       navigate('/brands');
     } catch (error) {
       console.error('Error creating brand:', error);

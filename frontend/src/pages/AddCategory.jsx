@@ -1,3 +1,4 @@
+import { toast } from '../../shared/toast/store';
 import React, { useState } from 'react';
 import Accordion from '../components/forms/Accordion';
 import PageHeader from '../components/forms/PageHeader';
@@ -33,6 +34,7 @@ const AddCategory = () => {
       data.createdBy = currentUser.id;
       
       await api.post('/api/categories', data);
+      toast.success('Category added.');
       navigate('/categories');
     } catch (error) {
       console.error('Error creating category:', error);

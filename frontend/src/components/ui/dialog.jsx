@@ -44,10 +44,16 @@ function DialogOverlay({
   )
 }
 
+// sheet: on phones (< 640 px) the dialog slides up from the bottom as a
+// sheet; from 640 px it is a centred dialog.
+const SHEET =
+  "max-sm:top-auto max-sm:bottom-0 max-sm:left-0 max-sm:translate-x-0 max-sm:translate-y-0 max-sm:max-w-full max-sm:rounded-b-none max-sm:rounded-t-2xl max-sm:max-h-[90dvh] max-sm:overflow-y-auto max-sm:data-[state=open]:slide-in-from-bottom max-sm:data-[state=open]:zoom-in-100";
+
 function DialogContent({
   className,
   children,
   showCloseButton = true,
+  sheet = false,
   ...props
 }) {
   return (
@@ -57,6 +63,7 @@ function DialogContent({
         data-slot="dialog-content"
         className={cn(
           "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border p-6 shadow-lg duration-200 sm:max-w-lg",
+          sheet && SHEET,
           className
         )}
         {...props}

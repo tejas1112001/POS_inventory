@@ -1,3 +1,4 @@
+import { toast } from '../../shared/toast/store';
 import React, { useState } from 'react';
 import PageHeader from '../components/forms/PageHeader';
 import FormFooter from '../components/forms/FormFooter';
@@ -29,6 +30,7 @@ const AddSupplier = () => {
       }
       
       await api.post('/api/suppliers', data);
+      toast.success('Supplier added.');
       navigate('/suppliers');
     } catch (error) {
       console.error('Error creating supplier:', error);

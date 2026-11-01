@@ -1,3 +1,4 @@
+import { toast } from '../../../shared/toast/store';
 import React, { useState, useMemo } from 'react';
 import { usePermission } from '../../hooks/usePermission';
 import { useUI } from "../ListComponents/useUI";
@@ -53,6 +54,7 @@ export default function BrandList({ brands = [], setShowForm, onRefresh }) {
   const handleDelete = async (brand) => {
     try {
       await api.delete(`/api/brands/${brand.id}`);
+      toast.success('Brand deleted.');
       if (typeof onRefresh === 'function') {
         onRefresh();
       }

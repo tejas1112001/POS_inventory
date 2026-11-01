@@ -1,5 +1,8 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import '@fontsource-variable/inter';
+import '../../shared/tokens.css';
+import '../../shared/toast/toast.css';
 import './global.css';
 import App from './App';
 

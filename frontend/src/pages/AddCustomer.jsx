@@ -1,3 +1,4 @@
+import { toast } from '../../shared/toast/store';
 import React, { useState } from 'react';
 import PageHeader from '../components/forms/PageHeader';
 import FormFooter from '../components/forms/FormFooter';
@@ -27,6 +28,7 @@ const AddCustomer = () => {
       }
       
       await api.post('/api/customers', data);
+      toast.success('Customer added.');
       navigate('/customers');
     } catch (error) {
       console.error('Error creating customer:', error);

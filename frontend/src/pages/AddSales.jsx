@@ -1,3 +1,4 @@
+import { toast } from '../../shared/toast/store';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PlusCircleIcon, XMarkIcon } from '@heroicons/react/24/outline';
@@ -121,6 +122,7 @@ export default function AddSales() {
     try {
       await api.post('/api/sales', body, { headers: { 'Idempotency-Key': idemKey.current }, quiet: true });
       idemKey.current = null;
+      toast.success('Sale saved.');
       navigate('/sales');
     } catch (err) {
       if (!isRetryable(err)) idemKey.current = null;

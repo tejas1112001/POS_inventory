@@ -32,7 +32,7 @@ export async function signIn(page, role) {
 // settle waits for the page to finish loading its data.
 export async function settle(page) {
   try {
-    await page.waitForLoadState('networkidle', { timeout: 6_000 });
+    await page.waitForLoadState('networkidle', { timeout: 3_000 });
   } catch {
     /* some pages keep a request open */
   }

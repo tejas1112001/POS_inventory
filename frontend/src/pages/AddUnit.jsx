@@ -1,3 +1,4 @@
+import { toast } from '../../shared/toast/store';
 import React from 'react';
 import Accordion from '../components/forms/Accordion';
 import PageHeader from '../components/forms/PageHeader';
@@ -20,6 +21,7 @@ const AddUnit = () => {
       const data = Object.fromEntries(formData.entries());
       
       await api.post('/api/units', data);
+      toast.success('Unit added.');
       navigate('/units');
     } catch (error) {
       console.error('Error creating unit:', error);

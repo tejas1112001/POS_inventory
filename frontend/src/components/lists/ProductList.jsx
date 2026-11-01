@@ -1,3 +1,4 @@
+import { toast } from '../../../shared/toast/store';
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -99,6 +100,7 @@ const columns = [
   const handleDelete = async (product) => {
     try {
       await api.delete(`/api/products/${product.id}`);
+      toast.success('Product deleted.');
       if (typeof onRefresh === 'function') {
         onRefresh();
       }

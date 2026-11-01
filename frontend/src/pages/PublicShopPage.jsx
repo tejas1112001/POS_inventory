@@ -1,3 +1,4 @@
+import { toast } from '../../shared/toast/store';
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
@@ -506,7 +507,7 @@ export default function PublicShopPage({ slug, homeSlug = null, onMissing }) {
                   <button
                     type="button"
                     onClick={() => {
-                      alert(`To purchase this product, please visit ${shop.name} at:\n${shop.address || 'our physical store location'}`);
+                      toast.info(`To buy this product, visit ${shop.name}${shop.address ? ` at ${shop.address}` : ' in person'}.`);
                     }}
                     className="w-full bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold py-3 px-4 rounded-xl text-sm shadow-lg shadow-emerald-500/20 transition-all flex items-center justify-center gap-2"
                   >

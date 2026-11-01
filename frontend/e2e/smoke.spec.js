@@ -20,7 +20,7 @@ for (const role of ['owner', 'cashier']) {
     test.skip(!ROLES[role].email, `set E2E_${role.toUpperCase()}_EMAIL and _PASSWORD`);
 
     test(`${role}: every route renders`, async ({ page }, info) => {
-      test.setTimeout(240_000);
+      test.setTimeout(600_000);
       const log = watch(page);
       await signIn(page, role);
       const problems = [];

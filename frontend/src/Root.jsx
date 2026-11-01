@@ -2,6 +2,7 @@ import React, { Suspense, lazy, useEffect, useState } from 'react';
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
 import ErrorBoundary from './components/errors/ErrorBoundary';
 import { AppError } from './components/errors/ErrorScreens';
+import Toaster from '../shared/toast/Toaster';
 
 // The tenant app loads in two separate parts: the public shop (/,
 // /product/..., /shop/...) and the staff app (sign-in and back office,
@@ -81,6 +82,7 @@ export default function Root() {
         </Routes>
       </Suspense>
       </ErrorBoundary>
+      <Toaster />
     </BrowserRouter>
   );
 }

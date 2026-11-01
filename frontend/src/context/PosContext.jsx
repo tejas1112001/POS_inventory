@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useError } from './ErrorContext';
+import { toast } from '../../shared/toast/store';
 import { authApi, refreshAccessToken } from '../services/api';
 import { clearSession, getSession, setSession, subscribeSession, tokenSecondsLeft } from '../lib/session';
 import { purgeLegacyAuthData } from '../lib/authStorage';
@@ -16,7 +16,6 @@ export const PosProvider = ({ children }) => {
   const [tenant, setTenant] = useState(null);
   const [impersonation, setImpersonation] = useState(false);
   const [loading, setLoading] = useState(true);
-  const { showError } = useError();
   const timerRef = useRef(null);
   const currentUserRef = useRef(null);
 
@@ -72,7 +71,7 @@ export const PosProvider = ({ children }) => {
       const wasSignedIn = !!currentUserRef.current;
       currentUserRef.current = null;
       signedOut();
-      if (wasSignedIn) showError('Your session has ended. Please sign in again.');
+      if (wasSignedIn) toast.warning('Your session has ended. Please sign in again.');
     };
     // A tab in the background may sleep through its timer.
     const onVisible = () => {

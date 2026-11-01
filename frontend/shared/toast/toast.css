@@ -1,0 +1,90 @@
+/* Toasts (see docs/UI_REDESIGN_PLAN.md §2.3). Desktop: top right, under the
+   top bar. Phones: top, full width minus 16 px gutters (at the bottom they
+   covered the sticky Save buttons and the PAY bar). */
+
+.toast-viewport {
+  position: fixed;
+  z-index: 100;
+  top: 72px;
+  right: 16px;
+  width: min(380px, calc(100vw - 32px));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.toast-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 6px 10px 12px;
+  border: 1px solid var(--ds-border);
+  border-left-width: 4px;
+  border-radius: var(--ds-radius-card);
+  background: var(--ds-surface);
+  color: var(--ds-text);
+  box-shadow: var(--ds-shadow-3);
+  font-family: var(--ds-font);
+  font-size: var(--ds-text-sm);
+  line-height: 1.4;
+  animation: toast-in var(--ds-motion) ease-out;
+}
+
+.toast--success { border-left-color: var(--ds-success); }
+.toast--success .toast__icon { color: var(--ds-success); }
+.toast--info { border-left-color: var(--ds-info); }
+.toast--info .toast__icon { color: var(--ds-info); }
+.toast--warning { border-left-color: var(--ds-warning); }
+.toast--warning .toast__icon { color: var(--ds-warning); }
+.toast--error { border-left-color: var(--ds-danger); background: var(--ds-danger-bg); color: var(--ds-danger-fg); }
+.toast--error .toast__icon { color: var(--ds-danger); }
+
+.toast__icon { flex: none; margin-top: 1px; }
+.toast__text { flex: 1; margin: 1px 0 0; overflow-wrap: anywhere; }
+.toast__count { opacity: 0.75; }
+
+.toast__action,
+.toast__close {
+  flex: none;
+  min-height: var(--ds-touch);
+  margin: -10px 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  border-radius: var(--ds-radius-input);
+}
+
+.toast__action { padding: 0 8px; font-weight: 600; text-decoration: underline; }
+.toast__close { width: var(--ds-touch); display: inline-flex; align-items: center; justify-content: center; opacity: 0.7; }
+.toast__close:hover,
+.toast__action:hover { opacity: 1; background: rgb(127 127 127 / 0.12); }
+.toast__close:focus-visible,
+.toast__action:focus-visible { outline: 2px solid var(--ds-focus); outline-offset: 2px; }
+
+@media (max-width: 639px) {
+  .toast-viewport {
+    top: 68px;
+    left: 16px;
+    right: 16px;
+    width: auto;
+  }
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: none; }
+}
+

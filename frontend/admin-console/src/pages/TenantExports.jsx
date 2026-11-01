@@ -1,3 +1,4 @@
+import { toast } from '../../../shared/toast/store';
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api';
 import { useStepUp } from '../stepup';
@@ -38,7 +39,8 @@ export default function TenantExports({ tenant }) {
     try {
       await withStepUp(() => api.post(`${base}/exports`, { includeFiles: withFiles }));
       setAsking(false);
-      setNotice({ kind: 'ok', text: 'Export queued. It runs in the background; this list refreshes.' });
+      setNotice(null);
+    toast.success('Export queued. It runs in the background; this list refreshes.');
       load();
     } catch (err) {
       if (err.code === 'CANCELLED') return;
@@ -52,7 +54,8 @@ export default function TenantExports({ tenant }) {
   const restoreTest = async (exportId) => {
     try {
       await api.post(`${base}/restore-tests`, exportId ? { exportId } : {});
-      setNotice({ kind: 'ok', text: 'Restore test queued. It runs with "posctl tenant restore-tests" (see below).' });
+      setNotice(null);
+    toast.success('Restore test queued. It runs with "posctl tenant restore-tests" (see below).');
       load();
     } catch (err) {
       setNotice({ kind: 'error', text: err.code === 'CONFLICT' ? 'A restore of this tenant is already queued or running.' : err.message });

@@ -37,7 +37,7 @@ export default defineConfig([
     // Super Admin console: shop names and other tenant text are shown as
     // plain text only (THREAT_MODEL §3.6), and the strict admin CSP allows
     // no inline styles. Each rule names what it stops.
-    files: ['admin-console/**/*.{js,jsx}'],
+    files: ['admin-console/**/*.{js,jsx}', 'shared/**/*.{js,jsx}'],
     rules: {
       'no-restricted-syntax': [
         'error',

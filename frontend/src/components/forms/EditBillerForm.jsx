@@ -1,3 +1,4 @@
+import { toast } from '../../../shared/toast/store';
 import React, { useState, useEffect } from 'react';
 import { api } from '../../services/api';
 
@@ -47,6 +48,7 @@ export default function EditBillerForm({ biller, onSaved, onCancel }) {
         role_id: roleId ? parseInt(roleId) : undefined,
         status,
       });
+      toast.success('User updated.');
       onSaved();
       onCancel();
     } catch (err) {

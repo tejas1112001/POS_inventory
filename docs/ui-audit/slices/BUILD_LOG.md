@@ -35,3 +35,18 @@ Note: the test navigates inside the app (like clicking links). Full page reloads
 **Tested**
 - Route smoke (`smoke.spec.js`) on the S1 build: owner and cashier × 3 widths, **6 passed**.
 - `s1-forms.spec.js`, owner × 3 widths: customer (empty name goes back to step 1; name only saves), supplier, brand without picture, single product with 18 % tax and a ₹99.50 price saved from the last step, edit of a product without a brand, purchase of a product with sizes (sizes listed, line total 500.00), POS store shown, web-address change asks first, report SKUs, no 401 for pictures. **3 passed** (first run found the price-step bug, fixed above).
+
+## S2 – Tokens and one message system
+
+**Changed**
+- `frontend/shared/tokens.css`: status colours (success, info, warning, danger with background and text pairs), surface/text/border, focus, shadows, type scale, 4 px spacing, radius, motion (respects reduced motion), touch sizes; light and dark. Used by both apps; mapped into Tailwind (`bg-danger-bg`, `text-success`, …) in the shop app.
+- Self-hosted Inter font (`@fontsource-variable/inter`) in both apps.
+- Shared toast (`frontend/shared/toast/`): plain JavaScript store + React component + static CSS, no run-time styles. Success 4 s, info 5 s, warning 7 s, error 8 s (or until closed when marked sticky); pause on hover/focus; × button (44 px) and Esc; at most 3; identical messages merged (×2); polite live region for success/info, assertive for errors. Desktop: top right under the top bar; phones: top, full width (moved from the bottom during testing: there it covered the forms' Save buttons).
+- The old red corner box is gone; every API error goes through the toast. Success toasts on every add, edit and delete (products, customers, suppliers, categories, brands, units, purchases, sales, returns, roles, users, settings, storefront, receipt email).
+- `ConfirmDialog` (`useConfirm()`): app dialog, bottom sheet on phones, optional type-to-confirm; replaces every `window.confirm` and `window.alert` (roles, storefront, email settings, public shop).
+- `InlineAlert` and `FieldError` components; the POS error bar uses `InlineAlert` (announced to screen readers).
+- Dialogs can opt into a phone bottom sheet (`sheet` prop).
+- Console: shared tokens, font and toasts; success notices became toasts; errors stay inline. The new `shared/` folder is under the console's strict lint rules.
+
+**Tested**
+- `s2-messages.spec.js` × 3 widths: success toast inside the screen (top on phones), error toast for a duplicate and closing it, delete confirm in an app dialog (cancelled; nothing deleted), web-address confirm in an app dialog, **no browser pop-ups**, axe on the toast area and the dialog (no serious/critical issues); console: **no CSP violations, no `<style>` elements, no inline styles**, tokens and Inter loaded. **6 passed** (earlier runs found a list-semantics axe issue in the toast and the bottom-toast overlap; both fixed).

@@ -1,3 +1,4 @@
+import { toast } from '../../shared/toast/store';
 import { useEffect, useMemo, useState } from 'react';
 import { Download, Loader2, Mail, Printer, X } from 'lucide-react';
 import { api } from '@/services/api';
@@ -75,7 +76,7 @@ export default function Receipt({ isOpen = true, onClose, sale: given, saleId, s
     try {
       const body = email.trim() ? { email: email.trim() } : {};
       await api.post(`/api/sales/${sale.id}/receipt/resend`, body, { quiet: true });
-      setNotice({ kind: 'ok', text: email.trim() ? `The receipt will be emailed to ${email.trim()}.` : "The receipt will be emailed to the customer's address." });
+      toast.success(email.trim() ? `The receipt will be emailed to ${email.trim()}.` : "The receipt will be emailed to the customer's address.");
     } catch (err) {
       const text =
         err.code === 'RATE_LIMITED'

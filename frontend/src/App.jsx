@@ -8,6 +8,7 @@ import { PermissionProvider } from './context/PermissionContext';
 import { ThemeProvider } from './context/ThemeContext';
 import AppLayout from './components/layout/AppLayout';
 import { NotFound } from './components/errors/ErrorScreens';
+import { ConfirmProvider } from './components/feedback/ConfirmDialog';
 import Dashboard from './pages/Dashboard';
 import Products from './pages/Products';
 import AddProduct from './pages/AddProduct';
@@ -132,8 +133,10 @@ function App() {
       <ThemeProvider>
         <PosProvider>
           <PermissionProvider>
-            <GlobalErrorHandler />
-            <AppRoutes />
+            <ConfirmProvider>
+              <GlobalErrorHandler />
+              <AppRoutes />
+            </ConfirmProvider>
           </PermissionProvider>
         </PosProvider>
       </ThemeProvider>

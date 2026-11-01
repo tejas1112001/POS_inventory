@@ -1,5 +1,8 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@import "@fontsource-variable/inter";
+@import "../shared/tokens.css";
+@import "../shared/toast/toast.css";
 
 html,
 body,
@@ -11,6 +14,19 @@ body,
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
+  --font-sans: var(--ds-font);
+  --color-success: var(--ds-success);
+  --color-success-bg: var(--ds-success-bg);
+  --color-success-fg: var(--ds-success-fg);
+  --color-info: var(--ds-info);
+  --color-info-bg: var(--ds-info-bg);
+  --color-info-fg: var(--ds-info-fg);
+  --color-warning: var(--ds-warning);
+  --color-warning-bg: var(--ds-warning-bg);
+  --color-warning-fg: var(--ds-warning-fg);
+  --color-danger: var(--ds-danger);
+  --color-danger-bg: var(--ds-danger-bg);
+  --color-danger-fg: var(--ds-danger-fg);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-sidebar-ring: var(--sidebar-ring);

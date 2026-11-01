@@ -1,3 +1,4 @@
+import { toast } from '../../shared/toast/store';
 import React, { useState, useEffect } from 'react';
 import PageHeader from '../components/forms/PageHeader';
 import FormFooter from '../components/forms/FormFooter';
@@ -177,6 +178,7 @@ const AddProduct = () => {
       }
       
       await api.post('/api/products', productData);
+      toast.success('Product added.');
       navigate('/products');
     } catch (error) {
       console.error('Error creating product:', error);
