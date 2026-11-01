@@ -111,6 +111,7 @@ func (h *HTTP) mountConsole(r chi.Router) {
 		p.With(h.need(PermTenantsCreate)).Post("/tenants/{id}/provisioning/retry", h.retry)
 		p.With(h.need(PermTenantsEdit), h.stepUpRequired).Post("/tenants/{id}/owner-invite", h.ownerInvite)
 		p.With(h.needAny(PermAuditViewAll, PermAuditViewOwn)).Get("/audit", h.audit)
+		h.mountTenantExtras(p)
 		h.mountBilling(p)
 		h.mountExports(p)
 	})
@@ -364,7 +365,7 @@ func (h *HTTP) listTenants(w http.ResponseWriter, r *http.Request) {
 	if limit < 1 || limit > 200 {
 		limit = 50
 	}
-	list, total, err := h.svc.ListTenants(r.Context(), ListFilter{Status: q.Get("status"), Q: q.Get("q"), Limit: limit, Offset: (page - 1) * limit})
+	list, total, err := h.svc.ListTenants(r.Context(), ListFilter{Status: q.Get("status"), Q: q.Get("q"), Sort: q.Get("sort"), Limit: limit, Offset: (page - 1) * limit})
 	if err != nil {
 		httpx.WriteError(w, r, err)
 		return

@@ -214,6 +214,7 @@ function Overview({ tenant: t, reload }) {
               )}
             </div>
           )}
+          <Health tenant={t} />
           <div className="card stack">
             <h2>Actions</h2>
             <div className="row">
@@ -240,6 +241,69 @@ function Overview({ tenant: t, reload }) {
             </Button>
           </div>
         </Modal>
+      )}
+    </div>
+  );
+}
+
+const LIMIT_LABELS = { max_stores: 'Stores', max_users: 'Users', max_products: 'Products', max_emails_per_day: 'Emails a day', max_storage_mb: 'Storage (MB)' };
+
+// Health: plan limits, storage against its limit, schema version, mail
+// waiting and recent notices (platform data only; the shop's own data is
+// not read from the console).
+function Health({ tenant }) {
+  const [o, setO] = useState(null);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    let active = true;
+    api
+      .get(`/tenants/${encodeURIComponent(tenant.id)}/overview`)
+      .then((v) => active && setO(v))
+      .catch((err) => active && setError(err.message));
+    return () => {
+      active = false;
+    };
+  }, [tenant.id]);
+  if (error) return <Notice kind="error">{error}</Notice>;
+  if (!o) return <p className="muted">Loading health…</p>;
+  const limits = Object.entries(o.limits || {}).filter(([k]) => LIMIT_LABELS[k]);
+  const behind = o.schemaVersion < o.latestSchema;
+  return (
+    <div className="card stack">
+      <h2>Health and plan</h2>
+      <Facts
+        items={[
+          ['Plan', o.planName || '-'],
+          ['Schema', behind ? `${o.schemaVersion} of ${o.latestSchema} (behind)` : `${o.schemaVersion} (up to date)`],
+          ['Receipts waiting to send', o.mailPendingSince ? `since ${formatDateTime(o.mailPendingSince)}` : 'None'],
+          ['Contacts / notes', `${o.contactCount} / ${o.noteCount}`],
+        ]}
+      />
+      <div className="stack">
+        <span className="small">
+          Storage: {bytes(o.storageBytes)}
+          {o.storageLimitBytes ? ` of ${bytes(o.storageLimitBytes)}` : ' (no limit)'}
+        </span>
+        {o.storageLimitBytes > 0 && <meter className="usage" min={0} max={o.storageLimitBytes} high={o.storageLimitBytes * 0.9} value={o.storageBytes} aria-label="Storage used" />}
+      </div>
+      {limits.length > 0 && (
+        <>
+          <h3>Plan limits</h3>
+          <Facts items={limits.map(([k, v]) => [LIMIT_LABELS[k], Number(v) > 0 ? v : 'No limit'])} />
+          <p className="muted small">The shop's own counts (users, stores, products) are not read from the console.</p>
+        </>
+      )}
+      {o.notices.length > 0 && (
+        <>
+          <h3>Recent notices</h3>
+          <ul className="stack small">
+            {o.notices.map((n) => (
+              <li key={`${n.kind}-${n.period}`}>
+                {formatDateTime(n.createdAt)} · {n.kind.replace(/_/g, ' ')}
+              </li>
+            ))}
+          </ul>
+        </>
       )}
     </div>
   );

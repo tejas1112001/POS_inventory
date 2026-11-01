@@ -128,3 +128,23 @@ Not rebuilt in S8 (already on the shared toasts, confirm windows and pager from 
 
 Known problems:
 - The users list is not paged on the server (shops have few users); search and pages are done in the browser.
+
+## S9 – Super Admin console (part 1: before flags and overrides)
+
+Sign in at https://admin.localhost:8443 (owner-console@posdev.test; see the reset earlier).
+
+How to check:
+1. Header: navy bar. At phone width (under 768 px) the menu folds behind a **Menu** button; it closes after you pick a page.
+2. **Tenants**: new columns Last activity and Storage. **Sort**: Newest, Oldest, Name A–Z, Last activity, Storage used.
+3. **Save view**: name the current search + status + sort; it appears as a chip above the table (click to apply, × to delete). Kept in this browser.
+4. At phone width every table shows each row as a card with "label: value" lines.
+5. Tenant page → **Overview**: new card "Health and plan": plan, schema (up to date / behind), receipts waiting to send, contacts/notes count, storage with a bar against the plan's storage limit, plan limits, recent notices (billing emails sent).
+6. Tenant page → **Contacts** tab: add (name, role, email or phone, primary), edit, remove (asks first). Only one contact is primary: marking another moves the mark. Email and phone are plain text (the console never turns shop data into links).
+7. Tenant page → **Notes** tab: add a note; newest first with time and author. There is no edit or delete (by design); write a new note to correct one.
+8. As a support user (read-only role): Contacts and Notes are visible, but there is no Add/Edit/Remove or "New note".
+9. Audit log: contact add/edit/remove and note add appear, without the email, phone or note text.
+
+Known problems:
+- The health card shows plan limits, not the shop's own counts (users, stores, products) and not per-shop email health: reading those needs the decision in `docs/S9_SECURITY_NOTE.md`.
+- Saved views are per browser.
+- Feature flags and limit overrides are not built (waiting for the security note).

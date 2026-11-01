@@ -170,3 +170,15 @@ These change only what the menu shows and which page shows "no access"; the serv
 - Roles & permissions, Storefront, reports and Invoices & dues are left as they are (already on the shared toasts, confirm windows and pager).
 
 **S8 checked** — lint (0 errors), both builds, `go test ./...`, isolation suite (with the new S8 tests); dev stack rebuilt. No browser tests (by request).
+
+## S9 (part 1) – Super Admin console
+
+**Changed**
+- Platform migration `00008_tenant_contacts_notes.sql`: `platform.tenant_contacts` (one primary per tenant, email or phone required) and `platform.tenant_notes` (append-only: `UPDATE`/`DELETE` revoked from `pos_platform`). Stored data: approved as "contacts and notes now".
+- API (platform data only; no tenant schema is read): `GET /tenants/{id}/overview` (plan, limits, storage vs limit, activity, schema vs latest, mail waiting, recent notices, counts), contacts `GET/POST/PUT/DELETE` (tenants:view to read, tenants:edit to change), notes `GET/POST` (same). Every change writes a platform audit row without contact details or note text. `GET /tenants?sort=` (newest, oldest, name, activity, storage; one constant query each, as the constsql rule requires).
+- Tests: `internal/platform/tenant_extras_integration_test.go` (validation, one primary, edit/delete, notes newest first, database refuses note update/delete for the app role, overview, every sort incl. a hostile value, support read-only, audit without PII); the console route matrix has rows for the 7 new routes.
+- Console: phone menu (drop-down under 768 px), tables as cards under 640 px, tenants list sort, Last activity and Storage columns, saved views (per browser), tenant page Health card, Contacts and Notes tabs, `api.put`. Strict CSP kept (no inline styles; the storage bar is a native `<meter>`).
+
+**Checked** — lint (0 errors), both builds, `go test ./...`, `make constsql`, isolation and platform suites; dev stack rebuilt; dev platform migrated to 00008 and tenants re-run (`--parallelism 1`). No browser tests (by request).
+
+**Stopped here** for the security note `docs/S9_SECURITY_NOTE.md` (feature flags, limit overrides, shop usage counts).

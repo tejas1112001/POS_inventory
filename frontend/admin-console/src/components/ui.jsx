@@ -133,7 +133,7 @@ export function Table({ columns, rows, rowKey = (r) => r.id, onRowClick, empty =
               tabIndex={onRowClick ? 0 : undefined}
             >
               {columns.map((c) => (
-                <td key={c.key} className={c.className}>
+                <td key={c.key} className={c.className} data-label={c.label}>
                   {c.render ? c.render(r) : r[c.key]}
                 </td>
               ))}

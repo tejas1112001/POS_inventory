@@ -75,3 +75,47 @@
   margin: 0 auto;
   padding: 20px;
 }
+
+.menuButton {
+  display: none;
+  margin-left: auto;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid #475569;
+  border-radius: var(--radius);
+  background: transparent;
+  color: #fff;
+  font: inherit;
+  font-weight: 500;
+}
+
+/* Phones: the menu folds into a drop-down; the user line wraps under it. */
+@media (max-width: 767px) {
+  .top {
+    gap: 8px;
+    padding: 10px 12px;
+  }
+  .menuButton {
+    display: inline-flex;
+    align-items: center;
+  }
+  .nav {
+    display: none;
+    flex: 1 0 100%;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .navOpen {
+    display: flex;
+  }
+  .link {
+    padding: 10px 12px;
+  }
+  .user {
+    flex: 1 0 100%;
+    justify-content: space-between;
+  }
+  .main {
+    padding: 12px;
+  }
+}

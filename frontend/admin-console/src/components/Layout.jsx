@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import ErrorBoundary from './ErrorBoundary';
 import { useSession } from '../session';
@@ -15,11 +16,16 @@ export default function Layout({ children }) {
   const { user, can, signOut } = useSession();
   const { pathname } = useLocation();
   const allowed = (perm) => (Array.isArray(perm) ? perm.some(can) : can(perm));
+  const [menu, setMenu] = useState(false); // phones: the menu is a drop-down
+  useEffect(() => setMenu(false), [pathname]);
   return (
     <div className={styles.shell}>
       <header className={styles.top}>
         <span className={styles.brand}>Platform console</span>
-        <nav className={styles.nav} aria-label="Main">
+        <button type="button" className={styles.menuButton} aria-expanded={menu} aria-controls="console-nav" onClick={() => setMenu((m) => !m)}>
+          {menu ? 'Close' : 'Menu'}
+        </button>
+        <nav id="console-nav" className={`${styles.nav} ${menu ? styles.navOpen : ''}`} aria-label="Main">
           {NAV.filter((n) => allowed(n.perm)).map((n) => (
             <NavLink key={n.to} to={n.to} className={({ isActive }) => `${styles.link} ${isActive ? styles.active : ''}`}>
               {n.label}

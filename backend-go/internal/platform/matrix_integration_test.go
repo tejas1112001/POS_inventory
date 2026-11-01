@@ -59,6 +59,16 @@ var consoleMatrix = map[string]consoleSpec{
 	"POST /tenants/{id}/slug":               {roles: roles(sa), stepUp: true},
 	"POST /tenants/{id}/provisioning/retry": {roles: roles(sa)},
 	"POST /tenants/{id}/owner-invite":       {roles: roles(sa), stepUp: true},
+	// UI S9: overview, contacts and notes. Reading: tenants:view (all three
+	// roles); changing: tenants:edit (super_admin). No step-up: they touch
+	// no tenant data and change no access.
+	"GET /tenants/{id}/overview":          {roles: roles(sa, ba, sup)},
+	"GET /tenants/{id}/contacts":          {roles: roles(sa, ba, sup)},
+	"GET /tenants/{id}/notes":             {roles: roles(sa, ba, sup)},
+	"POST /tenants/{id}/contacts":         {roles: roles(sa)},
+	"PUT /tenants/{id}/contacts/{cid}":    {roles: roles(sa)},
+	"DELETE /tenants/{id}/contacts/{cid}": {roles: roles(sa)},
+	"POST /tenants/{id}/notes":            {roles: roles(sa)},
 	// suspend / reactivate: super_admin and billing_admin, step-up.
 	"POST /tenants/{id}/suspend":    {roles: roles(sa, ba), stepUp: true},
 	"POST /tenants/{id}/reactivate": {roles: roles(sa, ba), stepUp: true},

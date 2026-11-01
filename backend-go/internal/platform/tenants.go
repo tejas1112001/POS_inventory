@@ -68,8 +68,35 @@ func scanTenant(row pgx.Row) (TenantView, error) {
 type ListFilter struct {
 	Status string
 	Q      string
+	Sort   string // a key of tenantSorts; anything else is newest first
 	Limit  int
 	Offset int
+}
+
+// The list orders the console offers (UI S9): one constant query each.
+const (
+	qTenantList = `SELECT ` + qTenantCols + ` FROM platform.tenants t LEFT JOIN platform.plans p ON p.id = t.plan_id
+			WHERE ($1 = '' OR t.status = $1) AND ($2 = '' OR lower(t.slug::text) LIKE $2 OR lower(t.name) LIKE $2 OR lower(t.owner_email::text) LIKE $2)`
+	qTenantsNewest   = qTenantList + ` ORDER BY t.created_at DESC, t.id LIMIT $3 OFFSET $4`
+	qTenantsOldest   = qTenantList + ` ORDER BY t.created_at ASC, t.id LIMIT $3 OFFSET $4`
+	qTenantsName     = qTenantList + ` ORDER BY lower(t.name), t.id LIMIT $3 OFFSET $4`
+	qTenantsActivity = qTenantList + ` ORDER BY t.last_activity_at DESC NULLS LAST, t.id LIMIT $3 OFFSET $4`
+	qTenantsStorage  = qTenantList + ` ORDER BY t.storage_bytes DESC, t.id LIMIT $3 OFFSET $4`
+)
+
+func queryTenants(ctx context.Context, tx tenancy.PlatformTx, sort string, args ...any) (pgx.Rows, error) {
+	switch sort {
+	case "oldest":
+		return tx.Query(ctx, qTenantsOldest, args...)
+	case "name":
+		return tx.Query(ctx, qTenantsName, args...)
+	case "activity":
+		return tx.Query(ctx, qTenantsActivity, args...)
+	case "storage":
+		return tx.Query(ctx, qTenantsStorage, args...)
+	default:
+		return tx.Query(ctx, qTenantsNewest, args...)
+	}
 }
 
 // ListTenants returns a page of tenants and the total count.
@@ -94,9 +121,7 @@ func (s *Service) ListTenants(ctx context.Context, f ListFilter) ([]TenantView, 
 			f.Status, like).Scan(&total); err != nil {
 			return err
 		}
-		rows, err := tx.Query(ctx, `SELECT `+qTenantCols+` FROM platform.tenants t LEFT JOIN platform.plans p ON p.id = t.plan_id
-			WHERE ($1 = '' OR t.status = $1) AND ($2 = '' OR lower(t.slug::text) LIKE $2 OR lower(t.name) LIKE $2 OR lower(t.owner_email::text) LIKE $2)
-			ORDER BY t.created_at DESC, t.id LIMIT $3 OFFSET $4`, f.Status, like, f.Limit, f.Offset)
+		rows, err := queryTenants(ctx, tx, f.Sort, f.Status, like, f.Limit, f.Offset)
 		if err != nil {
 			return err
 		}
