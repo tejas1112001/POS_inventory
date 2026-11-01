@@ -72,6 +72,7 @@ type env struct {
 	mu       sync.Mutex
 	queued   []uuid.UUID // export jobs started by the console
 	ph       *platform.HTTP
+	svc      *platform.Service
 }
 
 // One clock for every test: TOTP replay state lives in the database, so
@@ -166,6 +167,7 @@ func newEnvWith(t *testing.T, mod func(*platform.Config)) *env {
 		mod(&pc)
 	}
 	svc := platform.NewService(pc)
+	e.svc = svc
 	n := httpx.Network{BaseDomain: "pos.test"}
 	ph := platform.NewHTTP(svc, n, nil, nil, "http")
 	e.ph = ph
