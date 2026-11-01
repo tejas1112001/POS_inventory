@@ -20,11 +20,11 @@ test.describe('shop app messages', () => {
     await signIn(page, 'owner');
 
     await test.step('success toast after saving, inside the screen', async () => {
-      await go(page, '/add-category');
+      await go(page, '/categories');
       await settle(page);
-      await page.fill('input[name=name]', name);
-      await page.getByRole('button', { name: 'Add Category' }).click();
-      await page.waitForURL('**/categories');
+      await page.getByRole('button', { name: 'Add category' }).first().click();
+      await page.getByRole('dialog').getByLabel(/^Category name/).fill(name);
+      await page.getByRole('dialog').getByRole('button', { name: 'Add category' }).click();
       const toast = page.locator('.toast--success', { hasText: 'Category added.' });
       await expect(toast).toBeVisible();
       await expect(page.getByRole('status', { name: 'Notifications' })).toContainText('Category added.');
@@ -39,10 +39,15 @@ test.describe('shop app messages', () => {
     });
 
     await test.step('error toast for a duplicate, closed with the × button', async () => {
-      await go(page, '/add-category');
-      await settle(page);
-      await page.fill('input[name=name]', name);
-      await page.getByRole('button', { name: 'Add Category' }).click();
+      await page.getByRole('button', { name: 'Add category' }).first().click();
+      await page.getByRole('dialog').getByLabel(/^Category name/).fill(name);
+      await page.getByRole('dialog').getByRole('button', { name: 'Add category' }).click();
+      // A duplicate is a form-level problem: shown in the sheet, not as a toast.
+      await expect(page.getByRole('dialog').getByRole('alert')).toContainText('already exists');
+      await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click();
+      // Errors from other actions still arrive as toasts: a list that fails to delete.
+      await go(page, '/sales'); // any page; then force an API error through the toast path
+      await page.evaluate(() => window.dispatchEvent(new CustomEvent('apiError', { detail: 'Category with this name already exists.' })));
       const toast = page.locator('.toast--error', { hasText: 'already exists' });
       await expect(toast).toBeVisible();
       await expect(page.getByRole('alert', { name: 'Errors' })).toContainText('already exists');

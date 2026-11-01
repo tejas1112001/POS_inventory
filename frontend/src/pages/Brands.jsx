@@ -1,52 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import ListPageShell from '../components/layout/ListPageShell';
-import BrandList from '../components/lists/BrandList';
-import { useNavigate } from 'react-router-dom';
-import { api } from '../services/api';
-import { formatDate } from '@/lib/format';
+import RecordsPage from '@/components/kit/RecordsPage';
+import { brandConfig } from './recordConfigs';
 
-export default function Brands() {
-  const [brands, setBrands] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    fetchBrands();
-  }, []);
-
-  const fetchBrands = async () => {
-    try {
-      setLoading(true);
-      const data = await api.get('/api/brands');
-      const brandRows = Array.isArray(data) ? data : [];
-
-      // Format dates for display
-      const formattedData = brandRows.map(brand => ({
-        ...brand,
-        createdAt: formatDate(brand.createdAt)
-      }));
-      
-      setBrands(formattedData);
-      setError(null);
-    } catch (err) {
-      setError('Failed to fetch brands');
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (loading) return <div className="p-6">Loading brands...</div>;
-  if (error) return <div className="p-6 text-red-500">{error}</div>;
-
-  return (
-    <ListPageShell>
-      <BrandList
-        brands={brands || []}
-        setShowForm={() => navigate('/add-brand')}
-        onRefresh={fetchBrands}
-      />
-    </ListPageShell>
-  );
+// Brands: server-paged list with search, status filter and add/edit in a sheet.
+export default function Brands({ startNew = false }) {
+  return <RecordsPage config={brandConfig} startNew={startNew} />;
 }

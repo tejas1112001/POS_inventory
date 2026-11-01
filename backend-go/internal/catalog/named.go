@@ -35,7 +35,7 @@ type namedIn struct {
 type namedStore struct {
 	label   string // "Category"
 	purpose string
-	list    func(ctx context.Context, tx tenancy.TenantTx, limit, offset int) ([]namedJSON, int, error)
+	list    func(ctx context.Context, tx tenancy.TenantTx, limit, offset int, f listFilter) ([]namedJSON, int, error)
 	insert  func(ctx context.Context, tx tenancy.TenantTx, name, status string, img *uuid.UUID, by int64) (namedJSON, error)
 	current func(ctx context.Context, tx tenancy.TenantTx, id int64) (*uuid.UUID, error) // locks the row
 	update  func(ctx context.Context, tx tenancy.TenantTx, id int64, name, status string, img *uuid.UUID) (namedJSON, error)
@@ -69,13 +69,14 @@ func (s namedStore) withURL(n namedJSON) namedJSON {
 func (a *API) namedList(s namedStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		p := httpx.ParsePage(r, a.d.MaxRows)
+		f := filterOf(r)
 		var (
 			list  []namedJSON
 			total int
 		)
 		err := a.ro(r.Context(), tenant(r), func(tx tenancy.TenantTx) error {
 			var err error
-			list, total, err = s.list(r.Context(), tx, p.Limit, p.Offset)
+			list, total, err = s.list(r.Context(), tx, p.Limit, p.Offset, f)
 			return err
 		})
 		if err != nil {
@@ -217,9 +218,10 @@ func notFound(err error) error {
 // ---------------------------------------------------------- categories
 
 const (
-	qCatCount = `SELECT count(*) FROM categories WHERE deleted_at IS NULL`
+	qCatCount = `SELECT count(*) FROM categories WHERE deleted_at IS NULL AND ($1 = '' OR name ILIKE $1) AND ($2 = '' OR status = $2)`
 	qCatList  = `SELECT c.id, c.name::text, c.status, c.image_file_id, c.created_by, coalesce(u.name, 'Unknown'), c.created_at, c.updated_at
 		FROM categories c LEFT JOIN users u ON u.id = c.created_by WHERE c.deleted_at IS NULL
+		AND ($3 = '' OR c.name ILIKE $3) AND ($4 = '' OR c.status = $4)
 		ORDER BY c.created_at DESC, c.id DESC LIMIT $1 OFFSET $2`
 	qCatInsert = `WITH x AS (INSERT INTO categories (name, status, image_file_id, created_by) VALUES ($1, $2, $3, NULLIF($4, 0)) RETURNING *)
 		SELECT x.id, x.name::text, x.status, x.image_file_id, x.created_by, coalesce(u.name, 'Unknown'), x.created_at, x.updated_at
@@ -233,12 +235,12 @@ const (
 
 var categories = namedStore{
 	label: "Category", purpose: files.PurposeCategoryImage,
-	list: func(ctx context.Context, tx tenancy.TenantTx, limit, offset int) ([]namedJSON, int, error) {
+	list: func(ctx context.Context, tx tenancy.TenantTx, limit, offset int, f listFilter) ([]namedJSON, int, error) {
 		var total int
-		if err := tx.QueryRow(ctx, qCatCount).Scan(&total); err != nil {
+		if err := tx.QueryRow(ctx, qCatCount, f.like, f.status).Scan(&total); err != nil {
 			return nil, 0, err
 		}
-		rows, err := tx.Query(ctx, qCatList, limit, offset)
+		rows, err := tx.Query(ctx, qCatList, limit, offset, f.like, f.status)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -265,9 +267,10 @@ var categories = namedStore{
 // -------------------------------------------------------------- brands
 
 const (
-	qBrandCount = `SELECT count(*) FROM brands WHERE deleted_at IS NULL`
+	qBrandCount = `SELECT count(*) FROM brands WHERE deleted_at IS NULL AND ($1 = '' OR name ILIKE $1) AND ($2 = '' OR status = $2)`
 	qBrandList  = `SELECT b.id, b.name::text, b.status, b.image_file_id, b.created_by, coalesce(u.name, 'Unknown'), b.created_at, b.updated_at
 		FROM brands b LEFT JOIN users u ON u.id = b.created_by WHERE b.deleted_at IS NULL
+		AND ($3 = '' OR b.name ILIKE $3) AND ($4 = '' OR b.status = $4)
 		ORDER BY b.created_at DESC, b.id DESC LIMIT $1 OFFSET $2`
 	qBrandInsert = `WITH x AS (INSERT INTO brands (name, status, image_file_id, created_by) VALUES ($1, $2, $3, NULLIF($4, 0)) RETURNING *)
 		SELECT x.id, x.name::text, x.status, x.image_file_id, x.created_by, coalesce(u.name, 'Unknown'), x.created_at, x.updated_at
@@ -281,12 +284,12 @@ const (
 
 var brands = namedStore{
 	label: "Brand", purpose: files.PurposeBrandImage,
-	list: func(ctx context.Context, tx tenancy.TenantTx, limit, offset int) ([]namedJSON, int, error) {
+	list: func(ctx context.Context, tx tenancy.TenantTx, limit, offset int, f listFilter) ([]namedJSON, int, error) {
 		var total int
-		if err := tx.QueryRow(ctx, qBrandCount).Scan(&total); err != nil {
+		if err := tx.QueryRow(ctx, qBrandCount, f.like, f.status).Scan(&total); err != nil {
 			return nil, 0, err
 		}
-		rows, err := tx.Query(ctx, qBrandList, limit, offset)
+		rows, err := tx.Query(ctx, qBrandList, limit, offset, f.like, f.status)
 		if err != nil {
 			return nil, 0, err
 		}

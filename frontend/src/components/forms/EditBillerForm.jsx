@@ -126,7 +126,7 @@ export default function EditBillerForm({ biller, onSaved, onCancel }) {
         <button
           type="submit"
           disabled={saving}
-          className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50"
+          className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-[color-mix(in_oklch,var(--primary),black_12%)] disabled:opacity-50"
         >
           {saving ? 'Saving...' : 'Save User'}
         </button>

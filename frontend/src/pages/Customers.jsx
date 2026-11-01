@@ -1,45 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import ListPageShell from '../components/layout/ListPageShell';
-import CustomerList from '../components/lists/CustomerList';
-import { useNavigate } from 'react-router-dom';
-import { api } from '../services/api';
+import RecordsPage from '@/components/kit/RecordsPage';
+import { customerConfig } from './recordConfigs';
 
-export default function Customers() {
-  const [customers, setCustomers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    fetchCustomers();
-  }, []);
-
-  const fetchCustomers = async () => {
-    try {
-      setLoading(true);
-      const data = await api.get('/api/customers');
-      
-      setCustomers(Array.isArray(data) ? data : []);
-      setError(null);
-    } catch (err) {
-      setError('Failed to fetch customers');
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (loading) return <div className="p-6">Loading customers...</div>;
-  if (error) return <div className="p-6 text-red-500">{error}</div>;
-
-  return (
-    <ListPageShell>
-      <CustomerList
-        customers={customers || []}
-        setShowForm={() => navigate('/add-customer')}
-        onRefresh={fetchCustomers}
-      />
-    </ListPageShell>
-  );
+// Customers: server-paged list with search, status filter and add/edit in a sheet.
+export default function Customers({ startNew = false }) {
+  return <RecordsPage config={customerConfig} startNew={startNew} />;
 }

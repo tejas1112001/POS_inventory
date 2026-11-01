@@ -68,3 +68,19 @@ These change only what the menu shows and which page shows "no access"; the serv
 **Tested**
 - `s3-navigation.spec.js`, owner and cashier × 3 widths: menu groups per role, active item, no Storefront/Purchases for cashiers, tab bar only under 768 px with the right tabs and a working More, content padding, Reports redirect and tabs per permission, `g o` shortcut. **6 passed.**
 - Route smoke (now also `/reports`; Storefront and Purchase report counted as "no access" for cashiers): **6 passed.**
+
+## S4 – Component kit and pilot pages
+
+**Changed**
+- Kit (`src/components/kit/`): `PageHeader`; `DataTable` (server pages, a real table from 640 px, cards on phones, skeleton loading, empty and error states with Retry, "1–25 of N", rows per page, 44 px paging buttons); `FilterBar` (search, select filters, removable chips, Clear filters; on phones the filters open in a bottom sheet); `RowActions` (one "…" menu per row, only actions the role may take); `StatusBadge` (one colour map for every status); form kit on **react-hook-form** (`FormSheet`, `TextField`, `SelectField`, `TextAreaField`, `ImageField`): labels linked to inputs, `aria-invalid` and `aria-describedby`, field errors under the field, server field errors mapped to fields with a summary at the top; `RecordsPage` (list + search + status filter + add/edit sheet + delete confirm). `usePagedList` keeps page, size, search and filters in the address.
+- Pilot pages rebuilt on the kit: **Categories, Brands, Units, Customers, Suppliers, Stock**. Add/edit open in a sheet (the old add pages and their 2-step forms are gone; `/add-…` addresses open the sheet). Stock has counter tiles (All / In stock / Low stock / Out of stock, clickable) and "Set stock" in a sheet.
+- Server (read-only queries): `?search=` and `?status=` on categories, brands, units, suppliers, customers; `?search=` (product, SKU, store) and `?stockStatus=` on stock. Integration test `test/isolation/list_filters_test.go`; the whole isolation suite passes.
+- Accessibility found by axe and fixed app-wide: the primary colour (all five theme presets) gave white button text 3.0–3.7:1; now ≥ 4.7:1. Hover states darken instead of lightening (they dropped to 4.0:1).
+- Libraries: **MUI, Emotion and Headless UI removed** (66 packages); the old list modal uses the Radix dialog (bottom sheet on phones). TanStack Table stays only in the old list kit until S8; the new `DataTable` does not need it. `ProductPicker` moves to S8, where its forms are rebuilt.
+- Fixed while testing: quick filter changes could undo each other (address updates now start from the current address); on phones a long form's Save/Cancel sat below the screen edge (the sheet's buttons now stay fixed at its bottom while the fields scroll); the picture-less initials (S1) had 2.9:1 contrast (now full primary).
+
+**Tested** — `s4-kit.spec.js` × 3 widths:
+- Owner, each of the five record pages: server search (kept in the address), status filter (filters sheet on phones, chip, clear), cards instead of a table on phones, add with an empty name (field marked invalid, "… is required." under it), add (toast), edit (toast), delete asks (cancelled: nothing deleted), `/add-…` opens the sheet and Cancel returns to the list; axe on the page area and the sheet (no serious/critical issues).
+- Owner, Stock: tiles filter, search by SKU, "Set stock" refuses −1 ("Must be 0 or more.").
+- Cashier: may add customers but has no edit/delete menu; Categories says "no access"; Stock has no "Set stock".
+- Regression: all suites together (smoke, S1, S2, S3, S4) × 3 widths. **27 passed** (the S1 and S2 tests were updated for the new forms and the in-app confirm dialog).

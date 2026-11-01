@@ -3,6 +3,7 @@ package catalog
 import (
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -32,8 +33,8 @@ type unitIn struct {
 
 const (
 	qUnitCols   = `x.id, x.name::text, x.short_name, x.status, x.created_by, coalesce(u.name, 'Unknown'), x.created_at, x.updated_at`
-	qUnitCount  = `SELECT count(*) FROM units WHERE deleted_at IS NULL`
-	qUnitList   = `SELECT ` + qUnitCols + ` FROM units x LEFT JOIN users u ON u.id = x.created_by WHERE x.deleted_at IS NULL ORDER BY x.created_at DESC, x.id DESC LIMIT $1 OFFSET $2`
+	qUnitCount  = `SELECT count(*) FROM units WHERE deleted_at IS NULL AND ($1 = '' OR name ILIKE $1 OR short_name ILIKE $1) AND ($2 = '' OR status = $2)`
+	qUnitList   = `SELECT ` + qUnitCols + ` FROM units x LEFT JOIN users u ON u.id = x.created_by WHERE x.deleted_at IS NULL AND ($3 = '' OR x.name ILIKE $3 OR x.short_name ILIKE $3) AND ($4 = '' OR x.status = $4) ORDER BY x.created_at DESC, x.id DESC LIMIT $1 OFFSET $2`
 	qUnitInsert = `WITH x AS (INSERT INTO units (name, short_name, status, created_by) VALUES ($1, $2, $3, NULLIF($4, 0)) RETURNING *) SELECT ` + qUnitCols + ` FROM x LEFT JOIN users u ON u.id = x.created_by`
 	qUnitUpdate = `WITH x AS (UPDATE units SET name = $2, short_name = $3, status = $4, updated_at = now() WHERE id = $1 AND deleted_at IS NULL RETURNING *) SELECT ` + qUnitCols + ` FROM x LEFT JOIN users u ON u.id = x.created_by`
 	qUnitDelete = `UPDATE units SET deleted_at = now() WHERE id = $1 AND deleted_at IS NULL`
@@ -63,15 +64,16 @@ func (a *API) unitParse(r *http.Request) (unitIn, error) {
 
 func (a *API) listUnits(w http.ResponseWriter, r *http.Request) {
 	p := httpx.ParsePage(r, a.d.MaxRows)
+	f := filterOf(r)
 	var (
 		out   []unitJSON
 		total int
 	)
 	err := a.ro(r.Context(), tenant(r), func(tx tenancy.TenantTx) error {
-		if err := tx.QueryRow(r.Context(), qUnitCount).Scan(&total); err != nil {
+		if err := tx.QueryRow(r.Context(), qUnitCount, f.like, f.status).Scan(&total); err != nil {
 			return err
 		}
-		rows, err := tx.Query(r.Context(), qUnitList, p.Limit, p.Offset)
+		rows, err := tx.Query(r.Context(), qUnitList, p.Limit, p.Offset, f.like, f.status)
 		if err != nil {
 			return err
 		}
@@ -189,8 +191,8 @@ type supplierIn struct {
 
 const (
 	qSupCols   = `x.id, x.name, coalesce(x.email::text, ''), coalesce(x.phone, ''), coalesce(x.address, ''), x.image_file_id, x.status, x.created_by, coalesce(u.name, 'Unknown'), x.created_at, x.updated_at`
-	qSupCount  = `SELECT count(*) FROM suppliers WHERE deleted_at IS NULL`
-	qSupList   = `SELECT ` + qSupCols + ` FROM suppliers x LEFT JOIN users u ON u.id = x.created_by WHERE x.deleted_at IS NULL ORDER BY x.created_at DESC, x.id DESC LIMIT $1 OFFSET $2`
+	qSupCount  = `SELECT count(*) FROM suppliers WHERE deleted_at IS NULL AND ($1 = '' OR name ILIKE $1 OR phone ILIKE $1 OR email::text ILIKE $1) AND ($2 = '' OR status = $2)`
+	qSupList   = `SELECT ` + qSupCols + ` FROM suppliers x LEFT JOIN users u ON u.id = x.created_by WHERE x.deleted_at IS NULL AND ($3 = '' OR x.name ILIKE $3 OR x.phone ILIKE $3 OR x.email::text ILIKE $3) AND ($4 = '' OR x.status = $4) ORDER BY x.created_at DESC, x.id DESC LIMIT $1 OFFSET $2`
 	qSupInsert = `WITH x AS (INSERT INTO suppliers (name, email, phone, address, image_file_id, status, created_by)
 		VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, 0)) RETURNING *) SELECT ` + qSupCols + ` FROM x LEFT JOIN users u ON u.id = x.created_by`
 	qSupCurrent = `SELECT image_file_id FROM suppliers WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`
@@ -230,15 +232,16 @@ func parseSupplier(r *http.Request) (supplierIn, error) {
 
 func (a *API) listSuppliers(w http.ResponseWriter, r *http.Request) {
 	p := httpx.ParsePage(r, a.d.MaxRows)
+	f := filterOf(r)
 	var (
 		out   []supplierJSON
 		total int
 	)
 	err := a.ro(r.Context(), tenant(r), func(tx tenancy.TenantTx) error {
-		if err := tx.QueryRow(r.Context(), qSupCount).Scan(&total); err != nil {
+		if err := tx.QueryRow(r.Context(), qSupCount, f.like, f.status).Scan(&total); err != nil {
 			return err
 		}
-		rows, err := tx.Query(r.Context(), qSupList, p.Limit, p.Offset)
+		rows, err := tx.Query(r.Context(), qSupList, p.Limit, p.Offset, f.like, f.status)
 		if err != nil {
 			return err
 		}
@@ -377,9 +380,9 @@ type customerIn struct {
 
 const (
 	qCusCols  = `x.id, x.name, coalesce(x.email::text, ''), coalesce(x.phone, ''), coalesce(x.address, ''), coalesce(x.city, ''), coalesce(x.country, ''), x.image_file_id, x.status, x.created_by, coalesce(u.name, 'Unknown'), x.created_at, x.updated_at`
-	qCusCount = `SELECT count(*) FROM customers WHERE deleted_at IS NULL AND ($1 = '' OR name ILIKE $1 OR phone ILIKE $1 OR email::text ILIKE $1)`
+	qCusCount = `SELECT count(*) FROM customers WHERE deleted_at IS NULL AND ($1 = '' OR name ILIKE $1 OR phone ILIKE $1 OR email::text ILIKE $1) AND ($2 = '' OR status = $2)`
 	qCusList  = `SELECT ` + qCusCols + ` FROM customers x LEFT JOIN users u ON u.id = x.created_by
-		WHERE x.deleted_at IS NULL AND ($3 = '' OR x.name ILIKE $3 OR x.phone ILIKE $3 OR x.email::text ILIKE $3)
+		WHERE x.deleted_at IS NULL AND ($3 = '' OR x.name ILIKE $3 OR x.phone ILIKE $3 OR x.email::text ILIKE $3) AND ($4 = '' OR x.status = $4)
 		ORDER BY x.created_at DESC, x.id DESC LIMIT $1 OFFSET $2`
 	qCusInsert = `WITH x AS (INSERT INTO customers (name, email, phone, address, city, country, image_file_id, status, created_by)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NULLIF($9, 0)) RETURNING *) SELECT ` + qCusCols + ` FROM x LEFT JOIN users u ON u.id = x.created_by`
@@ -422,6 +425,19 @@ func parseCustomer(r *http.Request) (customerIn, error) {
 	return in, nil
 }
 
+// listFilter is the optional ?search= and ?status= of a list. search
+// matches anywhere (case-insensitive); status is Active, Inactive or empty.
+type listFilter struct{ like, status string }
+
+func filterOf(r *http.Request) listFilter {
+	q := r.URL.Query()
+	status := q.Get("status")
+	if status != "Active" && status != "Inactive" {
+		status = ""
+	}
+	return listFilter{like: likePattern(strings.TrimSpace(q.Get("search"))), status: status}
+}
+
 func likePattern(q string) string {
 	if q == "" {
 		return ""
@@ -442,16 +458,16 @@ func escapeLike(s string) string {
 
 func (a *API) listCustomers(w http.ResponseWriter, r *http.Request) {
 	p := httpx.ParsePage(r, a.d.MaxRows)
-	like := likePattern(r.URL.Query().Get("search"))
+	f := filterOf(r)
 	var (
 		out   []customerJSON
 		total int
 	)
 	err := a.ro(r.Context(), tenant(r), func(tx tenancy.TenantTx) error {
-		if err := tx.QueryRow(r.Context(), qCusCount, like).Scan(&total); err != nil {
+		if err := tx.QueryRow(r.Context(), qCusCount, f.like, f.status).Scan(&total); err != nil {
 			return err
 		}
-		rows, err := tx.Query(r.Context(), qCusList, p.Limit, p.Offset, like)
+		rows, err := tx.Query(r.Context(), qCusList, p.Limit, p.Offset, f.like, f.status)
 		if err != nil {
 			return err
 		}

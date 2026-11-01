@@ -18,19 +18,14 @@ import Purchases from './pages/Purchases';
 import AddPurchase from './pages/AddPurchase';
 import POS from './pages/POS';
 import Categories from './pages/Categories';
-import AddCategory from './pages/AddCategory';
 import Brands from './pages/Brands';
-import AddBrand from './pages/AddBrand';
 import Units from './pages/Units';
-import AddUnit from './pages/AddUnit';
 import Invoices from './pages/Invoices';
 import SalesReturn from './pages/SalesReturn';
 import AddSalesReturn from './pages/AddSalesReturn';
 import Customers from './pages/Customers';
-import AddCustomer from './pages/AddCustomer';
 import Billers from './pages/Billers';
 import Suppliers from './pages/Suppliers';
-import AddSupplier from './pages/AddSupplier';
 import PurchaseReport from './pages/PurchaseReport';
 import CustomerDueReport from './pages/CustomerDueReport';
 import CustomerReport from './pages/CustomerReport';
@@ -87,13 +82,13 @@ function AppRoutes() {
       <Route path="/accept-invite" element={<SetPassword purpose="invite" />} />
       <Route path="/dashboard" element={<ProtectedLayout module="dashboard"><Dashboard /></ProtectedLayout>} />
       <Route path="/categories" element={<ProtectedLayout module="categories" action="view"><Categories /></ProtectedLayout>} />
-      <Route path="/add-category" element={<ProtectedLayout module="categories" action="create"><AddCategory /></ProtectedLayout>} />
+      <Route path="/add-category" element={<ProtectedLayout module="categories" action="create"><Categories startNew /></ProtectedLayout>} />
       <Route path="/products" element={<ProtectedLayout module="products" action="view"><Products /></ProtectedLayout>} />
       <Route path="/add-product" element={<ProtectedLayout module="products" action="create"><AddProduct /></ProtectedLayout>} />
       <Route path="/brands" element={<ProtectedLayout module="brands" action="view"><Brands /></ProtectedLayout>} />
-      <Route path="/add-brand" element={<ProtectedLayout module="brands" action="create"><AddBrand /></ProtectedLayout>} />
+      <Route path="/add-brand" element={<ProtectedLayout module="brands" action="create"><Brands startNew /></ProtectedLayout>} />
       <Route path="/units" element={<ProtectedLayout module="units" action="view"><Units /></ProtectedLayout>} />
-      <Route path="/add-unit" element={<ProtectedLayout module="units" action="create"><AddUnit /></ProtectedLayout>} />
+      <Route path="/add-unit" element={<ProtectedLayout module="units" action="create"><Units startNew /></ProtectedLayout>} />
       <Route path="/invoices" element={<ProtectedLayout module="invoices" action="view"><Invoices /></ProtectedLayout>} />
       <Route path="/billers" element={<ProtectedLayout module="users" action="view"><Billers /></ProtectedLayout>} />
       <Route path="/users" element={<ProtectedLayout module="users" action="view"><Billers /></ProtectedLayout>} />
@@ -101,7 +96,7 @@ function AppRoutes() {
       <Route path="/add-role" element={<ProtectedLayout module="roles" action="create"><AddRole /></ProtectedLayout>} />
       <Route path="/edit-role/:id" element={<ProtectedLayout module="roles" action="edit"><AddRole /></ProtectedLayout>} />
       <Route path="/suppliers" element={<ProtectedLayout module="suppliers" action="view"><Suppliers /></ProtectedLayout>} />
-      <Route path="/add-supplier" element={<ProtectedLayout module="suppliers" action="create"><AddSupplier /></ProtectedLayout>} />
+      <Route path="/add-supplier" element={<ProtectedLayout module="suppliers" action="create"><Suppliers startNew /></ProtectedLayout>} />
       <Route path="/sales-return" element={<ProtectedLayout module="sales_returns" action="view"><SalesReturn /></ProtectedLayout>} />
       <Route path="/add-sales-return" element={<ProtectedLayout module="sales_returns" action="create"><AddSalesReturn /></ProtectedLayout>} />
       <Route path="/pos" element={<ProtectedLayout fullBleed module="pos" action="view"><POS /></ProtectedLayout>} />
@@ -114,7 +109,7 @@ function AppRoutes() {
       <Route path="/reports" element={<Navigate to="/sales-report" replace />} />
       <Route path="/customer-due-report" element={<ProtectedLayout module="reports" action="view"><CustomerDueReport /></ProtectedLayout>} />
       <Route path="/customers" element={<ProtectedLayout module="customers" action="view"><Customers /></ProtectedLayout>} />
-      <Route path="/add-customer" element={<ProtectedLayout module="customers" action="create"><AddCustomer /></ProtectedLayout>} />
+      <Route path="/add-customer" element={<ProtectedLayout module="customers" action="create"><Customers startNew /></ProtectedLayout>} />
       <Route path="/customer-report" element={<ProtectedLayout module="reports" action="view"><CustomerReport /></ProtectedLayout>} />
       <Route path="/inventory" element={<ProtectedLayout module="inventory" action="view"><Inventory /></ProtectedLayout>} />
       <Route path="/stock-adjustments" element={<ProtectedLayout module="stock_adjustments" action="view"><StockAdjustments /></ProtectedLayout>} />

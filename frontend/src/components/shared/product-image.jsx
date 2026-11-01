@@ -15,7 +15,7 @@ export function ProductImage({
     <div
       className={cn(
         "flex items-center justify-center font-semibold text-white shrink-0",
-        !color && "bg-primary/70",
+        !color && "bg-primary",
         rounded,
         className
       )}

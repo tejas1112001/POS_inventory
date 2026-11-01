@@ -44,4 +44,6 @@ Named `E2E-<slice> <kind> w<width> <run id>`; each run makes its own.
 
 | Slice | Records |
 |---|---|
-| S1 | 5 customers, 5 suppliers, 5 brands (two earlier runs stopped after these), 3 products (opening stock 3, ₹99.50, 18 %, Main Store; description edited by the test), 3 **Pending** purchases of 2 × UI-AUDIT T-Shirt at ₹250 |
+| S1 | 5 customers, 5 suppliers, 5 brands (two earlier runs stopped after these), 9 products (opening stock 3, ₹99.50, 18 %, Main Store; description edited by the test), 9 **Pending** purchases of 2 × UI-AUDIT T-Shirt at ₹250 (each S1 run makes 3 of each) |
+| S2 | 12 categories (`E2E-S2 Category …`) |
+| S4 | 12 categories, 12 brands, 12 units, 12 customers, 10 suppliers (`E2E-S4 … edited`: added, then renamed by the test; delete was always cancelled) |

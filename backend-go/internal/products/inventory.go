@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -40,11 +41,15 @@ const (
 		JOIN product_variants v ON v.id = i.variant_id AND v.deleted_at IS NULL
 		JOIN products p ON p.id = v.product_id AND p.deleted_at IS NULL
 		JOIN stores s ON s.id = i.store_id AND s.deleted_at IS NULL
-		WHERE ($1 = 0 OR i.store_id = $1)`
+		WHERE ($1 = 0 OR i.store_id = $1)
+		AND ($2 = '' OR p.name ILIKE $2 OR v.sku::text ILIKE $2 OR s.name ILIKE $2)
+		AND ($3 = '' OR ($3 = 'Out of Stock' AND i.qty <= 0)
+			OR ($3 = 'Low Stock' AND i.qty > 0 AND i.qty <= i.quantity_alert)
+			OR ($3 = 'In Stock' AND i.qty > i.quantity_alert AND i.qty > 0))`
 	qInvCount = `SELECT count(*)` + qInvFilter
 	qInvList  = `SELECT i.id, i.qty, i.quantity_alert, i.updated_at, v.id, v.sku::text, v.attributes, v.price, p.id, p.name,
 		p.image_file_id, EXISTS (SELECT 1 FROM store_products sp WHERE sp.product_id = p.id AND sp.is_published), s.id, s.name` +
-		qInvFilter + ` ORDER BY i.updated_at DESC, i.id DESC LIMIT $2 OFFSET $3`
+		qInvFilter + ` ORDER BY i.updated_at DESC, i.id DESC LIMIT $4 OFFSET $5`
 )
 
 func stockStatus(qty, alert int) string {
@@ -61,15 +66,24 @@ func stockStatus(qty, alert int) string {
 func (a *API) listInventory(w http.ResponseWriter, r *http.Request) {
 	p := httpx.ParsePage(r, a.d.MaxRows)
 	store, _ := queryInt(r, "storeId")
+	q := r.URL.Query()
+	like := ""
+	if s := strings.TrimSpace(q.Get("search")); s != "" {
+		like = "%" + strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(s) + "%"
+	}
+	stock := q.Get("stockStatus")
+	if stock != "In Stock" && stock != "Low Stock" && stock != "Out of Stock" {
+		stock = ""
+	}
 	var (
 		out   []inventoryRow
 		total int
 	)
 	err := a.ro(r.Context(), tenant(r), func(tx tenancy.TenantTx) error {
-		if err := tx.QueryRow(r.Context(), qInvCount, store).Scan(&total); err != nil {
+		if err := tx.QueryRow(r.Context(), qInvCount, store, like, stock).Scan(&total); err != nil {
 			return err
 		}
-		rows, err := tx.Query(r.Context(), qInvList, store, p.Limit, p.Offset)
+		rows, err := tx.Query(r.Context(), qInvList, store, like, stock, p.Limit, p.Offset)
 		if err != nil {
 			return err
 		}

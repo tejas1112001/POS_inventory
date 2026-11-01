@@ -1,4 +1,5 @@
 // S1: the forms that could not save, and the other S1 fixes, as the owner.
+// (Customer, supplier and brand forms were rebuilt in S4: see s4-kit.spec.js.)
 // Records are named "E2E-S1 … w<width> <time>" so every run is unique.
 import { test, expect } from '@playwright/test';
 import { ROLES, go, settle, shot, signIn, watch } from './helpers';
@@ -19,39 +20,6 @@ test('S1 forms and fixes', async ({ page }, info) => {
   const log = watch(page);
   const tag = `${info.project.name} ${Date.now().toString(36)}`;
   await signIn(page, 'owner');
-
-  await test.step('Add Customer: name only saves; empty name returns to step 1', async () => {
-    await go(page, '/add-customer');
-    await settle(page);
-    await next(page);
-    await page.getByRole('button', { name: 'Add Customer' }).click();
-    await expect(page.locator('input[name=name]')).toBeVisible(); // back on step 1
-    expect(new URL(page.url()).pathname).toBe('/add-customer');
-    await page.fill('input[name=name]', `E2E-S1 Customer ${tag}`);
-    await next(page);
-    await page.getByRole('button', { name: 'Add Customer' }).click();
-    await page.waitForURL('**/customers');
-    await expect(page.getByText(`E2E-S1 Customer ${tag}`).first()).toBeVisible();
-    await shot(page, `s1-${info.project.name}-customer-saved`);
-  });
-
-  await test.step('Add Supplier: name only saves', async () => {
-    await go(page, '/add-supplier');
-    await settle(page);
-    await page.fill('[name=name]', `E2E-S1 Supplier ${tag}`);
-    await next(page);
-    await page.getByRole('button', { name: 'Add Supplier' }).click();
-    await page.waitForURL('**/suppliers');
-    await expect(page.getByText(`E2E-S1 Supplier ${tag}`).first()).toBeVisible();
-  });
-
-  await test.step('Add Brand: no picture saves', async () => {
-    await go(page, '/add-brand');
-    await settle(page);
-    await page.fill('input[name=name]', `E2E-S1 Brand ${tag}`);
-    await page.getByRole('button', { name: 'Add Brand' }).click();
-    await page.waitForURL('**/brands');
-  });
 
   await test.step('Add Product: single product with 18 % tax saves from the last step', async () => {
     await go(page, '/add-product');
@@ -110,14 +78,12 @@ test('S1 forms and fixes', async ({ page }, info) => {
     await settle(page);
     const slug = page.locator('input[placeholder="e.g. abc-fashion"]');
     const before = await slug.inputValue();
-    let asked = '';
-    page.once('dialog', (d) => {
-      asked = d.message();
-      d.dismiss();
-    });
     await slug.fill(`${before}-e2e`);
     await page.getByRole('button', { name: 'Save Profile Changes' }).click();
-    await expect.poll(() => asked).toContain('web address');
+    // Since S2 this is an app dialog (was a browser pop-up in S1).
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toContainText('web address');
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
     await slug.fill(before);
   });
 
