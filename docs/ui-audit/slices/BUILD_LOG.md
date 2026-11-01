@@ -153,3 +153,8 @@ These change only what the menu shows and which page shows "no access"; the serv
 
 - Server (read-only): `GET /api/products/{id}` (products:view): one product with variants and stock in every store. Test `product_page_test.go` (found, 404, POS list still answers, cashier allowed, other tenant refused); the security matrix covers the route.
 - `/products` rebuilt on the kit (server paging, name/SKU search, category/brand/status filters, import, add, edit in a sheet, delete); `/products/:id` product page with options and stock per store. Old `lists/ProductList.jsx` and `lists/ProductDetails.jsx` removed.
+
+## S8c – Purchases and purchase page
+
+- Server (read-only): `GET /api/purchases` adds `?search=` (number or supplier name, LIKE characters escaped) and `?paymentStatus=`. Test `purchases_filters_test.go` (search, payment filter, payment recorded with `PUT {paid}`).
+- `/purchases` rebuilt on the kit; `/purchases/:id` purchase page. Actions on the existing `PUT /api/purchases/{id}`: Receive (`status: Received`, needs purchases:approve, stock in once), Cancel (`status: Cancelled`), Record payment (new paid total; server sets due and payment status). Old `lists/PurchaseList.jsx` removed.

@@ -85,3 +85,19 @@ How to check:
 Known problems:
 - The add-product wizard and the edit form are the existing ones (restyled in S4b, not rebuilt).
 - Barcode labels stay deferred.
+
+### S8c – Purchases and purchase page
+
+How to check:
+1. **Purchases** (`/purchases`): server pages; number (click to open), date, supplier, total, due (wide screens), status and payment badges. Search a purchase number or a supplier name. Filters: Status, Payment, Supplier.
+2. Row menu: Open; **Receive into stock** (Ordered/Pending, owner/admin with "approve purchases"); **Record payment** (when something is due); **Cancel purchase** (Ordered/Pending).
+3. Receive: the window says how many units go into which stores and that it happens once. After it: badge "Received", a green note with the time, and Stock shows the higher quantities. Receiving again is not offered.
+4. Record payment: shows total, paid and due; "Pay the full …" fills the amount; more than the due amount is refused. After it the payment badge changes (Partial or Paid) and Due drops.
+5. Cancel: asks "Keep it / Cancel purchase". A cancelled purchase cannot be received or paid.
+6. **Purchase page** (`/purchases/<id>`): items with the store each line stocks, unit cost and totals; the same three buttons at the top.
+7. A role without "approve purchases" sees "Not received yet. Receiving needs the approve purchases permission." instead of the Receive button.
+8. "New purchase" opens the existing purchase form.
+
+Known problems:
+- Purchases have no store of their own; each line names its store (shown per line).
+- Overdue is not set from here (the server keeps it when the form sends it).

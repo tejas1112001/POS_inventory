@@ -160,13 +160,16 @@ func (a *API) ro(ctx context.Context, t tenancy.Tenant, fn func(tenancy.TenantTx
 }
 
 const (
-	qFilter = ` FROM purchases p WHERE ($1 = 0 OR p.supplier_id = $1) AND ($2 = '' OR p.status = $2)`
-	qCount  = `SELECT count(*)` + qFilter
-	qIDs    = `SELECT p.id` + qFilter + ` ORDER BY p.date DESC, p.id DESC LIMIT $3 OFFSET $4`
+	qFilter = ` FROM purchases p WHERE ($1 = 0 OR p.supplier_id = $1) AND ($2 = '' OR p.status = $2)
+		AND ($3 = '' OR p.reference ILIKE $3 OR EXISTS (SELECT 1 FROM suppliers s WHERE s.id = p.supplier_id AND s.name ILIKE $3))
+		AND ($4 = '' OR p.payment_status = $4)`
+	qCount = `SELECT count(*)` + qFilter
+	qIDs   = `SELECT p.id` + qFilter + ` ORDER BY p.date DESC, p.id DESC LIMIT $5 OFFSET $6`
 )
 
 // list is GET /api/purchases: newest first, a bare array unless page/limit
-// are given; ?supplierId= and ?status= filter.
+// are given; ?supplierId=, ?status=, ?paymentStatus= and ?search= (number
+// or supplier name) filter.
 func (a *API) list(w http.ResponseWriter, r *http.Request) {
 	p := httpx.ParsePage(r, a.d.MaxRows)
 	q := r.URL.Query()
@@ -175,15 +178,25 @@ func (a *API) list(w http.ResponseWriter, r *http.Request) {
 		supplier = 0
 	}
 	status := strings.TrimSpace(q.Get("status"))
+	like := ""
+	if s := strings.TrimSpace(q.Get("search")); s != "" {
+		like = "%" + strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(s) + "%"
+	}
+	pay := q.Get("paymentStatus")
+	switch pay {
+	case "Paid", "Partial", "Unpaid", "Overdue":
+	default:
+		pay = ""
+	}
 	var (
 		out   []PurchaseJSON
 		total int
 	)
 	err = a.ro(r.Context(), tenant(r), func(tx tenancy.TenantTx) error {
-		if err := tx.QueryRow(r.Context(), qCount, supplier, status).Scan(&total); err != nil {
+		if err := tx.QueryRow(r.Context(), qCount, supplier, status, like, pay).Scan(&total); err != nil {
 			return err
 		}
-		rows, err := tx.Query(r.Context(), qIDs, supplier, status, p.Limit, p.Offset)
+		rows, err := tx.Query(r.Context(), qIDs, supplier, status, like, pay, p.Limit, p.Offset)
 		if err != nil {
 			return err
 		}

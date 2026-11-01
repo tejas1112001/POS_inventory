@@ -17,6 +17,7 @@ import Orders from './pages/Orders';
 import OrderDetail from './pages/OrderDetail';
 import AddSales from './pages/AddSales';
 import Purchases from './pages/Purchases';
+import PurchaseDetail from './pages/PurchaseDetail';
 import AddPurchase from './pages/AddPurchase';
 import CheckoutEntry from './pages/checkout/CheckoutEntry';
 import Categories from './pages/Categories';
@@ -109,6 +110,7 @@ function AppRoutes() {
       <Route path="/add-sale" element={<ProtectedLayout module="sales" action="create"><AddSales /></ProtectedLayout>} />
       <Route path="/sales-report" element={<ProtectedLayout module="reports" action="view"><SalesReport /></ProtectedLayout>} />
       <Route path="/purchases" element={<ProtectedLayout module="purchases" action="view"><Purchases /></ProtectedLayout>} />
+      <Route path="/purchases/:id" element={<ProtectedLayout module="purchases" action="view"><PurchaseDetail /></ProtectedLayout>} />
       <Route path="/add-purchase" element={<ProtectedLayout module="purchases" action="create"><AddPurchase /></ProtectedLayout>} />
       <Route path="/purchase-report" element={<ProtectedLayout module="purchases" action="view"><PurchaseReport /></ProtectedLayout>} />
       <Route path="/reports" element={<Navigate to="/sales-report" replace />} />
