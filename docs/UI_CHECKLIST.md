@@ -114,3 +114,17 @@ How to check:
 Known problems:
 - The New return form is the existing one (restyled, not rebuilt).
 - Returns have no printed credit note yet (S10b).
+
+### S8e – Users (and the pages left as they are)
+
+How to check:
+1. **Users** (`/users`; the old `/billers` address opens the same page): name (with "You" on your own row), email, role, added date (wide screens), status. Search name or email; Status filter.
+2. **Add user**: name, email, password (optional), role, status. With a password of 12+ characters the user can sign in at once; with an empty password the toast says an invitation was emailed (check Mailpit at http://127.0.0.1:8026). A short password is refused under the field.
+3. **Edit**: name, email, role, status. Your own row has no "Remove".
+4. **Remove** asks first; the removed user can no longer sign in.
+5. As the cashier: Users is not in the menu; `/users` shows "no access".
+
+Not rebuilt in S8 (already on the shared toasts, confirm windows and pager from S2–S4b): Roles & permissions, Storefront, the four reports, Invoices & dues. They keep their current layout.
+
+Known problems:
+- The users list is not paged on the server (shops have few users); search and pages are done in the browser.

@@ -163,3 +163,10 @@ These change only what the menu shows and which page shows "no access"; the serv
 
 - Server (read-only): `GET /api/sales/returns` adds `?search=` (return number, order number, customer), `?startDate=`, `?endDate=` (shop time zone) and `?storeId=`; new `GET /api/sales/returns/{id}` (sales_returns:view). Test `returns_page_test.go` (filters, read, 404, other tenant refused).
 - `/sales-return` rebuilt on the kit; `/sales-return/:id` return page. `kit/DateBox.jsx` shared by Orders and Returns. Old `lists/SalesReturnList.jsx` removed.
+
+## S8e – Users
+
+- `/users` (and `/billers`) rebuilt on the kit: search, status filter, add (password or emailed invitation), edit (name, email, role, status), remove (not yourself). Existing endpoints only; no server change. Old `Billers.jsx`, `BillerList.jsx`, `AddBillerForm.jsx`, `EditBillerForm.jsx` removed.
+- Roles & permissions, Storefront, reports and Invoices & dues are left as they are (already on the shared toasts, confirm windows and pager).
+
+**S8 checked** — lint (0 errors), both builds, `go test ./...`, isolation suite (with the new S8 tests); dev stack rebuilt. No browser tests (by request).

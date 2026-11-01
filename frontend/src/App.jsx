@@ -28,7 +28,7 @@ import SalesReturn from './pages/SalesReturn';
 import ReturnDetail from './pages/ReturnDetail';
 import AddSalesReturn from './pages/AddSalesReturn';
 import Customers from './pages/Customers';
-import Billers from './pages/Billers';
+import Users from './pages/Users';
 import Suppliers from './pages/Suppliers';
 import PurchaseReport from './pages/PurchaseReport';
 import CustomerDueReport from './pages/CustomerDueReport';
@@ -96,8 +96,8 @@ function AppRoutes() {
       <Route path="/units" element={<ProtectedLayout module="units" action="view"><Units /></ProtectedLayout>} />
       <Route path="/add-unit" element={<ProtectedLayout module="units" action="create"><Units startNew /></ProtectedLayout>} />
       <Route path="/invoices" element={<ProtectedLayout module="invoices" action="view"><Invoices /></ProtectedLayout>} />
-      <Route path="/billers" element={<ProtectedLayout module="users" action="view"><Billers /></ProtectedLayout>} />
-      <Route path="/users" element={<ProtectedLayout module="users" action="view"><Billers /></ProtectedLayout>} />
+      <Route path="/billers" element={<ProtectedLayout module="users" action="view"><Users /></ProtectedLayout>} />
+      <Route path="/users" element={<ProtectedLayout module="users" action="view"><Users /></ProtectedLayout>} />
       <Route path="/roles" element={<ProtectedLayout module="roles" action="view"><Roles /></ProtectedLayout>} />
       <Route path="/add-role" element={<ProtectedLayout module="roles" action="create"><AddRole /></ProtectedLayout>} />
       <Route path="/edit-role/:id" element={<ProtectedLayout module="roles" action="edit"><AddRole /></ProtectedLayout>} />
