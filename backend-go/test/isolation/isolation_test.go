@@ -145,7 +145,7 @@ func run(m *testing.M) (int, error) {
 	// The suite signs in far more often than a shop does; the per-tenant
 	// login limit (100 a minute) would refuse later tests.
 	theApp, err = app.New(ctx, cfg, log, app.WithMailTesting(guard, smtpSrv.RootCAs), app.WithSweepInterval(time.Second),
-		app.WithTenantLoginLimit(100_000))
+		app.WithTenantLoginLimit(100_000), app.WithDashboardCache(0)) // tests sell and read the dashboard at once
 	if err != nil {
 		return 0, err
 	}

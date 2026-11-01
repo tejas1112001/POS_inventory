@@ -2,6 +2,7 @@ package reports
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -185,6 +186,17 @@ func (a *API) dashboard(w http.ResponseWriter, r *http.Request) {
 		scope = queryID(r, "userId")
 	}
 	store := queryID(r, "storeId")
+	// The answer depends on the tenant, whose sales are counted, the
+	// filters, and the permissions that add or hide counts.
+	key := fmt.Sprintf("%s|%d|%d|%s|%s|%t%t%t%t", tenant(r).ID, scope, store, r.URL.Query().Get("startDate"), r.URL.Query().Get("endDate"),
+		p.Has("sales:view_all"), p.Has("inventory:view"), p.Has("purchases:view"), p.Has("reports:view"))
+	if a.d.DashboardTTL > 0 {
+		if cached, ok := a.dashC.Get(key); ok {
+			w.Header().Set("Cache-Control", "no-store")
+			httpx.WriteJSON(w, http.StatusOK, cached)
+			return
+		}
+	}
 	var out Dashboard
 	err := a.ro(r.Context(), tenant(r), func(tx tenancy.TenantTx) error {
 		ctx := r.Context()
@@ -228,6 +240,9 @@ func (a *API) dashboard(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		httpx.WriteError(w, r, err)
 		return
+	}
+	if a.d.DashboardTTL > 0 {
+		a.dashC.Set(key, out, a.d.DashboardTTL)
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	httpx.WriteJSON(w, http.StatusOK, out)

@@ -69,6 +69,13 @@ type options struct {
 	mailRoots        *x509.CertPool
 	sweepInterval    time.Duration
 	tenantLoginLimit int
+	dashboardTTL     *time.Duration
+}
+
+// WithDashboardCache sets the dashboard cache lifetime (default 30 s,
+// PHASE1_DESIGN §9); 0 turns it off (tests that sell and read at once).
+func WithDashboardCache(d time.Duration) Option {
+	return func(o *options) { o.dashboardTTL = &d }
 }
 
 // WithSweepInterval shortens the mail safety-net sweep (tests).
@@ -324,7 +331,11 @@ func (a *App) tenantAPI(cfg *config.Config, log *slog.Logger, network httpx.Netw
 	productAPI := products.New(products.Deps{Sessions: a.sessions, Files: fileSvc, Plans: planSvc, MaxRows: cfg.MaxUnpagedRows})
 	purchaseAPI := purchases.New(purchases.Deps{Sessions: a.sessions, MaxRows: cfg.MaxUnpagedRows})
 	adjustmentAPI := adjustments.New(adjustments.Deps{Sessions: a.sessions, MaxRows: cfg.MaxUnpagedRows})
-	reportAPI := reports.New(reports.Deps{Sessions: a.sessions, Plans: planSvc, MaxRows: cfg.MaxUnpagedRows})
+	dashTTL := 30 * time.Second // PHASE1_DESIGN §9
+	if a.opts.dashboardTTL != nil {
+		dashTTL = *a.opts.dashboardTTL
+	}
+	reportAPI := reports.New(reports.Deps{Sessions: a.sessions, Plans: planSvc, MaxRows: cfg.MaxUnpagedRows, DashboardTTL: dashTTL})
 	shopAPI := shop.New(shop.Deps{Sessions: a.sessions, Plans: planSvc, Network: network, Metrics: a.metrics})
 	salesAPI := sales.New(sales.Deps{Sessions: a.sessions, MaxRows: cfg.MaxUnpagedRows,
 		OnReceipt: func(ctx context.Context, t tenancy.Tenant, receiptID int64) {

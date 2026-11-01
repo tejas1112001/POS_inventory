@@ -31,17 +31,24 @@ type Deps struct {
 	Plans    *plans.Service
 	MaxRows  int              // unpaged list cap
 	Now      func() time.Time // tests; default time.Now
+	// DashboardTTL caches a dashboard answer per (tenant, user scope,
+	// permissions, filters) for this long (PHASE1_DESIGN §9: 30 s); 0 turns
+	// the cache off (tests that sell and read the dashboard at once).
+	DashboardTTL time.Duration
 }
 
 // API holds the handlers.
-type API struct{ d Deps }
+type API struct {
+	d     Deps
+	dashC *tenancy.TTLCache[string, Dashboard]
+}
 
 // New creates the API.
 func New(d Deps) *API {
 	if d.Now == nil {
 		d.Now = time.Now
 	}
-	return &API{d: d}
+	return &API{d: d, dashC: tenancy.NewTTLCache[string, Dashboard]()}
 }
 
 // Mount registers the report routes.
