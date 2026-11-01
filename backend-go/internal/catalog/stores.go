@@ -26,34 +26,41 @@ import (
 
 // storeJSON keeps the old Store.toJSON() keys.
 type storeJSON struct {
-	ID              int64     `json:"id"`
-	Name            string    `json:"name"`
-	Slug            string    `json:"slug"`
-	Address         string    `json:"address"`
-	Status          string    `json:"status"`
-	Logo            *string   `json:"logo"`
-	Banner          *string   `json:"banner"`
-	Description     string    `json:"description"`
-	Phone           string    `json:"phone"`
-	OpeningHours    string    `json:"openingHours"`
-	IsPublicEnabled bool      `json:"isPublicEnabled"`
-	CreatedBy       *int64    `json:"created_by"`
-	CreatedAt       time.Time `json:"createdAt"`
-	UpdatedAt       time.Time `json:"updatedAt"`
-	logoID          *uuid.UUID
-	bannerID        *uuid.UUID
+	ID              int64   `json:"id"`
+	Name            string  `json:"name"`
+	Slug            string  `json:"slug"`
+	Address         string  `json:"address"`
+	Status          string  `json:"status"`
+	Logo            *string `json:"logo"`
+	Banner          *string `json:"banner"`
+	Description     string  `json:"description"`
+	Phone           string  `json:"phone"`
+	OpeningHours    string  `json:"openingHours"`
+	IsPublicEnabled bool    `json:"isPublicEnabled"`
+	// Only on the Stores page list (?includeInactive=true).
+	IsDefault  *bool     `json:"isDefault,omitempty"`
+	StockUnits *int64    `json:"stockUnits,omitempty"`
+	CreatedBy  *int64    `json:"created_by"`
+	CreatedAt  time.Time `json:"createdAt"`
+	UpdatedAt  time.Time `json:"updatedAt"`
+	logoID     *uuid.UUID
+	bannerID   *uuid.UUID
 }
 
 const (
 	qStoreCols = `id, name, slug::text, coalesce(address, ''), status, logo_file_id, banner_file_id, coalesce(description, ''),
 		coalesce(phone, ''), coalesce(opening_hours, ''), is_public_enabled, created_by, created_at, updated_at`
-	qStoreCount   = `SELECT count(*) FROM stores WHERE deleted_at IS NULL AND status = 'Active'`
-	qStoreList    = `SELECT ` + qStoreCols + ` FROM stores WHERE deleted_at IS NULL AND status = 'Active' ORDER BY id LIMIT $1 OFFSET $2`
-	qStoreGet     = `SELECT ` + qStoreCols + ` FROM stores WHERE id = $1 AND deleted_at IS NULL`
-	qStoreGetLock = `SELECT ` + qStoreCols + ` FROM stores WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`
-	qStoreInsert  = `INSERT INTO stores (name, slug, address, status, created_by) VALUES ($1, $2, $3, $4, NULLIF($5, 0)) RETURNING ` + qStoreCols
-	qStoreUpdate  = `UPDATE stores SET name = $2, address = $3, status = $4, updated_at = now() WHERE id = $1 RETURNING ` + qStoreCols
-	qStoreShow    = `UPDATE stores SET slug = $2, logo_file_id = $3, banner_file_id = $4, description = $5, phone = $6,
+	qStoreWhere = ` WHERE deleted_at IS NULL AND ($1 = '' OR name ILIKE $1 OR slug::text ILIKE $1 OR address ILIKE $1 OR phone ILIKE $1) AND ($2 = '' OR status = $2)`
+	qStoreCount = `SELECT count(*) FROM stores` + qStoreWhere
+	qStoreList  = `SELECT ` + qStoreCols + ` FROM stores` + qStoreWhere + ` ORDER BY id LIMIT $3 OFFSET $4`
+	qStoreStock = `SELECT store_id, coalesce(sum(qty), 0) FROM inventories WHERE store_id = ANY($1) GROUP BY store_id`
+	// Active stores, locked: two requests cannot both turn off the last two.
+	qStoreActiveLock = `SELECT id FROM stores WHERE deleted_at IS NULL AND status = 'Active' ORDER BY id FOR UPDATE`
+	qStoreGet        = `SELECT ` + qStoreCols + ` FROM stores WHERE id = $1 AND deleted_at IS NULL`
+	qStoreGetLock    = `SELECT ` + qStoreCols + ` FROM stores WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`
+	qStoreInsert     = `INSERT INTO stores (name, slug, address, status, created_by, phone) VALUES ($1, $2, $3, $4, NULLIF($5, 0), $6) RETURNING ` + qStoreCols
+	qStoreUpdate     = `UPDATE stores SET name = $2, address = $3, status = $4, phone = $5, updated_at = now() WHERE id = $1 RETURNING ` + qStoreCols
+	qStoreShow       = `UPDATE stores SET slug = $2, logo_file_id = $3, banner_file_id = $4, description = $5, phone = $6,
 		opening_hours = $7, is_public_enabled = $8, updated_at = now() WHERE id = $1 RETURNING ` + qStoreCols
 	qStoreSlugTaken = `SELECT EXISTS (SELECT 1 FROM stores WHERE slug = $1 AND deleted_at IS NULL AND id <> $2)`
 	qStoreDelete    = `UPDATE stores SET deleted_at = now(), status = 'Inactive' WHERE id = $1 AND deleted_at IS NULL`
@@ -102,17 +109,25 @@ func uniqueSlug(ctx context.Context, tx tenancy.TenantTx, base string, selfID in
 	return "", apperr.Conflict(apperr.CodeConflict, "Could not find a free store slug")
 }
 
+// listStores is GET /api/stores: active stores (pickers, checkout). The
+// Stores page adds ?includeInactive=true (all stores, with the default-store
+// marker and units in stock); ?status= and ?search= narrow the list.
 func (a *API) listStores(w http.ResponseWriter, r *http.Request) {
 	p := httpx.ParsePage(r, a.d.MaxRows)
+	f := filterOf(r)
+	manage := r.URL.Query().Get("includeInactive") == "true"
+	if f.status == "" && !manage {
+		f.status = "Active"
+	}
 	var (
 		out   []storeJSON
 		total int
 	)
 	err := a.ro(r.Context(), tenant(r), func(tx tenancy.TenantTx) error {
-		if err := tx.QueryRow(r.Context(), qStoreCount).Scan(&total); err != nil {
+		if err := tx.QueryRow(r.Context(), qStoreCount, f.like, f.status).Scan(&total); err != nil {
 			return err
 		}
-		rows, err := tx.Query(r.Context(), qStoreList, p.Limit, p.Offset)
+		rows, err := tx.Query(r.Context(), qStoreList, f.like, f.status, p.Limit, p.Offset)
 		if err != nil {
 			return err
 		}
@@ -124,13 +139,79 @@ func (a *API) listStores(w http.ResponseWriter, r *http.Request) {
 			}
 			out = append(out, s)
 		}
-		return rows.Err()
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		if !manage || len(out) == 0 {
+			return nil
+		}
+		return addStoreExtras(r.Context(), tx, out)
 	})
 	if err != nil {
 		httpx.WriteError(w, r, err)
 		return
 	}
 	httpx.WriteList(w, p, out, total)
+}
+
+// addStoreExtras fills isDefault (the store the public shop opens) and
+// stockUnits (units on hand) for the Stores page.
+func addStoreExtras(ctx context.Context, tx tenancy.TenantTx, out []storeJSON) error {
+	defID, _, hasDef, err := settings.DefaultStore(ctx, tx)
+	if err != nil {
+		return err
+	}
+	ids := make([]int64, len(out))
+	for i := range out {
+		ids[i] = out[i].ID
+	}
+	units := map[int64]int64{}
+	rows, err := tx.Query(ctx, qStoreStock, ids)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, n int64
+		if err := rows.Scan(&id, &n); err != nil {
+			return err
+		}
+		units[id] = n
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for i := range out {
+		def, n := hasDef && out[i].ID == defID, units[out[i].ID]
+		out[i].IsDefault, out[i].StockUnits = &def, &n
+	}
+	return nil
+}
+
+// keepOneActive refuses to turn off or delete the last active store.
+func keepOneActive(ctx context.Context, tx tenancy.TenantTx, id int64, msg string) error {
+	rows, err := tx.Query(ctx, qStoreActiveLock)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	others := 0
+	for rows.Next() {
+		var sid int64
+		if err := rows.Scan(&sid); err != nil {
+			return err
+		}
+		if sid != id {
+			others++
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if others == 0 {
+		return apperr.Conflict(apperr.CodeInvalidState, msg)
+	}
+	return nil
 }
 
 func (a *API) getStore(w http.ResponseWriter, r *http.Request) {
@@ -155,6 +236,7 @@ func (a *API) getStore(w http.ResponseWriter, r *http.Request) {
 type storeIn struct {
 	Name    *string `json:"name"`
 	Address *string `json:"address"`
+	Phone   *string `json:"phone"`
 	Status  *string `json:"status"`
 	ignored
 }
@@ -181,6 +263,13 @@ func (a *API) createStore(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	phone := ""
+	if in.Phone != nil {
+		if phone, err = optionalText("phone", *in.Phone, 40); err != nil {
+			httpx.WriteError(w, r, err)
+			return
+		}
+	}
 	status := "Active"
 	if in.Status != nil {
 		status = normStatus(*in.Status)
@@ -194,7 +283,7 @@ func (a *API) createStore(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
-		out, err = scanStore(tx.QueryRow(r.Context(), qStoreInsert, name, slug, nullIfEmpty(addr), status, principal(r).UserID))
+		out, err = scanStore(tx.QueryRow(r.Context(), qStoreInsert, name, slug, nullIfEmpty(addr), status, principal(r).UserID, nullIfEmpty(phone)))
 		return err
 	})
 	if err != nil {
@@ -222,7 +311,7 @@ func (a *API) updateStore(w http.ResponseWriter, r *http.Request) {
 			return notFound(err)
 		}
 		// Missing fields keep their value (P2-9).
-		name, addr, status := cur.Name, cur.Address, cur.Status
+		name, addr, status, phone := cur.Name, cur.Address, cur.Status, cur.Phone
 		if in.Name != nil {
 			if name, err = requiredText("name", *in.Name, 120, "Store name is required."); err != nil {
 				return err
@@ -233,10 +322,20 @@ func (a *API) updateStore(w http.ResponseWriter, r *http.Request) {
 				return err
 			}
 		}
+		if in.Phone != nil {
+			if phone, err = optionalText("phone", *in.Phone, 40); err != nil {
+				return err
+			}
+		}
 		if in.Status != nil {
 			status = normStatus(*in.Status)
 		}
-		out, err = scanStore(tx.QueryRow(r.Context(), qStoreUpdate, id, name, nullIfEmpty(addr), status))
+		if cur.Status == "Active" && status != "Active" {
+			if err := keepOneActive(r.Context(), tx, id, "At least one store must stay active."); err != nil {
+				return err
+			}
+		}
+		out, err = scanStore(tx.QueryRow(r.Context(), qStoreUpdate, id, name, nullIfEmpty(addr), status, nullIfEmpty(phone)))
 		return err
 	})
 	if err != nil {
@@ -256,6 +355,15 @@ func (a *API) deleteStore(w http.ResponseWriter, r *http.Request) {
 		var live int
 		if err := tx.QueryRow(r.Context(), qStoreLiveCount).Scan(&live); err != nil {
 			return err
+		}
+		var status string
+		if err := tx.QueryRow(r.Context(), `SELECT status FROM stores WHERE id = $1 AND deleted_at IS NULL`, id).Scan(&status); err != nil {
+			return notFound(err)
+		}
+		if status == "Active" {
+			if err := keepOneActive(r.Context(), tx, id, "The last active store cannot be deleted."); err != nil {
+				return err
+			}
 		}
 		tag, err := tx.Exec(r.Context(), qStoreDelete, id)
 		if err != nil {

@@ -98,6 +98,7 @@ export default function POS() {
   const { currentUser } = usePos();
   const confirm = useConfirm();
   const [products, setProducts] = useState([]);
+  const [productsStore, setProductsStore] = useState(''); // the store the product list belongs to
   const [customers, setCustomers] = useState([]);
   const [stores, setStores] = useState([]);
   const [selectedStore, setSelectedStore] = useState('');
@@ -119,6 +120,8 @@ export default function POS() {
   // One key per checkout attempt; a retry after a lost answer reuses it.
   const idemKey = useRef(null);
   const lockedProducts = useRef(new Set());
+  const wantedStore = useRef('');
+  const recheckFor = useRef(null); // store whose stock the kept cart must be checked against
 
   // Screen estimate only: the server prices the sale (see processOrder).
   const subtotal = lines.reduce((sum, l) => sum + l.price * l.quantity, 0);
@@ -134,10 +137,13 @@ export default function POS() {
 
   const fetchProducts = useCallback(async (storeId) => {
     if (!storeId) return;
+    wantedStore.current = storeId;
     try {
       setLoading(true);
       const data = await api.get(`/api/products/pos?storeId=${storeId}`);
+      if (wantedStore.current !== storeId) return; // a newer store was chosen meanwhile
       setProducts(Array.isArray(data) ? data : []);
+      setProductsStore(storeId);
     } catch (err) {
       setError('Failed to fetch products for the selected store');
       console.error(err);
@@ -198,20 +204,52 @@ export default function POS() {
     if (selectedStore) fetchProducts(selectedStore);
   }, [selectedStore, fetchProducts]);
 
-  // Changing the store empties the cart: its stock limits belong to the old store.
-  const changeStore = async (value) => {
+  // Changing the store keeps the cart. Once the new store's products are
+  // loaded, each line gets that store's stock limit, the products are locked
+  // there, and lines without enough stock are named in a warning.
+  const changeStore = (value) => {
     if (value === selectedStore) return;
-    if (lines.length) {
-      const ok = await confirm({
-        title: 'Change the store?',
-        body: 'The cart is emptied: stock and prices are checked again for the new store.',
-        confirmLabel: 'Change store',
-      });
-      if (!ok) return;
-      setLines([]);
-    }
+    recheckFor.current = lines.length ? value : null;
     setSelectedStore(value);
   };
+
+  useEffect(() => {
+    const store = recheckFor.current;
+    if (!store || productsStore !== store) return;
+    recheckFor.current = null;
+    const byVariant = new Map();
+    for (const p of products) for (const v of variantsOf(p)) byVariant.set(v.id, v);
+    const label = (l) => `${l.name}${l.label ? ` (${l.label})` : ''}`;
+    const missing = [];
+    const short = [];
+    const next = lines.map((l) => {
+      const v = byVariant.get(l.variantId);
+      const stock = v ? Math.max(0, variantStock(v)) : 0;
+      if (stock <= 0) missing.push(label(l));
+      else if (l.quantity > stock) short.push(`${label(l)} (${stock} here)`);
+      return { ...l, maxQty: stock };
+    });
+    setLines(next);
+    const storeName = stores.find((st) => String(st.id) === String(store))?.name || 'this store';
+    const notes = [];
+    if (missing.length) notes.push(`Not in stock at ${storeName}: ${missing.join(', ')}.`);
+    if (short.length) notes.push(`Not enough at ${storeName}: ${short.join(', ')}.`);
+    if (notes.length) notes.push('Change the quantities or remove these items before paying.');
+    setError(notes.length ? notes.join(' ') : null);
+    for (const id of new Set(next.map((l) => l.productId))) {
+      api
+        .put(`/api/products/${id}/lock`, { lock: true, storeId: store }, { quiet: true })
+        .then((p) => {
+          lockedProducts.current.add(id);
+          setProducts((prev) => prev.map((x) => (x.id === p.id ? p : x)));
+        })
+        .catch((err) => {
+          const name = next.find((l) => l.productId === id)?.name || 'An item';
+          setError((prev) => `${prev ? `${prev} ` : ''}"${name}": ${err.message || 'could not be reserved at this store.'}`);
+        });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once per store change, when its products arrive
+  }, [products, productsStore]);
 
   // Category pills come from the products on sale here, so cashiers need
   // no categories:view permission (the biller role does not have it).
@@ -397,6 +435,11 @@ export default function POS() {
                       <p className="truncate text-sm font-medium">{l.name}</p>
                       {l.label && <p className="truncate text-xs text-muted-foreground">{l.label}</p>}
                       <p className="text-xs text-muted-foreground tabular-nums">{formatCurrency(l.price)} each</p>
+                      {l.maxQty <= 0 ? (
+                        <p className="mt-0.5 text-xs font-medium text-danger-fg">Not in stock at this store</p>
+                      ) : (
+                        l.quantity > l.maxQty && <p className="mt-0.5 text-xs font-medium text-warning-fg">Only {l.maxQty} at this store</p>
+                      )}
                     </div>
                     <Button variant="ghost" size="icon" className="size-9 shrink-0 text-muted-foreground hover:text-danger" aria-label={`Remove ${l.name}${l.label ? ` ${l.label}` : ''}`} onClick={() => setLines((prev) => prev.filter((x) => x.key !== l.key))}>
                       <Trash2 className="size-4" aria-hidden="true" />

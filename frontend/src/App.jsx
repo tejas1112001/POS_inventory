@@ -40,6 +40,7 @@ import Settings from './pages/Settings';
 import Billing from './pages/Billing';
 import StockAdjustments from './pages/StockAdjustments';
 import ShowcaseSettings from './pages/ShowcaseSettings';
+import Stores from './pages/Stores';
 
 // The staff app: sign-in and back office. Root.jsx loads it on every path
 // that is not the public shop.
@@ -115,6 +116,7 @@ function AppRoutes() {
       <Route path="/stock-adjustments" element={<ProtectedLayout module="stock_adjustments" action="view"><StockAdjustments /></ProtectedLayout>} />
       <Route path="/settings" element={<ProtectedLayout><Settings /></ProtectedLayout>} />
       <Route path="/billing" element={<ProtectedLayout module="billing" action="view"><Billing /></ProtectedLayout>} />
+      <Route path="/stores" element={<ProtectedLayout module="stores" action="view"><Stores /></ProtectedLayout>} />
       <Route path="/showcase-settings" element={<ProtectedLayout module="stores" action="edit"><ShowcaseSettings /></ProtectedLayout>} />
       {/* Unknown addresses: a real "Page not found" inside the app (sign-in first). */}
       <Route path="*" element={<ProtectedLayout><NotFound /></ProtectedLayout>} />

@@ -102,3 +102,20 @@ These change only what the menu shows and which page shows "no access"; the serv
 - Images: raw `<img>` in Sales returns, Invoices, Customer dues, Product details, Storefront, Shop settings and the edit form replaced by `ProductImage`/`AuthImage` (signed-in loading, initials fallback, lazy). Logos sit on white. Unused `ListComponents/Avatar.jsx` deleted.
 
 **Checked** — lint (0 errors), shop and console builds, `go test ./...`, receipts and sales integration tests; dev stack rebuilt. No browser tests (by request).
+
+## S4b follow-up – Store change at checkout
+
+- Changing the store keeps the cart. When the new store's products arrive, every line gets that store's stock limit and the products are reserved (locked) there. Lines with no stock, or less than in the cart, are named in a warning and marked on the line ("Not in stock at this store" / "Only 2 at this store"). Paying is not blocked: the server still refuses a sale without stock.
+
+## S5 – Stores page
+
+**Changed**
+- New page **Settings → Stores** (`/stores`, needs stores:view; also a tab on Settings): all stores with address, phone, units in stock, online shop on/off, status and a "Online shop default" marker; search and status filter; add and edit in a sheet (name, phone, address, status); "Turn off" / "Turn on" with a confirm that warns about stock left in the store and about the default online store. No delete (Q4). The web address, logo and online-shop details stay on the Storefront page.
+- Server (`internal/catalog/stores.go`):
+  - `GET /api/stores` unchanged for pickers and the checkout (active stores only). `?includeInactive=true` lists every store and adds `isDefault` and `stockUnits`; `?status=` and `?search=` (name, web address, address, phone) narrow it.
+  - The last active store cannot be turned off ("At least one store must stay active.") or deleted ("The last active store cannot be deleted."). Active stores are locked while checking, so two requests cannot turn off the last two at once.
+  - Stores take an optional `phone` on create and edit (the column existed; it was only editable on the Storefront page).
+  - No change to plan limits: inactive stores already count towards the plan's store limit, so turning a store off never frees a slot (tested). An inactive default store already falls back to the next active public store.
+- `usePagedList` accepts an endpoint that already has a query string.
+
+**Checked** — lint (0 errors), both builds, `go test ./...`, the whole isolation suite including the new `test/isolation/stores_page_test.go` (pickers active-only, page extras, filters, last-active rules for turn-off and delete, phone, plan count with an inactive store, cashier refused); dev stack rebuilt. No browser tests (by request).

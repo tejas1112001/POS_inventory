@@ -16,6 +16,7 @@ export default function Settings() {
     hasPermission('settings', 'view') && { key: 'shop', label: 'Shop' },
     hasPermission('email_settings', 'view') && { key: 'email', label: 'Email' },
     { key: 'appearance', label: 'Appearance' },
+    hasPermission('stores', 'view') && { key: 'stores', label: 'Stores', to: '/stores' },
     hasPermission('billing', 'view') && { key: 'billing', label: 'Plan & billing', to: '/billing' },
   ].filter(Boolean);
   const [tab, setTab] = useState(tabs[0].key);

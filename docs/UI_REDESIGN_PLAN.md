@@ -528,3 +528,11 @@ Each has my recommended default; answer only where you disagree.
 15. **List exports**: drop the client-side PDF export of lists, keep Excel with readable headers? *Default: yes.*
 16. **Form library**: adopt react-hook-form in the shop app? *Default: yes.*
 17. **Audit records**: keep the UI-AUDIT records in demo-shop? *Default: keep; delete only on your request.*
+
+### 14.1 Decisions after S4 (2026-11-01)
+
+- S5 store rules: yes (list inactive stores, keep one store active, warn on the default online store).
+- S6: the new checkout is switched per shop (a setting stored on the server), not per browser.
+- S8 detail pages: actions on existing endpoints (purchase receive/cancel/payment, void with reason): yes.
+- S9 console: read-only parts plus contacts and notes now; flags and limit overrides only after a security note.
+- Checkout store change (S4b follow-up): keep the cart and warn about items without stock in the new store (do not empty it).

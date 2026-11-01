@@ -22,6 +22,7 @@ import {
   UserCog,
   Users,
   Building2,
+  Store,
 } from 'lucide-react';
 
 export const REPORT_PATHS = ['/reports', '/sales-report', '/purchase-report', '/customer-report', '/customer-due-report'];
@@ -74,6 +75,7 @@ export const NAV = [
     title: 'Settings',
     items: [
       { label: 'Settings', path: '/settings', icon: Settings, perm: null },
+      { label: 'Stores', path: '/stores', icon: Store, perm: ['stores', 'view'] },
       { label: 'Plan & billing', path: '/billing', icon: CreditCard, perm: ['billing', 'view'] },
     ],
   },
@@ -128,6 +130,7 @@ export const TITLES = {
   '/customer-due-report': 'Reports',
   '/showcase-settings': 'Storefront',
   '/settings': 'Settings',
+  '/stores': 'Stores',
   '/billing': 'Plan & billing',
 };
 

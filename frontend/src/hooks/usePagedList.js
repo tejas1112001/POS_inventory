@@ -30,7 +30,7 @@ export default function usePagedList(endpoint, { filters = [], pageSizes = [10, 
     setState((s) => ({ ...s, loading: true, error: '' }));
     const t = setTimeout(() => {
       api
-        .get(`${endpoint}?${query}`, { quiet: true })
+        .get(`${endpoint}${endpoint.includes('?') ? '&' : '?'}${query}`, { quiet: true })
         .then((res) => {
           if (id !== live.current) return;
           const rows = Array.isArray(res) ? res : res?.data || [];
