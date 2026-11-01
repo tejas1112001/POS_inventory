@@ -228,10 +228,10 @@ export default function Dashboard() {
     <div className="space-y-4">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <h1 className="text-xl font-semibold">
+          <h2 className="text-xl font-semibold">
             {greeting()}
             {firstName ? `, ${firstName}` : ''}
-          </h1>
+          </h2>
           <p className="text-sm text-muted-foreground">{ownOnly ? 'Your own sales.' : 'Sales of the whole shop.'}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -252,7 +252,7 @@ export default function Dashboard() {
                 type="button"
                 aria-pressed={rangeKey === r.key}
                 onClick={() => setParam(r.key === 'custom' ? { range: 'custom', from, to } : { range: r.key === 'today' ? '' : r.key, from: '', to: '' })}
-                className={cn('min-h-9 shrink-0 rounded-md px-3 text-sm font-medium', rangeKey === r.key ? 'bg-card text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground')}
+                className={cn('min-h-9 shrink-0 rounded-md px-3 text-sm font-medium', rangeKey === r.key ? 'bg-card text-foreground shadow-xs' : 'text-slate-600 hover:text-foreground dark:text-slate-300')}
               >
                 {r.label}
               </button>
@@ -313,7 +313,7 @@ export default function Dashboard() {
                       ['revenue', 'Revenue'],
                       ['orders', 'Orders'],
                     ].map(([k, l]) => (
-                      <button key={k} type="button" aria-pressed={metric === k} onClick={() => setMetric(k)} className={cn('min-h-8 rounded px-3 text-sm', metric === k ? 'bg-card font-medium shadow-xs' : 'text-muted-foreground')}>
+                      <button key={k} type="button" aria-pressed={metric === k} onClick={() => setMetric(k)} className={cn('min-h-8 rounded px-3 text-sm', metric === k ? 'bg-card font-medium shadow-xs' : 'text-slate-600 dark:text-slate-300')}>
                         {l}
                       </button>
                     ))}

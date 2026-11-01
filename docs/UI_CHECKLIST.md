@@ -177,3 +177,13 @@ Known problems:
 
 Known problems:
 - None found; Excel files are still built in the browser (write-excel-file v4).
+
+### Item 8 – fixes found by the browser tests
+1. Table header row (every list, order/product/purchase/return pages): the column titles are a darker grey; they were below the readable contrast (4.34:1, now about 7:1).
+2. Checkout: the small "₹… each" and option text in a highlighted cart line, and "Change · F4", are darker grey; the "F10" hint inside PAY is no longer faded.
+3. Checkout tiles: screen readers now read the tile's visible text (name, category, price, stock badge) instead of a separate label; the star button keeps its own label.
+4. Dashboard: the unselected date-range buttons and the Revenue/Orders switch are darker grey (were 4.34:1).
+5. Dashboard, order, product, purchase and return pages: their big titles are now level-2 headings (the top bar holds the page's one level-1 heading); they look the same.
+6. Correction: cashiers can open Settings → Stores read-only (they hold "stores: view"), with no Add store and no Edit/Turn off. My S5 reply said "no access"; that was wrong.
+
+Known problems: none new.

@@ -287,7 +287,7 @@ export default function Checkout() {
           <User className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
           <span className="truncate font-medium">{customer?.name || 'Walk-in Customer'}</span>
         </span>
-        <span className="shrink-0 text-xs text-muted-foreground">Change · F4</span>
+        <span className="shrink-0 text-xs text-slate-600 dark:text-slate-300">Change · F4</span>
       </button>
       <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin">
         {lines.length === 0 ? (
@@ -314,8 +314,8 @@ export default function Checkout() {
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium">{l.name}</p>
-                        {l.label && <p className="truncate text-xs text-muted-foreground">{l.label}</p>}
-                        <p className="text-xs text-muted-foreground tabular-nums">
+                        {l.label && <p className="truncate text-xs text-slate-600 dark:text-slate-300">{l.label}</p>}
+                        <p className="text-xs text-slate-600 tabular-nums dark:text-slate-300">
                           {formatCurrency(l.price)} each{ql && Number(ql.taxRate) > 0 ? ` · tax ${Number(ql.taxRate)}%` : ''}
                         </p>
                         {l.maxQty <= 0 ? (
@@ -415,7 +415,7 @@ export default function Checkout() {
         )}
         <Button className="h-12 w-full text-base font-bold" disabled={!lines.length || !c.quoteReady} onClick={openPay}>
           <Banknote className="size-5" aria-hidden="true" /> PAY {formatCurrency(total)}
-          <span className="hidden text-xs font-normal opacity-80 lg:inline">F10</span>
+          <span className="hidden text-xs font-normal lg:inline">F10</span>
         </Button>
       </div>
     </div>

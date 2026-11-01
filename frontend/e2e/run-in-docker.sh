@@ -6,7 +6,7 @@
 set -eu
 REPO=$(cd "$(dirname "$0")/../.." && pwd)
 exec docker run --rm -i --network posd-dev_backend --ipc=host \
-  --add-host admin.localhost:127.0.0.1 \
+  --add-host admin.localhost:127.0.0.1 --add-host demo-shop.localhost:127.0.0.1 \
   -v "$REPO:/repo" -w /repo/frontend \
   -e E2E_OWNER_EMAIL -e E2E_OWNER_PASSWORD -e E2E_CASHIER_EMAIL -e E2E_CASHIER_PASSWORD -e E2E_SHOTS \
   -u "$(id -u):$(id -g)" -e HOME=/tmp \

@@ -98,9 +98,9 @@ export default function ProductDetail() {
             <Link to="/products" className="inline-flex items-center gap-1 text-sm text-primary hover:underline">
               <ArrowLeft className="size-4" aria-hidden="true" /> Products
             </Link>
-            <h1 className="mt-1 flex flex-wrap items-center gap-2 text-xl font-semibold">
+            <h2 className="mt-1 flex flex-wrap items-center gap-2 text-xl font-semibold">
               {product.name} <StatusBadge value={product.status} />
-            </h1>
+            </h2>
             <p className="text-sm text-muted-foreground">
               {[product.category, product.brand, product.unit].filter(Boolean).join(' · ') || 'No category'}
             </p>
@@ -131,7 +131,7 @@ export default function ProductDetail() {
         </h2>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-muted text-left text-xs uppercase tracking-wide text-muted-foreground">
+            <thead className="bg-muted text-left text-xs uppercase tracking-wide text-slate-600 dark:text-slate-300">
               <tr>
                 {many && <th scope="col" className="px-4 py-2 font-medium">Option</th>}
                 <th scope="col" className="px-4 py-2 font-medium">SKU</th>

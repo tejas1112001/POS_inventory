@@ -91,11 +91,11 @@ export default function OrderDetail() {
           <Link to="/sales" className="inline-flex items-center gap-1 text-sm text-primary hover:underline">
             <ArrowLeft className="size-4" aria-hidden="true" /> Orders
           </Link>
-          <h1 className="mt-1 flex flex-wrap items-center gap-2 text-xl font-semibold">
+          <h2 className="mt-1 flex flex-wrap items-center gap-2 text-xl font-semibold">
             Order {sale.reference}
             <StatusBadge value={sale.status} />
             <StatusBadge value={sale.payment_status} />
-          </h1>
+          </h2>
           <p className="text-sm text-muted-foreground">{formatDateTime(sale.date)}</p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -145,7 +145,7 @@ export default function OrderDetail() {
           </h2>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="bg-muted text-left text-xs uppercase tracking-wide text-muted-foreground">
+              <thead className="bg-muted text-left text-xs uppercase tracking-wide text-slate-600 dark:text-slate-300">
                 <tr>
                   <th scope="col" className="px-4 py-2 font-medium">Item</th>
                   <th scope="col" className="px-3 py-2 text-right font-medium">Qty</th>

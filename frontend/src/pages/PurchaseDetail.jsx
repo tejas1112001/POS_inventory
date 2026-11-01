@@ -56,9 +56,9 @@ export default function PurchaseDetail() {
           <Link to="/purchases" className="inline-flex items-center gap-1 text-sm text-primary hover:underline">
             <ArrowLeft className="size-4" aria-hidden="true" /> Purchases
           </Link>
-          <h1 className="mt-1 flex flex-wrap items-center gap-2 text-xl font-semibold">
+          <h2 className="mt-1 flex flex-wrap items-center gap-2 text-xl font-semibold">
             Purchase {p.reference} <StatusBadge value={p.status} /> <StatusBadge value={p.payment_status} />
-          </h1>
+          </h2>
           <p className="text-sm text-muted-foreground">
             {formatDate(p.date)} · {p.supplier?.name}
           </p>
@@ -98,7 +98,7 @@ export default function PurchaseDetail() {
           </h2>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="bg-muted text-left text-xs uppercase tracking-wide text-muted-foreground">
+              <thead className="bg-muted text-left text-xs uppercase tracking-wide text-slate-600 dark:text-slate-300">
                 <tr>
                   <th scope="col" className="px-4 py-2 font-medium">Item</th>
                   <th scope="col" className="hidden px-3 py-2 font-medium md:table-cell">Store</th>

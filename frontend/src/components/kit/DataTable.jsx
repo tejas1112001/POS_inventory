@@ -32,7 +32,7 @@ export default function DataTable({
         {/* Table: 640 px and up */}
         <div className="hidden sm:block">
           <table className="w-full text-sm" aria-label={label} aria-busy={loading || undefined}>
-            <thead className="sticky top-0 z-[1] bg-muted text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            <thead className="sticky top-0 z-[1] bg-muted text-left text-xs font-medium uppercase tracking-wide text-slate-600 dark:text-slate-300">
               <tr>
                 {columns.map((c) => (
                   <th key={c.id} scope="col" className={cn('px-4 py-2.5 font-medium', c.align === 'right' && 'text-right', c.className)}>

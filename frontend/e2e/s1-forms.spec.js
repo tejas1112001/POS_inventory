@@ -43,7 +43,9 @@ test('S1 forms and fixes', async ({ page }, info) => {
   });
 
   await test.step('Edit Product: a product without a brand saves', async () => {
-    await page.locator(`tr:has-text("E2E-S1 Product ${tag}") button[aria-label="Edit"]`).click();
+    // Since S8b the list has one "…" menu per row.
+    await page.getByRole('button', { name: `Actions for E2E-S1 Product ${tag}` }).first().click();
+    await page.getByRole('menuitem', { name: 'Edit' }).click();
     await page.locator('textarea[name=description]').fill('Edited by the S1 test');
     await page.getByRole('button', { name: 'Save Product' }).click();
     await expect(page.getByRole('button', { name: 'Save Product' })).toBeHidden();

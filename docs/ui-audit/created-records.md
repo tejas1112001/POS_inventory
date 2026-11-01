@@ -47,3 +47,10 @@ Named `E2E-<slice> <kind> w<width> <run id>`; each run makes its own.
 | S1 | 5 customers, 5 suppliers, 5 brands (two earlier runs stopped after these), 9 products (opening stock 3, ₹99.50, 18 %, Main Store; description edited by the test), 9 **Pending** purchases of 2 × UI-AUDIT T-Shirt at ₹250 (each S1 run makes 3 of each) |
 | S2 | 12 categories (`E2E-S2 Category …`) |
 | S4 | 12 categories, 12 brands, 12 units, 12 customers, 10 suppliers (`E2E-S4 … edited`: added, then renamed by the test; delete was always cancelled) |
+
+## Phase 3 (2026-11-01)
+
+| Record | Where | Why |
+|---|---|---|
+| User "E2E-P3 Cashier" (e2e-p3-cashier@demo.test), role Biller | demo-shop → Users | Cashier login for the Phase 3 Playwright suite. Password kept outside the repo. |
+| Records named "E2E-P3 …" (products, customers, stores, orders, purchases) | demo-shop | Created by the Phase 3 browser tests; every run adds new ones with a unique suffix. |

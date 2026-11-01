@@ -44,7 +44,6 @@ export function ProductTile({ product, lockedByOther: locked, onPick, inCart = 0
         type="button"
         onClick={() => !disabled && onPick(product)}
         disabled={disabled}
-        aria-label={`${product.name}, ${formatCurrency(product.price)}${variants.length > 1 ? `, ${variants.length} options` : ''}${out ? ', out of stock' : ''}${locked ? ', in use at another till' : ''}${inCart ? `, ${inCart} in cart` : ''}`}
         className="group flex h-full w-full flex-col overflow-hidden rounded-lg border bg-card text-left shadow-xs transition hover:border-primary/40 hover:shadow-sm focus-visible:outline-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-55"
       >
         <div className="relative aspect-[4/3] w-full bg-muted">

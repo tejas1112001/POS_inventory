@@ -22,7 +22,18 @@ export async function signIn(page, role) {
   await page.fill('#email', email);
   await page.fill('#password', password);
   await page.click('button[type=submit]');
-  await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 20_000 });
+  // The suite signs in more often than people do: when the server's login
+  // limit answers "Too many attempts", wait the minute out and try again.
+  const limited = page.getByText(/Too many attempts/);
+  const outcome = await Promise.race([
+    page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 20_000 }).then(() => 'in'),
+    limited.waitFor({ timeout: 20_000 }).then(() => 'limited'),
+  ]);
+  if (outcome === 'limited') {
+    await page.waitForTimeout(61_000);
+    await page.click('button[type=submit]');
+    await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 20_000 });
+  }
   // The app may still redirect once (to the page asked for, or the
   // dashboard): wait until the layout is up and the page is quiet.
   await page.locator('main').first().waitFor({ timeout: 20_000 });
