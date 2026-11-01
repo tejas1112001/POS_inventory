@@ -52,3 +52,21 @@ Known problems:
 - "Purchases to receive" counts the whole shop (purchases have no store), whatever store is picked.
 - The plan card shows only the shop status (trial, past due…), not days left; the banner at the top still has the details.
 - Payment-method split (donut) waits for split payments (S10).
+
+## S8 – Remaining pages
+
+### S8a – Orders and order page
+
+How to check:
+1. **Orders** (`/sales`): newest first, 25 per page with the shared pager. Search an order number or a customer name.
+2. Filters: Status (default "Not voided"; Completed, Pending, Voided), Payment (Paid, Partial, Unpaid, Overdue), Store (with more than one store), From/To dates. Each shows as a chip; "Clear filters" resets. On a phone the filters (and dates) are in the "Filters" sheet. The address keeps them; reload keeps them.
+3. Row menu (…): Open, Receipt, Return items (not on voided orders), Void… (owner/admin only). Click the order number to open it.
+4. **Order page** (`/sales/<id>`): number, status and payment badges, date; customer, store, cashier, payment (method and status), receipt email and notes; items with option labels, SKU and "N returned"; totals with Received/Change and Due; the order's returns (click → return).
+5. Buttons: **Receipt** (view, PDF, email), **Print** (prints at once), **Return items** (opens New return with this order already chosen; hidden when everything was returned), **Void…**.
+6. Void: the reason is required (at least 3 characters). "Keep order" cancels. After voiding: a red "Voided on … : reason" box, the badge says Void, and the stock is back (check Stock). The printed receipt shows VOID with the reason.
+7. As the cashier: only own orders (a colleague's order number gives "does not exist"); no Void.
+8. "New order" (owner) still opens the back-office order form.
+
+Known problems:
+- Order editing is not offered (Q6: use a return and a new sale); the server still accepts edits from the old form.
+- The order page shows the receipt in the window used everywhere; there is no separate "share" link.

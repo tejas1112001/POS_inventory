@@ -1,5 +1,6 @@
 import { toast } from '../../shared/toast/store';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useNavigate } from 'react-router-dom';
 import { PlusCircleIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import PageHeader from '../components/forms/PageHeader';
@@ -78,6 +79,13 @@ export default function AddSalesReturn() {
       setError({ message: err.message });
     }
   };
+  // /add-sales-return?saleId=… (from an order) opens with that sale.
+  const [params] = useSearchParams();
+  const preset = params.get('saleId');
+  useEffect(() => {
+    if (preset) pickSale(preset);
+  }, [preset]);
+
 
   const left = (item) => Math.max(0, (Number(item.quantity) || 0) - (Number(item.returnedQty) || 0));
   const linkedTotal = useMemo(

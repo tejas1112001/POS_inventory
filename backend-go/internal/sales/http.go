@@ -102,11 +102,12 @@ func escapeLike(s string) string {
 
 const (
 	qSaleFilter = ` FROM sales s WHERE ($1 = 0 OR s.user_id = $1) AND ($2 OR s.status <> 'Void')
-		AND ($3 = '' OR s.reference ILIKE $3)
+		AND ($3 = '' OR s.reference ILIKE $3 OR EXISTS (SELECT 1 FROM customers c WHERE c.id = s.customer_id AND c.name ILIKE $3))
 		AND ($4::timestamptz IS NULL OR s.date >= $4) AND ($5::timestamptz IS NULL OR s.date < $5)
-		AND ($6 = 0 OR s.store_id = $6) AND ($7 = 0 OR s.customer_id = $7)`
+		AND ($6 = 0 OR s.store_id = $6) AND ($7 = 0 OR s.customer_id = $7)
+		AND ($8 = '' OR s.payment_status = $8) AND ($9 = '' OR s.status = $9)`
 	qSaleCount = `SELECT count(*)` + qSaleFilter
-	qSaleIDs   = `SELECT s.id` + qSaleFilter + ` ORDER BY s.date DESC, s.id DESC LIMIT $8 OFFSET $9`
+	qSaleIDs   = `SELECT s.id` + qSaleFilter + ` ORDER BY s.date DESC, s.id DESC LIMIT $10 OFFSET $11`
 )
 
 func (a *API) list(w http.ResponseWriter, r *http.Request) {
@@ -117,6 +118,23 @@ func (a *API) list(w http.ResponseWriter, r *http.Request) {
 		like = "%" + escapeLike(s) + "%"
 	}
 	voided := q.Get("includeVoided") == "true"
+	// ?paymentStatus= (Paid, Partial, Unpaid, Overdue) and ?status=
+	// (Completed, Pending, Void; Void implies includeVoided). Unknown
+	// values are ignored (UI S8).
+	payStatus := q.Get("paymentStatus")
+	switch payStatus {
+	case "Paid", "Partial", "Unpaid", "Overdue":
+	default:
+		payStatus = ""
+	}
+	status := q.Get("status")
+	switch status {
+	case "Void":
+		voided = true
+	case "Completed", "Pending":
+	default:
+		status = ""
+	}
 	scope := ownerScope(principal(r))
 	var (
 		out   []SaleJSON
@@ -135,7 +153,7 @@ func (a *API) list(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
-		args := []any{scope, voided, like, from, to, queryInt(r, "storeId"), queryInt(r, "customerId")}
+		args := []any{scope, voided, like, from, to, queryInt(r, "storeId"), queryInt(r, "customerId"), payStatus, status}
 		if err := tx.QueryRow(r.Context(), qSaleCount, args...).Scan(&total); err != nil {
 			return err
 		}

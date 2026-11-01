@@ -5,13 +5,16 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 
 // FilterBar: search plus select filters. Filters: [{ key, label, options:
 // [{ value, label }] }]. On phones the filters move into a sheet behind a
-// "Filters" button; active filters show as removable chips.
-export default function FilterBar({ search, onSearch, placeholder = 'Search…', filters = [], values = {}, onFilter, onClear }) {
+// "Filters" button; active filters show as removable chips. extra: more
+// controls (for example date boxes), shown next to the selects and in the
+// phone sheet; extraActive counts them as active filters.
+export default function FilterBar({ search, onSearch, placeholder = 'Search…', filters = [], values = {}, onFilter, onClear, extra, extraActive = 0 }) {
   const [text, setText] = useState(search || '');
   const [open, setOpen] = useState(false);
   useEffect(() => setText(search || ''), [search]);
 
   const active = filters.filter((f) => values[f.key]);
+  const activeCount = active.length + extraActive;
   const selects = (stack) =>
     filters.map((f) => (
       <label key={f.key} className={stack ? 'grid gap-1.5 text-sm font-medium' : undefined}>
@@ -49,16 +52,19 @@ export default function FilterBar({ search, onSearch, placeholder = 'Search…',
             className="h-11 w-full rounded-md border bg-background pr-3 pl-9 text-base sm:h-9 sm:text-sm"
           />
         </div>
-        {filters.length > 0 && (
+        {(filters.length > 0 || extra) && (
           <>
-            <div className="hidden gap-2 sm:flex">{selects(false)}</div>
+            <div className="hidden flex-wrap gap-2 sm:flex">
+              {selects(false)}
+              {extra}
+            </div>
             <Button type="button" variant="outline" className="h-11 sm:hidden" onClick={() => setOpen(true)}>
-              <SlidersHorizontal className="size-4" aria-hidden="true" /> Filters{active.length ? ` (${active.length})` : ''}
+              <SlidersHorizontal className="size-4" aria-hidden="true" /> Filters{activeCount ? ` (${activeCount})` : ''}
             </Button>
           </>
         )}
       </div>
-      {(active.length > 0 || search) && (
+      {(activeCount > 0 || search) && (
         <div className="flex flex-wrap items-center gap-2 text-sm">
           {active.map((f) => (
             <button
@@ -82,7 +88,10 @@ export default function FilterBar({ search, onSearch, placeholder = 'Search…',
           <DialogHeader>
             <DialogTitle>Filters</DialogTitle>
           </DialogHeader>
-          <div className="grid gap-3">{selects(true)}</div>
+          <div className="grid gap-3">
+            {selects(true)}
+            {extra && <div className="grid gap-3">{extra}</div>}
+          </div>
           <Button type="button" className="h-11" onClick={() => setOpen(false)}>
             Show results
           </Button>
