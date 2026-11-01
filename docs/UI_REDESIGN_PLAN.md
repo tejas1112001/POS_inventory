@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Plan only. No application code was changed. Waiting for approval before step 2 (build) |
+| Status | Approved 31 Oct 2026 with the recommended defaults; build in progress (step 2). **Barcode: later** — barcode scanning and barcode labels are deferred (owner, 1 Nov 2026): removed from S6, S8 and S10; name/SKU search stays |
 | Date | 1 November 2026 |
 | Scope | Shop app (https://demo-shop.localhost:8443) and Super Admin console (https://admin.localhost:8443) |
 | Evidence | `docs/ui-audit/`: about 230 screenshots (360, 768 and 1280 px), crawl and form logs (`crawl-*.json`, `forms*.json`, `*-context.json`), a sample receipt PDF, and `created-records.md` |
@@ -114,7 +114,7 @@ POS sale, receipts (on screen, PDF, email with attachment, resend with 5-a-day l
 | Rule | Value |
 |---|---|
 | Kinds | success, info, warning, error |
-| Position | Desktop: top right, under the top bar, 16 px from the edge. Phones (< 640 px): bottom, full width minus 16 px gutters, above the bottom navigation and the POS PAY bar |
+| Position | Desktop: top right, under the top bar, 16 px from the edge. Phones (< 640 px): top, under the top bar, full width minus 16 px gutters (changed during S2: at the bottom they covered sticky Save buttons; the top keeps them clear of the bottom navigation and the PAY bar) |
 | Stack | At most 3; oldest leaves first; identical messages within 3 s are merged ("×2") |
 | Duration | success 4 s, info 5 s, warning 7 s, **error stays until closed** if it needs action, otherwise 8 s. Timers pause on hover and focus |
 | Close | × button (44 × 44 px touch target), Esc when focused, swipe on touch |
@@ -236,7 +236,7 @@ Built once in `frontend/src/components/ui/` (shop app, on the existing Radix + s
 | `StatCard`, `ChartCard` | `KpiCard`, `SectionCard` |
 | `StatusBadge` (one colour map for sale, payment, purchase, stock, tenant states) | `statusColumn`, ad hoc badges |
 | `Money`, `DateTime` formatters (shop currency, locale and **shop time zone**) | `lib/format.js` (time zone fix for M10) |
-| `ProductPicker` (search by name, SKU or barcode, shows variant and stock) | Product `<select>`s in Add Sale, Add Purchase, Returns, Adjustments |
+| `ProductPicker` (search by name or SKU, shows variant and stock; barcode: later) | Product `<select>`s in Add Sale, Add Purchase, Returns, Adjustments |
 | `AppErrorBoundary`, `RouteErrorBoundary`, `NotFound`, `NoAccess` | Section 3 |
 
 ### 5.3 Forms and modals found today (brief D)
@@ -287,7 +287,7 @@ Layout:
 | < 768 px | Two screens: **Products** (search + grid, a floating cart bar "3 items · ₹612.00 → Review") and **Cart** (full-screen sheet with lines, totals, PAY). Fixes H7 |
 
 Speed and input:
-- **Barcode/SKU first**: the search box accepts scanner input (scanners type + Enter). Exact barcode or SKU match adds the item at once with a beep and a short highlight; no match shows "No product with code …". Uses the existing `GET /products/barcode/{code}` endpoint.
+- **Name/SKU search first**: the search box is always focused; typing filters by name or SKU, Enter adds the single or exact SKU match with a short highlight. **Barcode: later** (deferred by the owner on 1 Nov 2026: scanner input and the `GET /products/barcode/{code}` lookup are not part of S6).
 - **Keyboard**: F2 search, F4 customer, F8 discount, F9 hold, F10 or Ctrl+Enter pay, + / − quantity on the selected line, Del remove line, Esc close sheet. Shortcuts listed under a "?" button.
 - **Quantity**: tap the number to type it; long-press +/−; weight items later (needs decimal quantities, J).
 - **Tiles**: picture or a coloured initial (L4), name, price, stock badge ("3 left", "Out of stock" greyed). Own cart items stay tappable (adds one) instead of greying out (M6).
@@ -432,7 +432,7 @@ Effort as in section 10. "Slice" refers to section 12. Items marked ⚠ need leg
 
 | Idea | Problem it solves | Who benefits | Priority | Effort | Slice |
 |---|---|---|---|---|---|
-| **Barcode scanning in checkout** (keyboard-wedge scanners, exact SKU/barcode match, beep, highlight) | Typing names is slow and error-prone | Cashier | Must | S | S6 |
+| **Barcode scanning in checkout** (keyboard-wedge scanners, exact barcode match, beep, highlight) | Typing names is slow and error-prone | Cashier | Must | S | **barcode: later** (deferred) |
 | **Keyboard shortcuts + always-focused search** | Mouse-free speed at peak | Cashier | Must | S | S6 |
 | **Quick product grid / favourites** (owner pins 12–24 items) | Loose items without barcodes (tea, snacks) | Cashier | Should | S | S6 |
 | **Hold / park bills** (several open carts, recall by number or customer) | Customer forgets an item; queue keeps moving | Cashier | Must | M | S10a |
@@ -445,7 +445,7 @@ Effort as in section 10. "Slice" refers to section 12. Items marked ⚠ need leg
 | **Manager PIN override** for discounts above the cap, price changes, voids | Owner nearby approves without signing in | Owner, cashier | Should | M | S10c |
 | **Thermal receipt printing** via 58/80 mm print stylesheet (browser print) | Most counters use thermal printers | Cashier | Must | S | S6 |
 | Direct ESC/POS printing, cash drawer kick, silent print | Faster printing; drawer opens on cash sale | Cashier | Could ★ (needs a local print agent or WebUSB; browser alone cannot) | L | later |
-| **Barcode label printing** (sheets and label printers, price + MRP + barcode) | Loose and repacked goods need labels | Owner | Should | M | S8 |
+| **Barcode label printing** (sheets and label printers, price + MRP + barcode) | Loose and repacked goods need labels | Owner | Should | M | **barcode: later** (deferred) |
 | **Returns and exchanges in one flow** (return item, add new items, pay/refund difference) | Exchanges dominate apparel/footwear | Cashier | Should | M | S10b |
 | **Store credit / credit note** instead of cash refund | Keeps money in the shop | Owner | Should ⚠ (credit-note numbering and GST treatment) | M | S10b |
 | **GST invoice completeness**: customer GSTIN and state, place of supply → CGST+SGST or IGST **per sale** (today a shop-wide setting), HSN on invoice lines, B2B vs B2C | Correct tax invoices for business customers | Owner, accountant | Must ⚠ | M | S10d |
@@ -480,9 +480,9 @@ Each slice is shippable on its own, keeps the app working, and ends with its tes
 | **S3** | Shell and navigation | New grouped sidebar with role-based visibility; bottom tabs on phones; Reports hub with tabs; Settings sub-navigation; shorter trial banner on phones | `layout/Sidebar.jsx`, `AppLayout.jsx`, `Topbar.jsx`, `BannerArea.jsx`, `routeTitles.js`, `context/PermissionContext.jsx`, `App.jsx`, report pages, `Settings.jsx` | Route names change: keep old paths as redirects | M (5 d) |
 | **S4** | Component kit + pilot pages | `PageHeader`, `DataTable` (server paging, card mode < 640 px), `FilterBar`, form kit (react-hook-form), `Modal/Sheet`, empty/loading/error states, `ProductPicker`; migrate Customers, Suppliers, Categories, Brands, Units, Stock | `components/ui/*`, new `components/data-table/*`, `components/form/*`, the 6 pilot pages and their lists | Kit churn: freeze the API after the pilot | L (2 w) |
 | **S5** | Stores page | Settings → Stores (list, add, edit, activate/deactivate); server: list inactive stores, deactivation rules (not the last active store; warn on default store) | new `pages/settings/Stores.jsx`, `backend-go/internal/catalog/stores.go` (+ tests) | Server change, small | M (3–4 d) |
-| **S6** | New checkout | Section 6.2: layout per width, two-screen phone mode, barcode/SKU scan, shortcuts, favourites, server-priced cart (new read-only "quote" endpoint reusing `pricing.Compute`), payment sheet, success screen, thermal print stylesheet, round-off (if approved), lock renewal, WhatsApp share link. Ships behind a per-shop setting; old POS kept until approved | new `pages/checkout/*`, `services/api.js`, `backend-go/internal/sales` (quote endpoint + tests), `products` (lock refresh), print CSS | Core money flow: full regression suite before switching the default | L (2 w) |
+| **S6** | New checkout | Section 6.2: layout per width, two-screen phone mode, name/SKU search (barcode: later), shortcuts, favourites, server-priced cart (new read-only "quote" endpoint reusing `pricing.Compute`), payment sheet, success screen, thermal print stylesheet, round-off (if approved), lock renewal, WhatsApp share link. Ships behind a per-shop setting; old POS kept until approved | new `pages/checkout/*`, `services/api.js`, `backend-go/internal/sales` (quote endpoint + tests), `products` (lock refresh), print CSS | Core money flow: full regression suite before switching the default | L (2 w) |
 | **S7** | Dashboard | Section 6.1; server: greeting name, low-stock count, previous-period figures (filters already exist) | `pages/Dashboard.jsx`, `backend-go/internal/reports/dashboard.go` | Numbers must match reports: cross-checked in tests | M (4–5 d) |
-| **S8** | Remaining pages | Orders + Order detail (receipt actions, returns, void with reason if Q6), Products list + Product page with variants and labels, Purchases + Purchase detail (Receive, Cancel, Record payment: server exists), Returns + detail, Users/Roles, Online shop, Reports polish | most of `pages/*`, `components/lists/*` | Size: split into S8a–S8e, one area each | XL (3–4 w) |
+| **S8** | Remaining pages | Orders + Order detail (receipt actions, returns, void with reason if Q6), Products list + Product page with variants (barcode labels: later), Purchases + Purchase detail (Receive, Cancel, Record payment: server exists), Returns + detail, Users/Roles, Online shop, Reports polish | most of `pages/*`, `components/lists/*` | Size: split into S8a–S8e, one area each | XL (3–4 w) |
 | **S9** | Super Admin console | Responsive shell (drawer, card tables, `<dialog>`), shared toast; tenant page: usage vs limits, activity, contacts, notes timeline, email health, storage, health; list sorting and saved filters | `admin-console/src/*`, `backend-go/internal/platform` (read endpoints + tests) | Mostly server work; strict CSP | L (1.5–2 w) |
 | **S10a–e** | POS expert features | a: hold bills, split payments, static UPI QR · b: customer credit/dues, exchanges, credit notes · c: shifts, cash count, day-end report, manager PIN · d: GST invoice completeness and summaries · e: low stock/reorder, PO → receive → supplier payments, transfers, stock counts | sales, purchases, reports packages (server) + new pages | Each needs its own short design and approval; ⚠ items need tax/legal verification | L each |
 
@@ -500,7 +500,7 @@ All browser tests use Playwright (Chromium; WebKit for the checkout on tablets) 
 | **Forms** | Every form in brief G: valid save, each required field missing, server validation error, network failure (request aborted), double submit | Saved record appears; correct toast/inline/field messages from section 2.3; no duplicate records |
 | **Accessibility** | axe-core on every page at 360 and 1280; keyboard-only path through sign-in, checkout, add product, add return; visible focus; reduced motion | Zero serious/critical axe issues; every input has a linked label; all actions reachable by keyboard; contrast ≥ 4.5:1 |
 | **CSP (console)** | Every console page under its real CSP with sample data, listening for `securitypolicyviolation` and "Refused to" console messages; check no `<style>` elements are added at run time | Zero violations |
-| **POS regression** | Cash sale with change; exact UPI/card; discount at cap (allowed) and above cap (refused) as cashier; tax-inclusive and tax-exclusive items; **screen total = receipt total** for 20 generated carts; price changed while in cart; out of stock; scanner input (typed code + Enter); hold/recall (when built); connection lost then retry (one sale only); receipt print, PDF, email, resend limit; return partial, full, too many; purchase received raises stock; adjustment; Add Sale with part payment | All expected figures equal; stock ledger reconciles (reuse the server's reconcile check) |
+| **POS regression** | Cash sale with change; exact UPI/card; discount at cap (allowed) and above cap (refused) as cashier; tax-inclusive and tax-exclusive items; **screen total = receipt total** for 20 generated carts; price changed while in cart; out of stock; name/SKU search adds the exact SKU on Enter; hold/recall (when built); connection lost then retry (one sale only); receipt print, PDF, email, resend limit; return partial, full, too many; purchase received raises stock; adjustment; Add Sale with part payment | All expected figures equal; stock ledger reconciles (reuse the server's reconcile check) |
 | **Visual review** | Screenshots of every page at three widths attached to each slice's PR | Reviewed by you (automatic pixel diffs only if Q11 = yes) |
 | **Data** | Tests create their own records with a `E2E-` prefix in a dedicated test shop | No test writes into demo-shop except on request |
 
