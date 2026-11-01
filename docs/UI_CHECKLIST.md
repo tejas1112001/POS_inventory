@@ -187,3 +187,9 @@ Known problems:
 6. Correction: cashiers can open Settings → Stores read-only (they hold "stores: view"), with no Add store and no Edit/Turn off. My S5 reply said "no access"; that was wrong.
 
 Known problems: none new.
+
+### Item 9 – load test change you can see
+1. **Dashboard**: the figures are cached for 30 seconds per shop, user and filter (as PHASE1_DESIGN §9 planned). Make a sale, then open the dashboard: the new sale can take up to 30 seconds to appear. Changing the date range or store shows fresh numbers at once.
+
+Known problems:
+- Checkout and the 1,000-product POS list are slower than their design targets under load on this laptop (see docs/PHASE3_REPORT.md §6, O5/O6); in normal use they feel instant (median 28 ms and 75 ms).

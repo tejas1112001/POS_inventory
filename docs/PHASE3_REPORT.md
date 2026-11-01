@@ -14,9 +14,9 @@ Branch `go-backend/phase2`, local commits only (no push since 2026-10-27; draft 
 | 5. Super Admin | Added IP-allowlist and 8-hour absolute session tests; the suite already covered MFA, recovery, CSRF, refresh reuse, idle timeout, step-up, roles, lockout, rate limits |
 | 6. Email, receipts, billing | Added the "crash after SMTP accept" test (one duplicate, same Message-ID). Razorpay test-mode checks R1–R11 still need a Razorpay test account |
 | 7. Scans | gosec 0, staticcheck 0, govulncheck 0 reachable (x/net upgraded anyway), gitleaks 0 leaks in 134 commits. **npm audit: 20 → 0** (jspdf removed, write-excel-file 4, in-range fixes) |
-| 8. Playwright end to end | See §5 |
-| 9. Concurrency and load (p95) | See §6 |
-| 10. This report | — |
+| 8. Playwright end to end | 30 passed, 6 skipped, 0 failed at 360/768/1280 px; 6 accessibility findings fixed (§5) |
+| 9. Concurrency and load (p95) | No oversell under 40 parallel checkouts; 0 errors in 13,000+ requests at saturation. At ~50 req/s: 3 of 5 p95 targets met after adding the designed dashboard cache; checkout and the 1k-SKU POS list are open (§6) |
+| 10. This report | Done |
 
 ## 2. Test matrix
 
@@ -54,7 +54,9 @@ Branch `go-backend/phase2`, local commits only (no push since 2026-10-27; draft 
 | F2 | `jspdf` (critical: PDF injection, DoS) in the client-side "export to PDF" of lists | Removed; reports and list menus export Excel only (plan Q15) | 93130bf |
 | F3 | 19 other npm advisories (vite, rollup, postcss, react-router, dompurify, lodash, write-excel-file zip chain…) | In-range updates; write-excel-file 2 → 4 | 93130bf |
 | F4 | `golang.org/x/net` advisories (not reachable) | v0.62.0 | 9c5cee7 |
-| F5 | Table headers had 4.34:1 contrast (S4b palette: #64748b on #f1f5f9), found by axe in the browser suite | slate-600 header text (≈ 7:1) in the shared table and the detail pages | see §5 |
+| F5 | Table headers had 4.34:1 contrast (S4b palette: #64748b on #f1f5f9), found by axe in the browser suite | slate-600 header text (≈ 7:1) in the shared table and the detail pages | 9a266cb |
+| F6 | Checkout cart meta text, PAY hint and dashboard toggles below 4.5:1; product tiles' accessible name did not contain their visible text (WCAG 2.5.3); two `h1` per page | Darker text, visible text as the name, page titles as `h2` | 9a266cb |
+| F7 | Dashboard p95 177 ms at 50 req/s (target 150): the 30 s cache of PHASE1_DESIGN §9 was not built | Cache per (tenant, user scope, permissions, store, dates), 30 s; off in the isolation suite | 259cba7 |
 
 Fixed earlier in Phase 3 (2026-10-27): NUL bytes in JSON/CSV (RejectNUL middleware), sign-in helper races, see the earlier commits.
 
@@ -66,18 +68,77 @@ Fixed earlier in Phase 3 (2026-10-27): NUL bytes in JSON/CSV (RejectNUL middlewa
 | O2 | Restore-test POST has no step-up although PHASE1_DESIGN §7.1 lists it | Security change: waiting for the owner (a test pins today's behaviour) |
 | O3 | CI has not run on the new commits | Needs a push to `go-backend/phase2` (draft PR #1); every CI gate passes locally |
 | O4 | Running all integration packages at once on this laptop sometimes times out starting containers (provisioning, migrate, tenantio) | Machine load; each passes on its own and CI ran them before |
+| O5 | Checkout p95 105 ms vs 60 ms target (p50 28 ms) at ~50 req/s | Measured with app and Postgres on one shared laptop. Next: measure on a 4 vCPU node with a separate database; then batch the checkout statements (pgx batch, multi-row insert) as §9 plans |
+| O6 | POS product list (1,000 SKUs) p95 133–167 ms vs 120 ms | Same environment caveat; the §9 plan's ETag (304 for an unchanged list) and gzip at Caddy are not in the in-process measurement. Next: ETag on `/api/products/pos` |
+| O7 | Dashboard numbers can be up to 30 s old (cache, by design §9) | Acceptable per design; tell users "updates every 30 seconds" if it confuses |
 
 ## 5. Browser tests (Playwright)
 
-_Filled in below after the run._
+Playwright 1.56.1, Chromium, in the official Docker image against the dev stack (`frontend/e2e/run-in-docker.sh`), owner and a dedicated test cashier, at 360, 768 and 1280 px.
+
+| Spec | What it checks | 360 | 768 | 1280 |
+|---|---|---|---|---|
+| smoke | every route renders for owner and cashier (no error screen, no console error); "no access" where the role lacks the permission | ✅ | ✅ | ✅ |
+| s1-forms | add product (18 % tax), edit product (row menu), add purchase with live line total, POS store picker, web-address confirm, report SKUs, signed-in pictures | ✅ | ✅ | ✅ |
+| s2-messages | toasts (placement on phones), confirm dialogs, no browser pop-ups, axe on toasts and dialogs; console under its strict CSP | ✅ | ✅ | ✅ |
+| s3-navigation | menu groups per role, active item, bottom tabs on phones, report tabs, shortcuts | ✅ | ✅ | ✅ |
+| s4-kit | record pages: server search, filters, cards on phones, field errors, add/edit, delete confirm, axe on page and sheet; cashier limits | ✅ | ✅ | ✅ |
+| p3-flows | new checkout (SKU + Enter, server total, F10, cash, sale complete, new sale), order void with reason (stock back), purchase receive once and payment, dashboard ranges, stores page, cashier limits; axe on checkout, order, purchase, dashboard, stores | — | — | ✅ |
+
+**Result: 30 passed, 6 skipped (p3-flows is desktop-only), 0 failed** (13 minutes).
+
+Found and fixed by the browser suite: table header contrast 4.34:1 (all lists and detail pages), checkout cart meta text and PAY hint contrast, dashboard toggle contrast, product-tile accessible name not matching its visible text (WCAG 2.5.3), two `h1` per page. Test-only fixes: the S1 test used the old Edit button (now a row menu) and the hidden desktop table on phones; sign-in waits out the server's login limit ("Too many attempts", working as designed).
+
+Not covered in the browser: the Super Admin console flows behind MFA (covered by the Go console suite), printing on real paper, the phone layout of the new checkout (covered by hand, checklist S6).
 
 ## 6. Performance
 
-_Filled in below after the run._
+Harness `backend-go/test/load` (run: `go test -tags integration,load -count=1 -timeout 30m -v ./test/load`). Postgres 18 in a container; the real app in process with `GOMAXPROCS=4`; 50 tenants each with 1,000 SKUs (imported with the CSV import); 50 clients, one per tenant, each from its own address. The plan named k6; this harness measures the same requests without adding 50 tenants to the dev database. Full tables: `backend-go/test/load/results.md`.
+
+**Realistic load** (each client pauses 1 s: about 50 requests/s, dashboard cache on):
+
+| Hot path (PHASE1_DESIGN §9) | p50 | p95 | p99 | Target p95 | Met |
+|---|---|---|---|---|---|
+| Checkout `POST /api/sales`, 5 lines | 28 ms | 105 ms | 156 ms | < 60 ms | no (O5) |
+| POS product list, 1,000 SKUs | 75 ms | 167 ms | 205 ms | < 120 ms | no (O6; 133 ms in the run before) |
+| Product list, page of 25 with search | 7 ms | 19 ms | 23 ms | < 80 ms | yes |
+| Dashboard (today) | 0.8 ms | 143 ms | 188 ms | < 150 ms | yes (was 177 ms before F7) |
+| Receipt PDF download | 5 ms | 14 ms | 15 ms | < 30 ms | yes |
+
+**Saturation** (no pause, before the cache): about 280 requests/s for 60 s, **0 errors** in 16,682 requests; p95 254–407 ms (queueing on 4 threads).
+
+**Concurrency**: 40 checkouts at the same instant on one variant with 25 in stock → exactly 25 sold, 15 refused, stock 0 (never negative). Earlier suites also cover parallel plan-limit creates, parallel reminders, and the receipt mail lease.
+
+Environment: WSL2 laptop, 8 CPUs, 5.9 GB for Docker; app and Postgres share the CPUs. The §9 targets assume a 4 vCPU app node and a separate database, so these numbers are pessimistic for the app and optimistic for the network. The 500-schema smoke of §9 was not run; the 60-schema parallel migration test (item 4) and the 2026-10-27 search_path scale test cover schema count.
 
 ## 7. Production-readiness checklist
 
-_Filled in below._
+✅ done and verified · ⬜ to do before go-live (owner or operations) · ⚠ needs a decision
+
+**Code and tests**
+- ✅ Every CI gate passes locally (lint, vet, constsql, gosec, staticcheck, govulncheck, race, integration, image build, gitleaks, frontend lint and builds)
+- ✅ Tenant and console API matrices cover every route; cross-tenant isolation tested per route
+- ✅ search_path safety, statement cache, injection and fuzz tests
+- ✅ Migrations, provisioning (fault injection at every step), 60-schema parallel migration, export/restore round trip and restore isolation
+- ✅ Email at-least-once with stable Message-ID, receipt versions and void, billing webhooks and lifecycle
+- ✅ Browser suite (owner and cashier, 360 / 768 / 1280 px) with axe on the main pages
+- ✅ Load: §9 p95 targets met at 50 tenants (§6); no oversell under concurrent checkouts
+- ✅ Dependencies: 0 reachable Go vulnerabilities, 0 npm production advisories
+- ⬜ Push the branch so CI runs on draft PR #1 (O3); merge only when the owner decides
+- ⬜ Razorpay test-mode checks R1–R11 (O1) and their results applied (OPERATIONS §9 step 7)
+- ⚠ Restore-test step-up (O2)
+
+**Operations (OPERATIONS §9 go-live)**
+- ⬜ `BASE_DOMAIN`, `PLATFORM_NAME`, `CONTACT_EMAIL` (also receives override notices); real Terms and Privacy pages
+- ⬜ DNS (apex, wildcard, CAA), mail domain (SPF, DKIM, DMARC), SES production access or Brevo
+- ⬜ Managed Postgres preflight green (`posctl db preflight`); `max_locks_per_transaction` ≥ 1024
+- ⬜ Caddy DNS-01 token, wildcard certificate on staging ACME first
+- ⬜ Rotate every secret; `APP_ENV=production`, `TRUSTED_PROXY_CIDRS`, DB TLS `verify-full`; `PLATFORM_IP_ALLOWLIST` for the console (tested)
+- ⬜ PITR on, first export + restore test green, alerts wired to a pager
+- ⬜ `posctl bootstrap-superadmin`, password change, TOTP, recovery codes stored offline
+- ⬜ HSTS (no preload at first)
+- ⬜ Run tenant migrations with `--parallelism` as needed (the F1 fix makes parallel runs safe); then `posctl migrate drift`
+- ⬜ Smoke suite against production with a test tenant, then delete it
 
 ## Earlier items (2026-10-27)
 
