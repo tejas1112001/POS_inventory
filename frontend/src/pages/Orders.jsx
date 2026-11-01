@@ -11,6 +11,7 @@ import PageHeader from '@/components/kit/PageHeader';
 import RowActions from '@/components/kit/RowActions';
 import StatusBadge from '@/components/kit/StatusBadge';
 import { EmptyState } from '@/components/kit/States';
+import DateBox from '@/components/kit/DateBox';
 import Receipt from '@/components/Receipt';
 import VoidSaleDialog from '@/components/orders/VoidSaleDialog';
 import { formatCurrency, formatDateTime } from '@/lib/format';
@@ -21,16 +22,6 @@ const STATUS = [
   { value: 'Void', label: 'Voided' },
 ];
 const PAYMENT = ['Paid', 'Partial', 'Unpaid', 'Overdue'].map((v) => ({ value: v, label: v }));
-
-// DateBox: one date filter kept in the address (startDate / endDate).
-function DateBox({ label, value, onChange, min, max }) {
-  return (
-    <label className="flex items-center gap-1.5 text-sm text-muted-foreground">
-      <span className="sm:sr-only">{label}</span>
-      <input type="date" aria-label={label} value={value || ''} min={min} max={max} onChange={(e) => onChange(e.target.value)} className="h-11 rounded-md border bg-background px-2 text-sm text-foreground sm:h-9" />
-    </label>
-  );
-}
 
 // Orders (/sales): every sale, newest first, from the server in pages.
 // Search by number or customer; filter by status, payment, store and dates.

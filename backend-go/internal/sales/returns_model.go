@@ -3,12 +3,15 @@ package sales
 import (
 	"context"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/shopspring/decimal"
 
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/apperr"
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/docdate"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/files"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/httpx"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/tenancy"
@@ -196,25 +199,50 @@ func loadReturns(ctx context.Context, tx tenancy.TenantTx, ids []int64) ([]Retur
 }
 
 const (
-	qReturnFilter = ` FROM sale_returns r WHERE ($1 = 0 OR r.sale_id = $1)`
-	qReturnCount  = `SELECT count(*)` + qReturnFilter
-	qReturnIDs    = `SELECT r.id` + qReturnFilter + ` ORDER BY r.date DESC, r.id DESC LIMIT $2 OFFSET $3`
+	qReturnFilter = ` FROM sale_returns r WHERE ($1 = 0 OR r.sale_id = $1)
+		AND ($2 = '' OR r.reference ILIKE $2
+			OR EXISTS (SELECT 1 FROM sales s WHERE s.id = r.sale_id AND s.reference ILIKE $2)
+			OR EXISTS (SELECT 1 FROM customers c WHERE c.id = r.customer_id AND c.name ILIKE $2))
+		AND ($3::timestamptz IS NULL OR r.date >= $3) AND ($4::timestamptz IS NULL OR r.date < $4)
+		AND ($5 = 0 OR r.store_id = $5)`
+	qReturnCount = `SELECT count(*)` + qReturnFilter
+	qReturnIDs   = `SELECT r.id` + qReturnFilter + ` ORDER BY r.date DESC, r.id DESC LIMIT $6 OFFSET $7`
 )
 
 // listReturns is GET /api/sales/returns: newest first, a bare array
-// unless page/limit are given; ?saleId= narrows to one sale.
+// unless page/limit are given; ?saleId= narrows to one sale; ?search=
+// (return number, order number or customer), ?startDate=, ?endDate= and
+// ?storeId= filter (UI S8).
 func (a *API) listReturns(w http.ResponseWriter, r *http.Request) {
 	p := httpx.ParsePage(r, a.d.MaxRows)
+	q := r.URL.Query()
 	saleID := queryInt(r, "saleId")
+	like := ""
+	if s := strings.TrimSpace(q.Get("search")); s != "" {
+		like = "%" + escapeLike(s) + "%"
+	}
 	var (
 		out   []ReturnJSON
 		total int
 	)
 	err := a.ro(r.Context(), tenant(r), func(tx tenancy.TenantTx) error {
-		if err := tx.QueryRow(r.Context(), qReturnCount, saleID).Scan(&total); err != nil {
+		s, err := loadSettings(r.Context(), tx)
+		if err != nil {
 			return err
 		}
-		rows, err := tx.Query(r.Context(), qReturnIDs, saleID, p.Limit, p.Offset)
+		from, err := docdate.Bound(q.Get("startDate"), s.loc, false)
+		if err != nil {
+			return err
+		}
+		to, err := docdate.Bound(q.Get("endDate"), s.loc, true)
+		if err != nil {
+			return err
+		}
+		args := []any{saleID, like, from, to, queryInt(r, "storeId")}
+		if err := tx.QueryRow(r.Context(), qReturnCount, args...).Scan(&total); err != nil {
+			return err
+		}
+		rows, err := tx.Query(r.Context(), qReturnIDs, append(args, p.Limit, p.Offset)...)
 		if err != nil {
 			return err
 		}
@@ -230,4 +258,30 @@ func (a *API) listReturns(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.WriteList(w, p, out, total)
+}
+
+// getReturn is GET /api/sales/returns/{id} (UI S8 return page).
+func (a *API) getReturn(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	var out ReturnJSON
+	err = a.ro(r.Context(), tenant(r), func(tx tenancy.TenantTx) error {
+		l, err := loadReturns(r.Context(), tx, []int64{id})
+		if err != nil {
+			return err
+		}
+		if len(l) == 0 {
+			return apperr.NotFound()
+		}
+		out = l[0]
+		return nil
+	})
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, out)
 }

@@ -101,3 +101,16 @@ How to check:
 Known problems:
 - Purchases have no store of their own; each line names its store (shown per line).
 - Overdue is not set from here (the server keeps it when the form sends it).
+
+### S8d – Returns and return page
+
+How to check:
+1. **Returns** (`/sales-return`): newest first; return number (click to open), date, order (click → order page, or "Without order"), customer, store (wide screens), refund and "Paid back" badge.
+2. Search a return number, an order number or a customer name. Filters: Store (more than one store), From/To dates (in the Filters sheet on phones).
+3. Row menu: Open, Open the order.
+4. **Return page** (`/sales-return/<id>`): order link, customer, store, note; items with reason, quantity, price and total; refund box (tax included, total, paid back, still to pay back).
+5. From an order page, **Return items** opens New return with that order chosen; after saving, the order page shows the return under "Returns" and "N returned" on the line.
+
+Known problems:
+- The New return form is the existing one (restyled, not rebuilt).
+- Returns have no printed credit note yet (S10b).

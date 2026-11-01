@@ -158,3 +158,8 @@ These change only what the menu shows and which page shows "no access"; the serv
 
 - Server (read-only): `GET /api/purchases` adds `?search=` (number or supplier name, LIKE characters escaped) and `?paymentStatus=`. Test `purchases_filters_test.go` (search, payment filter, payment recorded with `PUT {paid}`).
 - `/purchases` rebuilt on the kit; `/purchases/:id` purchase page. Actions on the existing `PUT /api/purchases/{id}`: Receive (`status: Received`, needs purchases:approve, stock in once), Cancel (`status: Cancelled`), Record payment (new paid total; server sets due and payment status). Old `lists/PurchaseList.jsx` removed.
+
+## S8d – Returns and return page
+
+- Server (read-only): `GET /api/sales/returns` adds `?search=` (return number, order number, customer), `?startDate=`, `?endDate=` (shop time zone) and `?storeId=`; new `GET /api/sales/returns/{id}` (sales_returns:view). Test `returns_page_test.go` (filters, read, 404, other tenant refused).
+- `/sales-return` rebuilt on the kit; `/sales-return/:id` return page. `kit/DateBox.jsx` shared by Orders and Returns. Old `lists/SalesReturnList.jsx` removed.

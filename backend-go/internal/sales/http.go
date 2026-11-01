@@ -728,6 +728,7 @@ func (a *API) Mount(rt *rbac.Router) {
 	rt.Handle(http.MethodGet, "/sales", req("sales", "view"), a.list)
 	rt.Handle(http.MethodGet, "/sales/returns", req("sales_returns", "view"), a.listReturns)
 	rt.Handle(http.MethodPost, "/sales/returns", req("sales_returns", "create"), a.createReturn)
+	rt.Handle(http.MethodGet, "/sales/returns/{id}", req("sales_returns", "view"), a.getReturn)
 	rt.Handle(http.MethodGet, "/sales/{id}", req("sales", "view"), a.get)
 	rt.Handle(http.MethodPost, "/sales", req("sales", "create"), a.create)
 	rt.Handle(http.MethodPost, "/sales/quote", req("sales", "create"), a.quote)

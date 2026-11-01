@@ -25,6 +25,7 @@ import Brands from './pages/Brands';
 import Units from './pages/Units';
 import Invoices from './pages/Invoices';
 import SalesReturn from './pages/SalesReturn';
+import ReturnDetail from './pages/ReturnDetail';
 import AddSalesReturn from './pages/AddSalesReturn';
 import Customers from './pages/Customers';
 import Billers from './pages/Billers';
@@ -103,6 +104,7 @@ function AppRoutes() {
       <Route path="/suppliers" element={<ProtectedLayout module="suppliers" action="view"><Suppliers /></ProtectedLayout>} />
       <Route path="/add-supplier" element={<ProtectedLayout module="suppliers" action="create"><Suppliers startNew /></ProtectedLayout>} />
       <Route path="/sales-return" element={<ProtectedLayout module="sales_returns" action="view"><SalesReturn /></ProtectedLayout>} />
+      <Route path="/sales-return/:id" element={<ProtectedLayout module="sales_returns" action="view"><ReturnDetail /></ProtectedLayout>} />
       <Route path="/add-sales-return" element={<ProtectedLayout module="sales_returns" action="create"><AddSalesReturn /></ProtectedLayout>} />
       <Route path="/pos" element={<ProtectedLayout fullBleed module="pos" action="view"><CheckoutEntry /></ProtectedLayout>} />
       <Route path="/sales" element={<ProtectedLayout module="sales" action="view"><Orders /></ProtectedLayout>} />
