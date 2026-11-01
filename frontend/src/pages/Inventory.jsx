@@ -101,7 +101,7 @@ export default function Inventory() {
   ];
 
   return (
-    <div>
+    <div className="flex min-h-0 flex-1 flex-col">
       <PageHeader description="How many of each product are in each store. Use Adjustments to add or remove with a reason." />
       <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
         {tiles.map((t) => (

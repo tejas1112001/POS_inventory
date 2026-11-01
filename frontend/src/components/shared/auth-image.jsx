@@ -50,5 +50,5 @@ export function AuthImage({ src, fallback = null, ...rest }) {
   const [failed, setFailed] = useState(false);
   useEffect(() => setFailed(false), [url]);
   if (!url || failed) return fallback;
-  return <img src={url} onError={() => setFailed(true)} {...rest} />;
+  return <img src={url} loading="lazy" decoding="async" onError={() => setFailed(true)} {...rest} />;
 }

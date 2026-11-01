@@ -88,7 +88,7 @@ export default function ImportProduct({ showForm, setShowForm, onImportComplete 
         <div className="flex-1 space-y-5 overflow-y-auto p-6 text-sm">
           <div className="space-y-1 text-muted-foreground">
             <p>
-              One row per product (or per variant: rows with the same name become variants). Required columns: name, sku, price.
+              One row per product (or per variant: rows with the same name become options of one product; at the till each option shows by its SKU). Required columns: name, sku, price.
               Categories, brands, units and stores must already exist. Existing SKUs or barcodes are not changed.
             </p>
             <p>All rows are imported or none: any error stops the whole file. At most 5,000 rows.</p>

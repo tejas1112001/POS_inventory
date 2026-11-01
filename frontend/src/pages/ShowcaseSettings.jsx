@@ -1,3 +1,4 @@
+import { ProductImage } from '@/components/shared/product-image';
 import { useConfirm } from '../components/feedback/ConfirmDialog';
 import { toast } from '../../shared/toast/store';
 import React, { useState, useEffect } from 'react';
@@ -452,17 +453,7 @@ export default function ShowcaseSettings() {
                 filteredProducts.map((p) => (
                   <tr key={p.id} className="hover:bg-muted/30 transition-colors">
                     <td className="p-3 font-medium flex items-center gap-3">
-                      {p.image ? (
-                        <img
-                          src={p.image}
-                          alt={p.name}
-                          className="size-8 rounded object-cover border"
-                        />
-                      ) : (
-                        <div className="size-8 rounded bg-muted flex items-center justify-center text-xs text-muted-foreground font-bold">
-                          {p.name[0]}
-                        </div>
-                      )}
+                      <ProductImage name={p.name} src={p.image} size={32} />
                       <span>{p.name}</span>
                     </td>
                     <td className="p-3 text-muted-foreground">{p.category || 'Unassigned'}</td>

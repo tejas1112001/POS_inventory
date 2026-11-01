@@ -26,7 +26,7 @@ export default function Topbar({ title, onOpenMobileMenu }) {
   };
 
   return (
-    <header className="z-20 flex h-16 shrink-0 items-center gap-2 border-b bg-background px-3 sm:px-4">
+    <header className="z-20 flex h-16 shrink-0 items-center gap-2 border-b bg-card px-3 sm:px-4">
       <Button
         variant="ghost"
         size="icon"

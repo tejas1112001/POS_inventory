@@ -1,16 +1,17 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 
-// Primary colours are dark enough for white button text at 4.5:1 or more
-// (WCAG AA); they were lightened brand colours that failed (3.0–3.7:1).
+// Theme presets change the accent colour only (buttons, active items,
+// links); the navy sidebar and the rest of the palette stay. Every primary
+// passes 4.5:1 with white text (WCAG AA).
 export const THEME_PRESETS = {
-  skyblue: {
-    label: 'Sky Blue',
-    primary: 'oklch(0.528 0.142 230)',
-    primaryForeground: 'oklch(0.985 0.01 230)',
-    ring: 'oklch(0.528 0.142 230)',
-    accent: 'oklch(0.94 0.04 230)',
-    accentForeground: 'oklch(0.35 0.1 230)',
-    chart1: 'oklch(0.528 0.142 230)',
+  blue: {
+    label: 'Blue',
+    primary: '#2563eb',
+    primaryForeground: '#ffffff',
+    ring: '#2563eb',
+    accent: '#eff6ff',
+    accentForeground: '#1e40af',
+    chart1: '#2563eb',
   },
   emerald: {
     label: 'Emerald Green',
@@ -55,7 +56,7 @@ const STORAGE_KEY = 'reactronpos-theme';
 const ThemeContext = createContext();
 
 function applyTheme(presetKey) {
-  const preset = THEME_PRESETS[presetKey] || THEME_PRESETS.skyblue;
+  const preset = THEME_PRESETS[presetKey] || THEME_PRESETS.blue;
   const root = document.documentElement;
 
   root.style.setProperty('--primary', preset.primary);
@@ -66,15 +67,15 @@ function applyTheme(presetKey) {
   root.style.setProperty('--chart-1', preset.chart1);
   root.style.setProperty('--sidebar-primary', preset.primary);
   root.style.setProperty('--sidebar-primary-foreground', preset.primaryForeground);
-  root.style.setProperty('--sidebar-accent', preset.accent);
-  root.style.setProperty('--sidebar-accent-foreground', preset.accentForeground);
   root.style.setProperty('--sidebar-ring', preset.ring);
   root.dataset.theme = presetKey;
 }
 
 export function ThemeProvider({ children }) {
   const [theme, setThemeState] = useState(() => {
-    return localStorage.getItem(STORAGE_KEY) || 'skyblue';
+    // 'skyblue' was the old default; the brand blue replaces it.
+    const saved = localStorage.getItem(STORAGE_KEY);
+    return saved && saved !== 'skyblue' && THEME_PRESETS[saved] ? saved : 'blue';
   });
 
   useEffect(() => {

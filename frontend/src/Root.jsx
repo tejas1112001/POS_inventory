@@ -36,7 +36,7 @@ function useHome(known = null) {
 }
 
 function Blank() {
-  return <div className="min-h-screen" />;
+  return <div className="min-h-dvh" />;
 }
 
 // Home is / and /product/:productId: the default store's shop, or the

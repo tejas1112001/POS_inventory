@@ -1,3 +1,4 @@
+import { AuthImage } from '@/components/shared/auth-image';
 import { toast } from '../../../shared/toast/store';
 import React, { useEffect, useState } from 'react';
 
@@ -141,11 +142,7 @@ export default function EntityForm({
                 />
                 {value && (
                   <div className="mt-3 flex items-center space-x-3">
-                    <img
-                      src={value}
-                      alt="Preview"
-                      className="w-16 h-16 rounded-lg object-cover border border-gray-300"
-                    />
+                    <AuthImage src={value} alt="Preview" className="w-16 h-16 rounded-lg object-cover border border-gray-300" />
                     <button
                       type="button"
                       className="text-sm text-red-600 hover:text-red-700"

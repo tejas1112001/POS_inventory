@@ -15,6 +15,9 @@ body,
 
 @theme inline {
   --font-sans: var(--ds-font);
+  --color-navy: var(--ds-navy);
+  --color-slate-surface: var(--ds-slate);
+  --color-sidebar-muted: var(--ds-sidebar-muted);
   --color-success: var(--ds-success);
   --color-success-bg: var(--ds-success-bg);
   --color-success-fg: var(--ds-success-fg);
@@ -66,37 +69,37 @@ body,
 
 :root {
   --radius: 0.625rem;
-  --background: oklch(0.99 0.005 145);
-  --foreground: oklch(0.18 0.02 160);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.18 0.02 160);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.18 0.02 160);
-  --primary: oklch(0.528 0.142 230);  /* 4.9:1 with white text (WCAG AA) */
-  --primary-foreground: oklch(0.985 0.01 230);
-  --secondary: oklch(0.97 0.01 230);
-  --secondary-foreground: oklch(0.25 0.02 230);
-  --muted: oklch(0.965 0.005 230);
-  --muted-foreground: oklch(0.52 0.02 230);
-  --accent: oklch(0.94 0.04 230);
-  --accent-foreground: oklch(0.35 0.1 230);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.91 0.005 230);
-  --input: oklch(0.92 0.005 230);
-  --ring: oklch(0.528 0.142 230);
-  --chart-1: oklch(0.588 0.158 230);
-  --chart-2: oklch(0.65 0.14 190);
-  --chart-3: oklch(0.78 0.16 80);
-  --chart-4: oklch(0.72 0.18 50);
-  --chart-5: oklch(0.65 0.21 15);
-  --sidebar: oklch(0.99 0.005 145);
-  --sidebar-foreground: oklch(0.25 0.02 160);
-  --sidebar-primary: oklch(0.528 0.142 230);
-  --sidebar-primary-foreground: oklch(0.985 0.01 230);
-  --sidebar-accent: oklch(0.94 0.04 230);
-  --sidebar-accent-foreground: oklch(0.35 0.1 230);
-  --sidebar-border: oklch(0.91 0.005 230);
-  --sidebar-ring: oklch(0.588 0.158 230);
+  --background: #f8fafc;
+  --foreground: #334155;
+  --card: #ffffff;
+  --card-foreground: #334155;
+  --popover: #ffffff;
+  --popover-foreground: #334155;
+  --primary: #2563eb; /* 5.2:1 with white text */
+  --primary-foreground: #ffffff;
+  --secondary: #f1f5f9;
+  --secondary-foreground: #1e293b;
+  --muted: #f1f5f9;
+  --muted-foreground: #64748b; /* 4.8:1 on white, 4.6:1 on #f1f5f9 */
+  --accent: #eff6ff;
+  --accent-foreground: #1e40af;
+  --destructive: #dc2626; /* 4.8:1 with white text */
+  --border: #e2e8f0;
+  --input: #cbd5e1;
+  --ring: #2563eb;
+  --chart-1: #2563eb;
+  --chart-2: #0ea5e9;
+  --chart-3: #f59e0b;
+  --chart-4: #10b981;
+  --chart-5: #ef4444;
+  --sidebar: #0f172a;
+  --sidebar-foreground: #cbd5e1;
+  --sidebar-primary: #2563eb;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #1e293b;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #1e293b;
+  --sidebar-ring: #2563eb;
 }
 
 .form-page label {
@@ -153,11 +156,32 @@ body,
   body {
     @apply bg-background text-foreground;
   }
+  h1,
+  h2,
+  h3 {
+    color: var(--ds-navy);
+  }
+  /* Inter on every control (browsers otherwise use the system font). */
+  button,
+  input,
+  select,
+  textarea {
+    font-family: inherit;
+  }
+  /* No spinner arrows on number boxes. */
+  input[type='number']::-webkit-inner-spin-button,
+  input[type='number']::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type='number'] {
+    -moz-appearance: textfield;
+  }
 }
 
 .scrollbar-thin {
   scrollbar-width: thin;
-  scrollbar-color: var(--primary) transparent;
+  scrollbar-color: var(--ds-border-strong) transparent;
 }
 .scrollbar-thin::-webkit-scrollbar {
   width: 6px;
@@ -167,7 +191,7 @@ body,
   background: transparent;
 }
 .scrollbar-thin::-webkit-scrollbar-thumb {
-  background-color: var(--primary);
+  background-color: var(--ds-border-strong);
   border-radius: 9999px;
 }
 
@@ -176,20 +200,4 @@ body,
 }
 .no-scrollbar::-webkit-scrollbar {
   display: none;
-}
-
-@media print {
-  body * {
-    visibility: hidden;
-  }
-  .print-receipt,
-  .print-receipt * {
-    visibility: visible;
-  }
-  .print-receipt {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
-  }
 }

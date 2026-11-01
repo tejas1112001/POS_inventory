@@ -1,5 +1,4 @@
-import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import Pagination from './Pagination';
 import { cn } from '@/lib/utils';
 import { EmptyState, ErrorState, LoadingRows } from './States';
 
@@ -31,9 +30,9 @@ export default function DataTable({
     return (
       <>
         {/* Table: 640 px and up */}
-        <div className="hidden overflow-x-auto sm:block">
+        <div className="hidden sm:block">
           <table className="w-full text-sm" aria-label={label} aria-busy={loading || undefined}>
-            <thead className="sticky top-0 z-[1] bg-muted/60 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            <thead className="sticky top-0 z-[1] bg-muted text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
               <tr>
                 {columns.map((c) => (
                   <th key={c.id} scope="col" className={cn('px-4 py-2.5 font-medium', c.align === 'right' && 'text-right', c.className)}>
@@ -92,44 +91,13 @@ export default function DataTable({
     );
   };
 
-  const first = total ? (page - 1) * size + 1 : 0;
-  const last = Math.min(page * size, total);
-  const pages = Math.max(1, Math.ceil(total / size));
-
+  // The rows scroll inside the table area (sticky header); the pager stays
+  // pinned under it. Pages give the table the remaining height.
   return (
-    <section className="overflow-hidden rounded-lg border bg-card">
-      {body()}
+    <section className="flex min-h-[16rem] flex-1 flex-col overflow-hidden rounded-lg border bg-card">
+      <div className="min-h-0 flex-1 overflow-auto scrollbar-thin">{body()}</div>
       {!error && total > 0 && (
-        <nav aria-label={`${label} pages`} className="flex flex-wrap items-center justify-between gap-2 border-t px-4 py-2.5 text-sm">
-          <p className="text-muted-foreground" aria-live="polite">
-            {first}–{last} of {total}
-          </p>
-          <div className="flex items-center gap-2">
-            <label className="hidden items-center gap-2 text-muted-foreground sm:flex">
-              Rows
-              <select
-                className="h-8 rounded-md border bg-background px-2 text-foreground"
-                value={size}
-                onChange={(e) => onSize?.(Number(e.target.value))}
-              >
-                {pageSizes.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <Button type="button" variant="outline" size="icon" className="size-11 sm:size-8" disabled={page <= 1} onClick={() => onPage?.(page - 1)} aria-label="Previous page">
-              <ChevronLeft className="size-4" aria-hidden="true" />
-            </Button>
-            <span className="tabular-nums">
-              {page} / {pages}
-            </span>
-            <Button type="button" variant="outline" size="icon" className="size-11 sm:size-8" disabled={page >= pages} onClick={() => onPage?.(page + 1)} aria-label="Next page">
-              <ChevronRight className="size-4" aria-hidden="true" />
-            </Button>
-          </div>
-        </nav>
+        <Pagination label={label} total={total} page={page} size={size} pageSizes={pageSizes} onPage={onPage} onSize={onSize} />
       )}
     </section>
   );

@@ -69,7 +69,7 @@ export default function RecordsPage({ config, startNew = false }) {
   const filtered = list.search || list.values.status;
 
   return (
-    <div>
+    <div className="flex min-h-0 flex-1 flex-col">
       <PageHeader
         description={description}
         actions={

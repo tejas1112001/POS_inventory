@@ -1,3 +1,4 @@
+import Pagination from '@/components/kit/Pagination';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2, Minus, Plus } from 'lucide-react';
 import { SectionCard } from '@/components/shared/section-card';
@@ -128,21 +129,10 @@ function usePaged(path, deps) {
   return { ...state, page, setPage, pages: Math.max(1, Math.ceil(state.total / PAGE)) };
 }
 
-function Pager({ page, pages, setPage }) {
-  if (pages <= 1) return null;
-  return (
-    <div className="mt-3 flex items-center justify-end gap-2 text-sm">
-      <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>
-        Previous
-      </Button>
-      <span>
-        Page {page} of {pages}
-      </span>
-      <Button variant="outline" size="sm" disabled={page >= pages} onClick={() => setPage(page + 1)}>
-        Next
-      </Button>
-    </div>
-  );
+// Pager: the shared Pagination (50 rows per page from the server).
+function Pager({ page, total, setPage }) {
+  if (!total) return null;
+  return <Pagination label="Stock changes" total={total} page={page} size={PAGE} onPage={setPage} className="mt-3 rounded-lg border" />;
 }
 
 function Table({ head, children, loading, error, empty }) {
@@ -169,7 +159,7 @@ function Table({ head, children, loading, error, empty }) {
 
 function AdjustmentList({ storeId, storeName, reload }) {
   const path = storeId ? `/api/stock-adjustments?storeId=${storeId}` : '/api/stock-adjustments';
-  const { rows, loading, error, page, pages, setPage } = usePaged(path, [storeId, reload]);
+  const { rows, total, loading, error, page, setPage } = usePaged(path, [storeId, reload]);
   return (
     <SectionCard>
       <div className="pt-4">
@@ -196,7 +186,7 @@ function AdjustmentList({ storeId, storeName, reload }) {
             </tr>
           ))}
         </Table>
-        <Pager page={page} pages={pages} setPage={setPage} />
+        <Pager page={page} total={total} setPage={setPage} />
       </div>
     </SectionCard>
   );
@@ -218,7 +208,7 @@ const REASON = {
 
 function HistoryList({ storeId, storeName, reload }) {
   const path = storeId ? `/api/stock-movements?storeId=${storeId}` : '/api/stock-movements';
-  const { rows, loading, error, page, pages, setPage } = usePaged(path, [storeId, reload]);
+  const { rows, total, loading, error, page, setPage } = usePaged(path, [storeId, reload]);
   return (
     <SectionCard>
       <div className="pt-4">
@@ -242,7 +232,7 @@ function HistoryList({ storeId, storeName, reload }) {
             </tr>
           ))}
         </Table>
-        <Pager page={page} pages={pages} setPage={setPage} />
+        <Pager page={page} total={total} setPage={setPage} />
       </div>
     </SectionCard>
   );

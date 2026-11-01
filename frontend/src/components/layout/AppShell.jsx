@@ -2,7 +2,7 @@ import { cn } from '@/lib/utils';
 
 export function AppShell({ children }) {
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="flex min-h-dvh bg-background">
       {children}
     </div>
   );
@@ -26,7 +26,7 @@ export function MainLayout({
   bottomNav = null,
 }) {
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-background">
+    <div className="flex h-dvh w-full overflow-hidden bg-background">
       {sidebar}
       <div
         className={cn(

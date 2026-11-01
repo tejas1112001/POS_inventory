@@ -1,3 +1,4 @@
+import { ProductImage } from '@/components/shared/product-image';
 import React from 'react';
 import { formatCurrency } from '@/lib/format';
 
@@ -23,17 +24,7 @@ export default function ProductDetails({ product }) {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3">
-        {product.image ? (
-          <img
-            src={product.image}
-            alt={product.name}
-            className="w-14 h-14 rounded-lg object-cover border border-gray-200"
-          />
-        ) : (
-          <div className="w-14 h-14 rounded-lg bg-gray-100 flex items-center justify-center text-sm text-gray-500">
-            {product.name?.charAt(0)?.toUpperCase() || 'P'}
-          </div>
-        )}
+        <ProductImage name={product.name || "P"} src={product.image} size={56} rounded="rounded-lg" />
         <div>
           <div className="text-lg font-semibold text-gray-900">{product.name || 'Untitled product'}</div>
           <div className="text-sm text-gray-500">{product.category || 'Uncategorized'}</div>

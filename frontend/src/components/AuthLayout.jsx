@@ -6,11 +6,11 @@ import { useTenantInfo } from '@/hooks/useTenantInfo';
 export default function AuthLayout({ title, subtitle, children }) {
   const info = useTenantInfo();
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-sky-50 via-background to-blue-50 p-4">
+    <div className="flex min-h-dvh items-center justify-center bg-gradient-to-br from-sky-50 via-background to-blue-50 p-4">
       <div className="w-full max-w-md">
         <div className="mb-6 flex flex-col items-center text-center">
           {info?.logoUrl ? (
-            <img src={info.logoUrl} alt="" className="mb-3 size-14 rounded-xl object-contain shadow-lg" />
+            <img src={info.logoUrl} alt="" className="mb-3 size-14 rounded-xl bg-white object-contain p-1 shadow-lg" />
           ) : (
             <div className="mb-3 flex size-14 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-lg shadow-primary/20">
               <ShoppingCart className="size-7" />

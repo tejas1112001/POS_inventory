@@ -14,8 +14,8 @@ export function ProductImage({
   const initialsBox = (
     <div
       className={cn(
-        "flex items-center justify-center font-semibold text-white shrink-0",
-        !color && "bg-primary",
+        "flex items-center justify-center font-semibold shrink-0",
+        color ? "text-white" : "bg-slate-100 text-slate-600 ring-1 ring-inset ring-slate-200",
         rounded,
         className
       )}

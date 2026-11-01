@@ -1,17 +1,261 @@
 import { toast } from '../../shared/toast/store';
-import { useEffect, useMemo, useState } from 'react';
-import { Download, Loader2, Mail, Printer, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Download, Loader2, Mail, Printer } from 'lucide-react';
 import { api } from '@/services/api';
 import { usePermission } from '@/context/PermissionContext';
 import { usePos } from '@/hooks/usePos';
 import { useShopSettings } from '@/hooks/useShopSettings';
 import { formatCurrency, formatDateTime } from '@/lib/format';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { useImageSrc } from '@/components/shared/auth-image';
+import { cn } from '@/lib/utils';
+import './receipt.css';
+import receiptCss from './receipt.css?raw';
 
 const n = (v) => Number(v) || 0;
+const pct = (v) => `${Number(n(v).toFixed(3))}%`;
+const lines = (s) => (s || '').split('\n').map((x) => x.trim()).filter(Boolean);
+
+// Paper sizes for printing; the choice is kept in this browser.
+const PAPERS = [
+  { value: 'a4', label: 'A4', page: '@page { size: A4; margin: 12mm; }', narrow: false },
+  { value: '80mm', label: '80 mm', page: '@page { size: 80mm auto; margin: 3mm; } body { width: 74mm; }', narrow: true },
+  { value: '58mm', label: '58 mm', page: '@page { size: 58mm auto; margin: 2mm; } body { width: 54mm; }', narrow: true },
+];
+const PAPER_KEY = 'pos.receiptPaper';
+function savedPaper() {
+  try {
+    const v = localStorage.getItem(PAPER_KEY);
+    return PAPERS.some((p) => p.value === v) ? v : 'a4';
+  } catch {
+    return 'a4';
+  }
+}
+
+function attrText(a) {
+  if (!a || typeof a !== 'object') return '';
+  return Object.keys(a)
+    .sort()
+    .filter((k) => a[k] !== '' && a[k] != null)
+    .map((k) => `${k}: ${a[k]}`)
+    .join(', ');
+}
+
+// taxRows: the PDF's tax summary, from the stored lines ("CGST 9% on 1,000.00").
+function taxRows(items, taxLabel) {
+  const by = new Map();
+  for (const i of items) {
+    if (n(i.tax_rate) <= 0) continue;
+    const k = String(n(i.tax_rate));
+    const a = by.get(k) || { rate: n(i.tax_rate), taxable: 0, tax: 0, cgst: 0, sgst: 0, igst: 0 };
+    a.taxable += n(i.subtotal) - n(i.tax_amount);
+    a.tax += n(i.tax_amount);
+    a.cgst += n(i.cgst);
+    a.sgst += n(i.sgst);
+    a.igst += n(i.igst);
+    by.set(k, a);
+  }
+  const out = [];
+  for (const a of by.values()) {
+    if (a.cgst > 0 || a.sgst > 0) {
+      out.push({ label: `CGST ${pct(a.rate / 2)}`, taxable: a.taxable, amount: a.cgst });
+      out.push({ label: `SGST ${pct(a.rate / 2)}`, taxable: a.taxable, amount: a.sgst });
+    } else if (a.igst > 0) out.push({ label: `IGST ${pct(a.rate)}`, taxable: a.taxable, amount: a.igst });
+    else out.push({ label: `${taxLabel} ${pct(a.rate)}`, taxable: a.taxable, amount: a.tax });
+  }
+  return out;
+}
+
+// printNode prints the receipt alone, in a hidden frame, on the chosen paper.
+async function printNode(node, paper, title) {
+  const frame = document.createElement('iframe');
+  frame.setAttribute('aria-hidden', 'true');
+  frame.tabIndex = -1;
+  Object.assign(frame.style, { position: 'fixed', right: '0', bottom: '0', width: '0', height: '0', border: '0' });
+  document.body.appendChild(frame);
+  const doc = frame.contentDocument;
+  const clone = node.cloneNode(true);
+  clone.classList.toggle('rc-narrow', paper.narrow);
+  doc.open();
+  doc.write(
+    `<!doctype html><html><head><meta charset="utf-8"><style>${receiptCss}\nhtml,body{margin:0;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}\n${paper.page}</style></head><body></body></html>`
+  );
+  doc.close();
+  doc.title = title;
+  doc.body.appendChild(doc.importNode(clone, true));
+  await Promise.all(
+    [...doc.images].map((img) => (img.complete ? null : new Promise((r) => (img.onload = img.onerror = r))))
+  );
+  const remove = () => setTimeout(() => frame.remove(), 500);
+  frame.contentWindow.addEventListener('afterprint', remove, { once: true });
+  setTimeout(() => frame.isConnected && frame.remove(), 60_000);
+  frame.contentWindow.focus();
+  frame.contentWindow.print();
+}
+
+function ReceiptBody({ sale, store, settings, businessName, taxLabel, logoUrl, narrow, bodyRef }) {
+  const items = sale.items || [];
+  const rows = taxRows(items, taxLabel);
+  const taxReg = settings?.taxRegistrationNo;
+  const taxId = taxReg ? (taxLabel === 'GST' ? `GSTIN: ${taxReg}` : `${taxLabel} No: ${taxReg}`) : '';
+  const address = lines(settings?.address);
+  const contact = [settings?.phone, settings?.email].filter(Boolean).join(' · ');
+  const storeLine = [store?.name || sale.Store?.name, store?.address, store?.phone].filter(Boolean).join(', ');
+  const voided = sale.status === 'Void';
+  const tendered = sale.tendered != null && n(sale.tendered) > 0;
+
+  return (
+    <div ref={bodyRef} className={cn('rc', narrow && 'rc-narrow')}>
+      {voided && (
+        <div className="rc-void">
+          <strong>VOID</strong>
+          This sale was voided{sale.voided_at ? ` on ${formatDateTime(sale.voided_at)}` : ''}
+          {sale.void_reason ? `: ${sale.void_reason}` : ''}.
+        </div>
+      )}
+      <div className="rc-head">
+        {logoUrl && <img className="rc-logo" src={logoUrl} alt="" />}
+        <div>
+          <p className="rc-biz">{businessName}</p>
+          {settings?.legalName && settings.legalName !== businessName && <p className="rc-muted">{settings.legalName}</p>}
+          {address.map((l, i) => (
+            <p key={i} className="rc-muted">
+              {l}
+            </p>
+          ))}
+          {contact && <p className="rc-muted">{contact}</p>}
+          {taxId && <p className="rc-muted">{taxId}</p>}
+        </div>
+      </div>
+      <hr className="rc-rule" />
+      <div className="rc-meta">
+        <p className="rc-title">{taxReg ? 'Tax Invoice' : 'Receipt'}</p>
+        <p className="rc-title rc-r">{sale.reference}</p>
+        <p>Store: {storeLine}</p>
+        <p className="rc-r">{formatDateTime(sale.date)}</p>
+        <p>
+          Customer: {sale.customer?.name || 'Walk-in Customer'}
+          {sale.receipt_email ? ` (${sale.receipt_email})` : ''}
+        </p>
+        <p className="rc-r">Cashier: {sale.user?.name || ''}</p>
+      </div>
+      {lines(settings?.receiptHeader).map((l, i) => (
+        <p key={i} className="rc-center rc-muted">
+          {l}
+        </p>
+      ))}
+      <table className="rc-items">
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th>Qty</th>
+            <th>Price</th>
+            <th>Disc.</th>
+            <th>Tax</th>
+            <th>Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((i, k) => {
+            const attrs = attrText(i.variant?.attributes);
+            return (
+              <tr key={i.id || k}>
+                <td>
+                  {i.product_name || i.name}
+                  {attrs && ` (${attrs})`}
+                  {i.sku && <span className="rc-sku">SKU {i.sku}</span>}
+                </td>
+                <td className="rc-qty">{i.quantity}</td>
+                <td>{formatCurrency(i.unit_price)}</td>
+                {n(i.discount) > 0 ? <td data-label="Disc.">{formatCurrency(i.discount)}</td> : <td className="rc-empty" />}
+                <td data-label="Tax">{pct(i.tax_rate)}</td>
+                <td>{formatCurrency(i.subtotal)}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      <div className="rc-totals">
+        <div>
+          <span>Subtotal</span>
+          <span>{formatCurrency(sale.subtotal)}</span>
+        </div>
+        {n(sale.discount) > 0 && (
+          <div>
+            <span>Discount</span>
+            <span>-{formatCurrency(sale.discount)}</span>
+          </div>
+        )}
+        {rows.map((r) => (
+          <div key={r.label} className="rc-muted">
+            <span>
+              {r.label} on {formatCurrency(r.taxable)}
+            </span>
+            <span>{formatCurrency(r.amount)}</span>
+          </div>
+        ))}
+        <div>
+          <span>Tax</span>
+          <span>{formatCurrency(sale.tax)}</span>
+        </div>
+        {n(sale.shipping) > 0 && (
+          <div>
+            <span>Shipping</span>
+            <span>{formatCurrency(sale.shipping)}</span>
+          </div>
+        )}
+        <div className="rc-grand">
+          <span>Total</span>
+          <span>{formatCurrency(sale.total)}</span>
+        </div>
+        <div>
+          <span>Paid</span>
+          <span>{formatCurrency(sale.paid)}</span>
+        </div>
+        {tendered && (
+          <>
+            <div>
+              <span>Received</span>
+              <span>{formatCurrency(sale.tendered)}</span>
+            </div>
+            <div>
+              <span>Change</span>
+              <span>{formatCurrency(sale.change)}</span>
+            </div>
+          </>
+        )}
+        {n(sale.due) > 0 && (
+          <div className="rc-grand">
+            <span>Due</span>
+            <span>{formatCurrency(sale.due)}</span>
+          </div>
+        )}
+        {sale.payment_method && (
+          <div>
+            <span>Payment</span>
+            <span>
+              {sale.payment_method} ({sale.payment_status})
+            </span>
+          </div>
+        )}
+      </div>
+      <div className="rc-lines">
+        {lines(settings?.receiptFooter).map((l, i) => (
+          <p key={i} className="rc-center rc-muted">
+            {l}
+          </p>
+        ))}
+      </div>
+      <p className="rc-thanks">Thank you for your purchase.</p>
+    </div>
+  );
+}
 
 // Receipt shows a sale as the server stored it (totals, tax and lines are
-// the server's), with the shop's details from settings. It can print,
-// download the PDF receipt and email it again. Pass the sale, or its ID.
+// the server's) in the same layout as the PDF. It prints on A4 or thermal
+// paper, downloads the PDF and emails it again. Pass the sale, or its ID.
 export default function Receipt({ isOpen = true, onClose, sale: given, saleId, store }) {
   const { hasPermission } = usePermission();
   const { tenant } = usePos();
@@ -20,7 +264,18 @@ export default function Receipt({ isOpen = true, onClose, sale: given, saleId, s
   const [loadError, setLoadError] = useState('');
   const [email, setEmail] = useState(given?.receipt_email || '');
   const [busy, setBusy] = useState('');
-  const [notice, setNotice] = useState(null);
+  const [paper, setPaper] = useState(savedPaper);
+  const [phone, setPhone] = useState(() => typeof window !== 'undefined' && window.matchMedia?.('(max-width: 479px)').matches);
+  const bodyRef = useRef(null);
+  const logoUrl = useImageSrc(settings?.logo || '');
+
+  useEffect(() => {
+    const mq = window.matchMedia?.('(max-width: 479px)');
+    if (!mq) return;
+    const on = () => setPhone(mq.matches);
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
 
   useEffect(() => {
     if (given) {
@@ -43,13 +298,7 @@ export default function Receipt({ isOpen = true, onClose, sale: given, saleId, s
     };
   }, [given, saleId]);
 
-  const taxParts = useMemo(() => {
-    const items = sale?.items || [];
-    const sum = (k) => items.reduce((acc, i) => acc + n(i[k]), 0);
-    return { cgst: sum('cgst'), sgst: sum('sgst'), igst: sum('igst') };
-  }, [sale]);
-
-  if (!isOpen) return null;
+  const paperDef = useMemo(() => PAPERS.find((p) => p.value === paper) || PAPERS[0], [paper]);
 
   const canDownload = hasPermission('receipts', 'view');
   const canResend = hasPermission('receipts', 'resend');
@@ -57,13 +306,30 @@ export default function Receipt({ isOpen = true, onClose, sale: given, saleId, s
   const businessName = settings?.businessName || tenant?.name || '';
   const voided = sale?.status === 'Void';
 
+  const choosePaper = (v) => {
+    setPaper(v);
+    try {
+      localStorage.setItem(PAPER_KEY, v);
+    } catch {
+      /* private window: not kept */
+    }
+  };
+
+  const print = async () => {
+    if (!bodyRef.current) return;
+    try {
+      await printNode(bodyRef.current, paperDef, sale?.reference || 'Receipt');
+    } catch {
+      toast.error('Printing did not start. Use Download PDF and print the file.');
+    }
+  };
+
   const download = async () => {
     setBusy('pdf');
-    setNotice(null);
     try {
       await api.download(`/api/sales/${sale.id}/receipt`, `${sale.reference || 'receipt'}.pdf`, { quiet: true });
     } catch (err) {
-      setNotice({ kind: 'error', text: err.code === 'UNAVAILABLE' ? 'The PDF is still being prepared. Try again in a moment.' : err.message });
+      toast.error(err.code === 'UNAVAILABLE' ? 'The PDF is still being prepared. Try again in a moment.' : err.message);
     } finally {
       setBusy('');
     }
@@ -72,199 +338,99 @@ export default function Receipt({ isOpen = true, onClose, sale: given, saleId, s
   const resend = async (e) => {
     e.preventDefault();
     setBusy('mail');
-    setNotice(null);
     try {
       const body = email.trim() ? { email: email.trim() } : {};
       await api.post(`/api/sales/${sale.id}/receipt/resend`, body, { quiet: true });
       toast.success(email.trim() ? `The receipt will be emailed to ${email.trim()}.` : "The receipt will be emailed to the customer's address.");
     } catch (err) {
-      const text =
-        err.code === 'RATE_LIMITED'
-          ? 'This address already got 5 receipts today. Try again tomorrow.'
-          : err.fields?.email || err.message;
-      setNotice({ kind: 'error', text });
+      toast.error(err.code === 'RATE_LIMITED' ? 'This address already got 5 receipts today. Try again tomorrow.' : err.fields?.email || err.message);
     } finally {
       setBusy('');
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center print:block">
-      <div onClick={onClose} className="absolute inset-0 bg-black/50 print:hidden" />
-      <div
-        id="receipt-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Receipt"
-        className="relative mx-4 w-full max-w-md overflow-hidden rounded-xl bg-white text-gray-900 shadow-xl print:fixed print:inset-0 print:m-0 print:max-w-none print:rounded-none print:p-4 print:shadow-none"
-      >
-        <div className="flex items-center justify-between border-b p-4 print:hidden">
-          <h2 className="text-lg font-bold">Receipt</h2>
-          <button onClick={onClose} className="rounded p-1 text-gray-500 hover:bg-gray-100" aria-label="Close">
-            <X className="size-5" />
-          </button>
-        </div>
+    <Dialog open={isOpen} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent sheet className="sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>{voided ? 'Receipt (voided)' : 'Receipt'}</DialogTitle>
+          <DialogDescription className="sr-only">The sale receipt, with print, PDF and email.</DialogDescription>
+        </DialogHeader>
 
-        <div className="max-h-[75vh] overflow-y-auto p-4 print:max-h-full print:overflow-visible">
-          {!sale ? (
-            <div className="py-10 text-center text-sm text-gray-500">
-              {loadError || (
-                <span className="inline-flex items-center gap-2">
-                  <Loader2 className="size-4 animate-spin" /> Loading receipt...
-                </span>
+        {!sale ? (
+          <div className="py-10 text-center text-sm text-muted-foreground">
+            {loadError || (
+              <span className="inline-flex items-center gap-2">
+                <Loader2 className="size-4 animate-spin" aria-hidden="true" /> Loading receipt...
+              </span>
+            )}
+          </div>
+        ) : (
+          <div className="rounded-lg bg-muted p-2 sm:p-4">
+            <div
+              className={cn(
+                'mx-auto rounded-sm bg-white p-4 shadow-sm ring-1 ring-border',
+                paperDef.value === '80mm' && 'max-w-[302px]',
+                paperDef.value === '58mm' && 'max-w-[220px] p-2'
               )}
+            >
+              <ReceiptBody
+                sale={sale}
+                store={store}
+                settings={settings}
+                businessName={businessName}
+                taxLabel={taxLabel}
+                logoUrl={logoUrl}
+                narrow={paperDef.narrow || phone}
+                bodyRef={bodyRef}
+              />
             </div>
-          ) : (
-            <>
-              <div className="mb-4 text-center">
-                {settings?.receiptHeader && <div className="mb-1 text-xs text-gray-600">{settings.receiptHeader}</div>}
-                <div className="text-xl font-bold">{businessName}</div>
-                {settings?.legalName && settings.legalName !== businessName && (
-                  <div className="text-xs text-gray-600">{settings.legalName}</div>
-                )}
-                {(store?.name || sale.Store?.name) && <div className="text-sm text-gray-700">{store?.name || sale.Store?.name}</div>}
-                {(store?.address || settings?.address) && <div className="text-xs text-gray-600">{store?.address || settings.address}</div>}
-                {(store?.phone || settings?.phone) && <div className="text-xs text-gray-600">Phone: {store?.phone || settings.phone}</div>}
-                {settings?.taxRegistrationNo && (
-                  <div className="text-xs text-gray-600">
-                    {taxLabel} No.: {settings.taxRegistrationNo}
-                  </div>
-                )}
-              </div>
+          </div>
+        )}
 
-              <div className="mb-4 border-y border-gray-300 py-1.5 text-center text-sm font-semibold tracking-wide">
-                {voided ? 'VOIDED SALE' : settings?.taxRegistrationNo ? 'TAX INVOICE' : 'RECEIPT'}
-              </div>
-
-              <div className="mb-4 grid grid-cols-2 gap-2 text-xs">
-                <div>
-                  <div className="text-gray-500">Receipt no.</div>
-                  <div className="font-semibold">{sale.reference}</div>
-                </div>
-                <div className="text-right">
-                  <div className="text-gray-500">Date</div>
-                  <div className="font-medium">{formatDateTime(sale.date)}</div>
-                </div>
-                <div>
-                  <div className="text-gray-500">Customer</div>
-                  <div className="font-medium">{sale.customer?.name || 'Walk-in Customer'}</div>
-                </div>
-                <div className="text-right">
-                  <div className="text-gray-500">Cashier</div>
-                  <div className="font-medium">{sale.user?.name || ''}</div>
-                </div>
-              </div>
-
-              <table className="mb-4 w-full text-xs">
-                <thead>
-                  <tr className="border-b border-gray-300 text-gray-600">
-                    <th className="py-1.5 text-left font-semibold">Item</th>
-                    <th className="py-1.5 text-right font-semibold">Price</th>
-                    <th className="py-1.5 text-center font-semibold">Qty</th>
-                    <th className="py-1.5 text-right font-semibold">Amount</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {(sale.items || []).map((item, i) => (
-                    <tr key={item.id || i}>
-                      <td className="py-1.5">
-                        {item.product_name || item.name}
-                        {item.sku && <div className="text-[10px] text-gray-500">{item.sku}</div>}
-                      </td>
-                      <td className="py-1.5 text-right">{formatCurrency(item.unit_price)}</td>
-                      <td className="py-1.5 text-center">{item.quantity}</td>
-                      <td className="py-1.5 text-right font-medium">
-                        {/* Before tax, so the lines add up to the subtotal. */}
-                        {formatCurrency(n(item.unit_price) * n(item.quantity) - n(item.discount))}
-                      </td>
-                    </tr>
+        {sale && (
+          <DialogFooter className="flex-col gap-2 sm:flex-col sm:justify-start">
+            {canResend && !voided && (
+              <form onSubmit={resend} className="flex w-full gap-2">
+                <Input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="Customer email (optional)"
+                  aria-label="Email address for the receipt"
+                  className="h-10 min-w-0 flex-1"
+                />
+                <Button type="submit" variant="outline" className="h-10" disabled={busy === 'mail'}>
+                  {busy === 'mail' ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Mail className="size-4" aria-hidden="true" />} Email
+                </Button>
+              </form>
+            )}
+            <div className="flex w-full flex-wrap items-center gap-2">
+              <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                Paper
+                <select className="h-10 rounded-md border bg-card px-2 text-foreground" value={paper} onChange={(e) => choosePaper(e.target.value)}>
+                  {PAPERS.map((p) => (
+                    <option key={p.value} value={p.value}>
+                      {p.label}
+                    </option>
                   ))}
-                </tbody>
-              </table>
-
-              <div className="mb-4 space-y-1 rounded-lg border border-gray-200 p-3 text-xs">
-                <Row label="Subtotal" value={sale.subtotal} />
-                {n(sale.discount) > 0 && <Row label="Discount" value={-n(sale.discount)} className="text-red-600" />}
-                {taxParts.cgst > 0 || taxParts.sgst > 0 ? (
-                  <>
-                    <Row label="CGST" value={taxParts.cgst} />
-                    <Row label="SGST" value={taxParts.sgst} />
-                  </>
-                ) : null}
-                {taxParts.igst > 0 && <Row label="IGST" value={taxParts.igst} />}
-                {!(taxParts.cgst > 0 || taxParts.sgst > 0 || taxParts.igst > 0) && <Row label={taxLabel} value={sale.tax} />}
-                {n(sale.shipping) > 0 && <Row label="Shipping" value={sale.shipping} />}
-                <div className="mt-1 flex justify-between border-t border-gray-200 pt-1.5 text-sm font-bold">
-                  <span>Total</span>
-                  <span>{formatCurrency(sale.total)}</span>
-                </div>
-                <Row label={`Paid${sale.payment_method ? ` (${sale.payment_method})` : ''}`} value={sale.paid} />
-                {sale.tendered != null && n(sale.tendered) > 0 && <Row label="Received" value={sale.tendered} />}
-                {sale.change != null && n(sale.change) > 0 && <Row label="Change" value={sale.change} />}
-                {n(sale.due) > 0 && <Row label="Due" value={sale.due} className="font-semibold text-amber-700" />}
-              </div>
-
-              <p className="text-center text-xs italic text-gray-500">{settings?.receiptFooter || 'Thank you for shopping with us!'}</p>
-
-              {notice && (
-                <div
-                  role={notice.kind === 'error' ? 'alert' : 'status'}
-                  className={`mt-4 rounded-md px-3 py-2 text-xs print:hidden ${notice.kind === 'error' ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-800'}`}
-                >
-                  {notice.text}
-                </div>
-              )}
-
-              <div className="mt-4 flex flex-wrap justify-center gap-2 print:hidden">
-                <button
-                  onClick={() => window.print()}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-black px-3 py-2 text-sm font-medium text-white hover:bg-gray-800"
-                >
-                  <Printer className="size-4" /> Print
-                </button>
+                </select>
+              </label>
+              <div className="ml-auto flex gap-2">
                 {canDownload && (
-                  <button
-                    onClick={download}
-                    disabled={busy === 'pdf'}
-                    className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium hover:bg-gray-50 disabled:opacity-60"
-                  >
-                    {busy === 'pdf' ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />} Download PDF
-                  </button>
+                  <Button type="button" variant="outline" className="h-10" onClick={download} disabled={busy === 'pdf'}>
+                    {busy === 'pdf' ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Download className="size-4" aria-hidden="true" />}
+                    <span className="hidden sm:inline">Download</span> PDF
+                  </Button>
                 )}
+                <Button type="button" className="h-10" onClick={print}>
+                  <Printer className="size-4" aria-hidden="true" /> Print
+                </Button>
               </div>
-
-              {canResend && !voided && (
-                <form onSubmit={resend} className="mt-4 flex gap-2 border-t pt-4 print:hidden">
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="Customer email (optional)"
-                    aria-label="Email address for the receipt"
-                    className="h-9 min-w-0 flex-1 rounded-md border px-2 text-sm"
-                  />
-                  <button
-                    type="submit"
-                    disabled={busy === 'mail'}
-                    className="inline-flex items-center gap-1.5 rounded-lg border px-3 text-sm font-medium hover:bg-gray-50 disabled:opacity-60"
-                  >
-                    {busy === 'mail' ? <Loader2 className="size-4 animate-spin" /> : <Mail className="size-4" />} Email
-                  </button>
-                </form>
-              )}
-            </>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Row({ label, value, className = '' }) {
-  return (
-    <div className={`flex justify-between ${className}`}>
-      <span className="text-gray-600">{label}</span>
-      <span className="font-medium">{formatCurrency(value)}</span>
-    </div>
+            </div>
+          </DialogFooter>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -40,7 +40,7 @@ export function FormSheet({ open, onOpenChange, title, description, defaultValue
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent sheet className="max-h-[90dvh] overflow-y-auto pb-0 sm:max-w-lg">
+      <DialogContent sheet className="sm:max-w-lg">
         <FormProvider {...form}>
           <form onSubmit={submit} noValidate className="grid gap-4">
             <DialogHeader>
@@ -49,8 +49,8 @@ export function FormSheet({ open, onOpenChange, title, description, defaultValue
             </DialogHeader>
             {error && <InlineAlert>{error}</InlineAlert>}
             <div className="grid gap-3 sm:grid-cols-2">{children}</div>
-            {/* Actions stay visible while long forms scroll (phones). */}
-            <DialogFooter className="sticky bottom-0 z-10 -mx-6 gap-2 border-t bg-background px-6 py-3 pb-[max(12px,env(safe-area-inset-bottom))]">
+            {/* The footer sticks: actions stay visible while long forms scroll. */}
+            <DialogFooter className="gap-2">
               <Button type="button" variant="outline" className="max-sm:h-11" onClick={() => onOpenChange(false)}>
                 Cancel
               </Button>

@@ -67,7 +67,7 @@ export function PageError({ error, reset }) {
 export function AppError({ error }) {
   if (isChunkLoadError(error)) return <NewVersion fullPage />;
   return (
-    <div className="flex min-h-screen items-center bg-background">
+    <div className="flex min-h-dvh items-center bg-background">
       <Panel
         icon={AlertTriangle}
         tone="danger"
@@ -104,7 +104,7 @@ function NewVersion({ fullPage = false }) {
       The app was updated while this page was open. Reload to continue.
     </Panel>
   );
-  return fullPage ? <div className="flex min-h-screen items-center bg-background">{body}</div> : body;
+  return fullPage ? <div className="flex min-h-dvh items-center bg-background">{body}</div> : body;
 }
 
 export function NotFound() {

@@ -84,3 +84,21 @@ These change only what the menu shows and which page shows "no access"; the serv
 - Owner, Stock: tiles filter, search by SKU, "Set stock" refuses −1 ("Must be 0 or more.").
 - Cashier: may add customers but has no edit/delete menu; Categories says "no access"; Stock has no "Set stock".
 - Regression: all suites together (smoke, S1, S2, S3, S4) × 3 widths. **27 passed** (the S1 and S2 tests were updated for the new forms and the in-app confirm dialog).
+
+## S4b – Polish and checkout fixes
+
+**Changed**
+- Palette in `shared/tokens.css` and the shop's theme: navy sidebar and headings, slate hover, blue primary (darker on hover), light background, white cards, body text #334155, muted text #64748B; money and tables use tabular figures. Theme presets: "Blue" is the default (the old "Sky blue" maps to it). The console uses the same colours with a navy header (still no run-time styles: CSP unchanged).
+- Layout: the app is exactly one screen high (`100dvh`); header and menu stay put and only the page scrolls. Record pages and Stock: the table fills the space, its header row sticks, and the pager sits pinned under it.
+- One pager (`kit/Pagination.jsx`): "1–25 of N", rows per page, first/previous/page numbers/next/last (44 px buttons on phones). Replaces "Showing … Prev/Next" in the old lists and the pager on Adjustments & history.
+- Dialogs: at most the screen height minus 32 px; title row and button row stay fixed, the middle scrolls; the × stays visible; bottom sheets on phones.
+- Receipt: same layout and wording as the PDF (logo, legal name, GSTIN/tax number, Tax Invoice/Receipt, store, customer, cashier; columns Item, Qty, Price, Disc., Tax, Total; variant labels and SKU; tax summary; Received/Change; payment). Print uses a hidden frame with only the receipt, on A4, 80 mm or 58 mm paper (kept per browser); thermal paper prints two lines per item. The old print rule (which matched nothing) is removed. Footer: Email, Paper, Download PDF, Print.
+- PDF (server): "Receipt N · version N" removed from the customer copy; "Tendered" now reads "Received".
+- Finalize sale: two columns from 768 px (amount left; payment type, email, notes right), bottom sheet on phones, buttons always visible; payment types are buttons (stored values unchanged: cash, credit, cheque, deposit, points); "Cash received" starts empty with no spinners and no preselected amount (Exact + quick amounts); notes behind "Add note".
+- Checkout tiles: smaller, neutral picture placeholder, name on two lines, category, price, "3 left"/"Out of stock", "N options". Search matches any option's SKU; Enter adds an exact SKU match.
+- Variants: a product with several options opens "Choose option" (attributes, or the SKU when there are none; price; stock in this store; empty options disabled). The cart has one line per option, each capped at its own stock. Locks are per product: released when the product's last line leaves; tiles locked by this user stay usable (only other tills' locks grey a tile). Changing the store asks first and empties the cart.
+- Phones: the checkout is product list first with a cart bar ("3 items · ₹…  Review") that opens the cart as a sheet.
+- CSV import: unchanged on the server (same-name rows already become options); the import screen now says so.
+- Images: raw `<img>` in Sales returns, Invoices, Customer dues, Product details, Storefront, Shop settings and the edit form replaced by `ProductImage`/`AuthImage` (signed-in loading, initials fallback, lazy). Logos sit on white. Unused `ListComponents/Avatar.jsx` deleted.
+
+**Checked** — lint (0 errors), shop and console builds, `go test ./...`, receipts and sales integration tests; dev stack rebuilt. No browser tests (by request).

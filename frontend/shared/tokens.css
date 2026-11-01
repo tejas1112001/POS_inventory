@@ -4,6 +4,16 @@
    pair is at least 4.5:1. */
 
 :root {
+  /* Brand palette (S4b). Contrast with white text: blue 5.2:1, navy 17.9:1.
+     Muted text is never lighter than #64748B (4.8:1 on white). */
+  --ds-navy: #0f172a;        /* sidebar, headings */
+  --ds-slate: #1e293b;       /* sidebar hover, secondary dark surfaces */
+  --ds-blue: #2563eb;        /* primary buttons, active items, links */
+  --ds-blue-hover: #1d4ed8;
+  --ds-bg: #f8fafc;          /* page background */
+  --ds-sidebar-text: #cbd5e1;
+  --ds-sidebar-muted: #94a3b8;
+
   /* Status colours: solid (icons, borders), background, text on background. */
   --ds-success: #15803d;
   --ds-success-bg: #ecfdf3;
@@ -19,13 +29,14 @@
   --ds-danger-fg: #7f1d1d;
 
   --ds-surface: #ffffff;
-  --ds-text: #17202b;
-  --ds-text-muted: #556274;
-  --ds-border: #dde3ea;
-  --ds-focus: #0b78b8;
-  --ds-shadow-1: 0 1px 2px rgb(16 24 40 / 0.06), 0 1px 3px rgb(16 24 40 / 0.1);
-  --ds-shadow-2: 0 4px 8px -2px rgb(16 24 40 / 0.1), 0 2px 4px -2px rgb(16 24 40 / 0.06);
-  --ds-shadow-3: 0 12px 16px -4px rgb(16 24 40 / 0.12), 0 4px 6px -2px rgb(16 24 40 / 0.05);
+  --ds-text: #334155;
+  --ds-text-muted: #64748b;
+  --ds-border: #e2e8f0;
+  --ds-border-strong: #cbd5e1;
+  --ds-focus: #2563eb;
+  --ds-shadow-1: 0 1px 2px rgb(15 23 42 / 0.05);
+  --ds-shadow-2: 0 2px 6px -1px rgb(15 23 42 / 0.08), 0 1px 3px -1px rgb(15 23 42 / 0.05);
+  --ds-shadow-3: 0 10px 20px -6px rgb(15 23 42 / 0.14), 0 4px 8px -4px rgb(15 23 42 / 0.06);
 
   /* Type */
   --ds-font: 'Inter Variable', Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
@@ -70,11 +81,13 @@
     --ds-danger: #f87171;
     --ds-danger-bg: #2c1010;
     --ds-danger-fg: #fecaca;
-    --ds-surface: #1a2029;
-    --ds-text: #e6eaf0;
-    --ds-text-muted: #9aa5b4;
-    --ds-border: #2d3542;
-    --ds-focus: #6cc3f5;
+    --ds-surface: #1e293b;
+    --ds-text: #e2e8f0;
+    --ds-text-muted: #94a3b8;
+    --ds-border: #334155;
+    --ds-border-strong: #475569;
+    --ds-focus: #60a5fa;
+    --ds-bg: #0f172a;
   }
 }
 
@@ -91,11 +104,13 @@
   --ds-danger: #f87171;
   --ds-danger-bg: #2c1010;
   --ds-danger-fg: #fecaca;
-  --ds-surface: #1a2029;
-  --ds-text: #e6eaf0;
-  --ds-text-muted: #9aa5b4;
-  --ds-border: #2d3542;
-  --ds-focus: #6cc3f5;
+  --ds-surface: #1e293b;
+  --ds-text: #e2e8f0;
+  --ds-text-muted: #94a3b8;
+  --ds-border: #334155;
+  --ds-border-strong: #475569;
+  --ds-focus: #60a5fa;
+  --ds-bg: #0f172a;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -103,4 +118,11 @@
     --ds-motion-fast: 0ms;
     --ds-motion: 0ms;
   }
+}
+
+/* Money and other figures line up in columns. */
+table,
+.tabular,
+.money {
+  font-variant-numeric: tabular-nums;
 }

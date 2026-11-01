@@ -3,7 +3,6 @@ package receipts
 import (
 	"bytes"
 	"errors"
-	"fmt"
 	"strconv"
 
 	"github.com/johnfercher/maroto/v2"
@@ -185,7 +184,7 @@ func RenderPDF(v View, logo []byte) ([]byte, error) {
 	total("Total", v.Total, bold)
 	total("Paid", v.Paid)
 	if v.HasTendered {
-		total("Tendered", v.Tendered)
+		total("Received", v.Tendered)
 		total("Change", v.Change)
 	}
 	if v.HasDue {
@@ -199,7 +198,6 @@ func RenderPDF(v View, logo []byte) ([]byte, error) {
 		m.AddAutoRow(text.NewCol(12, f, tp(8.5, center, muted)))
 	}
 	m.AddAutoRow(text.NewCol(12, "Thank you for your purchase.", tp(10, bold, center)))
-	m.AddAutoRow(text.NewCol(12, fmt.Sprintf("Receipt %d · version %d", v.ReceiptID, v.Version), tp(7, center, muted)))
 
 	doc, err := m.Generate()
 	if err != nil {

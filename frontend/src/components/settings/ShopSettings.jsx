@@ -1,3 +1,4 @@
+import { AuthImage } from '@/components/shared/auth-image';
 import { toast } from '../../../shared/toast/store';
 import { useEffect, useMemo, useState } from 'react';
 import { SectionCard } from '@/components/shared/section-card';
@@ -187,7 +188,7 @@ export default function ShopSettings({ canEdit }) {
             <span className="block text-sm font-medium">Logo</span>
             <div className="flex items-center gap-3">
               {logo || settings.logo ? (
-                <img src={logo || settings.logo} alt="Shop logo" className="size-14 rounded-md border object-contain" />
+                <AuthImage src={logo || settings.logo} alt="Shop logo" className="size-14 rounded-md border bg-white object-contain p-1" />
               ) : (
                 <div className="flex size-14 items-center justify-center rounded-md border text-xs text-muted-foreground">None</div>
               )}

@@ -38,7 +38,7 @@ export default function Sidebar({ mobileOpen, setMobileOpen, collapsed: controll
 
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-50 flex h-screen flex-col overflow-hidden border-r bg-sidebar text-sidebar-foreground transition-[width,transform] duration-200',
+          'fixed inset-y-0 left-0 z-50 flex h-dvh flex-col overflow-hidden border-r bg-sidebar text-sidebar-foreground transition-[width,transform] duration-200',
           collapsed ? 'w-[68px]' : 'w-64',
           mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         )}
@@ -63,17 +63,17 @@ export default function Sidebar({ mobileOpen, setMobileOpen, collapsed: controll
                   <ShoppingCart className="size-5" />
                 </div>
                 <div className="flex flex-col leading-tight">
-                  <span className="max-w-[150px] truncate text-sm font-bold tracking-tight text-foreground" title={tenant?.name || ''}>
+                  <span className="max-w-[150px] truncate text-sm font-bold tracking-tight text-white" title={tenant?.name || ''}>
                     {tenant?.name || 'Point of Sale'}
                   </span>
-                  <span className="text-[10px] font-medium text-muted-foreground">Point of sale</span>
+                  <span className="text-[10px] font-medium text-sidebar-muted">Point of sale</span>
                 </div>
               </div>
               <div className="flex items-center gap-1">
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="hidden lg:flex size-7 text-muted-foreground hover:text-foreground"
+                  className="hidden lg:flex size-7 text-sidebar-muted hover:bg-sidebar-accent hover:text-white"
                   onClick={() => setCollapsed(true)}
                   aria-label="Collapse sidebar"
                   title="Collapse sidebar"
@@ -83,7 +83,7 @@ export default function Sidebar({ mobileOpen, setMobileOpen, collapsed: controll
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="lg:hidden size-7 text-muted-foreground hover:text-foreground"
+                  className="lg:hidden size-9 text-sidebar-muted hover:bg-sidebar-accent hover:text-white"
                   onClick={() => setMobileOpen(false)}
                   aria-label="Close sidebar"
                 >
@@ -99,7 +99,7 @@ export default function Sidebar({ mobileOpen, setMobileOpen, collapsed: controll
             {visibleSections.map((section) => (
               <div key={section.title}>
                 {!collapsed && (
-                  <h3 className="mb-1.5 px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  <h3 className="mb-1.5 px-2 text-[10px] font-semibold uppercase tracking-wider text-sidebar-muted">
                     {section.title}
                   </h3>
                 )}
@@ -135,35 +135,37 @@ export default function Sidebar({ mobileOpen, setMobileOpen, collapsed: controll
           </div>
         </nav>
 
-        <div className="border-t p-2 shrink-0">
+        <div className="border-t border-sidebar-border p-2 shrink-0">
           {collapsed ? (
             <button
+              type="button"
               onClick={handleSignOut}
               title={`Sign out (${currentUser?.name || 'User'})`}
-              className="flex size-10 mx-auto items-center justify-center rounded-xl hover:bg-destructive/10 text-sidebar-foreground hover:text-destructive transition-colors group"
+              aria-label={`Sign out (${currentUser?.name || 'User'})`}
+              className="flex size-10 mx-auto items-center justify-center rounded-xl hover:bg-sidebar-accent text-sidebar-foreground transition-colors group"
             >
-              <Avatar className="size-8 shrink-0 ring-2 ring-primary/20 group-hover:ring-destructive/30">
-                <AvatarFallback className="bg-primary/10 text-primary text-xs font-bold group-hover:bg-destructive/10 group-hover:text-destructive">
+              <Avatar className="size-8 shrink-0 ring-2 ring-white/15 group-hover:ring-white/40">
+                <AvatarFallback className="bg-sidebar-accent text-white text-xs font-bold">
                   {currentUser ? initials(currentUser.name) : 'U'}
                 </AvatarFallback>
               </Avatar>
             </button>
           ) : (
-            <div className="flex items-center gap-2 rounded-xl p-2 bg-sidebar-accent/50">
+            <div className="flex items-center gap-2 rounded-xl p-2 bg-sidebar-accent">
               <Avatar className="size-8 shrink-0">
-                <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
+                <AvatarFallback className="bg-primary text-white text-xs font-semibold">
                   {currentUser ? initials(currentUser.name) : 'U'}
                 </AvatarFallback>
               </Avatar>
               <div className="flex flex-1 items-center justify-between overflow-hidden">
                 <div className="overflow-hidden leading-tight">
-                  <p className="truncate text-sm font-semibold text-foreground">{currentUser?.name}</p>
-                  <p className="truncate text-xs text-muted-foreground capitalize">{currentUser?.role}</p>
+                  <p className="truncate text-sm font-semibold text-white">{currentUser?.name}</p>
+                  <p className="truncate text-xs text-sidebar-muted capitalize">{currentUser?.role}</p>
                 </div>
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="size-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                  className="size-8 text-sidebar-muted hover:text-white hover:bg-red-600"
                   onClick={handleSignOut}
                   aria-label="Sign out"
                   title="Sign out"

@@ -1,0 +1,49 @@
+/* Receipt layout. Used on screen and, as plain text, inside the print
+   window (see Receipt.jsx), so it uses literal colours, not app tokens. */
+.rc {
+  color: #0f172a;
+  background: #fff;
+  font-family: 'Inter Variable', Inter, system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  font-size: 12px;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+.rc * { box-sizing: border-box; }
+.rc p { margin: 0; }
+.rc-void { text-align: center; color: #b91c1c; border: 2px solid #b91c1c; border-radius: 6px; padding: 4px 8px; margin-bottom: 10px; }
+.rc-void strong { display: block; font-size: 20px; letter-spacing: 0.15em; }
+.rc-head { display: flex; gap: 12px; align-items: flex-start; }
+.rc-logo { width: 56px; height: 56px; object-fit: contain; background: #fff; flex: none; }
+.rc-biz { font-size: 16px; font-weight: 700; }
+.rc-muted { color: #475569; }
+.rc-rule { border: 0; border-top: 1px solid #cbd5e1; margin: 8px 0; }
+.rc-meta { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; }
+.rc-r { text-align: right; }
+.rc-title { font-weight: 700; font-size: 14px; }
+.rc-center { text-align: center; }
+.rc-items { width: 100%; border-collapse: collapse; margin-top: 10px; }
+.rc-items th { background: #f1f5f9; font-weight: 600; text-align: right; padding: 4px 6px; font-size: 11px; white-space: nowrap; }
+.rc-items td { padding: 4px 6px; text-align: right; vertical-align: top; border-bottom: 1px solid #e2e8f0; white-space: nowrap; }
+.rc-items th:first-child, .rc-items td:first-child { text-align: left; white-space: normal; }
+.rc-sku { display: block; color: #64748b; font-size: 10px; }
+.rc-totals { margin: 10px 0 0 auto; width: 100%; max-width: 300px; }
+.rc-totals > div { display: flex; justify-content: space-between; gap: 12px; padding: 1px 0; }
+.rc-grand { font-weight: 700; font-size: 14px; border-top: 1px solid #cbd5e1; margin-top: 4px; padding-top: 4px; }
+.rc-thanks { text-align: center; font-weight: 700; margin-top: 12px; }
+.rc-lines { margin-top: 8px; }
+
+/* Narrow: thermal paper (and phones on screen). Each item takes two lines:
+   the name, then "2 × price · Disc. · Tax · total". */
+.rc-narrow { font-size: 11px; }
+.rc-narrow .rc-head { flex-direction: column; align-items: center; text-align: center; }
+.rc-narrow .rc-meta { grid-template-columns: 1fr; }
+.rc-narrow .rc-r { text-align: left; }
+.rc-narrow .rc-items thead { display: none; }
+.rc-narrow .rc-items tr { display: flex; flex-wrap: wrap; gap: 0 8px; border-bottom: 1px dashed #cbd5e1; padding: 4px 0; }
+.rc-narrow .rc-items td { display: block; border: 0; padding: 0; text-align: left; }
+.rc-narrow .rc-items td:first-child { flex: 1 0 100%; font-weight: 600; }
+.rc-narrow .rc-items td.rc-qty::after { content: ' ×'; }
+.rc-narrow .rc-items td[data-label]::before { content: attr(data-label) ' '; color: #64748b; }
+.rc-narrow .rc-items td.rc-empty { display: none; }
+.rc-narrow .rc-items td:last-child { margin-left: auto; font-weight: 600; }
+.rc-narrow .rc-totals { max-width: none; }
