@@ -8,7 +8,7 @@ import FormStepper from '../components/forms/FormStepper';
 import { useFormWizard } from '../hooks/useFormWizard';
 import { usePermission } from '../context/PermissionContext';
 import { api } from '../services/api';
-import { currencySymbol, formatCurrency, formatDate } from '@/lib/format';
+import { currencySymbol, formatCurrency, formatDate, todayInShop } from '@/lib/format';
 import { newIdempotencyKey } from '@/lib/checkout';
 
 const STEPS = [
@@ -17,7 +17,7 @@ const STEPS = [
   { id: 'refund', title: 'Refund', description: 'Money back' },
 ];
 const inputCls = 'w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-blue-500';
-const today = () => new Date().toLocaleDateString('en-CA');
+const today = () => todayInShop();
 let seq = 0;
 const freeLine = () => ({ key: ++seq, productId: '', variantId: '', quantity: 1, unitPrice: '', reason: '' });
 

@@ -7,6 +7,7 @@ import { useFormWizard, FORM_STEPS } from '../hooks/useFormWizard';
 import { useNavigate } from 'react-router-dom';
 import { usePermission } from '../hooks/usePermission';
 import { api } from '../services/api';
+import { checkWizard, formValues, stepClass } from '../lib/wizard';
 import { PhotoIcon } from '@heroicons/react/24/outline';
 
 const AddSupplier = () => {
@@ -17,10 +18,10 @@ const AddSupplier = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+    if (!checkWizard(e.target, goToStep)) return;
+
     try {
-      const formData = new FormData(e.target);
-      const data = Object.fromEntries(formData.entries());
+      const data = formValues(e.target);
       
       // Add image if exists
       if (selectedImage) {
@@ -63,7 +64,7 @@ const AddSupplier = () => {
     <FormPageLayout>
       <PageHeader />
 
-      <form className="flex min-h-0 flex-1 flex-col" onSubmit={handleSubmit}>
+      <form className="flex min-h-0 flex-1 flex-col" onSubmit={handleSubmit} noValidate>
         <FormCard>
           <FormBody>
             <FormStepper
@@ -72,8 +73,7 @@ const AddSupplier = () => {
               onStepClick={goToStep}
             />
 
-          {currentStep === 0 && (
-          <div>
+          <div data-step="0" className={stepClass(currentStep, 0)}>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -90,51 +90,47 @@ const AddSupplier = () => {
               
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Email <span className="text-red-500">*</span>
+                  Email
                 </label>
                 <input 
                   name="email"
                   type="email" 
                   className="w-full px-3 py-2 border border-gray-600 rounded-lg focus:ring-blue-500 focus:border-blue-500"
                   placeholder="Enter email"
-                  required
                 />
               </div>
               
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Phone <span className="text-red-500">*</span>
+                  Phone
                 </label>
                 <input 
                   name="phone"
                   type="tel" 
                   className="w-full px-3 py-2 border border-gray-600 rounded-lg focus:ring-blue-500 focus:border-blue-500"
                   placeholder="Enter phone number"
-                  required
                 />
               </div>
               
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Address <span className="text-red-500">*</span>
+                  Address
                 </label>
                 <input 
                   name="address"
                   type="text" 
                   className="w-full px-3 py-2 border border-gray-600 rounded-lg focus:ring-blue-500 focus:border-blue-500"
                   placeholder="Enter address"
-                  required
                 />
               </div>
               
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Status <span className="text-red-500">*</span>
+                  Status
                 </label>
                 <select 
                   name="status" 
                   className="w-full px-3 py-2 border border-gray-600 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-                  required
                 >
                   <option value="Active">Active</option>
                   <option value="Inactive">Inactive</option>
@@ -142,10 +138,8 @@ const AddSupplier = () => {
               </div>
             </div>
           </div>
-          )}
 
-          {currentStep === 1 && (
-          <div>
+          <div data-step="1" className={stepClass(currentStep, 1)}>
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Upload Profile Image
@@ -190,7 +184,6 @@ const AddSupplier = () => {
               </div>
             )}
           </div>
-          )}
           </FormBody>
 
         <FormFooter 

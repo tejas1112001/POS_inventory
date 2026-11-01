@@ -7,6 +7,7 @@ import { useNavigate } from 'react-router-dom';
 import { usePos } from '../hooks/usePos';
 import { usePermission } from '../hooks/usePermission';
 import { api } from '../services/api';
+import { formValues } from '../lib/wizard';
 import { InformationCircleIcon, PhotoIcon } from '@heroicons/react/24/outline';
 
 const AddBrand = () => {
@@ -19,8 +20,7 @@ const AddBrand = () => {
     e.preventDefault();
     
     try {
-      const formData = new FormData(e.target);
-      const data = Object.fromEntries(formData.entries());
+      const data = formValues(e.target);
       
       // Add image if exists
       if (selectedImage) {

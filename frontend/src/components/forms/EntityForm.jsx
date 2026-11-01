@@ -82,10 +82,11 @@ export default function EntityForm({
           if (field.type === 'textarea') {
             return (
               <div key={field.name} className={field.fullWidth ? 'md:col-span-2' : ''}>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor={`ef-${field.name}`} className="block text-sm font-medium text-gray-700 mb-1">
                   {label} {isRequired && <span className="text-red-500">*</span>}
                 </label>
                 <textarea
+                  id={`ef-${field.name}`}
                   name={field.name}
                   rows={field.rows || 3}
                   className="w-full px-3 py-2 border border-gray-600 rounded-lg focus:ring-blue-500 focus:border-blue-500"
@@ -102,10 +103,11 @@ export default function EntityForm({
             const options = normalizeOptions(field.options);
             return (
               <div key={field.name}>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor={`ef-${field.name}`} className="block text-sm font-medium text-gray-700 mb-1">
                   {label} {isRequired && <span className="text-red-500">*</span>}
                 </label>
                 <select
+                  id={`ef-${field.name}`}
                   name={field.name}
                   className="w-full px-3 py-2 border border-gray-600 rounded-lg focus:ring-blue-500 focus:border-blue-500"
                   value={value}
@@ -156,12 +158,14 @@ export default function EntityForm({
 
           return (
             <div key={field.name}>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor={`ef-${field.name}`} className="block text-sm font-medium text-gray-700 mb-1">
                 {label} {isRequired && <span className="text-red-500">*</span>}
               </label>
               <input
+                id={`ef-${field.name}`}
                 name={field.name}
                 type={field.type || 'text'}
+                step={field.type === 'number' ? field.step || 'any' : undefined}
                 className="w-full px-3 py-2 border border-gray-600 rounded-lg focus:ring-blue-500 focus:border-blue-500"
                 placeholder={field.placeholder}
                 value={value}

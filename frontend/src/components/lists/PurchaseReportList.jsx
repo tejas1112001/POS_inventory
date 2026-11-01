@@ -41,7 +41,7 @@ export default function PurchaseReportList() {
       indexColumn(),
       { accessorKey: 'date', header: 'Date', size: 110, cell: ({ getValue }) => formatDate(getValue(), 'N/A') },
       { accessorKey: 'reference', header: 'Reference', size: 110 },
-      { accessorKey: 'sku', header: 'SKU', size: 90 },
+      { id: 'sku', accessorFn: (r) => r.itemSku || '', header: 'SKU', size: 90 },
       { id: 'product', accessorFn: (r) => r.product?.name || '', header: 'Product', size: 200 },
       { accessorKey: 'category', header: 'Category', size: 110 },
       { id: 'supplier', accessorFn: (r) => r.supplierName || r.supplier?.name || '', header: 'Supplier', size: 140 },
@@ -58,7 +58,7 @@ export default function PurchaseReportList() {
     const q = search.trim().toLowerCase();
     return rows.filter((r) => {
       const passesProduct = productFilter === 'All' || r.product?.name === productFilter;
-      const text = `${r.reference} ${r.sku} ${r.product?.name} ${r.category} ${r.supplierName}`.toLowerCase();
+      const text = `${r.reference} ${r.itemSku || ''} ${r.product?.name} ${r.category} ${r.supplierName}`.toLowerCase();
       return passesProduct && (!q || text.includes(q));
     });
   }, [rows, search, productFilter]);

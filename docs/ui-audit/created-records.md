@@ -37,3 +37,11 @@ Every record carries the prefix **UI-AUDIT**. Nothing was deleted. All of these 
 - Purchase UI-AUDIT-PUR-2 (Pending, T-Shirt with sizes): "Choose a variant for this product."
 - Category duplicate, discount 12.06 as cashier, return of 3 when 1 was left, removing 999 units, deleting a product with stock, Settings with discount 150 or an empty business name, Email settings with no server.
 - Edit Product price 118 → 120 on UI-AUDIT Inclusive Soap: blocked silently by the browser (Brand required, product has none).
+
+## Records created by the automated tests (step 2)
+
+Named `E2E-<slice> <kind> w<width> <run id>`; each run makes its own.
+
+| Slice | Records |
+|---|---|
+| S1 | 5 customers, 5 suppliers, 5 brands (two earlier runs stopped after these), 3 products (opening stock 3, ₹99.50, 18 %, Main Store; description edited by the test), 3 **Pending** purchases of 2 × UI-AUDIT T-Shirt at ₹250 |

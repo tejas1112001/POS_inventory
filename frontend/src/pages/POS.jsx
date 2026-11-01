@@ -149,7 +149,7 @@ export default function POS() {
         const fetchedStores = await api.get('/api/stores');
         setStores(fetchedStores);
         if (fetchedStores && fetchedStores.length > 0) {
-          setSelectedStore(fetchedStores[0].id);
+          setSelectedStore(String(fetchedStores[0].id));
         } else {
           setError('No stores found. Please add a store.');
         }

@@ -16,3 +16,22 @@ One entry per slice: what changed, how it was tested, the result. Screenshots of
 **Tested**: `e2e/smoke.spec.js`, owner and cashier × 360/768/1280 (6 runs, 34 routes each): no page errors, no blank pages, no 5xx, no sideways scrolling, "Page not found" on unknown routes, "no access" on every route the Biller may not open. **6 passed.**
 
 Note: the test navigates inside the app (like clicking links). Full page reloads restore the session each time and hit the server's per-address rate limit on session refresh.
+
+## S1 – Broken-form fixes
+
+**Changed**
+- Multi-step forms (Add Product, Add Customer, Add Supplier) keep every step on the page (hidden when not current), read values from the whole form, and on a problem open the step with the first invalid field (`lib/wizard.js`). Empty picture fields are no longer sent (also Add Brand).
+- Customer and supplier forms: only the name is required (as on the server).
+- Add Product: tax is any rate from 0 to 100 (was 8/5/4 % only); prices accept paise (`step` 0.01; "99.5" used to be refused by the browser); the example variant rows are hints, not values; the −/+ buttons no longer submit the form; Sub Category, Brand and Unit no longer look required.
+- Edit Product: Category, Brand and Unit not required; number boxes accept decimals; labels linked to their inputs.
+- Add Purchase: sizes/variants are found (text vs number ID); line totals and the total update as you type.
+- POS: the store picker shows the selected store.
+- Product Showcase: changing the web address asks first.
+- Sales and Purchase reports show the product SKU.
+- Private pictures (categories, brands, products) load with the signed-in session; products without a picture show coloured initials.
+- New sales, returns and purchases default to today in the shop's time zone.
+- Stock history: "Set by hand", "Product edited".
+
+**Tested**
+- Route smoke (`smoke.spec.js`) on the S1 build: owner and cashier × 3 widths, **6 passed**.
+- `s1-forms.spec.js`, owner × 3 widths: customer (empty name goes back to step 1; name only saves), supplier, brand without picture, single product with 18 % tax and a ₹99.50 price saved from the last step, edit of a product without a brand, purchase of a product with sizes (sizes listed, line total 500.00), POS store shown, web-address change asks first, report SKUs, no 401 for pictures. **3 passed** (first run found the price-step bug, fixed above).

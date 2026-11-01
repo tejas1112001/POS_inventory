@@ -212,6 +212,8 @@ const REASON = {
   adjustment: 'Adjustment',
   import: 'Import',
   opening: 'Opening stock',
+  manual_set: 'Set by hand',
+  product_edit: 'Product edited',
 };
 
 function HistoryList({ storeId, storeName, reload }) {

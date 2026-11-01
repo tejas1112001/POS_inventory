@@ -97,3 +97,15 @@ export function initials(name) {
     .map((s) => s[0]?.toUpperCase())
     .join('');
 }
+
+// todayInShop is today's date (YYYY-MM-DD) in the shop's time zone, not
+// the device's: a sale entered at 00:30 in Mumbai is dated that day even
+// on a device set to another zone.
+export function todayInShop() {
+  const { timezone } = getFormatSettings();
+  try {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: timezone || undefined, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  } catch {
+    return new Date().toLocaleDateString('en-CA');
+  }
+}

@@ -40,7 +40,7 @@ export default function SalesReportList() {
       indexColumn(),
       { accessorKey: 'date', header: 'Date', size: 110, cell: ({ getValue }) => formatDate(getValue()) },
       { accessorKey: 'reference', header: 'Receipt', size: 120 },
-      { accessorKey: 'sku', header: 'SKU', size: 90 },
+      { id: 'sku', accessorFn: (r) => r.itemSku || '', header: 'SKU', size: 90 },
       {
         id: 'product',
         accessorFn: (r) => r.product?.name || '',
@@ -69,7 +69,7 @@ export default function SalesReportList() {
     const q = search.trim().toLowerCase();
     return rows.filter((r) => {
       const passesProduct = productFilter === 'All' || r.product?.name === productFilter;
-      const text = `${r.reference} ${r.sku} ${r.product?.name} ${r.product?.brand} ${r.category} ${r.customerName}`.toLowerCase();
+      const text = `${r.reference} ${r.itemSku || ''} ${r.product?.name} ${r.product?.brand} ${r.category} ${r.customerName}`.toLowerCase();
       return passesProduct && (!q || text.includes(q));
     });
   }, [rows, search, productFilter]);

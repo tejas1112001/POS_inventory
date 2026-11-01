@@ -102,6 +102,13 @@ export default function ShowcaseSettings() {
 
   const handleSaveProfile = async (e) => {
     e.preventDefault();
+    // A new web address breaks links people already have: ask first.
+    if (saved.slug && storeData.slug !== saved.slug) {
+      const ok = window.confirm(
+        `Change this store's web address from /shop/${saved.slug} to /shop/${storeData.slug}? Links and QR codes that use the old address stop working.`
+      );
+      if (!ok) return;
+    }
     try {
       setSaving(true);
       await api.put(`/api/stores/${selectedStoreId}/showcase`, storeData);

@@ -1,3 +1,4 @@
+import { AuthImage } from '@/components/shared/auth-image';
 import React, { useState, useMemo } from 'react';
 import { useUI } from "../ListComponents/useUI";
 import { selectColumn, indexColumn, statusColumn, actionsColumn } from '../ListComponents/columnHelpers';
@@ -37,7 +38,7 @@ export default function CategoryList({ categories = [], setShowForm, onRefresh }
       cell: ({ getValue }) => {
         const src = getValue();
         return src ? (
-          <img src={src} alt="cat" className="w-10 h-10 object-cover rounded-md" />
+          <AuthImage src={src} alt="" className="w-10 h-10 object-cover rounded-md" fallback={<span className="text-xs text-gray-400">--</span>} />
         ) : (
           <span className="text-xs text-gray-400">--</span>
         );

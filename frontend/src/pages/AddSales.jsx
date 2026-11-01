@@ -9,11 +9,11 @@ import PriceChangedDialog from '../components/PriceChangedDialog';
 import { useFormWizard, FORM_STEPS } from '../hooks/useFormWizard';
 import { usePermission } from '../context/PermissionContext';
 import { api } from '../services/api';
-import { currencySymbol, formatCurrency } from '@/lib/format';
+import { currencySymbol, formatCurrency, todayInShop } from '@/lib/format';
 import { isRetryable, newIdempotencyKey, priceChanges } from '@/lib/checkout';
 
 const inputCls = 'w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-blue-500';
-const today = () => new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD, read in the shop's zone by the server
+const today = () => todayInShop(); // YYYY-MM-DD in the shop's time zone
 
 let lineSeq = 0;
 const newLine = () => ({ key: ++lineSeq, productId: '', variantId: '', quantity: 1, unitPrice: '' });

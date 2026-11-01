@@ -1,3 +1,4 @@
+import { AuthImage } from '@/components/shared/auth-image';
 import React from 'react';
 import { EyeIcon, PencilIcon, TrashIcon } from '@heroicons/react/24/outline';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -159,27 +160,20 @@ export const imageColumn = (nameAccessor, header, imageAccessor, _size = 'md') =
     
     return (
       <div className="flex items-center gap-2">
-        {imageData ? (
-          <img 
-            src={imageData} 
-            alt={name}
-            className="size-8 rounded-md object-cover ring-1 ring-border"
-            onError={(e) => {
-              e.target.style.display = 'none';
-              // Show fallback when image fails to load
-              const fallback = e.target.nextSibling;
-              if (fallback) fallback.style.display = 'flex';
-            }}
-          />
-        ) : null}
-        {/* Fallback displayed if no image or image fails to load */}
+        <AuthImage
+          src={imageData}
+          alt={name}
+          className="size-8 rounded-md object-cover ring-1 ring-border"
+          fallback={(
         <div 
-          className={`size-8 bg-muted rounded-md flex items-center justify-center ring-1 ring-border ${imageData ? 'hidden' : 'flex'}`}
+          className={`size-8 bg-muted rounded-md flex items-center justify-center ring-1 ring-border flex`}
         >
           <span className="text-xs font-medium text-muted-foreground">
             {name.charAt(0).toUpperCase()}
           </span>
         </div>
+          )}
+        />
         {nameAccessor && <span className="font-medium">{name}</span>}
       </div>
     );

@@ -23,6 +23,10 @@ export async function signIn(page, role) {
   await page.fill('#password', password);
   await page.click('button[type=submit]');
   await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 20_000 });
+  // The app may still redirect once (to the page asked for, or the
+  // dashboard): wait until the layout is up and the page is quiet.
+  await page.locator('main').first().waitFor({ timeout: 20_000 });
+  await settle(page);
 }
 
 // settle waits for the page to finish loading its data.
@@ -47,8 +51,13 @@ export async function shot(page, name) {
 // click on a link would. A full reload restores the session from the
 // refresh cookie each time, and the server rate-limits that per address.
 export async function go(page, route) {
-  await page.evaluate((r) => {
-    window.history.pushState({}, '', r);
-    window.dispatchEvent(new PopStateEvent('popstate'));
-  }, route);
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await page.evaluate((r) => {
+      window.history.pushState({}, '', r);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    }, route);
+    await page.waitForTimeout(300);
+    if (new URL(page.url()).pathname === route) return;
+  }
+  throw new Error(`could not open ${route} (now at ${new URL(page.url()).pathname})`);
 }
