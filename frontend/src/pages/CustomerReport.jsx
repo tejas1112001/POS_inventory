@@ -1,5 +1,6 @@
 // frontend/src/pages/CustomerReport.jsx
 
+import ReportTabs from '../components/layout/ReportTabs';
 import React, { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
 import ListPageShell from '../components/layout/ListPageShell';
@@ -64,39 +65,7 @@ export default function CustomerReport() {
   
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col">
-      <div className="mb-4 shrink-0 border-b">
-        <ul className="flex">
-          <li className="mr-2">
-            <NavLink
-              to="/customer-report"
-              end
-              className={({ isActive }) =>
-                `block px-6 py-3 text-sm font-medium ${
-                  isActive
-                    ? 'border-b-2 border-primary text-primary'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`
-              }
-            >
-              Customer Report
-            </NavLink>
-          </li>
-          <li>
-            <NavLink
-              to="/customer-due-report"
-              className={({ isActive }) =>
-                `block px-6 py-3 text-sm font-medium ${
-                  isActive
-                    ? 'border-b-2 border-primary text-primary'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`
-              }
-            >
-              Customer Due
-            </NavLink>
-          </li>
-        </ul>
-      </div>
+      <ReportTabs />
 
       <ListPageShell>
         <CustomerReportList reports={reports} loading={loading} error={error} />

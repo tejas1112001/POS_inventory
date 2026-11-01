@@ -110,7 +110,8 @@ function AppRoutes() {
       <Route path="/sales-report" element={<ProtectedLayout module="reports" action="view"><SalesReport /></ProtectedLayout>} />
       <Route path="/purchases" element={<ProtectedLayout module="purchases" action="view"><Purchases /></ProtectedLayout>} />
       <Route path="/add-purchase" element={<ProtectedLayout module="purchases" action="create"><AddPurchase /></ProtectedLayout>} />
-      <Route path="/purchase-report" element={<ProtectedLayout module="reports" action="view"><PurchaseReport /></ProtectedLayout>} />
+      <Route path="/purchase-report" element={<ProtectedLayout module="purchases" action="view"><PurchaseReport /></ProtectedLayout>} />
+      <Route path="/reports" element={<Navigate to="/sales-report" replace />} />
       <Route path="/customer-due-report" element={<ProtectedLayout module="reports" action="view"><CustomerDueReport /></ProtectedLayout>} />
       <Route path="/customers" element={<ProtectedLayout module="customers" action="view"><Customers /></ProtectedLayout>} />
       <Route path="/add-customer" element={<ProtectedLayout module="customers" action="create"><AddCustomer /></ProtectedLayout>} />
@@ -119,7 +120,7 @@ function AppRoutes() {
       <Route path="/stock-adjustments" element={<ProtectedLayout module="stock_adjustments" action="view"><StockAdjustments /></ProtectedLayout>} />
       <Route path="/settings" element={<ProtectedLayout><Settings /></ProtectedLayout>} />
       <Route path="/billing" element={<ProtectedLayout module="billing" action="view"><Billing /></ProtectedLayout>} />
-      <Route path="/showcase-settings" element={<ProtectedLayout module="stores" action="view"><ShowcaseSettings /></ProtectedLayout>} />
+      <Route path="/showcase-settings" element={<ProtectedLayout module="stores" action="edit"><ShowcaseSettings /></ProtectedLayout>} />
       {/* Unknown addresses: a real "Page not found" inside the app (sign-in first). */}
       <Route path="*" element={<ProtectedLayout><NotFound /></ProtectedLayout>} />
     </Routes>

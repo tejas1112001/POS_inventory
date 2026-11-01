@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import React, { useState } from 'react';
 import { Palette, Check } from 'lucide-react';
 import ShopSettings from '@/components/settings/ShopSettings';
@@ -15,13 +16,18 @@ export default function Settings() {
     hasPermission('settings', 'view') && { key: 'shop', label: 'Shop' },
     hasPermission('email_settings', 'view') && { key: 'email', label: 'Email' },
     { key: 'appearance', label: 'Appearance' },
+    hasPermission('billing', 'view') && { key: 'billing', label: 'Plan & billing', to: '/billing' },
   ].filter(Boolean);
   const [tab, setTab] = useState(tabs[0].key);
 
   return (
     <div className="flex h-full flex-col gap-3 p-3 sm:p-4">
-      <div role="tablist" className="flex gap-1 border-b">
-        {tabs.map((t) => (
+      <div role="tablist" className="-mx-3 flex gap-1 overflow-x-auto border-b px-3 sm:mx-0 sm:px-0">
+        {tabs.map((t) => t.to ? (
+          <Link key={t.key} to={t.to} className="-mb-px inline-flex min-h-11 items-center whitespace-nowrap border-b-2 border-transparent px-4 text-sm font-medium text-muted-foreground hover:text-foreground">
+            {t.label}
+          </Link>
+        ) : (
           <button
             key={t.key}
             role="tab"
@@ -29,7 +35,7 @@ export default function Settings() {
             aria-selected={tab === t.key}
             onClick={() => setTab(t.key)}
             className={cn(
-              '-mb-px border-b-2 px-4 py-2 text-sm font-medium',
+              '-mb-px min-h-11 whitespace-nowrap border-b-2 px-4 text-sm font-medium',
               tab === t.key ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'
             )}
           >

@@ -1,3 +1,4 @@
+import ReportTabs from '../components/layout/ReportTabs';
 import ListPageShell from '../components/layout/ListPageShell';
 import SalesReportList from '../components/lists/SalesReportList';
 
@@ -5,6 +6,7 @@ import SalesReportList from '../components/lists/SalesReportList';
 export default function SalesReport() {
   return (
     <ListPageShell>
+      <ReportTabs />
       <SalesReportList />
     </ListPageShell>
   );

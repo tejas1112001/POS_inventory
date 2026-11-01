@@ -77,9 +77,9 @@ export default function BannerArea() {
         const Icon = ICON[b.level] || Info;
         const path = safePath(b.action?.path);
         return (
-          <div key={b.id} role={b.level === 'critical' ? 'alert' : 'status'} className={cn('flex items-center gap-3 rounded-lg border px-3 py-2 text-sm', STYLE[b.level] || STYLE.info)}>
+          <div key={b.id} role={b.level === 'critical' ? 'alert' : 'status'} className={cn('flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs sm:gap-3 sm:py-2 sm:text-sm', STYLE[b.level] || STYLE.info)}>
             <Icon className="size-4 shrink-0" />
-            <span className="min-w-0 flex-1">{b.message}</span>
+            <span className="min-w-0 flex-1 line-clamp-2 sm:line-clamp-none">{b.message}</span>
             {path && b.action?.label && location.pathname !== path && (
               <Link to={path} className="shrink-0 rounded-md bg-background/80 px-2.5 py-1 text-xs font-semibold text-foreground shadow-xs hover:bg-background">
                 {b.action.label}

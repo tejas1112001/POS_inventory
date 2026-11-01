@@ -1,31 +1,7 @@
 import { useState } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
-import {
-  LayoutDashboard,
-  CreditCard,
-  SlidersHorizontal,
-  ShoppingCart,
-  ReceiptText,
-  RotateCcw,
-  FileText,
-  Package,
-  Boxes,
-  Truck,
-  Tag,
-  Award,
-  Ruler,
-  Users,
-  UserCog,
-  BarChart3,
-  ChevronsLeft,
-  ChevronsRight,
-  LogOut,
-  X,
-  Plus,
-  Settings,
-  ShieldCheck,
-  Globe,
-} from 'lucide-react';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { isItemActive, visibleNav } from './navigation';
+import { ShoppingCart, ChevronsLeft, LogOut, X } from 'lucide-react';
 import { usePos } from '@/hooks/usePos';
 import { usePermission } from '@/hooks/usePermission';
 import { cn } from '@/lib/utils';
@@ -33,71 +9,13 @@ import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { initials } from '@/lib/format';
 
-const navSections = [
-  {
-    title: 'Overview',
-    items: [{ label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard, menuKey: 'dashboard' }],
-  },
-  {
-    title: 'Sales',
-    items: [
-      { label: 'POS', path: '/pos', icon: ShoppingCart, menuKey: 'pos' },
-      { label: 'Sales', path: '/sales', icon: ReceiptText, menuKey: 'sales' },
-      { label: 'Sales Returns', path: '/sales-return', icon: RotateCcw, menuKey: 'sales_returns' },
-      { label: 'Invoices', path: '/invoices', icon: FileText, menuKey: 'invoices' },
-    ],
-  },
-  {
-    title: 'Inventory',
-    items: [
-      { label: 'Products', path: '/products', icon: Package, menuKey: 'products' },
-      { label: 'Inventory', path: '/inventory', icon: Boxes, menuKey: 'inventory' },
-      { label: 'Stock Adjustments', path: '/stock-adjustments', icon: SlidersHorizontal, menuKey: 'stock_adjustments' },
-      { label: 'Purchases', path: '/purchases', icon: Truck, menuKey: 'purchases' },
-    ],
-  },
-  {
-    title: 'Master Data',
-    items: [
-      { label: 'Categories', path: '/categories', icon: Tag, menuKey: 'categories' },
-      { label: 'Brands', path: '/brands', icon: Award, menuKey: 'brands' },
-      { label: 'Units', path: '/units', icon: Ruler, menuKey: 'units' },
-      { label: 'Suppliers', path: '/suppliers', icon: Truck, menuKey: 'suppliers' },
-    ],
-  },
-  {
-    title: 'People',
-    items: [
-      { label: 'Customers', path: '/customers', icon: Users, menuKey: 'customers' },
-    ],
-  },
-  {
-    title: 'Reports',
-    items: [
-      { label: 'Sales Report', path: '/sales-report', icon: BarChart3, menuKey: 'reports' },
-      { label: 'Purchase Report', path: '/purchase-report', icon: BarChart3, menuKey: 'reports' },
-      { label: 'Customer Report', path: '/customer-report', icon: BarChart3, menuKey: 'reports' },
-      { label: 'Customer Due', path: '/customer-due-report', icon: BarChart3, menuKey: 'reports' },
-    ],
-  },
-  {
-    title: 'System',
-    items: [
-      { label: 'Product Showcase', path: '/showcase-settings', icon: Globe, menuKey: 'stores' },
-      { label: 'Users', path: '/users', icon: UserCog, menuKey: 'users' },
-      { label: 'Roles & Permissions', path: '/roles', icon: ShieldCheck, menuKey: 'roles' },
-      { label: 'Billing', path: '/billing', icon: CreditCard, menuKey: 'billing' },
-      { label: 'Settings', path: '/settings', icon: Settings, menuKey: 'settings' },
-    ],
-  },
-];
 
 export default function Sidebar({ mobileOpen, setMobileOpen, collapsed: controlledCollapsed, onCollapsedChange }) {
   const [internalCollapsed, setInternalCollapsed] = useState(false);
   const collapsed = controlledCollapsed ?? internalCollapsed;
   const setCollapsed = onCollapsedChange ?? setInternalCollapsed;
   const { currentUser, logout, tenant } = usePos();
-  const { canAccessMenu } = usePermission();
+  const { hasPermission } = usePermission();
   const navigate = useNavigate();
 
   const handleSignOut = async () => {
@@ -105,12 +23,8 @@ export default function Sidebar({ mobileOpen, setMobileOpen, collapsed: controll
     navigate('/login', { replace: true });
   };
 
-  const visibleSections = navSections
-    .map((section) => ({
-      ...section,
-      items: section.items.filter((item) => canAccessMenu(item.menuKey)),
-    }))
-    .filter((section) => section.items.length > 0);
+  const { pathname } = useLocation();
+  const visibleSections = visibleNav(hasPermission);
 
   return (
     <>
@@ -197,11 +111,12 @@ export default function Sidebar({ mobileOpen, setMobileOpen, collapsed: controll
                         <NavLink
                           to={item.path}
                           onClick={() => setMobileOpen(false)}
-                          className={({ isActive }) =>
+                          aria-current={isItemActive(item, pathname) ? 'page' : undefined}
+                          className={() =>
                             cn(
                               'flex items-center rounded-xl text-sm transition-all',
                               collapsed ? 'size-10 justify-center mx-auto' : 'w-full gap-3 px-3 py-2.5',
-                              isActive
+                              isItemActive(item, pathname)
                                 ? 'bg-primary text-primary-foreground shadow-xs font-semibold'
                                 : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground font-medium'
                             )

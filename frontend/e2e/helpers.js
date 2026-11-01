@@ -50,14 +50,15 @@ export async function shot(page, name) {
 // go moves to a route inside the app without reloading the page, as a
 // click on a link would. A full reload restores the session from the
 // refresh cookie each time, and the server rate-limits that per address.
-export async function go(page, route) {
+// landing: where the route is expected to end up (a redirect), if not itself.
+export async function go(page, route, landing = route) {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     await page.evaluate((r) => {
       window.history.pushState({}, '', r);
       window.dispatchEvent(new PopStateEvent('popstate'));
     }, route);
     await page.waitForTimeout(300);
-    if (new URL(page.url()).pathname === route) return;
+    if (new URL(page.url()).pathname === landing) return;
   }
-  throw new Error(`could not open ${route} (now at ${new URL(page.url()).pathname})`);
+  throw new Error(`could not open ${route} (expected ${landing}, now at ${new URL(page.url()).pathname})`);
 }

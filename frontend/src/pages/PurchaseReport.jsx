@@ -1,3 +1,4 @@
+import ReportTabs from '../components/layout/ReportTabs';
 import ListPageShell from '../components/layout/ListPageShell';
 import PurchaseReportList from '../components/lists/PurchaseReportList';
 
@@ -5,6 +6,7 @@ import PurchaseReportList from '../components/lists/PurchaseReportList';
 export default function PurchaseReport() {
   return (
     <ListPageShell>
+      <ReportTabs />
       <PurchaseReportList />
     </ListPageShell>
   );

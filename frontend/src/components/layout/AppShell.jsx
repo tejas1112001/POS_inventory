@@ -23,6 +23,7 @@ export function MainLayout({
   children,
   fullBleed = false,
   sidebarCollapsed = false,
+  bottomNav = null,
 }) {
   return (
     <div className="flex h-screen w-full overflow-hidden bg-background">
@@ -38,11 +39,13 @@ export function MainLayout({
         <main
           className={cn(
             'flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto no-scrollbar',
-            fullBleed ? 'p-0' : 'p-4 sm:p-6'
+            fullBleed ? 'p-0' : 'p-4 sm:p-6',
+            bottomNav && 'max-md:pb-24'
           )}
         >
           {children}
         </main>
+        {bottomNav}
       </div>
     </div>
   );

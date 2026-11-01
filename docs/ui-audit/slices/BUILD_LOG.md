@@ -50,3 +50,21 @@ Note: the test navigates inside the app (like clicking links). Full page reloads
 
 **Tested**
 - `s2-messages.spec.js` × 3 widths: success toast inside the screen (top on phones), error toast for a duplicate and closing it, delete confirm in an app dialog (cancelled; nothing deleted), web-address confirm in an app dialog, **no browser pop-ups**, axe on the toast area and the dialog (no serious/critical issues); console: **no CSP violations, no `<style>` elements, no inline styles**, tokens and Inter loaded. **6 passed** (earlier runs found a list-semantics axe issue in the toast and the bottom-toast overlap; both fixed).
+
+## S3 – Shell and navigation
+
+**Changed**
+- New grouped menu (`layout/navigation.js`): Overview · Sell (Checkout, Orders, Returns, Invoices & dues) · Inventory (Products, Stock, Adjustments & history, Purchases) · Contacts (Customers, Suppliers) · Catalogue setup (Categories, Brands, Units) · Reports · Online shop (Storefront) · Team (Users, Roles & permissions) · Settings (Settings, Plan & billing). Items show by permission; empty groups are hidden; the open page is marked (`aria-current="page"`) including its sub-pages. Old addresses keep working.
+- Page titles follow the new names (top bar). `routeTitles.js` removed.
+- Phones (< 768 px): bottom tab bar — owners/admins Dashboard, Checkout, Orders, More; cashiers Checkout, Orders, Customers, More ("More" opens the full menu). Not shown on the checkout screen. Page content gets room so nothing hides behind it.
+- Reports: one menu entry, one tab bar on all four reports (Sales, Purchases, Customers, Customer dues); `/reports` opens Sales. The Purchases tab and page need the purchases view permission (cashiers now see "no access" instead of a 403 error).
+- Storefront (Product Showcase) is shown to roles that can edit stores (cashiers no longer see a read-only page whose switches fail).
+- Settings tabs scroll on phones and include "Plan & billing".
+- Trial/billing banner: smaller, at most two lines on phones.
+- Keyboard: `g` then `d`/`p`/`o` → Dashboard / Checkout / Orders; `/` focuses the page's search box.
+
+These change only what the menu shows and which page shows "no access"; the server's permission checks are unchanged.
+
+**Tested**
+- `s3-navigation.spec.js`, owner and cashier × 3 widths: menu groups per role, active item, no Storefront/Purchases for cashiers, tab bar only under 768 px with the right tabs and a working More, content padding, Reports redirect and tabs per permission, `g o` shortcut. **6 passed.**
+- Route smoke (now also `/reports`; Storefront and Purchase report counted as "no access" for cashiers): **6 passed.**

@@ -8,12 +8,12 @@ const ROUTES = ['/dashboard', '/pos', '/sales', '/add-sale', '/sales-return', '/
   '/products', '/add-product', '/inventory', '/stock-adjustments', '/purchases', '/add-purchase',
   '/categories', '/add-category', '/brands', '/add-brand', '/units', '/add-unit', '/suppliers', '/add-supplier',
   '/customers', '/add-customer', '/sales-report', '/purchase-report', '/customer-report', '/customer-due-report',
-  '/showcase-settings', '/users', '/roles', '/add-role', '/billing', '/settings', '/no-such-page'];
+  '/showcase-settings', '/users', '/roles', '/add-role', '/billing', '/settings', '/reports', '/no-such-page'];
 
 // Routes the seeded Biller role may not open.
 const CASHIER_DENIED = new Set(['/sales-return', '/add-sales-return', '/add-product', '/stock-adjustments', '/purchases',
   '/add-purchase', '/categories', '/add-category', '/brands', '/add-brand', '/units', '/add-unit', '/suppliers',
-  '/add-supplier', '/users', '/roles', '/add-role', '/billing']);
+  '/add-supplier', '/users', '/roles', '/add-role', '/billing', '/showcase-settings', '/purchase-report']);
 
 for (const role of ['owner', 'cashier']) {
   test.describe(`${role} routes`, () => {
@@ -27,7 +27,7 @@ for (const role of ['owner', 'cashier']) {
       for (const route of ROUTES) {
         log.pageErrors.length = 0;
         log.serverErrors.length = 0;
-        await go(page, route);
+        await go(page, route, route === '/reports' ? '/sales-report' : route);
         await settle(page);
         const text = (await page.locator('#root').innerText()).trim();
         const sideways = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 2);
