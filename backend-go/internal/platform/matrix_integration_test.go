@@ -44,6 +44,7 @@ var consoleMatrix = map[string]consoleSpec{
 	"POST /auth/mfa/enroll":         {public: true},
 	"POST /auth/mfa/enroll/confirm": {public: true},
 	"POST /auth/password/change":    {public: true}, // challenge or signed-in session, checked inside
+	"POST /auth/invite/accept":      {public: true}, // the invite token is the credential
 	"POST /auth/refresh":            {public: true}, // cookie + CSRF
 	"POST /auth/logout":             {public: true}, // cookie + CSRF
 
@@ -75,6 +76,15 @@ var consoleMatrix = map[string]consoleSpec{
 	"GET /tenants/{id}/overrides":               {roles: roles(sa, ba, sup)},
 	"POST /tenants/{id}/overrides":              {roles: roles(sa), stepUp: true},
 	"POST /tenants/{id}/overrides/{oid}/revoke": {roles: roles(sa), stepUp: true},
+	// Platform users (S10 item 1): platform_users:manage = super_admin;
+	// every change needs step-up.
+	"GET /platform-users":                   {roles: roles(sa)},
+	"POST /platform-users":                  {roles: roles(sa), stepUp: true},
+	"POST /platform-users/{uid}/invite":     {roles: roles(sa), stepUp: true},
+	"POST /platform-users/{uid}/role":       {roles: roles(sa), stepUp: true},
+	"POST /platform-users/{uid}/deactivate": {roles: roles(sa), stepUp: true},
+	"POST /platform-users/{uid}/reactivate": {roles: roles(sa), stepUp: true},
+	"POST /platform-users/{uid}/reset-mfa":  {roles: roles(sa), stepUp: true},
 	// suspend / reactivate: super_admin and billing_admin, step-up.
 	"POST /tenants/{id}/suspend":    {roles: roles(sa, ba), stepUp: true},
 	"POST /tenants/{id}/reactivate": {roles: roles(sa, ba), stepUp: true},

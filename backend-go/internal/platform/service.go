@@ -60,6 +60,9 @@ type Config struct {
 	// ExportQueued starts the job of a newly queued export (optional: the
 	// worker's export sweep finds queued exports too).
 	ExportQueued func(ctx context.Context, exportID uuid.UUID) error
+	// PublicScheme and PublicPort build the console links in invites
+	// (default https, no port).
+	PublicScheme, PublicPort string
 	// InboxEmail receives a notice for every override change (UI S9);
 	// empty: no notice.
 	InboxEmail string
@@ -76,6 +79,9 @@ type Service struct {
 
 // NewService creates the service.
 func NewService(c Config) *Service {
+	if c.PublicScheme == "" {
+		c.PublicScheme = "https"
+	}
 	if c.Now == nil {
 		c.Now = time.Now
 	}

@@ -1,0 +1,6 @@
+{{define "body"}}
+<p style="margin:0 0 12px;">Hello {{.Name}},</p>
+<h1 style="font-size:18px;margin:0 0 12px;">{{.Heading}}</h1>
+{{range .Lines}}<p style="margin:0 0 8px;">{{.}}</p>
+{{end}}
+{{end}}

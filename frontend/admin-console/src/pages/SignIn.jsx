@@ -5,7 +5,7 @@ import { Button, Check, Notice, TextInput } from '../components/ui';
 import Qr from '../components/Qr';
 import styles from './SignIn.module.css';
 
-const MIN_PASSWORD = 12;
+const MIN_PASSWORD = 14; // the server's rule for console accounts
 
 function message(err) {
   switch (err?.code) {
@@ -25,9 +25,19 @@ function message(err) {
 // password change on first sign-in; authenticator enrolment (with the
 // recovery codes, shown once); or the authenticator code (or a recovery
 // code) on every later sign-in.
+// inviteToken reads an invite link (/invite#token=…) once and removes the
+// token from the address bar and history straight away.
+function inviteToken() {
+  if (window.location.pathname !== '/invite') return '';
+  const m = window.location.hash.match(/token=([A-Za-z0-9_-]{20,200})/);
+  window.history.replaceState(null, '', '/invite');
+  return m ? m[1] : '';
+}
+
 export default function SignIn() {
   const { signedIn } = useSession();
-  const [step, setStep] = useState('password');
+  const [invite] = useState(inviteToken);
+  const [step, setStep] = useState(invite ? 'invite' : 'password');
   const [challenge, setChallenge] = useState('');
   const [form, setForm] = useState({ email: '', password: '', next: '', repeat: '', code: '', recovery: '' });
   const [useRecovery, setUseRecovery] = useState(false);
@@ -78,6 +88,23 @@ export default function SignIn() {
   };
 
   const login = run(async () => next(await api.post('/auth/login', { email: form.email.trim(), password: form.password })));
+  const acceptInvite = async (e) => {
+    e.preventDefault();
+    if (form.next.length < MIN_PASSWORD) return setError(`Use at least ${MIN_PASSWORD} characters.`);
+    if (form.next !== form.repeat) return setError('The two passwords are not the same.');
+    setBusy(true);
+    setError('');
+    try {
+      await next(await api.post('/auth/invite/accept', { token: invite, password: form.next }));
+    } catch (err) {
+      if (err.code === 'UNAUTHENTICATED') {
+        restart();
+        setError('This invite link is invalid, used or expired. Ask the person who invited you for a new one.');
+      } else setError(message(err));
+    } finally {
+      setBusy(false);
+    }
+  };
   const change = run(async () => {
     if (form.next.length < MIN_PASSWORD) throw new Error(`Use at least ${MIN_PASSWORD} characters.`);
     if (form.next !== form.repeat) throw new Error('The two passwords are not the same.');
@@ -93,6 +120,18 @@ export default function SignIn() {
       <div className={`card ${styles.card}`}>
         <h1>Platform console</h1>
         <p className="muted">For platform staff only.</p>
+
+        {step === 'invite' && (
+          <form onSubmit={acceptInvite} className="stack">
+            <Notice kind="info">Welcome. Choose your password, then set up your authenticator app.</Notice>
+            <TextInput label="Password" type="password" value={form.next} onChange={set('next')} autoComplete="new-password" hint={`At least ${MIN_PASSWORD} characters.`} />
+            <TextInput label="Repeat the password" type="password" value={form.repeat} onChange={set('repeat')} autoComplete="new-password" />
+            <Notice kind="error">{error}</Notice>
+            <Button type="submit" variant="primary" busy={busy}>
+              Continue
+            </Button>
+          </form>
+        )}
 
         {step === 'password' && (
           <form onSubmit={login} className="stack">

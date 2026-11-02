@@ -848,6 +848,10 @@ func (m *Mailer) deliverPlatformRow(ctx context.Context, r row) outcome {
 		return m.deliverContactRequest(ctx, r)
 	case mailtmpl.OverrideNoticeTemplate:
 		return m.deliverOverrideNotice(ctx, r)
+	case mailtmpl.PlatformInviteTemplate:
+		return m.deliverPlatformInvite(ctx, r)
+	case mailtmpl.PlatformUserNoticeTemplate:
+		return m.deliverPlatformUserNotice(ctx, r)
 	default:
 		return outcome{status: "dead", class: "permanent", detail: "unknown template " + keySafe.ReplaceAllString(r.template, "?")}
 	}

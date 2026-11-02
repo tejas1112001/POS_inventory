@@ -1,3 +1,4 @@
+import PlatformUsers from './pages/PlatformUsers';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { SessionProvider, useSession } from './session';
 import { StepUpProvider } from './stepup';
@@ -24,6 +25,7 @@ function Routed() {
         <Route path="/plans" element={<Plans />} />
         <Route path="/billing" element={<Billing />} />
         <Route path="/audit" element={<Audit />} />
+        <Route path="/platform-users" element={<PlatformUsers />} />
         <Route path="*" element={<Navigate to="/tenants" replace />} />
       </Routes>
     </Layout>

@@ -9,6 +9,7 @@ const NAV = [
   { to: '/plans', label: 'Plans', perm: ['plans:manage', 'billing:view'] },
   { to: '/billing', label: 'Billing', perm: 'billing:view' },
   { to: '/audit', label: 'Audit log', perm: ['audit:view_all', 'audit:view_own'] },
+  { to: '/platform-users', label: 'Platform users', perm: 'platform_users:manage' },
 ];
 
 // Layout: navigation by permission, the signed-in user, sign-out.

@@ -1,0 +1,6 @@
+{{define "body"}}
+<p style="margin:0 0 12px;">Hello {{.Name}},</p>
+<p style="margin:0 0 12px;">{{.InvitedBy}} invited you to the {{.PlatformName}} console.</p>
+<p style="margin:0 0 16px;"><a href="{{.Link}}" style="display:inline-block;background:#2563eb;color:#ffffff;padding:10px 16px;border-radius:6px;text-decoration:none;">Accept the invite</a></p>
+<p style="margin:0 0 12px;font-size:13px;color:#52525b;">You choose your password, then set up your authenticator app. The link works once and expires in {{.Expires}}.</p>
+{{end}}

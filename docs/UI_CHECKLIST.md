@@ -193,3 +193,20 @@ Known problems: none new.
 
 Known problems:
 - Checkout and the 1,000-product POS list are slower than their design targets under load on this laptop (see docs/PHASE3_REPORT.md §6, O5/O6); in normal use they feel instant (median 28 ms and 75 ms).
+
+## S10 – Item 1: Platform users (Super Admin console)
+
+How to check (console, signed in as a super admin):
+1. Menu → **Platform users**: every console account with role, status, sign-in state ("Invite sent (until …)", "MFA set up", "MFA not set up") and last sign-in. Your own row shows "You" and has no actions.
+2. **Add user**: name, email, role, reason (10+ characters). It asks for your MFA code. Then a window shows the invite link **once** with "Copy link"; closing it hides the link for good. Mailpit (http://127.0.0.1:8026) has the invite email "You are invited to the … console" with an "Accept the invite" button.
+3. Open the link in a private window: "Welcome. Choose your password" (14+ characters, twice) → the authenticator QR code → the 10 recovery codes (shown once) → signed in. The address bar shows only `/invite` (the token is removed). Opening the same link again says the invite is invalid, used or expired.
+4. **New invite** (only for users who have not set up MFA): earlier links stop working; a new email and a new copy-once link.
+5. **Role**: pick the new role and a reason; the user is signed out and sees the new menu at the next sign-in. Email "Your console role changed" to the user and the platform inbox.
+6. **Deactivate**: the user is signed out at once and cannot sign in; **Reactivate** lets them in again. Both send emails.
+7. **Reset MFA** (only for users with MFA): their authenticator and recovery codes stop working; at the next sign-in they set up a new one. Email to the user ("If you did not ask for this, contact the platform owner now") and the inbox.
+8. Audit log: platform_user.invite / reinvite / role / deactivate / reactivate / mfa_reset with the reason; invite_accepted when the user accepts.
+9. As a billing admin or support user: no Platform users menu item; the page answers "no access".
+
+Known problems:
+- The console password hint said 12 characters while the server required 14; it now says 14.
+- An invite opened in a browser where another admin is already signed in shows the console, not the invite: use a private window.

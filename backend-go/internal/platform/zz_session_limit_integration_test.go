@@ -7,6 +7,7 @@ package platform_test
 // in the database), which would expire sessions other tests still hold.
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -33,4 +34,20 @@ func TestSessionAbsoluteLimit(t *testing.T) {
 	e.advance(25 * time.Minute) // now past 8 h
 	r := e.do(req{method: "POST", path: "/auth/refresh", cookie: cookie, csrf: true})
 	require.Equal(t, 401, r.Code, "absolute limit: %s", r.Raw)
+}
+
+// TestInviteExpires (S10 item 1): an invite link stops working after 7
+// days. In this file because it moves the shared clock 8 days.
+func TestInviteExpires(t *testing.T) {
+	e := newEnv(t)
+	root := e.mfaLogin(t, rootEmail, newPW, rootSession(t, e).secret)
+	e.stepUp(t, root)
+	r := e.do(req{method: "POST", path: "/platform-users", token: root.token, body: map[string]any{
+		"email": "late-joiner@platform.test", "name": "Late Joiner", "role": "support", "reason": "Starts next month"}})
+	require.Equal(t, 201, r.Code, r.Raw)
+	link := r.Body["inviteUrl"].(string)
+	token := link[strings.Index(link, "#token=")+len("#token="):]
+	e.advance(8 * 24 * time.Hour)
+	acc := e.do(req{method: "POST", path: "/auth/invite/accept", body: map[string]string{"token": token, "password": "late-joiner-password-1"}})
+	require.Equal(t, 401, acc.Code, acc.Raw)
 }

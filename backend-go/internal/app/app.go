@@ -445,6 +445,7 @@ func (a *App) platformAPI(cfg *config.Config, log *slog.Logger, network httpx.Ne
 		Envelope: env, Signer: signer, Sessions: a.sessions, Billing: a.billing,
 		ExportsEnabled: cfg.ExportsEnabled(),
 		InboxEmail:     cfg.ContactEmail,
+		PublicScheme:   cfg.PublicScheme, PublicPort: cfg.PublicPort,
 		OverridesChanged: func(tenantID string) {
 			if a.plans != nil {
 				a.plans.Forget(tenantID)
