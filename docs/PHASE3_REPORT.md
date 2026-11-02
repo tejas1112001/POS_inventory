@@ -68,7 +68,7 @@ Fixed earlier in Phase 3 (2026-10-27): NUL bytes in JSON/CSV (RejectNUL middlewa
 | O2 | ~~Restore-test POST has no step-up~~ | **Closed 2026-11-02**: owner approved; step-up required, tested (refused without a fresh code, nothing queued; accepted after step-up) |
 | O3 | CI has not run on the new commits | Needs a push to `go-backend/phase2` (draft PR #1); every CI gate passes locally |
 | O4 | Running all integration packages at once on this laptop sometimes times out starting containers (provisioning, migrate, tenantio) | Machine load; each passes on its own and CI ran them before |
-| O5 | Checkout p95 117 ms vs 60 ms target (p50 30 ms) at ~50 req/s after batching (was 148 ms the same day) | Measured with app and Postgres on one shared laptop. Next: measure on a 4 vCPU node with a separate database; then batch the checkout statements (pgx batch, multi-row insert) as §9 plans |
+| O5 | Checkout p95 117 ms vs 60 ms target (p50 30 ms) at ~50 req/s after batching (was 148 ms the same day) | Batching is done (d7c746b). The rest is database time on one shared laptop. Next: measure on a 4 vCPU node with a separate database; then fold the remaining fixed steps (settings, parties, reference, receipt, outbox, idempotency) into fewer round trips |
 | O6 | POS product list (1,000 SKUs) p95 159 ms vs 120 ms after the slim response (was 228 ms the same day) | Same environment caveat; the §9 plan's ETag (304 for an unchanged list) and gzip at Caddy are not in the in-process measurement. Next: ETag on `/api/products/pos` |
 | O7 | Dashboard numbers can be up to 30 s old (cache, by design §9) | Acceptable per design; tell users "updates every 30 seconds" if it confuses |
 
