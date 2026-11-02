@@ -1,6 +1,6 @@
 # S10 — Design note
 
-Status: **approved 2026-11-02 with the owner's changes** (marked *Changed*). Items 1–4 are being built; item 5 waits for the owner's refund-rule decision (§5.3). Each change to stored data (D), permissions (P) or billing rules (B) is numbered; the last section lists them for a yes/no. Shifts, cash count, day-end report and GST per sale are out of scope (later).
+Status: **approved 2026-11-02 with the owner's changes** (marked *Changed*). Items 1–8 are being built in order; the refund rule (§5.3) was decided on 2026-11-02: **option A**. Each change to stored data (D), permissions (P) or billing rules (B) is numbered; the last section lists them for a yes/no. Shifts, cash count, day-end report and GST per sale are out of scope (later).
 
 Common rules for every item: S4b design (Inter, navy/slate/blue, 100dvh), kit components, server checks first (the UI only hides what the server refuses), audit rows for every change, tenant-isolation tests for every new endpoint, the console under its strict CSP.
 
@@ -75,13 +75,15 @@ Common rules for every item: S4b design (Inter, navy/slate/blue, 100dvh), kit co
 - `sales.paid` stays the stored total and is kept in sync with the sum of payments by the code from then on (and checked by a test and the nightly ledger check).
 - The migration is **run on a copy first** (a scratch restore of a demo shop's export) and reports, per shop: sales, rows created, sales whose sum differs (must be 0); then on the dev database, with the same report.
 
-### 5.3 Refunds and dues — decision needed before item 5
+### 5.3 Refunds and dues — decided 2026-11-02: option A
 *Today* (corrected): a return records its own refund (`sale_returns.paid`) and **does not change the original sale's amount due**. The Customer Due report reads only `sales.due`, so it ignores returns: a customer who returned goods from an unpaid sale still shows the full due. "Returns reduce dues as today" in the first draft was wrong.
 
+**Decision (owner, 2026-11-02): option A.** Options B and C are kept below as the alternatives that were considered.
+
 Options:
-- **A (recommended)**: a return against a sale first reduces what the customer still owes on that sale; only the rest is paid out as a refund. Example: sale ₹1,000, paid ₹400 (owes ₹600); return worth ₹700 → the due drops to ₹0 and ₹100 is refunded.
-- **B**: keep today's rule — the full return value is refunded in cash and the sale's due stays; the customer may then owe and be refunded at the same time.
-- **C**: the return value becomes store credit on the customer's account (reduces any due, oldest first; a credit balance can pay later sales); nothing is paid out unless the owner chooses to.
+- **A (chosen)**: a return against a sale first reduces what the customer still owes on that sale; only the rest is paid out as a refund. Example: sale ₹1,000, paid ₹400 (owes ₹600); return worth ₹700 → the due drops to ₹0 and ₹100 is refunded.
+- **B** (not chosen): keep today's rule — the full return value is refunded in cash and the sale's due stays; the customer may then owe and be refunded at the same time.
+- **C** (not chosen): the return value becomes store credit on the customer's account (reduces any due, oldest first; a credit balance can pay later sales); nothing is paid out unless the owner chooses to.
 
 With any option, the Customer Due report and the statement are fixed to include returns.
 - **P1** new permissions: `sales:credit` (sell on credit / part payment; owner only by default), `customers:credit_limit` (set limits; owner only), `customers:collect` (collect payments; owner and admin by default, not cashiers unless granted). UPI is recorded as a method only (no QR or bank integration).
@@ -109,7 +111,7 @@ With any option, the Customer Due report and the statement are fixed to include 
 
 ---
 
-## Changes and approvals (all approved 2026-11-02 except the refund rule)
+## Changes and approvals (all approved 2026-11-02)
 
 | # | Item | Change |
 |---|---|---|
@@ -134,4 +136,4 @@ With any option, the Customer Due report and the statement are fixed to include 
 | B6 | 5 | credit and part payment need `sales:credit` and a named customer; total dues stay within the credit limit (none set = no credit); no per-sale override |
 | — | 1 | *Changed*: invite link (7 days, emailed + copy once), no password shown; MFA forced at first sign-in |
 | — | 4 | *Changed*: finalising cancels Razorpay, blocks logins, needs the verified final export; no schema or file drop; pruning keeps finals and the latest verified export |
-| — | 5 | **Refund rule (§5.3): waiting for the owner** |
+| — | 5 | Refund rule (§5.3): **option A** — a return first reduces that sale's due, the rest is refunded (approved 2026-11-02; B and C recorded as alternatives) |
