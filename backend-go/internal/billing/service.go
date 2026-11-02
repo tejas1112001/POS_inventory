@@ -404,6 +404,11 @@ var needsPayLink = map[string]bool{NoticePaymentFailed: true, NoticeGraceEnding:
 // transaction (BILLING_DESIGN §6). It reports whether the notice is new;
 // a second call is a no-op.
 func Notify(ctx context.Context, tx tenancy.PlatformTx, tenantID string, n Notice, data map[string]any) (bool, error) {
+	return notify(ctx, tx, tenantID, n, data, "")
+}
+
+// notify is Notify to a given address ("" = the billing contact).
+func notify(ctx context.Context, tx tenancy.PlatformTx, tenantID string, n Notice, data map[string]any, toAddr string) (bool, error) {
 	var logID int64
 	err := tx.QueryRow(ctx, `INSERT INTO platform.notification_log (tenant_id, kind, period_key) VALUES ($1, $2, $3)
 		ON CONFLICT (tenant_id, kind, period_key) DO NOTHING RETURNING id`, tenantID, n.Kind, clip(n.PeriodKey, 100)).Scan(&logID)
@@ -417,6 +422,9 @@ func Notify(ctx context.Context, tx tenancy.PlatformTx, tenantID string, n Notic
 	if err := tx.QueryRow(ctx, `SELECT coalesce(billing_email, owner_email)::text, name FROM platform.tenants WHERE id = $1`, tenantID).
 		Scan(&to, &name); err != nil {
 		return false, err
+	}
+	if toAddr != "" {
+		to = toAddr
 	}
 	if data == nil {
 		data = map[string]any{}

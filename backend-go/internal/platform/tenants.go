@@ -444,7 +444,9 @@ const (
 		THEN 'trialing' ELSE 'active' END,
 		suspended_at = NULL, suspend_reason = NULL, suspension_source = NULL, restricted_at = NULL, updated_at = now()
 		WHERE t.id = $1 AND $2::text IS NOT NULL` // $2 (reason) is unused here
+	// The deletion date (S10 item 4) is 30 days out; warnings at 14/7/1.
 	qDelete = `UPDATE platform.tenants SET status = 'pending_deletion', deletion_requested_at = now(),
+		purge_after = coalesce(purge_after, now() + interval '30 days'),
 		suspend_reason = coalesce(NULLIF($2, ''), suspend_reason), updated_at = now() WHERE id = $1`
 	// Restoring lands in suspended; reactivation is a separate, deliberate
 	// step. The deletion clock stops: an admin suspension does not count.

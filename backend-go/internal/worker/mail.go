@@ -728,7 +728,7 @@ func (d billingData) noticeDate() string {
 		v = d.TrialEnd
 	case d.Kind == billing.NoticePaymentFailed || d.Kind == billing.NoticeGraceEnding:
 		v = d.GraceEnd
-	case d.Kind == billing.NoticePendingDeletion:
+	case d.Kind == billing.NoticePendingDeletion, strings.HasPrefix(d.Kind, billing.NoticeDeletionWarning):
 		v = d.PurgeAfter
 	}
 	t, err := time.Parse(time.RFC3339, v)

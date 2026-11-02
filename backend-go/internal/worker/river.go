@@ -119,6 +119,7 @@ const (
 	JobExportSweep        = "export_sweep"
 	JobUsageSnapshot      = "usage_snapshot"
 	JobBillingReconcile   = "billing_reconcile"
+	JobNightlyExports     = "nightly_exports"
 )
 
 // ---------------------------------------------------------------- workers
@@ -247,8 +248,18 @@ func (k *maintenanceWorker) Work(ctx context.Context, job *river.Job[maintenance
 		if n, err = k.w.cfg.Billing.RunDeletionClock(ctx); n > 0 {
 			k.w.cfg.Log.InfoContext(ctx, "tenants moved to pending_deletion", slog.Int("tenants", n))
 		}
+		if err == nil {
+			if n, err = k.w.cfg.Billing.RunDeletionWarnings(ctx); n > 0 {
+				k.w.cfg.Log.InfoContext(ctx, "deletion warnings sent", slog.Int("tenants", n))
+			}
+		}
+		if err == nil {
+			_, err = m.EndDeletedSessions(ctx)
+		}
 	case JobExportSweep:
 		err = k.w.SweepExports(ctx)
+	case JobNightlyExports:
+		err = k.w.NightlyExports(ctx)
 	default:
 		return nil
 	}
@@ -354,6 +365,7 @@ func New(cfg Config) (*Worker, error) {
 			periodic(JobBillingReminders, dailyAt{hour: 3, minute: 30}, false), // BILLING_NOTIFY_HOUR: 09:00 in India
 			periodic(JobDeletionClock, river.PeriodicInterval(time.Hour), false),
 			periodic(JobExportSweep, river.PeriodicInterval(cfg.ExportSweepInterval), true),
+			periodic(JobNightlyExports, dailyAt{hour: 19, minute: 30}, false), // 01:00 in India
 		}
 	}
 	client, err := river.NewClient(riverpgxv5.New(cfg.Pool), rc)
@@ -494,6 +506,15 @@ func (w *Worker) SweepExports(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	// A final export must pass a restore test before deletion can be
+	// finalised (S10 item 4); posctl tenant restore-tests runs it.
+	tests, err := e.QueueFinalTests(ctx)
+	if len(tests) > 0 {
+		w.cfg.Log.InfoContext(ctx, "final export restore tests queued", slog.Int("restores", len(tests)))
+	}
+	if err != nil {
+		return err
+	}
 	ids, err := e.Queued(ctx, 100)
 	if err != nil || len(ids) == 0 {
 		return err
@@ -504,6 +525,29 @@ func (w *Worker) SweepExports(ctx context.Context) error {
 	}
 	_, err = w.client.InsertMany(ctx, params)
 	return err
+}
+
+// NightlyExports queues tonight's export of every live tenant and prunes
+// nightly exports past retention (S10 item 4). The export sweep runs the
+// queued exports.
+func (w *Worker) NightlyExports(ctx context.Context) error {
+	e := w.cfg.Exporter
+	if !e.Enabled() {
+		return nil
+	}
+	queued, busy, err := e.QueueNightly(ctx)
+	w.cfg.Log.InfoContext(ctx, "nightly exports queued", slog.Int("exports", len(queued)), slog.Int("busy", busy))
+	if err != nil {
+		return err
+	}
+	pruned, err := e.PruneNightly(ctx)
+	if pruned > 0 {
+		w.cfg.Log.InfoContext(ctx, "old nightly exports pruned", slog.Int("exports", pruned))
+	}
+	if err != nil {
+		return err
+	}
+	return w.SweepExports(ctx)
 }
 
 // Maintenance exposes the periodic jobs (tests, posctl).

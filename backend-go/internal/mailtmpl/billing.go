@@ -48,7 +48,7 @@ func RenderBillingNotice(d BillingNotice) (Rendered, error) {
 	var subj string
 	kind := d.Kind
 	days := ""
-	for _, p := range []string{"trial_ending_", "subscription_ending_"} {
+	for _, p := range []string{"trial_ending_", "subscription_ending_", "deletion_warning_"} {
 		if strings.HasPrefix(kind, p) {
 			days, kind = strings.TrimPrefix(kind, p), strings.TrimSuffix(p, "_")
 		}
@@ -93,6 +93,11 @@ func RenderBillingNotice(d BillingNotice) (Rendered, error) {
 		v.Lines = []string{"The payment for " + shop + " has been overdue for a long time, so the shop is closed and nobody can sign in.",
 			"Your data is kept until " + date + ". After that it may be deleted for good.",
 			"To keep your shop, reply to this email before then and we will help you pay and reopen it."}
+	case "deletion_warning":
+		subj = fmt.Sprintf("%s will be deleted in %s", shop, plural(days))
+		v.Heading = "Your shop will be deleted on " + date
+		v.Lines = []string{"The account of " + shop + " on " + platform + " is closed and its data is scheduled for deletion on " + date + ".",
+			"A final copy of the data is kept by us. To keep your shop, reply to this email before then and we will help you reopen it."}
 	case "reactivated":
 		subj = shop + " is active again"
 		v.Heading = "Welcome back"

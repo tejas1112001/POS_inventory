@@ -116,7 +116,7 @@ function Overview({ tenant: t, reload }) {
     },
     delete: {
       title: 'Delete tenant',
-      intro: 'The tenant moves to pending deletion: nobody can sign in and a final export is taken. Nothing is dropped now; it can be restored until it is deleted for good.',
+      intro: 'The tenant moves to pending deletion: nobody can sign in and a final export is taken. The deletion date is 30 days from now; the owner and billing contact are warned 14, 7 and 1 day(s) before. It can be restored until it is deleted for good.',
       fields: [{ key: 'reason', label: 'Reason (optional)', type: 'textarea', maxLength: 500 }],
       confirmWord: t.slug,
       submitLabel: 'Delete',
@@ -220,6 +220,7 @@ function Overview({ tenant: t, reload }) {
             </div>
           )}
           <Health tenant={t} />
+          {['pending_deletion', 'deleted'].includes(t.status) && <Deletion tenant={t} reload={reload} />}
           <div className="card stack">
             <h2>Actions</h2>
             <div className="row">
@@ -329,6 +330,71 @@ function Health({ tenant }) {
             ))}
           </ul>
         </>
+      )}
+    </div>
+  );
+}
+
+// Deletion (S10 item 4): the deletion date, warnings sent, the final
+// export and its restore test, and Finalise deletion once all are done.
+function Deletion({ tenant: t, reload }) {
+  const { can } = useSession();
+  const [d, setD] = useState(null);
+  const [error, setError] = useState('');
+  const [open, setOpen] = useState(false);
+  const path = `/tenants/${encodeURIComponent(t.id)}`;
+  const load = useCallback(() => {
+    api
+      .get(`${path}/deletion`)
+      .then(setD)
+      .catch((err) => setError(err.message));
+  }, [path]);
+  useEffect(load, [load]);
+  if (!d) return error ? <Notice kind="error">{error}</Notice> : null;
+  return (
+    <div className="card stack">
+      <h2>Deletion</h2>
+      <Facts
+        items={[
+          ['Requested', d.requestedAt && formatDateTime(d.requestedAt)],
+          ['Deletion date', d.deletionDate && formatDateTime(d.deletionDate)],
+          ['Warnings sent', d.warningsSent?.length ? d.warningsSent.join(', ') + ' before' : 'None yet'],
+          ['Final export', d.finalExportStatus ? `${d.finalExportStatus}${d.finalExportAt ? `, ${formatDateTime(d.finalExportAt)}` : ''}` : 'Not yet'],
+          ['Restore test', d.restoreTestStatus ? `${d.restoreTestStatus}${d.restoreTestAt ? `, ${formatDateTime(d.restoreTestAt)}` : ''}` : 'Not yet'],
+          ['Payment provider', d.providerToCancel ? 'Subscription is cancelled at once when finalised' : null],
+          ['Deleted', d.deletedAt && formatDateTime(d.deletedAt)],
+        ]}
+      />
+      {t.status === 'pending_deletion' && (
+        <>
+          {d.blocker && <p className="muted">{d.blocker}</p>}
+          {can('tenants:delete') && (
+            <div>
+              <Button variant="danger" disabled={!d.canFinalise} onClick={() => setOpen(true)}>
+                Finalise deletion
+              </Button>
+            </div>
+          )}
+        </>
+      )}
+      {t.status === 'deleted' && <p className="muted">Sign-ins are blocked and sessions ended. The schema and files are kept until an operator removes them.</p>}
+      {open && (
+        <ActionDialog
+          title={`Finalise deletion of ${t.slug}?`}
+          intro="The tenant becomes deleted: every sign-in is blocked, every session ends, and the payment provider's subscription is cancelled now. This cannot be undone from the console. The final export is kept."
+          fields={[{ key: 'reason', label: 'Reason', type: 'textarea', required: true, minLength: 10, maxLength: 500, hint: 'Kept in the audit log.' }]}
+          confirmWord={t.slug}
+          submitLabel="Finalise deletion"
+          danger
+          onSubmit={(v) => api.post(`${path}/finalise-deletion`, { reason: v.reason.trim(), confirm: t.slug })}
+          onDone={() => {
+            setOpen(false);
+            toast.success('Tenant deleted.');
+            load();
+            reload();
+          }}
+          onClose={() => setOpen(false)}
+        />
       )}
     </div>
   );

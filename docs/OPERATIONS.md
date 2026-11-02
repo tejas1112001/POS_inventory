@@ -117,7 +117,7 @@ Server hardening: `ReadHeaderTimeout 5s`, `ReadTimeout 30s`, `WriteTimeout 60s`,
 6. Compress (zstd) and encrypt with `age` (S7, included) to the platform export public key `EXPORT_AGE_RECIPIENT` → object storage `exports/<tenant_id>/<ts>.tar.zst.age`. Record size and the manifest hash. The private key (`EXPORT_AGE_IDENTITY`) is given only to `posctl` for restore, never to the running API.
 7. Also available for DBAs: `pg_dump --schema='"t_<id>"' --format=custom --no-owner --no-privileges` (same snapshot semantics). The app-level format is primary because it is version-aware and restorable into **any** schema name, while `pg_restore` cannot rename schemas.
 
-Retention: nightly export per tenant (staggered), keep 7 daily + 4 weekly; final export kept 1 year after tenant deletion (Q-14).
+Retention (built in S10 item 4): the worker job `nightly_exports` runs at 19:30 UTC (01:00 India time) and queues a **data-only** nightly export for every live tenant (not provisioning, failed, pending deletion or deleted; once a night); the export sweep runs them. The same job then prunes: of each tenant's succeeded nightly exports it keeps the last 7 and the last 4 Sunday ones (India time), plus the tenant's **latest verified export** (any kind, restore test passed), and **never** prunes manual or final exports. A pruned export has its object deleted from storage first, then is marked `expired` with `expired_at`. Final exports are kept 1 year after tenant deletion (Q-14).
 
 ### 6.3 Per-tenant restore
 
@@ -135,12 +135,11 @@ Retention: nightly export per tenant (staggered), keep 7 daily + 4 weekly; final
 **Weekly automated restore test** (job): pick a random active tenant + the oldest-tested one, restore into scratch, compare, record `pos_restore_test_last_success_timestamp_seconds`, drop scratch. Phase 3 test: export tenant A, restore into scratch, counts + checksums equal, and **no other schema's** `pg_stat_user_tables` write counters changed (proves isolation).
 
 ### 6.4 Deletion
-**No automatic schema drop in v1** (decided O-4). At `RETENTION_DAYS` (90) after the restriction started (BILLING_DESIGN §3 timeline), the tenant only becomes *eligible* for deletion:
-1. Warning emails to the owner and billing contact before the eligibility date (14, 7 and 1 days before; deduplicated via `notification_log`).
-2. A final export is taken and **verified** (restore into scratch, counts and checksums match, §6.3). Without a verified final export, deletion is refused.
-3. A Super Admin deletes from the console with **step-up** and an explicit confirmation (typed slug). Only then: `DROP SCHEMA "t_<id>" CASCADE`, `DROP ROLE t_<id>_rw`, delete object-storage prefix `tenants/<id>/` (except the final export), status `deleted`, slug reserved for 1 year. Platform audit row. Billing records are kept (legal).
-
-The "Super Admin → eligible for deletion" list shows these tenants; nothing is dropped by a job.
+**No automatic schema drop in v1** (decided O-4). The deletion date is `tenants.purge_after`: `RETENTION_DAYS` (90) after the restriction started (BILLING_DESIGN §3 timeline) when the deletion clock moved the tenant, or 30 days after a console "Delete". Built in S10 item 4:
+1. Warning emails to the billing contact and the owner (both when they differ) 14, 7 and 1 day(s) before the deletion date, from the hourly `deletion_clock` job; only the nearest warning is sent, each once (`notification_log`).
+2. A final export (with files) is queued by the export sweep, and once it succeeds the sweep queues its **restore test** (`posctl tenant restore-tests`, cron, runs it: restore into scratch, counts and checksums match, §6.3). Without a final export whose restore test passed, finalising is refused.
+3. A Super Admin finalises from the console (tenant → Deletion → **Finalise deletion**: `tenants:delete`, **step-up**, written reason, the slug typed), only on or after the deletion date. Effect: status `deleted`, `deleted_at`, `deleted_by`; the payment provider's subscription is **cancelled at once** (refused if that call fails); the host stops resolving, so every sign-in is blocked and no session works, and the worker revokes the shop's refresh tokens within the hour; the slug stays reserved. Platform audit row `tenant.finalise_deletion`. Billing records are kept (legal).
+4. **Dropping the data is a manual operator step, later** (never the console or a job): after checking the final export is stored and its restore test passed, run `DROP SCHEMA "t_<id>" CASCADE`, `DROP ROLE t_<id>_rw`, and delete the object-storage prefix `tenants/<id>/` (keep `exports/<id>/` final exports for 1 year, Q-14). Record it in the platform audit log by hand.
 
 ## 7. Deployment & security posture
 - Image: multi-stage build → `gcr.io/distroless/static-debian12:nonroot`, `CGO_ENABLED=0`, `-trimpath -ldflags "-s -w"`, read-only root FS, no shell. Version via `-ldflags -X`. The image is scanned (Trivy/Grype) in CI.

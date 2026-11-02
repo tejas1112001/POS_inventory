@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/audit"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/inventory"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/obs"
@@ -206,4 +208,40 @@ func (m *Maintenance) tenantDepth(ctx context.Context) int {
 		}
 	}
 	return total
+}
+
+// EndDeletedSessions revokes every refresh token of tenants deleted in the
+// last 3 days (S10 item 4). Their hosts no longer resolve, so no session
+// works anyway; this makes it explicit. It returns how many were revoked.
+func (m *Maintenance) EndDeletedSessions(ctx context.Context) (int64, error) {
+	var ids []string
+	err := m.Jobs.InPlatformTx(ctx, tenancy.TxOptions{Access: tenancy.ReadOnly}, func(tx tenancy.PlatformTx) error {
+		rows, err := tx.Query(ctx, `SELECT id FROM platform.tenants WHERE status = 'deleted' AND deleted_at > now() - interval '3 days' ORDER BY id`)
+		if err != nil {
+			return err
+		}
+		ids, err = pgx.CollectRows(rows, pgx.RowTo[string])
+		return err
+	})
+	if err != nil {
+		return 0, err
+	}
+	var total int64
+	var errs []error
+	for _, id := range ids {
+		t := tenancy.Tenant{ID: id, Status: "deleted"}
+		if t.Schema, t.Role, err = tenancy.SchemaFor(id); err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		err := m.Jobs.InTenantTx(ctx, t, tenancy.TxOptions{Access: tenancy.ReadWrite}, func(tx tenancy.TenantTx) error {
+			tag, err := tx.Exec(ctx, `UPDATE refresh_tokens SET revoked_at = now(), revoke_reason = 'tenant_deleted' WHERE revoked_at IS NULL`)
+			total += tag.RowsAffected()
+			return err
+		})
+		if err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return total, errors.Join(errs...)
 }

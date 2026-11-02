@@ -89,8 +89,10 @@ var consoleMatrix = map[string]consoleSpec{
 	"POST /tenants/{id}/suspend":    {roles: roles(sa, ba), stepUp: true},
 	"POST /tenants/{id}/reactivate": {roles: roles(sa, ba), stepUp: true},
 	// delete / restore: super_admin, step-up.
-	"DELETE /tenants/{id}":       {roles: roles(sa), stepUp: true},
-	"POST /tenants/{id}/restore": {roles: roles(sa), stepUp: true},
+	"DELETE /tenants/{id}":                 {roles: roles(sa), stepUp: true},
+	"POST /tenants/{id}/restore":           {roles: roles(sa), stepUp: true},
+	"GET /tenants/{id}/deletion":           {roles: roles(sa, ba, sup)},
+	"POST /tenants/{id}/finalise-deletion": {roles: roles(sa), stepUp: true},
 	// export / restore-test: super_admin, both with step-up (§7.1; restore
 	// tests since the owner's decision of 2026-11-02).
 	"POST /tenants/{id}/exports":       {roles: roles(sa), stepUp: true},

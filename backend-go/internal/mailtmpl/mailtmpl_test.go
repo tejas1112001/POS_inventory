@@ -124,6 +124,8 @@ func TestBillingNotices(t *testing.T) {
 		"grace_ending":          "Last day to pay for Asha General Stores",
 		"suspended":             "Asha General Stores is suspended",
 		"pending_deletion":      "Asha General Stores is scheduled for deletion",
+		"deletion_warning_14":   "Asha General Stores will be deleted in 14 days",
+		"deletion_warning_1":    "Asha General Stores will be deleted in 1 day",
 		"reactivated":           "Asha General Stores is active again",
 		"renewal_success":       "Payment received for Asha General Stores",
 	}

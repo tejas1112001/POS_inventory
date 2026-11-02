@@ -117,6 +117,7 @@ func (h *HTTP) mountConsole(r chi.Router) {
 		h.mountOverrides(p)
 		h.mountBilling(p)
 		h.mountExports(p)
+		h.mountDeletion(p)
 	})
 }
 

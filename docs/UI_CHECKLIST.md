@@ -239,3 +239,17 @@ How to check:
 
 Known problems:
 - With the fake provider in dev, subscriptions created before a restart are unknown to the fake and show as "Subscription at provider: provider answered 400".
+
+## S10 – Item 4: Nightly exports, retention, final deletion
+
+How to check:
+1. Nightly exports run at 01:00 India time (worker job `nightly_exports`). Next morning, console → tenant → **Exports** shows a `nightly` export (data only) for every live shop. Pending-deletion and deleted shops get none.
+2. Retention: each shop keeps its last 7 nightly exports and its last 4 Sunday ones; older nightly exports show status `expired` (their files are deleted). Manual and final exports are never expired, and the shop's newest export with a passed restore test is always kept.
+3. Console → tenant → **Delete** now says the deletion date is 30 days out. The tenant page then has a **Deletion** card: requested, deletion date, warnings sent, final export, restore test.
+4. Warnings: 14, 7 and 1 day(s) before the deletion date, Mailpit gets "<shop> will be deleted in N days" for the billing contact and the owner (both if different).
+5. The final export is taken automatically; once it succeeds a restore test is queued (run by `posctl tenant restore-tests`).
+6. **Finalise deletion** stays disabled with the reason ("The deletion date is …", "The final export has not succeeded yet", "…restore test has not passed yet") until all are done. Then it asks for a reason, the subdomain typed, and your MFA code. Afterwards: status deleted, the shop's address no longer answers, the payment provider's subscription is cancelled at once, and the audit log has tenant.finalise_deletion. The schema and files stay (OPERATIONS §6.4 step 4).
+
+Known problems:
+- In dev the restore test only runs when `posctl tenant restore-tests` is run by hand.
+- Nightly exports hold data only (not uploaded images); the final export holds both.
