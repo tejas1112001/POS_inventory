@@ -7,10 +7,12 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/shopspring/decimal"
 
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/apperr"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/audit"
@@ -125,6 +127,56 @@ func (a *API) list(w http.ResponseWriter, r *http.Request) {
 
 // pos lists active products stocked in a store, with that store's
 // inventory and lock state.
+// posProduct is the slim POS list entry (Phase 3 performance work): only
+// the fields the two checkout screens read. A 1,000-SKU list spent about
+// half its CPU encoding the full product record; the lock endpoint still
+// returns the full record, which is a superset.
+type posProduct struct {
+	ID              int64            `json:"id"`
+	Name            string           `json:"name"`
+	Image           *string          `json:"image"`
+	Category        string           `json:"category"`
+	Price           decimal.Decimal  `json:"price"`
+	Qty             int              `json:"qty"`
+	Tax             *decimal.Decimal `json:"tax"`
+	TaxType         *string          `json:"taxType"`
+	IsLocked        bool             `json:"isLocked"`
+	LockedAt        *time.Time       `json:"lockedAt"`
+	LockedBy        *int64           `json:"locked_by"`
+	ProductVariants []posVariant     `json:"ProductVariants"`
+}
+
+type posVariant struct {
+	ID          int64           `json:"id"`
+	SKU         string          `json:"sku"`
+	Price       decimal.Decimal `json:"price"`
+	Attributes  map[string]any  `json:"attributes"`
+	Inventories []posStock      `json:"Inventories"`
+}
+
+type posStock struct {
+	Qty           int   `json:"qty"`
+	QuantityAlert int   `json:"quantityAlert"`
+	StoreID       int64 `json:"store_id"`
+}
+
+func slimPOS(list []ProductJSON) []posProduct {
+	out := make([]posProduct, len(list))
+	for i, p := range list {
+		vs := make([]posVariant, len(p.ProductVariants))
+		for j, v := range p.ProductVariants {
+			inv := make([]posStock, len(v.Inventories))
+			for k, x := range v.Inventories {
+				inv[k] = posStock{Qty: x.Qty, QuantityAlert: x.QuantityAlert, StoreID: x.StoreID}
+			}
+			vs[j] = posVariant{ID: v.ID, SKU: v.SKU, Price: v.Price, Attributes: v.Attributes, Inventories: inv}
+		}
+		out[i] = posProduct{ID: p.ID, Name: p.Name, Image: p.Image, Category: p.Category, Price: p.Price, Qty: p.Qty,
+			Tax: p.Tax, TaxType: p.TaxType, IsLocked: p.IsLocked, LockedAt: p.LockedAt, LockedBy: p.LockedBy, ProductVariants: vs}
+	}
+	return out
+}
+
 func (a *API) pos(w http.ResponseWriter, r *http.Request) {
 	storeID, ok := queryInt(r, "storeId")
 	if !ok {
@@ -152,10 +204,7 @@ func (a *API) pos(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	if out == nil {
-		out = []ProductJSON{}
-	}
-	httpx.WriteJSON(w, http.StatusOK, out)
+	httpx.WriteJSON(w, http.StatusOK, slimPOS(out))
 }
 
 // barcode finds the product of a barcode or SKU (both unique per tenant).

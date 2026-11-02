@@ -29,6 +29,7 @@ import (
 	"net/http"
 	"os"
 	"runtime"
+	"runtime/pprof"
 	"sort"
 	"strconv"
 	"strings"
@@ -138,18 +139,24 @@ func (s *shop) call(c client, method, path string, body any, hdr map[string]stri
 
 // stats collects latencies per scenario.
 type stats struct {
-	mu   sync.Mutex
-	lat  map[string][]time.Duration
-	errs map[string]int
+	mu    sync.Mutex
+	lat   map[string][]time.Duration
+	errs  map[string]int
+	codes map[int]int // status codes of failed requests (0: transport error)
 }
 
 func (s *stats) add(name string, d time.Duration, ok bool) {
+	s.addCode(name, d, ok, 0)
+}
+
+func (s *stats) addCode(name string, d time.Duration, ok bool, code int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if ok {
 		s.lat[name] = append(s.lat[name], d)
 	} else {
 		s.errs[name]++
+		s.codes[code]++
 	}
 }
 
@@ -238,7 +245,24 @@ func TestLoad(t *testing.T) {
 	var receipts []string
 	var rmu sync.Mutex
 
-	st := &stats{lat: map[string][]time.Duration{}, errs: map[string]int{}}
+	// LOAD_CPUPROFILE=file writes a CPU profile of the measured minute.
+	if f := os.Getenv("LOAD_CPUPROFILE"); f != "" {
+		out, err := os.Create(f)
+		require.NoError(t, err)
+		require.NoError(t, pprof.StartCPUProfile(out))
+		defer func() { pprof.StopCPUProfile(); _ = out.Close() }()
+	}
+	// Fresh tokens for the measured minute (a slow setup must not let the
+	// 10-minute access tokens expire mid-run).
+	for _, s := range shops {
+		code, body, _, err := s.call(c, "POST", "/api/auth/login", map[string]any{"email": "owner@" + strings.TrimSuffix(s.host, ".pos.test") + ".test", "password": ownerPW}, nil)
+		require.NoError(t, err)
+		require.Equal(t, 200, code, string(body))
+		var tok struct{ Token string }
+		_ = json.Unmarshal(body, &tok)
+		s.token = tok.Token
+	}
+	st := &stats{lat: map[string][]time.Duration{}, errs: map[string]int{}, codes: map[int]int{}}
 	end := time.Now().Add(time.Duration(seconds) * time.Second)
 	var seq atomic.Int64
 	for _, s := range shops {
@@ -257,7 +281,7 @@ func TestLoad(t *testing.T) {
 					}
 					key := fmt.Sprintf("load-%d", seq.Add(1))
 					code, body, d, err := s.call(c, "POST", "/api/sales", map[string]any{"orderItems": items, "storeId": s.store, "method": "cash", "amountTendered": 100000}, map[string]string{"Idempotency-Key": key})
-					st.add("POST /api/sales (5 lines)", d, err == nil && code == 201)
+					st.addCode("POST /api/sales (5 lines)", d, err == nil && code == 201, code)
 					if code == 201 {
 						var sale struct{ ID float64 }
 						_ = json.Unmarshal(body, &sale)
@@ -267,14 +291,14 @@ func TestLoad(t *testing.T) {
 					}
 				case 1:
 					code, _, d, err := s.call(c, "GET", fmt.Sprintf("/api/products/pos?storeId=%v", s.store), nil, nil)
-					st.add(fmt.Sprintf("GET /api/products/pos (%d SKUs)", nSKUs), d, err == nil && code == 200)
+					st.addCode(fmt.Sprintf("GET /api/products/pos (%d SKUs)", nSKUs), d, err == nil && code == 200, code)
 				case 2:
 					code, _, d, err := s.call(c, "GET", fmt.Sprintf("/api/products?page=%d&limit=25&search=item", 1+i%10), nil, nil)
-					st.add("GET /api/products (page of 25, search)", d, err == nil && code == 200)
+					st.addCode("GET /api/products (page of 25, search)", d, err == nil && code == 200, code)
 				case 3:
 					today := time.Now().Format("2006-01-02")
 					code, _, d, err := s.call(c, "GET", "/api/dashboard?startDate="+today+"&endDate="+today, nil, nil)
-					st.add("GET /api/dashboard (today)", d, err == nil && code == 200)
+					st.addCode("GET /api/dashboard (today)", d, err == nil && code == 200, code)
 				case 4:
 					rmu.Lock()
 					var pick string
@@ -290,7 +314,7 @@ func TestLoad(t *testing.T) {
 					if code == http.StatusServiceUnavailable {
 						continue // still rendering: not a download
 					}
-					st.add("GET /api/sales/{id}/receipt (PDF download)", d, err == nil && code == 200)
+					st.addCode("GET /api/sales/{id}/receipt (PDF download)", d, err == nil && code == 200, code)
 				}
 			}
 		}(s)
@@ -328,6 +352,9 @@ func TestLoad(t *testing.T) {
 		fmt.Fprintf(&out, "| %s | %d | %d | %s | %s | %s | %s | %s |\n", n, len(ds), st.errs[n],
 			pct(ds, 0.5).Round(100*time.Microsecond), p95.Round(100*time.Microsecond), pct(ds, 0.99).Round(100*time.Microsecond), targets[n], met)
 	}
+	if len(st.codes) > 0 {
+		fmt.Fprintf(&out, "\nFailed requests by status: %v\n", st.codes)
+	}
 	fmt.Fprintf(&out, "\nConcurrent checkouts on one variant with 25 in stock: 40 requests at once → %d sold, %d refused, %d left (expected 25 / 15 / 0).\n", sold, refused, left)
 	fmt.Print(out.String())
 	path := os.Getenv("LOAD_OUT")
@@ -335,6 +362,7 @@ func TestLoad(t *testing.T) {
 		path = "results.md"
 	}
 	require.NoError(t, os.WriteFile(path, []byte(out.String()), 0o644))
+	require.Empty(t, st.codes, "no request may fail")
 	require.Equal(t, 25, sold)
 	require.Equal(t, 0, left)
 }

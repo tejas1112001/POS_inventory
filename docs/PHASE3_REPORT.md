@@ -68,8 +68,8 @@ Fixed earlier in Phase 3 (2026-10-27): NUL bytes in JSON/CSV (RejectNUL middlewa
 | O2 | ~~Restore-test POST has no step-up~~ | **Closed 2026-11-02**: owner approved; step-up required, tested (refused without a fresh code, nothing queued; accepted after step-up) |
 | O3 | CI has not run on the new commits | Needs a push to `go-backend/phase2` (draft PR #1); every CI gate passes locally |
 | O4 | Running all integration packages at once on this laptop sometimes times out starting containers (provisioning, migrate, tenantio) | Machine load; each passes on its own and CI ran them before |
-| O5 | Checkout p95 105 ms vs 60 ms target (p50 28 ms) at ~50 req/s | Measured with app and Postgres on one shared laptop. Next: measure on a 4 vCPU node with a separate database; then batch the checkout statements (pgx batch, multi-row insert) as §9 plans |
-| O6 | POS product list (1,000 SKUs) p95 133–167 ms vs 120 ms | Same environment caveat; the §9 plan's ETag (304 for an unchanged list) and gzip at Caddy are not in the in-process measurement. Next: ETag on `/api/products/pos` |
+| O5 | Checkout p95 117 ms vs 60 ms target (p50 30 ms) at ~50 req/s after batching (was 148 ms the same day) | Measured with app and Postgres on one shared laptop. Next: measure on a 4 vCPU node with a separate database; then batch the checkout statements (pgx batch, multi-row insert) as §9 plans |
+| O6 | POS product list (1,000 SKUs) p95 159 ms vs 120 ms after the slim response (was 228 ms the same day) | Same environment caveat; the §9 plan's ETag (304 for an unchanged list) and gzip at Caddy are not in the in-process measurement. Next: ETag on `/api/products/pos` |
 | O7 | Dashboard numbers can be up to 30 s old (cache, by design §9) | Acceptable per design; tell users "updates every 30 seconds" if it confuses |
 
 ## 5. Browser tests (Playwright)
@@ -108,6 +108,18 @@ Harness `backend-go/test/load` (run: `go test -tags integration,load -count=1 -t
 **Saturation** (no pause, before the cache): about 280 requests/s for 60 s, **0 errors** in 16,682 requests; p95 254–407 ms (queueing on 4 threads).
 
 **Concurrency**: 40 checkouts at the same instant on one variant with 25 in stock → exactly 25 sold, 15 refused, stock 0 (never negative). Earlier suites also cover parallel plan-limit creates, parallel reminders, and the receipt mail lease.
+
+**Speed work, 2026-11-02** (realistic load, same machine, same day, before → after):
+
+| Hot path | p95 before | p95 after | Target | Change |
+|---|---|---|---|---|
+| Checkout, 5 lines | 148 ms | 117 ms (p50 30 ms) | < 60 ms | order lines and stock moves + ledger sent as one batch each (≈ 15 → 2 round trips) |
+| POS list, 1,000 SKUs | 228 ms | 159 ms (p50 67 ms) | < 120 ms | slim response with only the fields the tills read (about half of its CPU was JSON) |
+| Dashboard | 247 ms | 250 ms (p50 1 ms) | < 150 ms | unchanged; p95 is a cache miss (≈ 1 request in 6 with 50 tenants and a 30 s cache) |
+| Product list | 24 ms | 26 ms | < 80 ms | met |
+| Receipt download | 17 ms | 18 ms | < 30 ms | met |
+
+Also: receipt PDF rendering (29 % of the node's CPU, in the background after each sale) now runs at most 2 at a time instead of 4, so it cannot take every API thread. Concurrency check unchanged: 40 parallel checkouts on 25 units → 25 sold, 15 refused, 0 left. 0 failed requests.
 
 Environment: WSL2 laptop, 8 CPUs, 5.9 GB for Docker; app and Postgres share the CPUs. The §9 targets assume a 4 vCPU app node and a separate database, so these numbers are pessimistic for the app and optimistic for the network. The 500-schema smoke of §9 was not run; the 60-schema parallel migration test (item 4) and the 2026-10-27 search_path scale test cover schema count.
 

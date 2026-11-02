@@ -323,7 +323,7 @@ func New(cfg Config) (*Worker, error) {
 	if cfg.RunJobs {
 		rc.Queues = map[string]river.QueueConfig{
 			QueueMail:          {MaxWorkers: 10}, // tenants in parallel; each job handles one tenant
-			QueueReceipts:      {MaxWorkers: 4},
+			QueueReceipts:      {MaxWorkers: 2},  // PDF rendering is CPU-heavy: leave the API threads free (Phase 3 load test)
 			QueueMaintenance:   {MaxWorkers: 2},
 			QueueExports:       {MaxWorkers: 1}, // one export at a time per node: they are long, streamed reads
 			river.QueueDefault: {MaxWorkers: 1},

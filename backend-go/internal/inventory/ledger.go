@@ -44,6 +44,14 @@ const (
 	qLedger = `INSERT INTO stock_movements (store_id, variant_id, delta, qty_after, reason, ref_type, ref_id, user_id)
 		VALUES ($1, $2, $3, $4, $5, NULLIF($6, ''), NULLIF($7, 0), NULLIF($8, 0))`
 	qLockQty = `SELECT qty FROM inventories WHERE store_id = $1 AND variant_id = $2 FOR UPDATE`
+	// qMoveAndLedger is qMoveExisting and qLedger in one statement (for
+	// batches): no row is moved or recorded when stock would go below zero
+	// or the row does not exist.
+	qMoveAndLedger = `WITH m AS (UPDATE inventories SET qty = qty + $3, updated_at = now()
+			WHERE store_id = $1 AND variant_id = $2 AND qty + $3 >= 0 RETURNING qty)
+		INSERT INTO stock_movements (store_id, variant_id, delta, qty_after, reason, ref_type, ref_id, user_id)
+		SELECT $1, $2, $3, m.qty, $4, NULLIF($5, ''), NULLIF($6, 0), NULLIF($7, 0) FROM m
+		RETURNING qty_after`
 )
 
 // Move adds delta (negative to remove) and records the movement. A

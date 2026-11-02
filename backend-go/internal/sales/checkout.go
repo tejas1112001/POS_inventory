@@ -525,14 +525,21 @@ const qInsertItem = `INSERT INTO order_items (sale_id, product_id, variant_id, p
 		catalog_price, discount, tax_type, tax_rate, tax_amount, cgst, sgst, igst, subtotal)
 	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`
 
+// insertItems writes the order lines in one batch (one round trip).
 func insertItems(ctx context.Context, tx tenancy.TenantTx, saleID int64, p priced) error {
+	b := &pgx.Batch{}
 	for _, l := range p.lines {
-		if _, err := tx.Exec(ctx, qInsertItem, saleID, l.v.productID, l.v.id, l.v.productName, l.v.sku, l.qty, l.unit,
-			l.catalog, l.q.Discount, l.taxType, l.taxRate, l.q.Tax, l.q.CGST, l.q.SGST, l.q.IGST, l.q.Total); err != nil {
+		b.Queue(qInsertItem, saleID, l.v.productID, l.v.id, l.v.productName, l.v.sku, l.qty, l.unit,
+			l.catalog, l.q.Discount, l.taxType, l.taxRate, l.q.Tax, l.q.CGST, l.q.SGST, l.q.IGST, l.q.Total)
+	}
+	br := tx.SendBatch(ctx, b)
+	for range p.lines {
+		if _, err := br.Exec(); err != nil {
+			_ = br.Close()
 			return err
 		}
 	}
-	return nil
+	return br.Close()
 }
 
 func skuMap(p priced) map[int64]string {

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/jackc/pgx/v5"
+
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/apperr"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/tenancy"
 )
@@ -69,12 +71,42 @@ func Lock(ctx context.Context, tx tenancy.TenantTx, deltas map[Key]int, skus map
 }
 
 // Apply moves locked rows by their deltas and writes one ledger row each.
+// All rows go to the database in one batch (one round trip; Phase 3
+// performance work); a row that does not exist yet (only for an increase)
+// is then created by Move, as before.
 func Apply(ctx context.Context, tx tenancy.TenantTx, keys []Key, deltas map[Key]int, reason string, ref Ref, userID int64) error {
+	b := &pgx.Batch{}
+	var moved []Key
 	for _, k := range keys {
+		if d := deltas[k]; d != 0 {
+			b.Queue(qMoveAndLedger, k.Store, k.Variant, d, reason, ref.Type, ref.ID, userID)
+			moved = append(moved, k)
+		}
+	}
+	if len(moved) == 0 {
+		return nil
+	}
+	br := tx.SendBatch(ctx, b)
+	var missing []Key
+	for _, k := range moved {
+		var after int
+		err := br.QueryRow().Scan(&after)
+		switch {
+		case errors.Is(err, pgx.ErrNoRows) && deltas[k] < 0:
+			_ = br.Close()
+			return apperr.Conflict(apperr.CodeInsufficientStock, "Insufficient stock.")
+		case errors.Is(err, pgx.ErrNoRows):
+			missing = append(missing, k)
+		case err != nil:
+			_ = br.Close()
+			return err
+		}
+	}
+	if err := br.Close(); err != nil {
+		return err
+	}
+	for _, k := range missing {
 		if _, err := Move(ctx, tx, k.Store, k.Variant, deltas[k], reason, ref, userID); err != nil {
-			if errors.Is(err, ErrInsufficient) {
-				return apperr.Conflict(apperr.CodeInsufficientStock, "Insufficient stock.")
-			}
 			return err
 		}
 	}

@@ -83,6 +83,13 @@ func (t TenantTx) Query(ctx context.Context, sql string, args ...any) (pgx.Rows,
 	return t.tx.Query(ctx, sql, args...)
 }
 
+// SendBatch sends queued statements in one network round trip, inside
+// this transaction (same role and search_path). Every queued SQL must be a
+// constant, as for Exec and Query.
+func (t TenantTx) SendBatch(ctx context.Context, b *pgx.Batch) pgx.BatchResults {
+	return t.tx.SendBatch(ctx, b)
+}
+
 // QueryRow runs a single-row query.
 func (t TenantTx) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
 	return t.tx.QueryRow(ctx, sql, args...)
