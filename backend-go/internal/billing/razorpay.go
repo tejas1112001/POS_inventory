@@ -320,6 +320,26 @@ func (r *Razorpay) CancelSubscription(ctx context.Context, subID string, atPerio
 		map[string]any{"cancel_at_cycle_end": end}, nil)
 }
 
+// ChangePlan implements Provider: PATCH /v1/subscriptions/:id with the new
+// plan and schedule_change_at now|cycle_end (Razorpay prorates "now").
+func (r *Razorpay) ChangePlan(ctx context.Context, subID, planID string, atCycleEnd bool) (Subscription, error) {
+	when := "now"
+	if atCycleEnd {
+		when = "cycle_end"
+	}
+	var out rzSub
+	if err := r.call(ctx, http.MethodPatch, "/v1/subscriptions/"+url.PathEscape(subID),
+		map[string]any{"plan_id": planID, "schedule_change_at": when, "customer_notify": 1}, &out); err != nil {
+		return Subscription{}, err
+	}
+	return out.toSubscription(), nil
+}
+
+// CancelScheduledChange implements Provider.
+func (r *Razorpay) CancelScheduledChange(ctx context.Context, subID string) error {
+	return r.call(ctx, http.MethodPost, "/v1/subscriptions/"+url.PathEscape(subID)+"/cancel_scheduled_changes", nil, nil)
+}
+
 // FetchSubscription implements Provider.
 func (r *Razorpay) FetchSubscription(ctx context.Context, subID string) (Subscription, error) {
 	var out rzSub

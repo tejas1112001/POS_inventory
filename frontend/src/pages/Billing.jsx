@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { CreditCard, ExternalLink, Loader2 } from 'lucide-react';
+import { ArrowRightLeft, CreditCard, ExternalLink, Loader2 } from 'lucide-react';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { SectionCard } from '@/components/shared/section-card';
 import { Button } from '@/components/ui/button';
 import { usePermission } from '@/context/PermissionContext';
@@ -55,13 +56,56 @@ export default function Billing() {
   const [sub, setSub] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState('');
+  const [change, setChange] = useState(null); // preview of a plan change
 
-  useEffect(() => {
+  const load = () =>
     api
       .get('/api/billing/subscription', { quiet: true })
       .then(setSub)
       .catch((err) => setError(err.message));
+  useEffect(() => {
+    load();
   }, []);
+
+  const failText = (err) => (err.status === 503 ? 'The payment service is not answering. Try again in a few minutes.' : err.message);
+
+  // previewChange asks the server what a change would do before confirming.
+  const previewChange = async (planCode) => {
+    setBusy(planCode);
+    setError('');
+    try {
+      setChange(await api.get(`/api/billing/plan-change?planCode=${encodeURIComponent(planCode)}`, { quiet: true }));
+    } catch (err) {
+      setError(failText(err));
+    } finally {
+      setBusy('');
+    }
+  };
+  const confirmChange = async () => {
+    setBusy('confirm');
+    try {
+      await api.post('/api/billing/plan-change', { planCode: change.to.code }, { quiet: true });
+      setChange(null);
+      await load();
+    } catch (err) {
+      setChange(null);
+      setError(failText(err));
+    } finally {
+      setBusy('');
+    }
+  };
+  const cancelScheduled = async () => {
+    setBusy('cancel');
+    setError('');
+    try {
+      await api.post('/api/billing/plan-change/cancel', {}, { quiet: true });
+      await load();
+    } catch (err) {
+      setError(failText(err));
+    } finally {
+      setBusy('');
+    }
+  };
 
   const checkout = async (planCode) => {
     setBusy(planCode);
@@ -74,7 +118,7 @@ export default function Billing() {
     } catch (err) {
       setError(
         err.code === 'INVALID_STATE'
-          ? 'This shop already has a subscription. Changing plans is not possible yet; contact support.'
+          ? 'This shop already has a subscription. Use Change plan below.'
           : err.status === 503
             ? 'The payment service is not answering. Try again in a few minutes.'
             : err.message
@@ -123,6 +167,18 @@ export default function Billing() {
           </dl>
         </div>
         {!sub.billingEnabled && <p className="mt-3 text-sm text-muted-foreground">Online payment is not set up yet. Contact support to change your plan.</p>}
+        {sub.pendingChange && (
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            <span>
+              Changes to <strong>{sub.pendingChange.plan.name}</strong> on {formatDate(sub.pendingChange.at)}.
+            </span>
+            {canManage && (
+              <Button size="sm" variant="outline" onClick={cancelScheduled} disabled={!!busy}>
+                {busy === 'cancel' && <Loader2 className="size-4 animate-spin" />} Cancel the change
+              </Button>
+            )}
+          </div>
+        )}
         {/* subscribed is true from the moment a checkout starts, before payment. */}
         {canManage && pending && sub.status !== 'active' && (
           <a href={pending} className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline">
@@ -174,6 +230,68 @@ export default function Billing() {
           <p className="mt-3 text-xs text-muted-foreground">You pay on the payment provider&apos;s page. The plan starts as soon as the payment is confirmed.</p>
         </SectionCard>
       )}
+
+      {sub.billingEnabled && sub.subscribed && sub.status === 'active' && canManage && sub.plans?.length > 1 && (
+        <SectionCard title="Change plan">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {sub.plans
+              .filter((p) => p.code !== sub.plan?.code)
+              .map((p) => (
+                <div key={p.code} className="flex flex-col rounded-lg border p-4">
+                  <div className="font-semibold">{p.name}</div>
+                  <div className="mt-1 text-xl font-bold">{money(p.priceMinor, p.currency)}</div>
+                  <div className="text-xs text-muted-foreground">per {p.interval === 'yearly' ? 'year' : 'month'}</div>
+                  <ul className="mt-3 flex-1 space-y-0.5 text-xs text-muted-foreground">
+                    {LIMITS.filter(([, lk]) => p.limits?.[lk]).map(([, lk, name]) => (
+                      <li key={lk}>
+                        {name}: {p.limits[lk]}
+                      </li>
+                    ))}
+                  </ul>
+                  <Button className="mt-3" variant="outline" onClick={() => previewChange(p.code)} disabled={!!busy}>
+                    {busy === p.code ? <Loader2 className="size-4 animate-spin" /> : <ArrowRightLeft className="size-4" />} Change to {p.name}
+                  </Button>
+                </div>
+              ))}
+          </div>
+          <p className="mt-3 text-xs text-muted-foreground">A dearer plan starts now and the difference for this period is charged. A cheaper plan starts when the paid period ends.</p>
+        </SectionCard>
+      )}
+
+      <Dialog open={!!change} onOpenChange={(open) => !open && setChange(null)}>
+        {change && (
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>
+                {change.kind === 'upgrade' ? 'Upgrade' : 'Change'} to {change.to.name}
+              </DialogTitle>
+              <DialogDescription>{change.effect}</DialogDescription>
+            </DialogHeader>
+            {change.blockers?.length > 0 && (
+              <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                <p className="font-medium">Reduce these first:</p>
+                <ul className="mt-1 list-disc pl-5">
+                  {change.blockers.map((b) => (
+                    <li key={b.resource}>{b.resource === 'usage' ? b.label : `${b.label}: ${b.used} in use, the plan allows ${b.limit}`}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {!change.allowed && !change.blockers?.length && <p className="text-sm text-destructive">{change.refusal}</p>}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setChange(null)}>
+                Close
+              </Button>
+              {change.allowed && (
+                <Button onClick={confirmChange} disabled={busy === 'confirm'}>
+                  {busy === 'confirm' && <Loader2 className="size-4 animate-spin" />}
+                  {change.when === 'now' ? 'Change now' : `Schedule for ${formatDate(change.effectiveAt)}`}
+                </Button>
+              )}
+            </DialogFooter>
+          </DialogContent>
+        )}
+      </Dialog>
 
       <SectionCard title="Invoices">
         {sub.invoices?.length ? (

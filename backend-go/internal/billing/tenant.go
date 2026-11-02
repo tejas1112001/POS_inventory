@@ -41,6 +41,10 @@ func (a *TenantAPI) Mount(rt *rbac.Router) {
 	rt.Handle(http.MethodGet, "/billing/subscription", rbac.Require("billing", "view"), a.subscription)
 	rt.Handle(http.MethodPost, "/billing/checkout", rbac.Require("billing", "manage").ReadOnlyOK(), perUser(http.HandlerFunc(a.checkout)).ServeHTTP)
 	rt.Handle(http.MethodGet, "/notifications/banners", rbac.Authenticated(), a.banners)
+	// Plan changes (S10 item 2).
+	rt.Handle(http.MethodGet, "/billing/plan-change", rbac.Require("billing", "manage"), a.previewChange)
+	rt.Handle(http.MethodPost, "/billing/plan-change", rbac.Require("billing", "manage"), perUser(http.HandlerFunc(a.changePlan)).ServeHTTP)
+	rt.Handle(http.MethodPost, "/billing/plan-change/cancel", rbac.Require("billing", "manage"), perUser(http.HandlerFunc(a.cancelChange)).ServeHTTP)
 }
 
 func tenantOf(r *http.Request) tenancy.Tenant {
@@ -97,6 +101,7 @@ type SubscriptionJSON struct {
 	Usage             Usage         `json:"usage"`
 	Invoices          []InvoiceJSON `json:"invoices"`
 	Plans             []PlanJSON    `json:"plans"`
+	PendingChange     *PendingJSON  `json:"pendingChange"`
 }
 
 const (
@@ -158,6 +163,9 @@ func (a *TenantAPI) subscription(w http.ResponseWriter, r *http.Request) {
 		}
 		rows.Close()
 		if err := rows.Err(); err != nil {
+			return err
+		}
+		if out.PendingChange, err = PendingFor(ctx, tx, t.ID); err != nil {
 			return err
 		}
 		rows, err = tx.Query(ctx, qBuyable)
@@ -247,7 +255,7 @@ func (a *TenantAPI) checkout(w http.ResponseWriter, r *http.Request) {
 		live := r.ProviderSubID != "" && r.ProviderStatus != "" && r.ProviderStatus != "created"
 		switch {
 		case live && (r.Status == Active || r.Status == PastDue || r.Status == Grace || r.Status == Trialing):
-			return apperr.Conflict(apperr.CodeInvalidState, "You already have a subscription. Contact support to change your plan.")
+			return apperr.Conflict(apperr.CodeInvalidState, "You already have a subscription. Use Change plan.")
 		case r.Status == Suspended:
 			return apperr.Conflict(apperr.CodeInvalidState, "This account is suspended. Use the payment link in the email.")
 		}
@@ -372,4 +380,97 @@ func (a *TenantAPI) banners(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	httpx.WriteJSON(w, http.StatusOK, out)
+}
+
+// liveUsage counts the shop's own use of its limits (owner changes).
+func (a *TenantAPI) liveUsage(ctx context.Context, t tenancy.Tenant) (UsageCounts, error) {
+	u := UsageCounts{Known: true}
+	var storage int64
+	err := a.Svc.Sessions.InPlatformTx(ctx, tenancy.TxOptions{Access: tenancy.ReadOnly}, func(tx tenancy.PlatformTx) error {
+		return tx.QueryRow(ctx, `SELECT storage_bytes FROM platform.tenants WHERE id = $1`, t.ID).Scan(&storage)
+	})
+	if err != nil {
+		return u, err
+	}
+	u.StorageMB = (storage + (1<<20 - 1)) >> 20
+	var emails int
+	err = a.Svc.Sessions.InTenantTx(ctx, t, tenancy.TxOptions{Access: tenancy.ReadOnly}, func(tx tenancy.TenantTx) error {
+		return tx.QueryRow(ctx, qUsage).Scan(&u.Stores, &u.Users, &u.Products, &emails)
+	})
+	return u, err
+}
+
+// previewChange is GET /api/billing/plan-change?planCode=: what a change
+// to that plan would do (price, when, what blocks it). Read-only.
+func (a *TenantAPI) previewChange(w http.ResponseWriter, r *http.Request) {
+	t := tenantOf(r)
+	ctx := r.Context()
+	u, err := a.liveUsage(ctx, t)
+	var out PlanChangeJSON
+	if err == nil {
+		err = a.Svc.Sessions.InPlatformTx(ctx, tenancy.TxOptions{Access: tenancy.ReadOnly}, func(tx tenancy.PlatformTx) error {
+			var err error
+			out, err = PreviewPlanChange(ctx, tx, t.ID, r.URL.Query().Get("planCode"), true, u)
+			return err
+		})
+	}
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	httpx.WriteJSON(w, http.StatusOK, out)
+}
+
+// changePlan is POST /api/billing/plan-change {planCode} (B1-B3).
+func (a *TenantAPI) changePlan(w http.ResponseWriter, r *http.Request) {
+	var in checkoutIn
+	if err := httpx.DecodeJSON(r, &in); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	t := tenantOf(r)
+	p, _ := auth.PrincipalFrom(r.Context())
+	ctx := r.Context()
+	u, err := a.liveUsage(ctx, t)
+	var out PlanChangeJSON
+	if err == nil {
+		err = a.Svc.Sessions.InPlatformTx(ctx, tenancy.TxOptions{Access: tenancy.ReadWrite}, func(tx tenancy.PlatformTx) error {
+			var err error
+			out, err = a.Svc.ChangePlanTx(ctx, tx, t.ID, in.PlanCode, true, u, "tenant_user:"+strconv.FormatInt(p.UserID, 10), 0, "")
+			return err
+		})
+	}
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	_ = a.Svc.Sessions.InTenantTx(ctx, t, tenancy.TxOptions{Access: tenancy.ReadWrite}, func(tx tenancy.TenantTx) error {
+		return audit.Write(ctx, tx, audit.Entry{ActorID: p.UserID, Action: "billing.plan_change", Entity: "subscription",
+			Before: map[string]any{"plan": out.From.Code}, After: map[string]any{"plan": out.To.Code, "when": out.When},
+			RequestID: httpx.RequestID(ctx), UserAgent: r.UserAgent()})
+	})
+	httpx.WriteJSON(w, http.StatusOK, out)
+}
+
+// cancelChange is POST /api/billing/plan-change/cancel (B3).
+func (a *TenantAPI) cancelChange(w http.ResponseWriter, r *http.Request) {
+	t := tenantOf(r)
+	p, _ := auth.PrincipalFrom(r.Context())
+	ctx := r.Context()
+	var pl PlanJSON
+	err := a.Svc.Sessions.InPlatformTx(ctx, tenancy.TxOptions{Access: tenancy.ReadWrite}, func(tx tenancy.PlatformTx) error {
+		var err error
+		pl, err = a.Svc.CancelScheduledTx(ctx, tx, t.ID, "tenant_user:"+strconv.FormatInt(p.UserID, 10), 0, "")
+		return err
+	})
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	_ = a.Svc.Sessions.InTenantTx(ctx, t, tenancy.TxOptions{Access: tenancy.ReadWrite}, func(tx tenancy.TenantTx) error {
+		return audit.Write(ctx, tx, audit.Entry{ActorID: p.UserID, Action: "billing.plan_change_cancelled", Entity: "subscription",
+			After: map[string]any{"cancelled_plan": pl.Code}, RequestID: httpx.RequestID(ctx), UserAgent: r.UserAgent()})
+	})
+	w.WriteHeader(http.StatusNoContent)
 }

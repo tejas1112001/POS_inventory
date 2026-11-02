@@ -24,7 +24,8 @@ type Fake struct {
 	seq     atomic.Int64
 	run     string
 	subs    map[string]*Subscription
-	cancels map[string]bool // subscription ID → at period end
+	cancels map[string]bool   // subscription ID → at period end
+	pending map[string]string // subscription ID → plan scheduled for cycle end
 	// FailNext makes the next call return this error (tests).
 	FailNext error
 }
@@ -36,7 +37,7 @@ func NewFake(secret []byte, payBase string) *Fake {
 	}
 	var tag [3]byte
 	_, _ = rand.Read(tag[:])
-	return &Fake{Secret: secret, PayBase: payBase, run: hex.EncodeToString(tag[:]), subs: map[string]*Subscription{}, cancels: map[string]bool{}}
+	return &Fake{Secret: secret, PayBase: payBase, run: hex.EncodeToString(tag[:]), subs: map[string]*Subscription{}, cancels: map[string]bool{}, pending: map[string]string{}}
 }
 
 // Name implements Provider.
@@ -89,6 +90,61 @@ func (f *Fake) CancelSubscription(_ context.Context, subID string, atPeriodEnd b
 	}
 	f.cancels[subID] = atPeriodEnd
 	return nil
+}
+
+// ChangePlan implements Provider: "now" changes the plan at once, "cycle
+// end" records it as pending (tests apply it with ApplyPending).
+func (f *Fake) ChangePlan(_ context.Context, subID, planID string, atCycleEnd bool) (Subscription, error) {
+	if err := f.fail(); err != nil {
+		return Subscription{}, err
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	s, ok := f.subs[subID]
+	if !ok {
+		return Subscription{}, &APIError{Status: 400, Code: "BAD_REQUEST_ERROR", Detail: "no such subscription"}
+	}
+	if atCycleEnd {
+		f.pending[subID] = planID
+	} else {
+		s.PlanID = planID
+		delete(f.pending, subID)
+	}
+	return *s, nil
+}
+
+// CancelScheduledChange implements Provider.
+func (f *Fake) CancelScheduledChange(_ context.Context, subID string) error {
+	if err := f.fail(); err != nil {
+		return err
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if _, ok := f.pending[subID]; !ok {
+		return &APIError{Status: 400, Code: "BAD_REQUEST_ERROR", Detail: "no scheduled change"}
+	}
+	delete(f.pending, subID)
+	return nil
+}
+
+// Pending is the plan scheduled for a subscription's cycle end (tests).
+func (f *Fake) Pending(subID string) string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.pending[subID]
+}
+
+// ApplyPending applies a scheduled plan change, as the provider does at
+// the cycle end (tests).
+func (f *Fake) ApplyPending(subID string) string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if p, ok := f.pending[subID]; ok {
+		f.subs[subID].PlanID = p
+		delete(f.pending, subID)
+		return p
+	}
+	return ""
 }
 
 // Cancelled reports whether a subscription was cancelled and how (tests).

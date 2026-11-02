@@ -30,7 +30,9 @@ func (h *HTTP) mountBilling(p chi.Router) {
 	p.With(h.need(PermPlansManage)).Post("/plans", h.createPlan)
 	p.With(h.need(PermPlansManage)).Patch("/plans/{id}", h.patchPlan)
 	p.With(h.need(PermBillingView)).Get("/tenants/{id}/billing", h.tenantBilling)
-	p.With(h.need(PermBillingManage)).Post("/tenants/{id}/subscription", h.assignPlan)
+	p.With(h.need(PermBillingManage)).Get("/tenants/{id}/subscription/preview", h.previewPlan)
+	p.With(h.need(PermBillingManage), h.stepUpRequired).Post("/tenants/{id}/subscription", h.assignPlan)
+	p.With(h.need(PermBillingManage), h.stepUpRequired).Post("/tenants/{id}/subscription/cancel-change", h.cancelPlanChange)
 	p.With(h.need(PermBillingManage)).Post("/tenants/{id}/subscription/extend-trial", h.extendTrial)
 	p.With(h.need(PermBillingManage)).Post("/tenants/{id}/subscription/grace", h.applyGrace)
 	p.With(h.need(PermBillingManage), h.stepUpRequired).Post("/tenants/{id}/subscription/cancel", h.cancelSub)
@@ -380,18 +382,22 @@ type SubscriptionView struct {
 	GraceEnd          *time.Time `json:"graceEnd"`
 	CancelAtPeriodEnd bool       `json:"cancelAtPeriodEnd"`
 	LastEventAt       *time.Time `json:"lastEventAt"`
+	PendingPlanCode   *string    `json:"pendingPlanCode"`
+	PendingChangeAt   *time.Time `json:"pendingChangeAt"`
 }
 
 const subViewCols = `t.id, t.slug::text, t.name, t.status, t.suspension_source, s.status, p.code, s.provider,
 	s.provider_subscription_id, s.provider_status, s.trial_end, s.current_period_end, s.grace_end, s.cancel_at_period_end,
-	s.last_event_at`
+	s.last_event_at, pp.code, s.pending_change_at`
 
-const subViewFrom = ` FROM platform.subscriptions s JOIN platform.tenants t ON t.id = s.tenant_id JOIN platform.plans p ON p.id = s.plan_id`
+const subViewFrom = ` FROM platform.subscriptions s JOIN platform.tenants t ON t.id = s.tenant_id JOIN platform.plans p ON p.id = s.plan_id
+	LEFT JOIN platform.plans pp ON pp.id = s.pending_plan_id`
 
 func scanSubView(row pgx.Row) (SubscriptionView, error) {
 	var v SubscriptionView
 	err := row.Scan(&v.TenantID, &v.Slug, &v.Name, &v.TenantStatus, &v.SuspensionSource, &v.Status, &v.PlanCode, &v.Provider,
-		&v.ProviderSubID, &v.ProviderStatus, &v.TrialEnd, &v.CurrentPeriodEnd, &v.GraceEnd, &v.CancelAtPeriodEnd, &v.LastEventAt)
+		&v.ProviderSubID, &v.ProviderStatus, &v.TrialEnd, &v.CurrentPeriodEnd, &v.GraceEnd, &v.CancelAtPeriodEnd, &v.LastEventAt,
+		&v.PendingPlanCode, &v.PendingChangeAt)
 	return v, err
 }
 
@@ -545,29 +551,67 @@ func (s *Service) consoleChange(ctx context.Context, a Actor, id, action string,
 	return out, err
 }
 
-// AssignPlan puts a tenant on a plan locally (a comped or manual plan).
-// Refused while the tenant pays through a live provider subscription:
-// its next event would set the provider's plan back. Plan changes at the
-// provider come later (step 16 gate report).
+// bill is the billing service; without one (billing off) plan changes
+// are local only.
+func (s *Service) bill() *billing.Service {
+	if s.cfg.Billing != nil {
+		return s.cfg.Billing
+	}
+	return &billing.Service{}
+}
+
+// PreviewPlan shows what assigning a plan would do: price change, when it
+// applies, what usage blocks it (S10 B4). Read-only.
+func (s *Service) PreviewPlan(ctx context.Context, id, code string) (billing.PlanChangeJSON, error) {
+	if !tenancy.ValidTenantID(id) {
+		return billing.PlanChangeJSON{}, apperr.NotFound()
+	}
+	var out billing.PlanChangeJSON
+	err := s.ro(ctx, func(tx tenancy.PlatformTx) error {
+		u, err := billing.ConsoleUsage(ctx, tx, id)
+		if err != nil {
+			return err
+		}
+		out, err = billing.PreviewPlanChange(ctx, tx, id, code, false, u)
+		return err
+	})
+	return out, err
+}
+
+// AssignPlan changes a tenant's plan (S10 B4): for a shop paying through
+// the provider the plan changes there too (a dearer plan now, a cheaper
+// one at the end of the paid period); otherwise locally, now.
 func (s *Service) AssignPlan(ctx context.Context, a Actor, id, code, reason string, m Meta) (SubscriptionView, error) {
 	reason, err := reasonOK(reason)
 	if err != nil {
 		return SubscriptionView{}, err
 	}
-	return s.consoleChange(ctx, a, id, "billing.assign_plan", m, map[string]any{"reason": reason, "plan": code},
+	var change billing.PlanChangeJSON
+	extra := map[string]any{"reason": reason, "plan": code}
+	return s.consoleChange(ctx, a, id, "billing.assign_plan", m, extra,
 		func(tx tenancy.PlatformTx, v SubscriptionView) error {
-			if liveProvider(v) {
-				return apperr.Conflict(apperr.CodeInvalidState, "This tenant pays through the provider; cancel that subscription first.")
-			}
-			tag, err := tx.Exec(ctx, `UPDATE platform.subscriptions SET plan_id = (SELECT id FROM platform.plans WHERE code = $2 AND is_active),
-				updated_at = now() WHERE tenant_id = $1 AND EXISTS (SELECT 1 FROM platform.plans WHERE code = $2 AND is_active)`, id, code)
+			u, err := billing.ConsoleUsage(ctx, tx, id)
 			if err != nil {
 				return err
 			}
-			if tag.RowsAffected() == 0 {
-				return apperr.Invalid("planCode", "No active plan with this code.")
-			}
-			return nil
+			change, err = s.bill().ChangePlanTx(ctx, tx, id, code, false, u, "", a.UserID, reason)
+			extra["when"], extra["kind"], extra["provider"] = change.When, change.Kind, change.Provider
+			return err
+		})
+}
+
+// CancelPlanChange drops a scheduled plan change (B3, from the console).
+func (s *Service) CancelPlanChange(ctx context.Context, a Actor, id, reason string, m Meta) (SubscriptionView, error) {
+	reason, err := reasonOK(reason)
+	if err != nil {
+		return SubscriptionView{}, err
+	}
+	extra := map[string]any{"reason": reason}
+	return s.consoleChange(ctx, a, id, "billing.plan_change_cancelled", m, extra,
+		func(tx tenancy.PlatformTx, v SubscriptionView) error {
+			pl, err := s.bill().CancelScheduledTx(ctx, tx, id, "", a.UserID, reason)
+			extra["cancelled_plan"] = pl.Code
+			return err
 		})
 }
 
@@ -770,6 +814,21 @@ func (h *HTTP) decodeChange(w http.ResponseWriter, r *http.Request) (subChange, 
 func (h *HTTP) assignPlan(w http.ResponseWriter, r *http.Request) {
 	if in, ok := h.decodeChange(w, r); ok {
 		h.respondSub(w, r)(h.svc.AssignPlan(r.Context(), actorFrom(r.Context()), chi.URLParam(r, "id"), strings.TrimSpace(in.PlanCode), in.Reason, h.meta(r)))
+	}
+}
+
+func (h *HTTP) previewPlan(w http.ResponseWriter, r *http.Request) {
+	out, err := h.svc.PreviewPlan(r.Context(), chi.URLParam(r, "id"), strings.TrimSpace(r.URL.Query().Get("planCode")))
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, out)
+}
+
+func (h *HTTP) cancelPlanChange(w http.ResponseWriter, r *http.Request) {
+	if in, ok := h.decodeChange(w, r); ok {
+		h.respondSub(w, r)(h.svc.CancelPlanChange(r.Context(), actorFrom(r.Context()), chi.URLParam(r, "id"), in.Reason, h.meta(r)))
 	}
 }
 

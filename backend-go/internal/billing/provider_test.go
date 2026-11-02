@@ -145,6 +145,14 @@ func TestRazorpayClient(t *testing.T) {
 				return
 			}
 			_, _ = io.WriteString(w, `{"id":"sub_1","status":"active"}`)
+		case r.Method == http.MethodPatch && r.URL.Path == "/v1/subscriptions/sub_1":
+			if body["plan_id"] != "plan_big" || body["schedule_change_at"] != "cycle_end" {
+				w.WriteHeader(400)
+				return
+			}
+			_, _ = io.WriteString(w, `{"id":"sub_1","status":"active","plan_id":"plan_pro"}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/subscriptions/sub_1/cancel_scheduled_changes":
+			_, _ = io.WriteString(w, `{"id":"sub_1","status":"active"}`)
 		case r.Method == http.MethodGet && r.URL.Path == "/v1/subscriptions/sub_1":
 			if gets.Add(1) == 1 {
 				w.WriteHeader(503)
@@ -169,6 +177,12 @@ func TestRazorpayClient(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "https://rzp.io/i/abc", s.ShortURL)
 	require.NoError(t, rz.CancelSubscription(ctx, "sub_1", true))
+	ch, err := rz.ChangePlan(ctx, "sub_1", "plan_big", true)
+	require.NoError(t, err)
+	require.Equal(t, "plan_pro", ch.PlanID, "a cycle-end change keeps the plan until then")
+	_, err = rz.ChangePlan(ctx, "sub_1", "plan_big", false)
+	require.Error(t, err, "schedule_change_at=now is sent for an immediate change")
+	require.NoError(t, rz.CancelScheduledChange(ctx, "sub_1"))
 	got, err := rz.FetchSubscription(ctx, "sub_1")
 	require.NoError(t, err, "GET retried after a 503")
 	require.Equal(t, int32(2), gets.Load())

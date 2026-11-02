@@ -93,7 +93,9 @@ func TestConsoleBilling(t *testing.T) {
 	require.Equal(t, "trialing", tb.Body["subscription"].(map[string]any)["status"])
 	require.Empty(t, tb.Body["invoices"])
 
-	// Assign a plan (with a reason), extend the trial.
+	// Assign a plan (with a reason and step-up), extend the trial.
+	require.Equal(t, 403, call("POST", "/tenants/"+id+"/subscription", map[string]any{"planCode": "starter_test", "reason": "Pilot customer"}).Code, "step-up first")
+	e.stepUp(t, s)
 	require.Equal(t, 400, call("POST", "/tenants/"+id+"/subscription", map[string]any{"planCode": "starter_test"}).Code, "reason required")
 	a := call("POST", "/tenants/"+id+"/subscription", map[string]any{"planCode": "starter_test", "reason": "Pilot customer"})
 	require.Equal(t, 200, a.Code, a.Raw)
@@ -143,7 +145,8 @@ func TestConsoleBilling(t *testing.T) {
 		status = 'active' WHERE tenant_id = $1`, id, sub.ID)
 	require.NoError(t, err)
 	assign := call("POST", "/tenants/"+id+"/subscription", map[string]any{"planCode": "starter_test", "reason": "Pilot customer"})
-	require.Equal(t, 409, assign.Code, "no local plan while the provider bills")
+	require.Equal(t, 409, assign.Code, "already on this plan")
+	e.advance(platform.StepUpTTL + time.Minute)
 	cx := call("POST", "/tenants/"+id+"/subscription/cancel", map[string]any{"atPeriodEnd": true, "reason": "Closing the shop"})
 	require.Equal(t, 403, cx.Code)
 	require.Equal(t, "STEP_UP_REQUIRED", cx.Body["code"])

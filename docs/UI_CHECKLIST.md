@@ -210,3 +210,19 @@ How to check (console, signed in as a super admin):
 Known problems:
 - The console password hint said 12 characters while the server required 14; it now says 14.
 - An invite opened in a browser where another admin is already signed in shows the console, not the invite: use a private window.
+
+## S10 – Item 2: Plan changes (owner and console)
+
+How to check:
+1. Shop (owner) → **Plan & billing** on a shop that pays through the provider (status Active): a **Change plan** card lists the other plans. "Change to …" opens a preview: old → new price per period and when it applies.
+2. A dearer plan: "Takes effect now; the payment provider charges the pro-rated difference" → **Change now**: the plan and the usage limits change at once.
+3. A cheaper plan while the shop uses more than it allows (for example 2 stores, plan allows 1): the preview lists "Reduce these first: Stores: 2 in use, the plan allows 1" and has no confirm button.
+4. A cheaper plan within its limits: "Takes effect on <period end>" → **Schedule for <date>**. The "Your plan" card shows "Changes to … on <date>" with **Cancel the change**; cancelling removes it.
+5. A shop on trial (not subscribed yet) has no Change plan card; it uses Subscribe as before. Staff without billing rights do not see the page.
+6. Console → tenant → **Billing** → **Change plan**: pick a plan → **Preview** → the next window shows the price change and when it applies (or why it is refused), asks for a reason and your MFA code. A scheduled change shows as "Scheduled change: <plan> on <date>" with **Cancel scheduled change**.
+7. Console: a shop billed by the provider whose usage has not been counted yet is refused ("Usage not measured yet"); a comped/trial shop changes at once.
+8. Audit: billing.plan_change / billing.plan_change_cancelled (shop audit log and console audit log); billing.assign_plan in the console log with the reason.
+
+Known problems:
+- Tested against the fake provider only. Live Razorpay checks are listed in docs/BILLING_DESIGN.md (R7, R7a) and must be done before real customers change plans.
+- Changing between monthly and yearly plans is refused (contact support).

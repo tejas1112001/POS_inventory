@@ -6,8 +6,9 @@ import { Button, Facts, Notice, StatusBadge, Table } from '../components/ui';
 import { formatDate, formatDateTime, money } from '../lib/format';
 
 // TenantBilling: the tenant's subscription, invoices and provider events,
-// and the console's subscription changes (billing:manage; cancelling also
-// needs step-up). Every change needs a reason and is audited.
+// and the console's subscription changes (billing:manage; changing the
+// plan and cancelling also need step-up). A plan change is previewed first
+// (price, when, blocking usage). Every change needs a reason and is audited.
 export default function TenantBilling({ tenant, reload }) {
   const { can } = useSession();
   const [data, setData] = useState(null);
@@ -15,6 +16,7 @@ export default function TenantBilling({ tenant, reload }) {
   const [error, setError] = useState('');
   const [dialog, setDialog] = useState(null);
   const [notice, setNotice] = useState('');
+  const [preview, setPreview] = useState(null); // plan change preview
   const base = `/tenants/${encodeURIComponent(tenant.id)}`;
 
   const load = useCallback(() => {
@@ -41,11 +43,38 @@ export default function TenantBilling({ tenant, reload }) {
   const dialogs = {
     plan: {
       title: 'Change plan',
-      intro: 'Limits change at once. Not possible while the payment provider bills the tenant.',
-      fields: [{ key: 'planCode', label: 'Plan', type: 'select', required: true, initial: s.planCode, options: plans.map((p) => ({ value: p.code, label: `${p.name} (${p.code})` })) }, reason],
-      submitLabel: 'Change plan',
-      onSubmit: (v) => api.post(`${base}/subscription`, { planCode: v.planCode, reason: v.reason.trim() }),
-      onDone: done('Plan changed.'),
+      intro: 'Pick the new plan. The next step shows the price change and when it applies, before anything changes.',
+      fields: [{ key: 'planCode', label: 'Plan', type: 'select', required: true, initial: s.planCode, options: plans.map((p) => ({ value: p.code, label: `${p.name} (${p.code})` })) }],
+      submitLabel: 'Preview',
+      onSubmit: (v) => api.get(`${base}/subscription/preview?planCode=${encodeURIComponent(v.planCode)}`),
+      onDone: (p) => {
+        setPreview(p);
+        setDialog('confirmPlan');
+      },
+    },
+    confirmPlan: preview && (preview.allowed
+      ? {
+          title: `${preview.kind === 'upgrade' ? 'Upgrade' : 'Change'} to ${preview.to.name}?`,
+          intro: `${preview.effect}${preview.provider ? ' The plan is changed at the payment provider too.' : ''}`,
+          fields: [reason],
+          submitLabel: preview.when === 'now' ? 'Change now' : `Schedule for ${formatDate(preview.effectiveAt)}`,
+          onSubmit: (v) => api.post(`${base}/subscription`, { planCode: preview.to.code, reason: v.reason.trim() }),
+          onDone: done(preview.when === 'now' ? 'Plan changed.' : 'Plan change scheduled.'),
+        }
+      : {
+          title: `Cannot change to ${preview.to.name}`,
+          intro: `${preview.refusal} ${preview.effect}`,
+          submitLabel: 'Close',
+          onSubmit: async () => null,
+          onDone: () => setDialog(null),
+        }),
+    cancelChange: {
+      title: 'Cancel the scheduled plan change',
+      intro: `The shop stays on ${s.planCode}${s.pendingPlanCode ? ` instead of moving to ${s.pendingPlanCode}` : ''}. Cancelled at the payment provider too.`,
+      fields: [reason],
+      submitLabel: 'Cancel the change',
+      onSubmit: (v) => api.post(`${base}/subscription/cancel-change`, { reason: v.reason.trim() }),
+      onDone: done('Scheduled change cancelled.'),
     },
     trial: {
       title: 'Extend trial',
@@ -91,6 +120,7 @@ export default function TenantBilling({ tenant, reload }) {
               ['Period ends', s.currentPeriodEnd && formatDate(s.currentPeriodEnd)],
               ['Pay by (grace)', s.graceEnd && formatDate(s.graceEnd)],
               ['Cancels at period end', s.cancelAtPeriodEnd ? 'Yes' : null],
+              ['Scheduled change', s.pendingPlanCode && `${s.pendingPlanCode} on ${formatDate(s.pendingChangeAt)}`],
               ['Last provider event', s.lastEventAt && formatDateTime(s.lastEventAt)],
             ]}
           />
@@ -100,6 +130,7 @@ export default function TenantBilling({ tenant, reload }) {
             <h2>Change</h2>
             <div className="row">
               <Button onClick={() => setDialog('plan')}>Change plan</Button>
+              {s.pendingPlanCode && <Button onClick={() => setDialog('cancelChange')}>Cancel scheduled change</Button>}
               {/* Offered only where the server accepts them. */}
               {['trialing', 'read_only'].includes(s.status) && <Button onClick={() => setDialog('trial')}>Extend trial</Button>}
               {['past_due', 'grace', 'suspended'].includes(s.status) && <Button onClick={() => setDialog('grace')}>Give more time to pay</Button>}
@@ -137,7 +168,7 @@ export default function TenantBilling({ tenant, reload }) {
           { key: 'eventId', label: 'Event ID', render: (r) => <span className="mono small">{r.eventId}</span> },
         ]}
       />
-      {dialog && <ActionDialog {...dialogs[dialog]} onClose={() => setDialog(null)} />}
+      {dialog && dialogs[dialog] && <ActionDialog key={dialog} {...dialogs[dialog]} onClose={() => setDialog(null)} />}
     </div>
   );
 }

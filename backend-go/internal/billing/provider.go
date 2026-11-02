@@ -41,6 +41,11 @@ type Provider interface {
 	CreateSubscription(ctx context.Context, req CreateSubscriptionReq) (Subscription, error)
 	CancelSubscription(ctx context.Context, subID string, atPeriodEnd bool) error
 	FetchSubscription(ctx context.Context, subID string) (Subscription, error)
+	// ChangePlan moves a subscription to another provider plan, now or at
+	// the end of the current billing cycle (S10 item 2).
+	ChangePlan(ctx context.Context, subID, planID string, atCycleEnd bool) (Subscription, error)
+	// CancelScheduledChange drops a plan change scheduled for cycle end.
+	CancelScheduledChange(ctx context.Context, subID string) error
 	// VerifyWebhook checks the signature over the raw body and parses the
 	// event. ErrSignature means the request is not from the provider.
 	VerifyWebhook(raw []byte, h http.Header) (Event, error)

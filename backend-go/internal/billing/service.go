@@ -222,6 +222,13 @@ func saveSub(ctx context.Context, tx tenancy.PlatformTx, r subRow, s Sub) (int64
 	err := tx.QueryRow(ctx, qSaveSub, r.id, string(s.Status), s.ProviderSubID, s.ProviderCustomerID, s.ProviderStatus,
 		s.TrialEnd, s.PeriodStart, s.PeriodEnd, s.GraceEnd, s.CancelAtPeriodEnd, s.CancelledAt, s.LastEventAt,
 		s.ProviderPlanID).Scan(&plan)
+	if err != nil {
+		return plan, err
+	}
+	// A scheduled plan change is done once an event carries the new plan
+	// (S10 item 2); an ended subscription has nothing scheduled.
+	_, err = tx.Exec(ctx, `UPDATE platform.subscriptions SET pending_plan_id = NULL, pending_change_at = NULL
+		WHERE id = $1 AND pending_plan_id IS NOT NULL AND (pending_plan_id = plan_id OR status IN ('cancelled','expired'))`, r.id)
 	return plan, err
 }
 
