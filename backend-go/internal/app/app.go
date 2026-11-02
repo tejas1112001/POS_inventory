@@ -204,7 +204,8 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger, opts ...Opti
 	a.billing = &billing.Service{Sessions: a.sessions, Provider: billingProvider(cfg, log),
 		Cfg: billing.Config{GraceDays: cfg.BillingGraceDays, TrialChargeWait: billing.DefaultConfig.TrialChargeWait,
 			ReadOnlyDays: cfg.ReadOnlyDays, RetentionDays: cfg.RetentionDays},
-		MaxAge: cfg.WebhookMaxAge, Metrics: a.metrics, Log: log}
+		MaxAge: cfg.WebhookMaxAge, Metrics: a.metrics, Log: log,
+		Inbox: cfg.ContactEmail, WebhookQuietAfter: time.Duration(cfg.BillingWebhookQuietHours) * time.Hour}
 	tenantAPI, authSvc, err := a.tenantAPI(cfg, log, network, env, storage)
 	if err != nil {
 		a.closePools()

@@ -2,16 +2,20 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, query } from '../api';
 import { Notice, StatusBadge, Table, Tabs } from '../components/ui';
-import { formatDate, money } from '../lib/format';
+import { formatDate, formatDateTime, money } from '../lib/format';
 
 const TABS = [
   { key: 'expiring', label: 'Expiring' },
   { key: 'past-due', label: 'Past due' },
   { key: 'invoices', label: 'Invoices' },
+  { key: 'drift', label: 'Drift' },
 ];
 
+const FIELD = { status: 'Provider status', plan: 'Plan', period_end: 'Period end', fetch: 'Subscription at provider' };
+
 // Billing: trials and subscriptions ending soon, tenants that have not
-// paid, and recent invoices (billing:view). A row opens the tenant.
+// paid, recent invoices, and the hourly reconcile's differences with the
+// payment provider (billing:view). A row opens the tenant.
 export default function Billing() {
   const navigate = useNavigate();
   const [tab, setTab] = useState('expiring');
@@ -23,10 +27,15 @@ export default function Billing() {
     let active = true;
     setRows(null);
     setError('');
-    const path = tab === 'expiring' ? `/billing/expiring${query({ days })}` : tab === 'past-due' ? '/billing/past-due' : '/billing/invoices';
+    const path = {
+      expiring: `/billing/expiring${query({ days })}`,
+      'past-due': '/billing/past-due',
+      invoices: '/billing/invoices',
+      drift: '/billing/drift',
+    }[tab];
     api
       .get(path)
-      .then((r) => active && setRows(r || []))
+      .then((r) => active && setRows(r || (tab === 'drift' ? { open: [], resolved: [] } : [])))
       .catch((err) => active && setError(err.message));
     return () => {
       active = false;
@@ -58,7 +67,7 @@ export default function Billing() {
         </label>
       )}
       <Notice kind="error">{error}</Notice>
-      {tab === 'expiring' && (
+      {tab === 'expiring' && (rows === null || Array.isArray(rows)) && (
         <Table
           loading={!rows && !error}
           rows={rows || []}
@@ -72,7 +81,7 @@ export default function Billing() {
           ]}
         />
       )}
-      {tab === 'past-due' && (
+      {tab === 'past-due' && (rows === null || Array.isArray(rows)) && (
         <Table
           loading={!rows && !error}
           rows={rows || []}
@@ -86,7 +95,9 @@ export default function Billing() {
           ]}
         />
       )}
-      {tab === 'invoices' && (
+      {tab === 'drift' && rows === null && !error && <p className="muted">Loading…</p>}
+      {tab === 'drift' && rows && !Array.isArray(rows) && <Drift report={rows} open={open} />}
+      {tab === 'invoices' && (rows === null || Array.isArray(rows)) && (
         <Table
           loading={!rows && !error}
           rows={rows || []}
@@ -103,6 +114,42 @@ export default function Billing() {
           ]}
         />
       )}
+    </div>
+  );
+}
+
+// Drift lists where our subscription and the provider's differ. Report
+// only: fix with the tenant's billing actions.
+function Drift({ report, open }) {
+  const cols = [
+    { key: 'slug', label: 'Tenant', render: (r) => <span className="mono">{r.slug}</span> },
+    { key: 'field', label: 'Field', render: (r) => FIELD[r.field] || r.field },
+    { key: 'ours', label: 'Ours', render: (r) => <span className="mono small">{r.ours || '—'}</span> },
+    { key: 'theirs', label: 'Provider', render: (r) => <span className="mono small">{r.theirs || '—'}</span> },
+    { key: 'firstSeen', label: 'First seen', render: (r) => formatDateTime(r.firstSeen), className: 'nowrap' },
+  ];
+  return (
+    <div className="stack">
+      <p className="muted">
+        Checked every hour against the payment provider. Nothing is fixed automatically. Last webhook received:{' '}
+        {report.lastWebhookAt ? formatDateTime(report.lastWebhookAt) : 'never'} (alert after {report.quietAfterHours} hours without one while subscriptions are live).
+      </p>
+      <h2>Open</h2>
+      <Table
+        rows={report.open || []}
+        rowKey={(r) => r.id}
+        onRowClick={open}
+        empty="No differences. Our records match the provider."
+        columns={[...cols, { key: 'lastSeen', label: 'Last seen', render: (r) => formatDateTime(r.lastSeen), className: 'nowrap' }, { key: 'alertedAt', label: 'Alerted', render: (r) => (r.alertedAt ? 'Yes' : '') }]}
+      />
+      <h2>Resolved in the last 7 days</h2>
+      <Table
+        rows={report.resolved || []}
+        rowKey={(r) => r.id}
+        onRowClick={open}
+        empty="None."
+        columns={[...cols, { key: 'resolvedAt', label: 'Resolved', render: (r) => formatDateTime(r.resolvedAt), className: 'nowrap' }]}
+      />
     </div>
   );
 }

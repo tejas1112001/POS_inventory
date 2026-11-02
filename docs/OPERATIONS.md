@@ -36,6 +36,9 @@ Health endpoints answer on any host, before tenant resolution and before auth.
 | `pos_email_sent_total`, `pos_email_failed_total`, `pos_email_dead_total` | counter | `via`, `kind` / `class` |
 | `pos_webhook_events_total` | counter | `provider`, `outcome` (applied/duplicate/stale/invalid_signature/error) |
 | `pos_webhook_signature_failures_total` | counter | `provider` |
+| `pos_billing_drift_open` | gauge | — (hourly reconcile, S10 item 3) |
+| `pos_billing_webhook_age_seconds` | gauge | — (0 while no subscription is live) |
+| `pos_billing_reconcile_fetch_errors_total` | counter | — |
 | `pos_tenant_migration_pending_tenants` | gauge | — |
 | `pos_tenant_migration_runs_total` | counter | `status` |
 | `pos_tenant_schema_drift_tenants` | gauge | — |
@@ -64,6 +67,9 @@ Tracing (optional): OpenTelemetry with `otelchi` + `otelpgx`, enabled when `OTEL
 | DeadLetterGrowth | `increase(pos_email_dead_total[1h]) > 20` | warn |
 | WebhookSignatureFailures | `increase(pos_webhook_signature_failures_total[15m]) > 5` | page (possible attack/secret mismatch) |
 | WebhookErrors | `outcome="error"` > 0 for 30 min | warn |
+| BillingWebhooksQuiet | `pos_billing_webhook_age_seconds > 86400` (BILLING_WEBHOOK_QUIET_HOURS, default 24) | page (payments may not reach the shops; the reconcile also emails the platform inbox once a day) |
+| BillingDriftPersistent | `pos_billing_drift_open > 0` for 2 h (two hourly runs) | warn (the reconcile emails the inbox once per difference; see console Billing → Drift; fix with the tenant's billing actions) |
+| BillingReconcileFetchErrors | `increase(pos_billing_reconcile_fetch_errors_total[3h]) > 20` | warn (provider API failing or rate-limited) |
 | BackupFailed | `time() - pos_backup_last_success_timestamp_seconds{kind="pitr"} > 26h` or tenant exports > 26 h | page |
 | RestoreTestStale | last successful restore test > 8 days | warn |
 | CertificateExpiry | blackbox exporter `probe_ssl_earliest_cert_expiry - time() < 14d` | warn (< 3 d page) |

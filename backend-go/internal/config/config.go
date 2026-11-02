@@ -103,7 +103,10 @@ type Config struct {
 	RazorpayKeySecret     secrets.Secret `env:"RAZORPAY_KEY_SECRET"`
 	RazorpayWebhookSecret secrets.Secret `env:"RAZORPAY_WEBHOOK_SECRET"`
 	BillingGraceDays      int            `env:"BILLING_GRACE_DAYS" envDefault:"7"`
-	WebhookMaxAge         time.Duration  `env:"WEBHOOK_MAX_AGE" envDefault:"72h"`
+	// BillingWebhookQuietHours: alert when live subscriptions exist but no
+	// verified webhook arrived for this long (S10 item 3).
+	BillingWebhookQuietHours int           `env:"BILLING_WEBHOOK_QUIET_HOURS" envDefault:"24"`
+	WebhookMaxAge            time.Duration `env:"WEBHOOK_MAX_AGE" envDefault:"72h"`
 
 	// Tenant exports (OPERATIONS §6.2, S7): off unless both are set. The
 	// age identity (private key) is for posctl restore only; posd refuses
@@ -406,6 +409,9 @@ func (c *Config) validateBilling(add func(string, ...any)) {
 		}
 	default:
 		add("BILLING_PROVIDER must be none, fake or razorpay")
+	}
+	if c.BillingWebhookQuietHours < 1 || c.BillingWebhookQuietHours > 24*14 {
+		add("BILLING_WEBHOOK_QUIET_HOURS must be between 1 and 336")
 	}
 	if c.BillingGraceDays < 1 || c.BillingGraceDays > 60 {
 		add("BILLING_GRACE_DAYS must be between 1 and 60")

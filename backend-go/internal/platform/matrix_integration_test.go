@@ -107,6 +107,7 @@ var consoleMatrix = map[string]consoleSpec{
 	"GET /billing/expiring":                         {roles: roles(sa, ba, sup)},
 	"GET /billing/past-due":                         {roles: roles(sa, ba, sup)},
 	"GET /billing/invoices":                         {roles: roles(sa, ba, sup)},
+	"GET /billing/drift":                            {roles: roles(sa, ba, sup)},
 	"POST /tenants/{id}/subscription":               {roles: roles(sa, ba), stepUp: true},
 	"GET /tenants/{id}/subscription/preview":        {roles: roles(sa, ba)},
 	"POST /tenants/{id}/subscription/cancel-change": {roles: roles(sa, ba), stepUp: true},

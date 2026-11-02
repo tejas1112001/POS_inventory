@@ -226,3 +226,16 @@ How to check:
 Known problems:
 - Tested against the fake provider only. Live Razorpay checks are listed in docs/BILLING_DESIGN.md (R7, R7a) and must be done before real customers change plans.
 - Changing between monthly and yearly plans is refused (contact support).
+
+## S10 – Item 3: Razorpay reconcile (report only)
+
+How to check:
+1. Console → **Billing** → **Drift** tab: "Checked every hour against the payment provider. Nothing is fixed automatically", the time of the last webhook, and two lists (Open; Resolved in the last 7 days). On a fresh dev stack both are empty.
+2. The job runs hourly (worker job `billing_reconcile`). For each shop with a provider subscription it compares the provider status, plan and period end. A difference appears under Open with "Ours" and "Provider" values; a row opens the tenant.
+3. When the same difference is seen in two runs in a row, Mailpit gets one email to the platform inbox: "Billing differs from the payment provider: <shop>". It is sent once per difference.
+4. When both sides agree again, the row moves to Resolved.
+5. When subscriptions are live but no verified webhook came for 24 hours (BILLING_WEBHOOK_QUIET_HOURS), the inbox gets "No billing webhooks received" (at most once a day). Metrics: pos_billing_drift_open, pos_billing_webhook_age_seconds; alert rules in docs/OPERATIONS.md.
+6. The job never changes a subscription: fix a difference with the tenant's billing actions (Change plan, Cancel, Grace…).
+
+Known problems:
+- With the fake provider in dev, subscriptions created before a restart are unknown to the fake and show as "Subscription at provider: provider answered 400".

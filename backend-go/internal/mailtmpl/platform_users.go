@@ -4,6 +4,9 @@ package mailtmpl
 const (
 	PlatformInviteTemplate     = "platform_invite"
 	PlatformUserNoticeTemplate = "platform_user_notice"
+	// OpsAlertTemplate is an alert to the platform inbox (S10 item 3); it
+	// renders like a user notice: a heading and a few lines.
+	OpsAlertTemplate = "ops_alert"
 )
 
 // PlatformInvite is the invite to the Super Admin console.

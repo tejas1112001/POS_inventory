@@ -39,6 +39,7 @@ func (h *HTTP) mountBilling(p chi.Router) {
 	p.With(h.need(PermBillingView)).Get("/billing/expiring", h.expiring)
 	p.With(h.need(PermBillingView)).Get("/billing/past-due", h.pastDue)
 	p.With(h.need(PermBillingView)).Get("/billing/invoices", h.invoices)
+	p.With(h.need(PermBillingView)).Get("/billing/drift", h.billingDrift)
 }
 
 // ------------------------------------------------------------------ plans
@@ -889,6 +890,26 @@ func (h *HTTP) invoices(w http.ResponseWriter, r *http.Request) {
 		out, err = listInvoices(r.Context(), tx, tenantID, 200)
 		return err
 	})
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, out)
+}
+
+// BillingDrift is the reconcile report (S10 item 3).
+func (s *Service) BillingDrift(ctx context.Context) (billing.DriftReport, error) {
+	var out billing.DriftReport
+	err := s.ro(ctx, func(tx tenancy.PlatformTx) error {
+		var err error
+		out, err = s.bill().Drift(ctx, tx)
+		return err
+	})
+	return out, err
+}
+
+func (h *HTTP) billingDrift(w http.ResponseWriter, r *http.Request) {
+	out, err := h.svc.BillingDrift(r.Context())
 	if err != nil {
 		httpx.WriteError(w, r, err)
 		return

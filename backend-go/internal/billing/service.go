@@ -27,6 +27,12 @@ type Service struct {
 	Metrics  *obs.Metrics  // optional
 	Log      *slog.Logger
 	Now      func() time.Time
+	// Reconcile (S10 item 3): the platform inbox for alerts, the webhook
+	// silence that raises one (default 24 h) and the pause between
+	// provider fetches (default: spread over 20 minutes, at most 1 s).
+	Inbox             string
+	WebhookQuietAfter time.Duration
+	ReconcileSpacing  time.Duration
 }
 
 func (s *Service) now() time.Time {

@@ -31,6 +31,12 @@ type Metrics struct {
 	// Billing (BILLING_DESIGN §4). No tenant labels.
 	WebhookSignatureFailures prometheus.Counter
 	BillingEvents            *prometheus.CounterVec
+	// Reconcile (S10 item 3): open differences with the provider, and the
+	// age of the newest verified webhook while live subscriptions exist
+	// (0 when there are none).
+	BillingDriftOpen   prometheus.Gauge
+	BillingWebhookAge  prometheus.Gauge
+	BillingFetchErrors prometheus.Counter
 }
 
 // NewMetrics registers the metrics on a fresh registry.
@@ -100,6 +106,18 @@ func NewMetrics() *Metrics {
 			Name: "pos_billing_events_total",
 			Help: "Verified billing webhook events by outcome (applied, duplicate, stale, ...).",
 		}, []string{"outcome"}),
+		BillingDriftOpen: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "pos_billing_drift_open",
+			Help: "Open differences between our subscriptions and the provider's (hourly reconcile).",
+		}),
+		BillingWebhookAge: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "pos_billing_webhook_age_seconds",
+			Help: "Seconds since the last verified billing webhook while live subscriptions exist (0: none live).",
+		}),
+		BillingFetchErrors: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "pos_billing_reconcile_fetch_errors_total",
+			Help: "Provider fetches that failed during the reconcile (network or 5xx).",
+		}),
 	}
 	reg.MustRegister(
 		collectors.NewGoCollector(),
@@ -107,7 +125,7 @@ func NewMetrics() *Metrics {
 		m.HTTPRequests, m.HTTPDuration, m.RateLimited, m.SessionTampered,
 		m.ListenerUp, m.ListenerRetries,
 		m.EmailSent, m.EmailFailed, m.EmailDead, m.OutboxDepth, m.ReceiptRender, m.LedgerMismatch, m.JobsFailed,
-		m.WebhookSignatureFailures, m.BillingEvents,
+		m.WebhookSignatureFailures, m.BillingEvents, m.BillingDriftOpen, m.BillingWebhookAge, m.BillingFetchErrors,
 	)
 	return m
 }

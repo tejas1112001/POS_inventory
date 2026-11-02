@@ -118,6 +118,7 @@ const (
 	JobDeletionClock      = "deletion_clock"
 	JobExportSweep        = "export_sweep"
 	JobUsageSnapshot      = "usage_snapshot"
+	JobBillingReconcile   = "billing_reconcile"
 )
 
 // ---------------------------------------------------------------- workers
@@ -227,6 +228,15 @@ func (k *maintenanceWorker) Work(ctx context.Context, job *river.Job[maintenance
 		}
 		if n > 0 {
 			k.w.cfg.Log.InfoContext(ctx, "billing job", slog.String("job", job.Args.Job), slog.Int("rows", n))
+		}
+	case JobBillingReconcile:
+		if k.w.cfg.Billing == nil || k.w.cfg.Billing.Provider == nil {
+			return nil
+		}
+		var r billing.ReconcileResult
+		if r, err = k.w.cfg.Billing.RunReconcile(ctx); err == nil && (r.Drift > 0 || r.FetchErrors > 0 || r.WebhooksQuiet) {
+			k.w.cfg.Log.WarnContext(ctx, "billing reconcile", slog.Int("checked", r.Checked), slog.Int("drift", r.Drift),
+				slog.Int("resolved", r.Resolved), slog.Int("fetch_errors", r.FetchErrors), slog.Bool("webhooks_quiet", r.WebhooksQuiet))
 		}
 	case JobDeletionClock:
 		// Runs also with billing off: restricted_at may predate that.
@@ -340,6 +350,7 @@ func New(cfg Config) (*Worker, error) {
 			periodic(JobUsageSnapshot, river.PeriodicInterval(15*time.Minute), true),
 			periodic(JobLedgerReconcile, dailyAt{hour: 21, minute: 0}, false), // 02:30 in India
 			periodic(JobBillingLifecycle, river.PeriodicInterval(time.Hour), true),
+			periodic(JobBillingReconcile, river.PeriodicInterval(time.Hour), false),
 			periodic(JobBillingReminders, dailyAt{hour: 3, minute: 30}, false), // BILLING_NOTIFY_HOUR: 09:00 in India
 			periodic(JobDeletionClock, river.PeriodicInterval(time.Hour), false),
 			periodic(JobExportSweep, river.PeriodicInterval(cfg.ExportSweepInterval), true),
