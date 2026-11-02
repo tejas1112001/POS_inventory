@@ -1,6 +1,6 @@
 # S10 — Design note
 
-Status: **waiting for approval**. Nothing below is built yet. Each change to stored data (D), permissions (P) or billing rules (B) is numbered; the last section lists them for a yes/no. Shifts, cash count, day-end report and GST per sale are out of scope (later).
+Status: **approved 2026-11-02 with the owner's changes** (marked *Changed*). Items 1–4 are being built; item 5 waits for the owner's refund-rule decision (§5.3). Each change to stored data (D), permissions (P) or billing rules (B) is numbered; the last section lists them for a yes/no. Shifts, cash count, day-end report and GST per sale are out of scope (later).
 
 Common rules for every item: S4b design (Inter, navy/slate/blue, 100dvh), kit components, server checks first (the UI only hides what the server refuses), audit rows for every change, tenant-isolation tests for every new endpoint, the console under its strict CSP.
 
@@ -11,12 +11,12 @@ Common rules for every item: S4b design (Inter, navy/slate/blue, 100dvh), kit co
 **What**: list platform users (email, name, role, status, MFA enrolled, last login); add a user; change role; deactivate / reactivate; reset another admin's MFA.
 
 **How**
-- Add: name, email, role. The server creates the user with a one-time temporary password (shown once to the adding admin, like `posctl bootstrap-superadmin`), `must_change_password` and MFA enrolment on first sign-in. The new user gets an email notice *without* the password ("an account was created for you; ask <admin> for the first password").
+- *Changed* — Add: name, email, role. **No password is ever shown or chosen by the adding admin.** The server creates the user without a usable password and issues a one-time **invite link valid 7 days**: it is emailed to the new user, and the adding admin also gets the same link once on screen to copy (for when email is slow). Opening the link: set a password (14+ characters), then **MFA enrolment is forced** before the first session, and the 10 recovery codes are shown once. A used or expired link is refused; re-inviting revokes the old link.
 - Change role / deactivate / reactivate / reset MFA: step-up MFA, written reason (10+ characters), audit row, email notice to the affected user and to the platform inbox.
 - Deactivate and reset MFA end all of that user's sessions at once. Reset MFA clears the TOTP secret and recovery codes; the user enrols again at the next sign-in.
 - Guards: nobody changes their own role, deactivates themselves or resets their own MFA here; at least one active super_admin with MFA always remains.
 
-**Data**: none new — existing `platform_users`, `platform_recovery_codes`, `platform_sessions`; one new email template.
+**Data**: **D11** new `platform.platform_invites` (user, token hash, expires, used_at, revoked_at; the token itself is never stored); existing `platform_users`, `platform_recovery_codes`, `platform_sessions`; email templates for the invite and the notices.
 **Permissions**: existing `platform_users:manage` (super_admin only).
 **Risks**: account takeover by a rogue super_admin (mitigated by step-up, reason, audit, notices to the victim and the inbox); locking everyone out (last-super-admin guard).
 
@@ -27,7 +27,7 @@ Common rules for every item: S4b design (Inter, navy/slate/blue, 100dvh), kit co
 **How**
 - New provider call `ChangePlan(subscription, plan, when)` (Razorpay `PATCH /subscriptions/:id` with `plan_id` and `schedule_change_at`). The fake provider implements it for tests.
 - **B1 Upgrade**: takes effect now; Razorpay's proration decides the charge. **B2 Downgrade**: takes effect at the end of the paid period (scheduled); it is refused while the shop uses more than the smaller plan allows (stores, users, products, storage), with the list of what to reduce. **B3** A scheduled downgrade can be cancelled by the owner before it applies.
-- **B4 Console assign-plan for paying shops**: allowed again; it changes the plan at Razorpay too (so the next webhook does not set it back), needs `billing:manage`, step-up and a reason.
+- **B4 Console assign-plan for paying shops**: allowed again; it changes the plan at Razorpay too (so the next webhook does not set it back), needs `billing:manage`, step-up and a reason. *Changed*: before the confirm, the console shows the **price change and billing effect** (old and new price per period, "takes effect now, Razorpay charges the pro-rated difference" or "takes effect on <date>", and any usage that blocks a downgrade), from a read-only preview call.
 - Webhook handling: the plan follows `subscription.updated`/`charged` events as today; a scheduled change is applied when the provider reports it.
 
 **Data**: **D1** `platform.subscriptions` gets `pending_plan_id` and `pending_change_at` (a scheduled downgrade).
@@ -46,12 +46,12 @@ Common rules for every item: S4b design (Inter, navy/slate/blue, 100dvh), kit co
 
 ## 4. Nightly exports with retention, and the final deletion step
 
-**Nightly exports**: at 01:00 (shop time zone ignored; UTC 19:30) every live tenant gets an encrypted `nightly` export (the existing export code). **B5/D3 Retention**: keep the last 7 daily and the last 4 weekly (Sunday) exports; older nightly exports have their files **deleted from storage** and their rows marked expired. Manual and final exports are never pruned automatically.
+**Nightly exports**: at 01:00 India time (19:30 UTC) every live tenant gets an encrypted `nightly` export (the existing export code). **B5/D3 Retention**: keep the last 7 daily and the last 4 weekly (Sunday) exports; older nightly exports have their files **deleted from storage** and their rows marked expired. *Changed*: pruning **never deletes final exports** (nor manual ones) and **always keeps the latest verified export** of each tenant (one whose restore test passed), even when it is older than the window.
 
 **Final deletion step** (today: `pending_deletion` → nothing; the schema is never dropped):
 - Warning emails to the owner and billing email 14, 7 and 1 day(s) before the deletion date.
 - A final export is queued automatically and must pass a restore test before deletion can be finalised.
-- Console "Finalise deletion": Super Admin, step-up, written reason, the tenant's slug typed to confirm. Effect: status `deleted`, every session ended, the slug held for a year (existing redirect rule). **The schema and files are not dropped** (an operator does that by hand later, documented).
+- Console "Finalise deletion": Super Admin, step-up, written reason, the tenant's slug typed to confirm, **and a verified final export (its restore test passed) is required**. *Changed* — effect: status `deleted`; the shop's **Razorpay subscription is cancelled** (immediately, not at period end); **every login is blocked** and every session ended; the slug held for a year (existing redirect rule). **The schema and files are not dropped** (an operator does that by hand later, documented).
 
 **Data**: **D3** `tenant_exports` gets `expired_at` (pruned nightly); **D4** `tenants` gets `deletion_due_at`, `deleted_at`, `deleted_by`; email templates for the warnings.
 **Risks**: storage cost (bounded by retention); a deleted shop that wanted its data (final export kept, restore documented).
@@ -62,14 +62,31 @@ Common rules for every item: S4b design (Inter, navy/slate/blue, 100dvh), kit co
 
 **How**
 - **D5** new tenant table `sale_payments` (sale, method `cash|upi|card|credit|cheque|deposit|points`, amount, tendered and change for cash, reference such as a UPI ID or card last 4 digits, user, time). A sale's `paid` = sum of non-credit payments; `due` = total − paid; payment status as today (Paid / Partial / Unpaid). **Existing sales get one payment row each** from their current paid amount and method (backfill migration).
-- **D6** new tenant table `customer_payments` (collection against dues) and `customer_payment_allocations` (which sales it pays, oldest first). Returns reduce dues as today.
+- **D6** new tenant table `customer_payments` (collection against dues) and `customer_payment_allocations` (which sales it pays, oldest first). *Changed*: **collections and corrections are append-only** — a wrong collection is reversed by a new negative entry with a reason, never edited or deleted (enforced in the database as for the audit log).
+- *Changed* — **D12** credit sales get a **due date** (`sales.due_date`, default today + 30 days, editable at the sale); overdue dues show as Overdue.
+- *Changed* — at the till, a credit or part payment that would pass the customer's limit shows **"Credit limit reached: <customer> owes ₹X of ₹Y. Take ₹Z now or ask the owner to raise the limit."**; the server refuses it with the same numbers.
 - **D7** `customers.credit_limit` (null = no credit allowed).
 - **B6** Selling on credit or part payment needs the `sales:credit` permission and a named customer (never Walk-in), and the customer's total dues after the sale must stay within their credit limit (no limit set = no credit). Only a user with `customers:credit_limit` can raise a limit; there is no per-sale override.
 - Customer statement: sales, payments, returns and running balance for a date range, printable (browser print, A4).
-- Receipt and PDF show each payment line and the balance due.
+- *Changed* — everywhere the money shows, part and split payments show correctly: receipts (screen, PDF, email: each payment line, balance due, due date), Sales and Orders lists (Paid / Partial / Unpaid / Overdue), the Dashboard (collected = sum of payments, due), Customer dues (per customer and per sale, with returns, §5.3) and the reports (sales by payment method).
+
+### 5.2 Backfill of existing sales (D5)
+- Per shop: every existing sale gets payment rows that **sum exactly to its current `paid`** (one row with its current method, or `cash` if none; no row when paid is 0).
+- `sales.paid` stays the stored total and is kept in sync with the sum of payments by the code from then on (and checked by a test and the nightly ledger check).
+- The migration is **run on a copy first** (a scratch restore of a demo shop's export) and reports, per shop: sales, rows created, sales whose sum differs (must be 0); then on the dev database, with the same report.
+
+### 5.3 Refunds and dues — decision needed before item 5
+*Today* (corrected): a return records its own refund (`sale_returns.paid`) and **does not change the original sale's amount due**. The Customer Due report reads only `sales.due`, so it ignores returns: a customer who returned goods from an unpaid sale still shows the full due. "Returns reduce dues as today" in the first draft was wrong.
+
+Options:
+- **A (recommended)**: a return against a sale first reduces what the customer still owes on that sale; only the rest is paid out as a refund. Example: sale ₹1,000, paid ₹400 (owes ₹600); return worth ₹700 → the due drops to ₹0 and ₹100 is refunded.
+- **B**: keep today's rule — the full return value is refunded in cash and the sale's due stays; the customer may then owe and be refunded at the same time.
+- **C**: the return value becomes store credit on the customer's account (reduces any due, oldest first; a credit balance can pay later sales); nothing is paid out unless the owner chooses to.
+
+With any option, the Customer Due report and the statement are fixed to include returns.
 - **P1** new permissions: `sales:credit` (sell on credit / part payment; owner only by default), `customers:credit_limit` (set limits; owner only), `customers:collect` (collect payments; owner and admin by default, not cashiers unless granted). UPI is recorded as a method only (no QR or bank integration).
 
-**Risks**: money correctness (server computes everything; idempotency keys as today; tests for every split/part/return combination), report totals (sales reports gain a "by method" split; "paid" stays the sum), concurrency on a customer's dues (row lock on the customer while allocating).
+**Risks**: money correctness (server computes everything; idempotency keys as today; tests for every split/part/return combination, the backfill and every place money shows), report totals (sales reports gain a "by method" split; "paid" stays the sum), concurrency on a customer's dues (row lock on the customer while allocating).
 
 ## 6. Low-stock alerts
 
@@ -80,8 +97,8 @@ Common rules for every item: S4b design (Inter, navy/slate/blue, 100dvh), kit co
 ## 7. Held bills
 
 **What**: in the new checkout, "Hold" parks the current cart with an optional label; "Recall" lists held carts and restores one (re-checks prices and stock through the quote; changed prices use the existing "Prices have changed" dialog).
-**Data**: **D9** tenant table `held_carts` (user, store, customer, label, lines and discount as JSON, created, expires after 7 days). Holding releases the product locks; recalling takes them again.
-**Permissions**: `pos:create`; a cashier sees only their own held carts, owner/admin see all of the store.
+**Data**: **D9** tenant table `held_carts` (user, store, customer, label, lines and discount as JSON, created, expires after 7 days). *Changed*: **no stock is reserved** for a held cart (its product locks are released); **prices and stock are re-checked on recall**.
+**Permissions**: `pos:create`; *Changed*: held carts are **visible to every cashier of the same store** (any of them can recall one; the list shows who held it).
 **Risks**: stale prices or stock (re-checked on recall), clutter (7-day expiry, max 20 per user).
 
 ## 8. Onboarding checklist
@@ -92,7 +109,7 @@ Common rules for every item: S4b design (Inter, navy/slate/blue, 100dvh), kit co
 
 ---
 
-## Changes that need your approval
+## Changes and approvals (all approved 2026-11-02 except the refund rule)
 
 | # | Item | Change |
 |---|---|---|
@@ -106,6 +123,8 @@ Common rules for every item: S4b design (Inter, navy/slate/blue, 100dvh), kit co
 | D8 | 6 | `settings.low_stock_email`; email kind `low_stock` |
 | D9 | 7 | new tenant `held_carts` |
 | D10 | 8 | `settings.onboarding_hidden_at` |
+| D11 | 1 | new `platform.platform_invites` (approved with the invite-link change) |
+| D12 | 5 | `sales.due_date` for credit sales (approved with item 5's changes) |
 | P1 | 5 | new permissions `sales:credit`, `customers:credit_limit` (owner only), `customers:collect` (owner, admin) |
 | B1 | 2 | upgrades take effect now (Razorpay prorates) |
 | B2 | 2 | downgrades at period end, refused while usage exceeds the smaller plan |
@@ -113,5 +132,6 @@ Common rules for every item: S4b design (Inter, navy/slate/blue, 100dvh), kit co
 | B4 | 2 | console assign-plan allowed for paying shops (changes the plan at Razorpay; step-up, reason) |
 | B5 | 4 | nightly export retention 7 daily + 4 weekly; older nightly files deleted |
 | B6 | 5 | credit and part payment need `sales:credit` and a named customer; total dues stay within the credit limit (none set = no credit); no per-sale override |
-| — | 1 | platform user page uses existing tables and `platform_users:manage`; temporary first password shown once to the adding admin |
-| — | 4 | "Finalise deletion" marks the tenant deleted; no schema or file drop |
+| — | 1 | *Changed*: invite link (7 days, emailed + copy once), no password shown; MFA forced at first sign-in |
+| — | 4 | *Changed*: finalising cancels Razorpay, blocks logins, needs the verified final export; no schema or file drop; pruning keeps finals and the latest verified export |
+| — | 5 | **Refund rule (§5.3): waiting for the owner** |
