@@ -65,7 +65,7 @@ Fixed earlier in Phase 3 (2026-10-27): NUL bytes in JSON/CSV (RejectNUL middlewa
 | # | Item | Why open |
 |---|---|---|
 | O1 | Razorpay test-mode checks R1–R11 (BILLING_DESIGN §10) | Need a Razorpay test account and manual payments |
-| O2 | Restore-test POST has no step-up although PHASE1_DESIGN §7.1 lists it | Security change: waiting for the owner (a test pins today's behaviour) |
+| O2 | ~~Restore-test POST has no step-up~~ | **Closed 2026-11-02**: owner approved; step-up required, tested (refused without a fresh code, nothing queued; accepted after step-up) |
 | O3 | CI has not run on the new commits | Needs a push to `go-backend/phase2` (draft PR #1); every CI gate passes locally |
 | O4 | Running all integration packages at once on this laptop sometimes times out starting containers (provisioning, migrate, tenantio) | Machine load; each passes on its own and CI ran them before |
 | O5 | Checkout p95 105 ms vs 60 ms target (p50 28 ms) at ~50 req/s | Measured with app and Postgres on one shared laptop. Next: measure on a 4 vCPU node with a separate database; then batch the checkout statements (pgx batch, multi-row insert) as §9 plans |
@@ -126,7 +126,7 @@ Environment: WSL2 laptop, 8 CPUs, 5.9 GB for Docker; app and Postgres share the 
 - ✅ Dependencies: 0 reachable Go vulnerabilities, 0 npm production advisories
 - ⬜ Push the branch so CI runs on draft PR #1 (O3); merge only when the owner decides
 - ⬜ Razorpay test-mode checks R1–R11 (O1) and their results applied (OPERATIONS §9 step 7)
-- ⚠ Restore-test step-up (O2)
+- ✅ Restore-test step-up (O2, closed 2026-11-02)
 
 **Operations (OPERATIONS §9 go-live)**
 - ⬜ `BASE_DOMAIN`, `PLATFORM_NAME`, `CONTACT_EMAIL` (also receives override notices); real Terms and Privacy pages

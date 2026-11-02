@@ -53,11 +53,12 @@ export default function TenantExports({ tenant }) {
 
   const restoreTest = async (exportId) => {
     try {
-      await api.post(`${base}/restore-tests`, exportId ? { exportId } : {});
+      await withStepUp(() => api.post(`${base}/restore-tests`, exportId ? { exportId } : {}));
       setNotice(null);
     toast.success('Restore test queued. It runs with "posctl tenant restore-tests" (see below).');
       load();
     } catch (err) {
+      if (err.code === 'CANCELLED') return; // the MFA prompt was closed
       setNotice({ kind: 'error', text: err.code === 'CONFLICT' ? 'A restore of this tenant is already queued or running.' : err.message });
     }
   };

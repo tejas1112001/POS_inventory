@@ -81,12 +81,11 @@ var consoleMatrix = map[string]consoleSpec{
 	// delete / restore: super_admin, step-up.
 	"DELETE /tenants/{id}":       {roles: roles(sa), stepUp: true},
 	"POST /tenants/{id}/restore": {roles: roles(sa), stepUp: true},
-	// export / restore-test: super_admin. §7.1 lists step-up for both; the
-	// build asks for it on export only (PHASE2_GATE_REPORT, step 18). A
-	// restore test only writes a scratch schema. Raised in Phase 3.
+	// export / restore-test: super_admin, both with step-up (§7.1; restore
+	// tests since the owner's decision of 2026-11-02).
 	"POST /tenants/{id}/exports":       {roles: roles(sa), stepUp: true},
 	"GET /tenants/{id}/exports":        {roles: roles(sa)},
-	"POST /tenants/{id}/restore-tests": {roles: roles(sa)},
+	"POST /tenants/{id}/restore-tests": {roles: roles(sa), stepUp: true},
 	"GET /tenants/{id}/restore-tests":  {roles: roles(sa)},
 	// plans:manage = super_admin, billing_admin; the plan list is also
 	// readable with billing:view (support).

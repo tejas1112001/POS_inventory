@@ -27,7 +27,8 @@ import (
 func (h *HTTP) mountExports(p chi.Router) {
 	p.With(h.need(PermTenantsExport), h.stepUpRequired).Post("/tenants/{id}/exports", h.requestExport)
 	p.With(h.need(PermTenantsExport)).Get("/tenants/{id}/exports", h.listExports)
-	p.With(h.need(PermTenantsExport)).Post("/tenants/{id}/restore-tests", h.requestRestoreTest)
+	// Step-up as PHASE1_DESIGN §7.1 lists (owner decision 2026-11-02).
+	p.With(h.need(PermTenantsExport), h.stepUpRequired).Post("/tenants/{id}/restore-tests", h.requestRestoreTest)
 	p.With(h.need(PermTenantsExport)).Get("/tenants/{id}/restore-tests", h.listRestores)
 }
 

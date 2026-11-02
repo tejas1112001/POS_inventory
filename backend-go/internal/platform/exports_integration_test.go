@@ -98,10 +98,16 @@ func TestExportsAndRestoreTestsInTheConsole(t *testing.T) {
 		require.Equal(t, 404, e.do(req{method: "GET", path: "/tenants/" + id + "/restore-tests", token: s.token}).Code, id)
 	}
 
-	// Restore tests need no step-up, but a succeeded export of this tenant.
+	// Restore tests need a fresh step-up (PHASE1_DESIGN §7.1, owner
+	// decision 2026-11-02) and a succeeded export of this tenant.
 	e.advance(6 * time.Minute) // step-up expired
-	require.Equal(t, 404, e.do(req{method: "POST", path: "/tenants/" + a + "/restore-tests", token: s.token}).Code, "nothing exported yet")
 	succeed(t, exportID)
+	stale := e.do(req{method: "POST", path: "/tenants/" + a + "/restore-tests", token: s.token})
+	require.Equal(t, 403, stale.Code, "no fresh MFA code: refused")
+	require.Contains(t, stale.Raw, "STEP_UP_REQUIRED")
+	require.Empty(t, ids(t, e.do(req{method: "GET", path: "/tenants/" + a + "/restore-tests", token: s.token})), "nothing was queued")
+	e.stepUp(t, s)
+	require.Equal(t, 404, e.do(req{method: "POST", path: "/tenants/" + b + "/restore-tests", token: s.token}).Code, "nothing exported yet")
 	rt := e.do(req{method: "POST", path: "/tenants/" + a + "/restore-tests", token: s.token})
 	require.Equal(t, 202, rt.Code, rt.Raw)
 	require.Equal(t, exportID, rt.Body["exportId"], "the latest succeeded export")
