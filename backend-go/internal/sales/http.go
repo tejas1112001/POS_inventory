@@ -215,6 +215,7 @@ type InvoiceJSON struct {
 }
 
 type invoiceCustomer struct {
+	ID     int64  `json:"id"`
 	Name   string `json:"name"`
 	Avatar string `json:"avatar"`
 }
@@ -222,7 +223,7 @@ type invoiceCustomer struct {
 const (
 	qInvoiceFilter = ` FROM sales s WHERE s.status <> 'Void' AND ($1 = 0 OR s.user_id = $1)`
 	qInvoices      = `SELECT s.id, s.reference, s.date, s.due_date, s.total, s.paid, s.due,
-			CASE WHEN ` + sqlOverdue + ` THEN 'Overdue' ELSE s.payment_status END, c.name, c.image_file_id
+			CASE WHEN ` + sqlOverdue + ` THEN 'Overdue' ELSE s.payment_status END, c.name, c.image_file_id, s.customer_id
 		FROM sales s LEFT JOIN customers c ON c.id = s.customer_id
 		WHERE s.status <> 'Void' AND ($1 = 0 OR s.user_id = $1)
 		ORDER BY s.date DESC, s.id DESC LIMIT $2 OFFSET $3`
@@ -252,20 +253,21 @@ func (a *API) invoices(w http.ResponseWriter, r *http.Request) {
 		defer rows.Close()
 		for rows.Next() {
 			var (
-				inv  InvoiceJSON
-				date time.Time
-				due  *time.Time
-				name *string
-				img  *uuid.UUID
+				inv    InvoiceJSON
+				date   time.Time
+				due    *time.Time
+				name   *string
+				custID int64
+				img    *uuid.UUID
 			)
-			if err := rows.Scan(&inv.ID, &inv.InvoiceNo, &date, &due, &inv.Amount, &inv.Paid, &inv.AmountDue, &inv.Status, &name, &img); err != nil {
+			if err := rows.Scan(&inv.ID, &inv.InvoiceNo, &date, &due, &inv.Amount, &inv.Paid, &inv.AmountDue, &inv.Status, &name, &img, &custID); err != nil {
 				return err
 			}
 			inv.DueDate = date.In(s.loc).Format("02 Jan 2006")
 			if due != nil {
 				inv.DueDate = due.UTC().Format("02 Jan 2006")
 			}
-			inv.Customer = invoiceCustomer{Name: "N/A"}
+			inv.Customer = invoiceCustomer{ID: custID, Name: "N/A"}
 			if name != nil {
 				inv.Customer.Name = *name
 				if img != nil {

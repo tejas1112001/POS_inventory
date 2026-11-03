@@ -1,6 +1,8 @@
 // Page settings for the RecordsPage lists (categories, brands, units,
 // customers, suppliers): columns, form fields and how a form becomes the
 // request body. Field names match the server's.
+import { Wallet } from 'lucide-react';
+import { formatCurrency } from '@/lib/format';
 import { AuthImage } from '@/components/shared/auth-image';
 import StatusBadge from '@/components/kit/StatusBadge';
 import { ImageField, SelectField, STATUS_OPTIONS, TextAreaField, TextField } from '@/components/kit/Form';
@@ -101,8 +103,19 @@ export const customerConfig = {
     { id: 'phone', header: 'Phone', card: 'subtitle', cell: (r) => dash(r.phone) },
     { id: 'email', header: 'Email', card: 'meta', className: 'hidden md:table-cell', cell: (r) => dash(r.email) },
     { id: 'city', header: 'City', card: 'hidden', className: 'hidden lg:table-cell', cell: (r) => dash(r.city) },
+    // S10 item 5: what the customer owes now, and their credit limit.
+    {
+      id: 'due',
+      header: 'Owes',
+      card: 'meta',
+      className: 'text-right tabular-nums',
+      cell: (r) => (Number(r.due) > 0 ? <span className="font-medium text-danger-fg">{formatCurrency(r.due)}</span> : '—'),
+    },
+    { id: 'creditLimit', header: 'Credit limit', card: 'hidden', className: 'hidden lg:table-cell text-right tabular-nums', cell: (r) => (r.creditLimit == null ? 'No credit' : formatCurrency(r.creditLimit)) },
     status,
   ],
+  // The customer's account: dues, payments, statement, credit limit.
+  extraActions: (row, navigate) => [{ label: 'Account and dues', icon: Wallet, onSelect: () => navigate(`/customers/${row.id}`) }],
   defaults: (r) => ({ name: r.name || '', phone: r.phone || '', email: r.email || '', address: r.address || '', city: r.city || '', country: r.country || '', status: r.status || 'Active', image: undefined }),
   payload: (v) => withImage({ name: trim(v.name), phone: trim(v.phone), email: trim(v.email), address: trim(v.address), city: trim(v.city), country: trim(v.country), status: v.status }, v),
   fields: contactFields(true),

@@ -1,3 +1,4 @@
+import { COLLECT_METHODS, methodLabel } from '@/lib/payments';
 import { toast } from '../../shared/toast/store';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -34,7 +35,7 @@ export default function AddSales() {
   const [products, setProducts] = useState([]);
   const [info, setInfo] = useState({ date: today(), customerId: '', storeId: '', status: 'Completed', note: '' });
   const [lines, setLines] = useState([newLine()]);
-  const [pay, setPay] = useState({ payment_method: 'Cash', discount: '', shipping: '', paid: '' });
+  const [pay, setPay] = useState({ method: 'cash', discount: '', shipping: '', paid: '', dueDate: '' });
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
   const [changed, setChanged] = useState(null);
@@ -106,10 +107,16 @@ export default function AddSales() {
       storeId: Number(info.storeId),
       status: info.status,
       note: info.note || undefined,
-      payment_method: pay.payment_method || undefined,
       discount: num(pay.discount),
       shipping: num(pay.shipping),
-      paid: num(pay.paid),
+      // S10 item 5: paid in full (empty), or part now and the rest on the
+      // customer's account. The server checks the credit rules.
+      ...(pay.paid === ''
+        ? { payment_method: pay.method }
+        : {
+            payments: [...(Number(pay.paid) > 0 ? [{ method: pay.method, amount: Number(pay.paid) }] : []), { method: 'credit' }],
+            ...(pay.dueDate ? { dueDate: pay.dueDate } : {}),
+          }),
       orderItems: lines
         .filter((l) => l.variantId)
         .map((l) => ({
@@ -312,17 +319,25 @@ export default function AddSales() {
             {currentStep === 2 && (
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 <Field label="Payment method">
-                  <select className={inputCls} value={pay.payment_method} onChange={(e) => setPay({ ...pay, payment_method: e.target.value })}>
-                    <option value="Cash">Cash</option>
-                    <option value="Card">Card</option>
-                    <option value="Bank Transfer">Bank transfer</option>
-                    <option value="UPI">UPI</option>
-                    <option value="Credit">On credit</option>
+                  <select className={inputCls} value={pay.method} onChange={(e) => setPay({ ...pay, method: e.target.value })}>
+                    {COLLECT_METHODS.map((m) => (
+                      <option key={m} value={m}>
+                        {methodLabel(m)}
+                      </option>
+                    ))}
                   </select>
                 </Field>
-                <Field label={`Paid amount (${currencySymbol()})`} hint="Leave empty if the customer paid in full.">
+                <Field
+                  label={`Paid now (${currencySymbol()})`}
+                  hint="Leave empty if paid in full. Anything less goes on the customer's account (a named customer with a credit limit, and the owner's permission)."
+                >
                   <input type="number" min="0" step="0.01" className={inputCls} value={pay.paid} onChange={(e) => setPay({ ...pay, paid: e.target.value })} />
                 </Field>
+                {pay.paid !== '' && (
+                  <Field label="Rest due by" hint="Empty: 30 days after the sale.">
+                    <input type="date" className={inputCls} value={pay.dueDate} onChange={(e) => setPay({ ...pay, dueDate: e.target.value })} />
+                  </Field>
+                )}
                 <Field label={`Discount (${currencySymbol()})`}>
                   <input type="number" min="0" step="0.01" className={inputCls} value={pay.discount} onChange={(e) => setPay({ ...pay, discount: e.target.value })} />
                 </Field>

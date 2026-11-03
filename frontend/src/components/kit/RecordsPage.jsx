@@ -18,7 +18,8 @@ import { FormSheet, STATUS_OPTIONS } from './Form';
 // in a sheet and delete with confirmation. Used by categories, brands,
 // units, customers and suppliers.
 //   config: { endpoint, module, noun, nounPlural, description, searchHint,
-//             columns, fields(row), defaults(row), payload(values, row) }
+//             columns, fields(row), defaults(row), payload(values, row),
+//             extraActions(row, navigate) — more row actions, optional }
 export default function RecordsPage({ config, startNew = false }) {
   const { endpoint, module, noun, nounPlural, description, searchHint, columns, fields, defaults, payload } = config;
   const { hasPermission } = usePermission();
@@ -118,6 +119,7 @@ export default function RecordsPage({ config, startNew = false }) {
           <RowActions
             label={row.name}
             actions={[
+              ...(config.extraActions ? config.extraActions(row, navigate) : []),
               can('edit') && { label: 'Edit', icon: Pencil, onSelect: () => setEditing(row) },
               can('delete') && { label: 'Delete', icon: Trash2, destructive: true, onSelect: () => remove(row) },
             ]}

@@ -113,6 +113,7 @@ func TestSplitPartPaymentAndCredit(t *testing.T) {
 	require.Len(t, ov, 1)
 	inv := get(t, host, "/api/invoices?limit=200", tok)
 	require.Contains(t, inv.Raw, `"dueDate":"31 May 2003"`)
+	require.Contains(t, inv.Raw, fmt.Sprintf(`"customer":{"id":%v,"name":"Credit Kiran"`, cid), "the due report links to the customer")
 
 	// Sales by payment method.
 	rep := get(t, host, "/api/sales/report/payment-methods?startDate=2003-01-01&endDate=2003-12-31", tok)

@@ -82,6 +82,8 @@ Common rules for every item: S4b design (Inter, navy/slate/blue, 100dvh), kit co
 | demo-shop | 41 | 41 | 41 (all cash) | 0 |
 | 7 other dev shops (console test shops, tejas) | 0 | 0 | 0 | 0 |
 
+*Fix-up 00013 (same day):* the old sales screens stored `payment_method = 'credit'` for **card** payments (their button says Card), which 00012 mapped to cash. Migration 00013 changes those backfilled rows to card (amounts unchanged), and the old single-payment field now reads "credit" as card (in `payments[]` "credit" still means on account). Copy first, then dev: demo-shop 40 cash + 1 card, 0 sales whose sum differs.
+
 A migration test (`internal/migrate`, `TestPaymentsBackfill`) covers the method mapping (Cash, UPI, Credit Card → card, none → cash, Bank Transfer → deposit, unknown → cash), cash tendered kept, no row for unpaid sales, and returns keeping their amounts.
 
 **Implementation notes.** `sale_returns.applied_to_due` records option A (the part of a return that reduced the sale's due; check `paid + due + applied_to_due = total`). Credit applies to *completed* sales: a pending order is neither checked against the limit nor given a due date until it is completed. Existing sales keep no due date (never Overdue). Overdue is worked out when read (due > 0 and due date before today in the shop's time zone); the stored payment_status stays Paid / Partial / Unpaid. A sale paid by a collection, like one with returns, cannot be edited or voided until the collection is reversed.

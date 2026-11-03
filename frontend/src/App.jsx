@@ -28,6 +28,8 @@ import SalesReturn from './pages/SalesReturn';
 import ReturnDetail from './pages/ReturnDetail';
 import AddSalesReturn from './pages/AddSalesReturn';
 import Customers from './pages/Customers';
+import CustomerAccount from './pages/CustomerAccount';
+import CustomerStatement from './pages/CustomerStatement';
 import Users from './pages/Users';
 import Suppliers from './pages/Suppliers';
 import PurchaseReport from './pages/PurchaseReport';
@@ -118,6 +120,9 @@ function AppRoutes() {
       <Route path="/reports" element={<Navigate to="/sales-report" replace />} />
       <Route path="/customer-due-report" element={<ProtectedLayout module="reports" action="view"><CustomerDueReport /></ProtectedLayout>} />
       <Route path="/customers" element={<ProtectedLayout module="customers" action="view"><Customers /></ProtectedLayout>} />
+      <Route path="/customers/:id" element={<ProtectedLayout module="customers" action="view"><CustomerAccount /></ProtectedLayout>} />
+      {/* Printable: no sidebar or top bar. */}
+      <Route path="/customers/:id/statement" element={<ProtectedRoute><ProtectedRoute module="customers" action="view"><CustomerStatement /></ProtectedRoute></ProtectedRoute>} />
       <Route path="/add-customer" element={<ProtectedLayout module="customers" action="create"><Customers startNew /></ProtectedLayout>} />
       <Route path="/customer-report" element={<ProtectedLayout module="reports" action="view"><CustomerReport /></ProtectedLayout>} />
       <Route path="/inventory" element={<ProtectedLayout module="inventory" action="view"><Inventory /></ProtectedLayout>} />

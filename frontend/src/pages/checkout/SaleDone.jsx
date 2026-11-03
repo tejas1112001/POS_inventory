@@ -1,3 +1,4 @@
+import { formatDay, methodLabel } from '@/lib/payments';
 import { useEffect, useState } from 'react';
 import { CheckCircle2, FileText, Plus, Printer } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -62,7 +63,11 @@ export default function SaleDone({ sale, onPrint, onReceipt, onNewSale }) {
             </DialogTitle>
             <DialogDescription>
               {sale.reference} · {formatCurrency(sale.total)}
-              {sale.payment_method ? ` · ${sale.payment_method}` : ''}
+              {sale.payments?.length
+                ? ` · ${[...new Set(sale.payments.map((p) => methodLabel(p.method)))].join(' + ')}`
+                : sale.payment_method
+                  ? ` · ${sale.payment_method}`
+                  : ''}
             </DialogDescription>
           </DialogHeader>
 
@@ -74,6 +79,12 @@ export default function SaleDone({ sale, onPrint, onReceipt, onNewSale }) {
             </div>
           ) : (
             <p className="rounded-lg bg-accent px-4 py-4 text-center text-lg font-semibold text-navy">Paid {formatCurrency(sale.paid)}</p>
+          )}
+          {Number(sale.due) > 0 && (
+            <p className="rounded-lg border border-warning/40 bg-warning-bg px-4 py-2 text-center text-sm font-medium" role="status">
+              {formatCurrency(sale.due)} on {sale.customer?.name || 'the customer'}&apos;s account
+              {sale.dueDate ? `, due by ${formatDay(sale.dueDate)}` : ''}.
+            </p>
           )}
           {sale.receipt_email && <p className="text-center text-sm text-muted-foreground">The receipt will be emailed to {sale.receipt_email}.</p>}
 

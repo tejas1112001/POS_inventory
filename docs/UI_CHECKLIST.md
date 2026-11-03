@@ -253,3 +253,30 @@ How to check:
 Known problems:
 - In dev the restore test only runs when `posctl tenant restore-tests` is run by hand.
 - Nightly exports hold data only (not uploaded images); the final export holds both.
+
+## S10 – Item 5: Split and part payment, customer dues
+
+Before you start: Settings stays as it is; the owner has the new permissions "Sell on credit or part payment" and "Set customer credit limits" (not given to Admin); Owner and Admin have "Collect customer payments"; Biller has none of them.
+
+How to check:
+1. Customers: the list has **Owes** and **Credit limit** ("No credit" by default) columns, and a row action **Account and dues**.
+2. Account page (owner): **Change** next to Credit limit → set e.g. ₹1,000 (or "No credit for this customer"). Walk-in cannot get a limit. An admin or biller sees no Change link.
+3. New checkout with that customer → Take payment: pick Cash, type 100 → **Add this payment and take another**; pick UPI, amount 50, reference; tick **Put what is left on <customer>'s account**, due date defaults to 30 days → Complete. The done screen shows "Cash + UPI + On account" and "₹X on <customer>'s account, due by <date>".
+4. The order page shows each payment line (Cash, UPI (ref)), Paid, **Balance due** and **Due by**; the receipt PDF and the receipt email show the payment lines, "Balance due" and the due date.
+5. Credit limit: put more on account than the limit allows → the sheet stays open with "Credit limit reached: <customer> owes ₹X of ₹Y. Take ₹Z now or ask the owner to raise the limit."
+6. With Walk-in, or as a cashier/admin without the permission, there is no "on account" box and a short payment is refused.
+7. Quick path unchanged: Cash → Exact → Complete (or Card → Complete) works as before.
+8. Account page: **Collect payment** (amount defaults to what is owed; method, reference) → it pays the oldest sale first; more than owed is refused. The payment appears under "Payments received" with the sales it paid; **Reverse** asks for a reason, adds a reversal line and the dues come back; a payment can be reversed once.
+9. A sale paid by a collection cannot be voided ("Reverse that payment first").
+10. **Statement** → choose dates → opening balance, each sale, payment, collection, reversal, return and refund with the running balance, closing "Balance due" equal to "Owes now". **Print** prints only the statement (A4).
+11. Return part of a sale that still has something due (Return items on the order): the due drops first and only the rest is refunded; the return shows "applied to due".
+12. Orders list: Paid / Partial / Unpaid / **Overdue** (a credit sale past its due date); the Payment filter "Overdue" works. Invoices & dues show the due date.
+13. Dashboard: **Collected** = payments received in the period (including dues collected); Due from customers / overdue use the due date.
+14. Reports → Sales: **Sales by payment method** table (method, payments, of which dues collected, amount; "Money taken" total).
+15. Back office **New order**: method + "Paid now" (empty = in full; less = rest on account with "Rest due by").
+16. Customer Due report: the customer name opens the account page; dues already include returns.
+
+Known problems:
+- The old POS screen (when New checkout is off) still takes one payment; it cannot split.
+- Existing sales from before this change have no due date, so they never show Overdue.
+- Credit applies to completed sales; a pending order has no due date until it is completed.

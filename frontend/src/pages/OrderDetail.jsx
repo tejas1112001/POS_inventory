@@ -1,3 +1,4 @@
+import { formatDay, methodLabel } from '@/lib/payments';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Ban, FileText, Printer, Undo2 } from 'lucide-react';
@@ -131,7 +132,14 @@ export default function OrderDetail() {
           <Field label="Customer">{sale.customer?.name}</Field>
           <Field label="Store">{sale.Store?.name}</Field>
           <Field label="Cashier">{sale.user?.name}</Field>
-          <Field label="Payment">{sale.payment_method ? `${sale.payment_method} (${sale.payment_status})` : sale.payment_status}</Field>
+          <Field label="Payment">
+            {sale.payments?.length
+              ? `${[...new Set(sale.payments.filter((p) => p.amount > 0).map((p) => methodLabel(p.method)))].join(' + ')} (${sale.payment_status})`
+              : sale.payment_method
+                ? `${sale.payment_method} (${sale.payment_status})`
+                : sale.payment_status}
+          </Field>
+          {sale.dueDate && n(sale.due) > 0 && <Field label="Due by">{formatDay(sale.dueDate)}</Field>}
           {sale.receipt_email && <Field label="Receipt emailed to">{sale.receipt_email}</Field>}
           {sale.note && <Field label="Sale note">{sale.note}</Field>}
           {sale.payment_note && <Field label="Payment note">{sale.payment_note}</Field>}
@@ -191,10 +199,20 @@ export default function OrderDetail() {
           {n(sale.shipping) > 0 && <Row label="Shipping" value={formatCurrency(sale.shipping)} />}
           <div className="my-1 border-t" />
           <Row strong label="Total" value={formatCurrency(sale.total)} />
+          {(sale.payments || [])
+            .filter((p) => p.method !== 'credit')
+            .map((p) => (
+              <Row
+                key={p.id}
+                muted
+                label={`${p.customerPaymentId ? (n(p.amount) < 0 ? 'Reversed' : 'Collected') + ' · ' : ''}${methodLabel(p.method)}${p.reference ? ` (${p.reference})` : ''}`}
+                value={formatCurrency(p.amount)}
+              />
+            ))}
           <Row label="Paid" value={formatCurrency(sale.paid)} />
           {n(sale.tendered) > 0 && <Row muted label="Received" value={formatCurrency(sale.tendered)} />}
           {n(sale.tendered) > 0 && <Row muted label="Change" value={formatCurrency(sale.change)} />}
-          {n(sale.due) > 0 && <Row strong label="Due" value={formatCurrency(sale.due)} />}
+          {n(sale.due) > 0 && <Row strong label={sale.overdue ? 'Due (overdue)' : 'Balance due'} value={formatCurrency(sale.due)} />}
         </section>
       </div>
 

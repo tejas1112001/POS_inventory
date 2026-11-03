@@ -1,3 +1,4 @@
+import { usePermission } from '@/context/PermissionContext';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Banknote, HelpCircle, Loader2, Minus, Plus, RefreshCw, Search, ShoppingCart, Star, Trash2, User, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -56,6 +57,7 @@ const finePointer = () => typeof window !== 'undefined' && window.matchMedia?.('
 // "Use the new checkout" in Settings. Totals shown before PAY are the
 // server's (POST /api/sales/quote); the sale itself is unchanged.
 export default function Checkout() {
+  const { hasPermission } = usePermission();
   const { currentUser } = usePos();
   const { settings } = useShopSettings();
   const confirm = useConfirm();
@@ -248,6 +250,7 @@ export default function Checkout() {
   }, [lines, selected, search, openPay, c]);
 
   const customer = c.customers.find((x) => String(x.id) === String(c.customerId));
+  const canCredit = hasPermission('sales', 'credit');
   const store = c.stores.find((s) => String(s.id) === String(c.storeId));
   const q = c.quoteReady ? c.quote.data : null;
   const estimate = lines.reduce((n, l) => n + l.price * l.quantity, 0);
@@ -541,7 +544,18 @@ export default function Checkout() {
         onAdded={(cu) => c.setCustomers((prev) => [...prev, cu])}
       />
       <ShortcutsHelp open={help} onClose={() => setHelp(false)} />
-      <PaymentSheet open={payOpen} onClose={() => setPayOpen(false)} total={total} customerEmail={customer?.email || ''} onPay={pay} />
+      <PaymentSheet
+        open={payOpen}
+        onClose={() => setPayOpen(false)}
+        total={total}
+        customerEmail={customer?.email || ''}
+        onPay={pay}
+        onAccount={
+          canCredit && customer && String(customer.id) !== String(c.walkIn?.id)
+            ? { name: customer.name, owes: Number(customer.due) || 0, limit: customer.creditLimit == null ? null : Number(customer.creditLimit) }
+            : null
+        }
+      />
       <SaleDone
         sale={receiptFor ? null : done}
         onPrint={() => setReceiptFor({ sale: done, print: true })}

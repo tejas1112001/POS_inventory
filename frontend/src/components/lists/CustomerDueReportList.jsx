@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { ProductImage } from '@/components/shared/product-image';
 import React, { useState, useMemo } from 'react';
 import { useUI } from "../ListComponents/useUI";
@@ -53,7 +54,13 @@ export default function CustomerDueReportList({ reports }) {
       cell: ({ row }) => (
         <div className="flex items-center">
           <ProductImage name={row.original.customer.name} src={row.original.customer.image} size={32} rounded="rounded-full" className="mr-3" />
-          <span>{row.original.customer.name}</span>
+          {row.original.customer.id ? (
+            <Link to={`/customers/${row.original.customer.id}`} className="text-primary hover:underline">
+              {row.original.customer.name}
+            </Link>
+          ) : (
+            <span>{row.original.customer.name}</span>
+          )}
         </div>
       ),
       size: 200,

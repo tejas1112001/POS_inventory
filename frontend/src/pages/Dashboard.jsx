@@ -294,7 +294,7 @@ export default function Dashboard() {
             </section>
 
             <section aria-label="Money" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-              <Stat label="Collected" value={formatCurrency(cur.paid)} />
+              <Stat label="Collected" value={formatCurrency(cur.collected ?? cur.paid)} hint="Payments received, incl. dues" />
               {!ownOnly && <Stat label="Due from customers" value={formatCurrency(cur.due)} hint={hasPermission('reports', 'view') ? 'See customer dues →' : undefined} to={hasPermission('reports', 'view') ? '/customer-due-report' : undefined} />}
               <Stat label="Refunds" value={formatCurrency(cur.returns)} />
               <Stat label="Discounts given" value={formatCurrency(cur.discounts)} />
