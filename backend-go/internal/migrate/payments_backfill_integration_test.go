@@ -51,7 +51,7 @@ func TestPaymentsBackfill(t *testing.T) {
 	cases := []old{
 		{"Cash", "100", "100", "150", "cash"}, {"UPI", "200", "50", nil, "upi"}, {"Credit Card", "300", "300", nil, "card"},
 		{nil, "400", "400", nil, "cash"}, {"Bank Transfer", "500", "500", nil, "deposit"}, {"Cash", "600", "0", nil, ""},
-		{"Something odd", "700", "10.5", nil, "cash"},
+		{"Something odd", "700", "10.5", nil, "cash"}, {"credit", "800", "800", nil, "card"},
 	}
 	for i, c := range cases {
 		exec(`INSERT INTO sales (reference, status, payment_status, payment_method, subtotal, total, paid, due, tendered, change_due,
@@ -71,8 +71,8 @@ func TestPaymentsBackfill(t *testing.T) {
 	require.NoError(t, admin.QueryRow(ctx, `SELECT (SELECT count(*) FROM `+sc+`.sales), (SELECT count(*) FROM `+sc+`.sale_payments),
 		(SELECT count(*) FROM `+sc+`.sales s WHERE s.paid <> coalesce((SELECT sum(amount) FROM `+sc+`.sale_payments p WHERE p.sale_id = s.id), 0))`).
 		Scan(&sales, &rows, &differ))
-	require.Equal(t, 7, sales)
-	require.Equal(t, 6, rows, "one row per sale with something paid")
+	require.Equal(t, 8, sales)
+	require.Equal(t, 7, rows, "one row per sale with something paid")
 	require.Zero(t, differ, "every sale's payments sum to its paid amount")
 	for i, c := range cases {
 		var method string

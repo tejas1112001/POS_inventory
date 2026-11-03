@@ -11,7 +11,7 @@ func dec(s string) decimal.Decimal { return decimal.RequireFromString(s) }
 
 func TestMapMethod(t *testing.T) {
 	for in, want := range map[string]string{"": "cash", "Cash": "cash", "UPI": "upi", "GPay UPI": "upi", "Credit Card": "card",
-		"card": "card", "Cheque": "cheque", "Bank Transfer": "deposit", "NEFT": "deposit", "Points": "points", "credit": "credit", "Other": "cash"} {
+		"card": "card", "Cheque": "cheque", "Bank Transfer": "deposit", "NEFT": "deposit", "Points": "points", "credit": "card", "Other": "cash"} {
 		require.Equal(t, want, MapMethod(in), in)
 	}
 }

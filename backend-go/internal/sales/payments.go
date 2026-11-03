@@ -42,10 +42,14 @@ var saleMethods = map[string]bool{MethodCash: true, MethodUPI: true, MethodCard:
 var CollectMethods = map[string]bool{MethodCash: true, MethodUPI: true, MethodCard: true, MethodCheque: true, MethodDeposit: true}
 
 // MapMethod turns a free-text method (the old payment_method field) into
-// one of the list, as the backfill migration does; cash when unknown.
+// one of the list, as the backfill migrations do; cash when unknown. The
+// old screens send "credit" for a card payment (their button says Card),
+// so here it means card; in payments[] "credit" means on account.
 func MapMethod(s string) string {
 	l := strings.ToLower(strings.TrimSpace(s))
 	switch {
+	case strings.Contains(l, "credit"):
+		return MethodCard
 	case saleMethods[l]:
 		return l
 	case strings.Contains(l, "upi"):
