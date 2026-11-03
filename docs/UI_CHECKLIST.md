@@ -280,3 +280,14 @@ Known problems:
 - The old POS screen (when New checkout is off) still takes one payment; it cannot split.
 - Existing sales from before this change have no due date, so they never show Overdue.
 - Credit applies to completed sales; a pending order has no due date until it is completed.
+
+## S10 – Item 6: Low-stock alerts
+
+How to check:
+1. Settings → **Notifications**: "Email the owner the low-stock list every morning" is on by default; turning it off is saved and audited like other settings.
+2. Set a product's low-stock level above its quantity (Stock page). Within 5 minutes (or on reload), staff who can see stock get a yellow banner "N items are at or below their low-stock level." with **View stock**; it can be dismissed for this tab and comes back the next day or when the count changes. Users without stock access get no banner.
+3. From 08:00 shop time the worker (job `low_stock_email`, hourly) sends every active owner one email "N items are low on stock at <shop>" (Mailpit), listing up to 50 items with store, quantity left and alert level, and a "See stock" button. Only once a day, never when nothing is low, never when the setting is off.
+4. The Dashboard's Low stock / Out of stock cards are unchanged.
+
+Known problems:
+- The email goes out at the first hourly run after 08:00 shop time (up to an hour later).

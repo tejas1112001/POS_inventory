@@ -1,0 +1,11 @@
+Hello {{.Name}},
+
+These items at {{.BusinessName}} are at or below their low-stock level ({{.Date}}):
+
+{{range .Items}}- {{.Name}}{{if .SKU}} ({{.SKU}}){{end}}, {{.Store}}: {{.Qty}} left (alert at {{.Alert}})
+{{end}}{{if .More}}… and {{.More}} more.
+{{end}}{{if .Link}}
+See them all: {{.Link}}
+{{end}}
+-- 
+{{.Footnote}}

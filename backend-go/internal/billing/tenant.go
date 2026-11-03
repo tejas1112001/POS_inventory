@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -374,12 +375,44 @@ func (a *TenantAPI) banners(w http.ResponseWriter, r *http.Request) {
 		}
 		return nil
 	})
+	if err == nil && p.Has("inventory:view") {
+		err = a.Svc.Sessions.InTenantTx(r.Context(), t, tenancy.TxOptions{Access: tenancy.ReadOnly}, func(tx tenancy.TenantTx) error {
+			var low int
+			if err := tx.QueryRow(r.Context(), qLowStockCount).Scan(&low); err != nil {
+				return err
+			}
+			if low > 0 {
+				out = append(out, lowStockBanner(low, a.Svc.now()))
+			}
+			return nil
+		})
+	}
 	if err != nil {
 		httpx.WriteError(w, r, err)
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	httpx.WriteJSON(w, http.StatusOK, out)
+}
+
+// qLowStockCount counts stock rows at or below their alert level (out of
+// stock included), as the dashboard and the daily email do (S10 item 6).
+const qLowStockCount = `SELECT count(*) FROM inventories i
+	JOIN product_variants v ON v.id = i.variant_id AND v.deleted_at IS NULL
+	JOIN products p ON p.id = v.product_id AND p.deleted_at IS NULL
+	JOIN stores st ON st.id = i.store_id AND st.deleted_at IS NULL AND st.status = 'Active'
+	WHERE i.qty <= i.quantity_alert`
+
+// lowStockBanner is the in-app low-stock notice for users who can see
+// stock. Its ID changes with the day and the count, so a dismissed banner
+// comes back when more items run low.
+func lowStockBanner(n int, now time.Time) Banner {
+	msg := fmt.Sprintf("%d items are at or below their low-stock level.", n)
+	if n == 1 {
+		msg = "1 item is at or below its low-stock level."
+	}
+	return Banner{ID: fmt.Sprintf("low-stock-%s-%d", now.UTC().Format("20060102"), n), Kind: "stock", Level: "warning",
+		Message: msg, Action: &BannerAction{Label: "View stock", Path: "/inventory"}, Dismissible: true}
 }
 
 // liveUsage counts the shop's own use of its limits (owner changes).

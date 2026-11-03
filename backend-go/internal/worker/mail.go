@@ -546,6 +546,8 @@ func (m *Mailer) buildTenant(ctx context.Context, st *tenantState, r row) (conte
 	switch r.template {
 	case "receipt":
 		err = m.buildReceipt(ctx, st, r, &c)
+	case mailtmpl.LowStockTemplate:
+		err = m.buildLowStock(st, r, &c)
 	case "password_reset", "user_invite":
 		var o *outcome
 		if o, err = m.buildLink(ctx, st, r, &c); o != nil {

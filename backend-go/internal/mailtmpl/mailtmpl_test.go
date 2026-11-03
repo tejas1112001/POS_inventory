@@ -191,3 +191,22 @@ func TestRestoreNotice(t *testing.T) {
 	require.NotContains(t, h.Subject, "\n")
 	require.NotContains(t, h.HTML, "javascript:")
 }
+
+func TestLowStockEmail(t *testing.T) {
+	d := LowStock{BusinessName: "Asha General Stores", Name: "Asha", Date: "05 Jan 2030", Link: "https://asha.pos.test/inventory", Count: 52}
+	for i := range 52 {
+		d.Items = append(d.Items, LowStockItem{Name: "Item", SKU: "SKU", Store: "Main", Qty: "1", Alert: "5"})
+		_ = i
+	}
+	r, err := RenderLowStock(d)
+	require.NoError(t, err)
+	require.Equal(t, "52 items are low on stock at Asha General Stores", r.Subject)
+	require.Contains(t, r.Text, "… and 2 more.")
+	require.Contains(t, r.HTML, "https://asha.pos.test/inventory")
+	checkSafe(t, r)
+	d.Count, d.Items, d.Link = 1, d.Items[:1], "javascript:alert(1)"
+	r, err = RenderLowStock(d)
+	require.NoError(t, err)
+	require.Equal(t, "1 item is low on stock at Asha General Stores", r.Subject)
+	require.NotContains(t, r.HTML, "javascript:")
+}

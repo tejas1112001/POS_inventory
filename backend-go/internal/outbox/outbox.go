@@ -20,6 +20,7 @@ const (
 	KindTest           = "test"
 	KindCustomer       = "customer"
 	KindPlatformNotice = "platform_notice"
+	KindLowStock       = "low_stock" // the owner's daily low-stock list (S10 item 6)
 )
 
 // Sender policies.

@@ -38,7 +38,7 @@ const MAX_LOGO = 2 * 1024 * 1024;
 const FIELDS = [
   'businessName', 'legalName', 'address', 'phone', 'email', 'currency', 'locale', 'timezone', 'taxLabel',
   'taxRegistrationNo', 'taxSplit', 'pricesIncludeTax', 'maxDiscountPct', 'invoicePrefix', 'receiptHeader', 'receiptFooter',
-  'homePage', 'shopStoreId', 'newCheckout',
+  'homePage', 'shopStoreId', 'newCheckout', 'lowStockEmail',
 ];
 
 function timeZones(current) {
@@ -59,6 +59,7 @@ function fromSettings(s) {
   const out = {};
   for (const k of FIELDS) out[k] = s?.[k] ?? (k === 'pricesIncludeTax' || k === 'newCheckout' ? false : '');
   out.maxDiscountPct = s?.maxDiscountPct != null ? String(s.maxDiscountPct) : '';
+  out.lowStockEmail = s?.lowStockEmail ?? true;
   out.homePage = s?.homePage || 'login';
   out.shopStoreId = s?.shopStoreId != null ? String(s.shopStoreId) : '';
   return out;
@@ -249,6 +250,17 @@ export default function ShopSettings({ canEdit }) {
         {settings?.newCheckoutAllowed === false && (
           <p className="mt-2 text-sm text-muted-foreground">The platform has turned the new checkout off for this shop. Contact support to use it.</p>
         )}
+      </SectionCard>
+
+      <SectionCard title="Notifications">
+        <CheckField
+          id="lowStockEmail"
+          label="Email the owner the low-stock list every morning"
+          hint="From 08:00 shop time, once a day, only when items are at or below their low-stock level. Staff who can see stock also get a banner in the app."
+          checked={form.lowStockEmail}
+          onChange={set('lowStockEmail')}
+          disabled={dis}
+        />
       </SectionCard>
 
       <SectionCard title="Home page">
