@@ -151,6 +151,7 @@ func TestCheckoutPOSPayloadServerTotals(t *testing.T) {
 	// Explicit customer, paid: 0 respected, partial, back-dated, Pending.
 	cu := do(t, rq{method: "POST", host: host, path: "/api/customers", token: tok, body: map[string]any{"name": "Asha"}})
 	require.Equal(t, 201, cu.Code)
+	setCreditLimit(t, "a", cu.Body["id"], "10000")
 	body := posSale(store, line(p, 1))
 	body["customerId"], body["paid"] = cu.Body["id"], 0
 	r = sell(t, "a", tok, body, nil)
@@ -424,7 +425,7 @@ func TestEditKeepsBillerAndVoidRestocks(t *testing.T) {
 	// The catalog price changes; keeping the sale's price is not an override.
 	_, err := admin(t).Exec(context.Background(), `UPDATE `+schema("a")+`.product_variants SET price = 130 WHERE id = $1`, int64(p.vid))
 	require.NoError(t, err)
-	e := do(t, rq{method: "PUT", host: host, path: path, token: tok, body: posSale(store, line(p, 3), line(q, 1))})
+	e := do(t, rq{method: "PUT", host: host, path: path, token: tok, body: paidInFull(posSale(store, line(p, 3), line(q, 1)))})
 	require.Equal(t, 200, e.Code, e.Raw)
 	require.Equal(t, biller, e.Body["user_id"], "original biller kept (Q-10)")
 	require.NotNil(t, e.Body["updated_by"])
@@ -531,4 +532,19 @@ func TestSalesIsolationAcrossTenants(t *testing.T) {
 		require.Equal(t, 204, do(t, rq{method: "DELETE", host: tenants["a"].Host, path: fmt.Sprintf("/api/sales/%v", s.Body["id"]), token: aTok}).Code)
 		return get(t, tenants["a"].Host, fmt.Sprintf("/api/sales/%v", s.Body["id"]), aTok).Body["status"]
 	}())
+}
+
+// setCreditLimit gives a customer a credit limit (S10 B6: no limit, no
+// credit), as the owner would in the customer form.
+func setCreditLimit(t *testing.T, l string, id any, limit string) {
+	t.Helper()
+	_, err := admin(t).Exec(context.Background(), `UPDATE `+schema(l)+`.customers SET credit_limit = $2 WHERE id = $1`, int64(num(id)), limit)
+	require.NoError(t, err)
+}
+
+// paidInFull marks a sale body as paid in full (the server caps paid at
+// the total), for edits that change the total.
+func paidInFull(b map[string]any) map[string]any {
+	b["paid"] = 99999999
+	return b
 }

@@ -68,7 +68,7 @@ func TestReceiptDownloadVersionsAndVoid(t *testing.T) {
 	require.Equal(t, r.Raw, again.Raw, "the stored PDF is served")
 
 	// An edit adds version 2; a void adds version 3. Old versions stay.
-	e := do(t, rq{method: "PUT", host: host, path: fmt.Sprintf("/api/sales/%v", id), token: tok, body: posSale(store, line(p, 3))})
+	e := do(t, rq{method: "PUT", host: host, path: fmt.Sprintf("/api/sales/%v", id), token: tok, body: paidInFull(posSale(store, line(p, 3)))})
 	require.Equal(t, 200, e.Code, e.Raw)
 	require.Equal(t, 200, do(t, rq{method: "GET", host: host, path: s.Body["receiptUrl"].(string), token: tok}).Code)
 	require.Equal(t, 204, do(t, rq{method: "DELETE", host: host, path: fmt.Sprintf("/api/sales/%v", id), token: tok}).Code)

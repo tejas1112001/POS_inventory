@@ -51,9 +51,14 @@ func TestDashboardFiltersScopeAndChart(t *testing.T) {
 	require.Equal(t, 201, march.Code, march.Raw)
 	april := sell(t, "a", btok, dated(store, "2001-04-02", nil, line(p, 1)), nil)
 	require.Equal(t, 201, april.Code, april.Raw)
-	unpaid := sell(t, "a", tok, dated(store, "2001-04-10", 0, line(p, 1)), nil)
+	dc := do(t, rq{method: "POST", host: host, path: "/api/customers", token: tok, body: map[string]any{"name": "Dash Credit"}})
+	require.Equal(t, 201, dc.Code, dc.Raw)
+	setCreditLimit(t, "a", dc.Body["id"], "10000")
+	ub := dated(store, "2001-04-10", 0, line(p, 1))
+	ub["customerId"] = dc.Body["id"]
+	unpaid := sell(t, "a", tok, ub, nil)
 	require.Equal(t, 201, unpaid.Code)
-	require.Equal(t, "Unpaid", unpaid.Body["payment_status"])
+	require.Equal(t, "Overdue", unpaid.Body["payment_status"], "due 30 days after a 2001 sale (S10 item 5)")
 	voided := sell(t, "a", tok, dated(store, "2001-04-11", nil, line(p, 5)), nil)
 	require.Equal(t, 204, do(t, rq{method: "DELETE", host: host, path: fmt.Sprintf("/api/sales/%v", voided.Body["id"]), token: tok}).Code)
 	rb := retBody(march.Body["id"], store, retItem(p, 1))
@@ -73,8 +78,9 @@ func TestDashboardFiltersScopeAndChart(t *testing.T) {
 	require.Positive(t, num(st["totalProducts"]))
 	require.InDelta(t, t1+t2+t3, num(sc["totalAmount"]), 0.001)
 	require.InDelta(t, t1+t2, num(sc["totalPaid"]), 0.001)
-	require.InDelta(t, t3, num(sc["totalUnpaid"]), 0.001)
-	require.Equal(t, 0.0, num(sc["totalOverdue"]))
+	// The unpaid 2001 sale is long past its due date (S10 item 5).
+	require.Equal(t, 0.0, num(sc["totalUnpaid"]))
+	require.InDelta(t, t3, num(sc["totalOverdue"]), 0.001)
 
 	// Calendar months of that year, zero-filled, "Mon YYYY", in order.
 	pts := d["revenueData"].([]any)

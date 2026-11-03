@@ -56,6 +56,10 @@ type saleIn struct {
 	Note          *string   `json:"note"`
 	PaymentNote   *string   `json:"payment_note"`
 	Tendered      money.Dec `json:"tendered"`
+	// Split and part payment (S10 item 5): the payments, and the due date
+	// (YYYY-MM-DD) of what is left on account.
+	Payments []paymentIn `json:"payments"`
+	DueDate  *string     `json:"dueDate"`
 
 	// POS aliases.
 	Method         *string   `json:"method"`
@@ -98,6 +102,8 @@ type cleanSale struct {
 	paymentMethod      *string
 	paymentNote, note  *string
 	receiptEmail       *string
+	payments           []payLine // nil: the old single-payment fields
+	dueDate            string
 }
 
 type fieldErrs map[string]string
@@ -202,6 +208,12 @@ func validate(in saleIn) (cleanSale, error) {
 		if v != nil && len([]rune(*v)) > maxNoteLen {
 			f[k] = fmt.Sprintf("At most %d characters.", maxNoteLen)
 		}
+	}
+	if in.Payments != nil {
+		c.payments = validatePayments(in.Payments, f)
+	}
+	if in.DueDate != nil {
+		c.dueDate = strings.TrimSpace(*in.DueDate)
 	}
 	if in.ReceiptEmail != nil {
 		e := strings.TrimSpace(*in.ReceiptEmail)

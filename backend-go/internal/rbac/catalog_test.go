@@ -22,7 +22,7 @@ func TestCatalogUniqueAndBillerSubset(t *testing.T) {
 		if !InSystemRole(RoleOwner, p) {
 			t.Fatal("owner must have every permission")
 		}
-		if InSystemRole(RoleAdmin, p) == (p.Module == "billing") {
+		if InSystemRole(RoleAdmin, p) == OwnerOnly(p) {
 			t.Fatalf("admin billing rule wrong for %s", p.Key())
 		}
 	}

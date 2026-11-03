@@ -75,6 +75,17 @@ Common rules for every item: S4b design (Inter, navy/slate/blue, 100dvh), kit co
 - `sales.paid` stays the stored total and is kept in sync with the sum of payments by the code from then on (and checked by a test and the nightly ledger check).
 - The migration is **run on a copy first** (a scratch restore of a demo shop's export) and reports, per shop: sales, rows created, sales whose sum differs (must be 0); then on the dev database, with the same report.
 
+**Backfill report (2026-11-03).** Tenant migration 00012. *Copy first*: the dev database was copied into a separate database (`pg_dump` → `pg_restore` as `pos_copy`, inside the Postgres container), the migration's SQL was run on every shop schema of the copy, then the copy was dropped. *Then dev*: `posctl migrate tenants up` (8 tenants, 11 → 12). Same result both times:
+
+| Shop | Sales | Sales with paid > 0 | Payment rows created | Sales whose sum differs |
+|---|---|---|---|---|
+| demo-shop | 41 | 41 | 41 (all cash) | 0 |
+| 7 other dev shops (console test shops, tejas) | 0 | 0 | 0 | 0 |
+
+A migration test (`internal/migrate`, `TestPaymentsBackfill`) covers the method mapping (Cash, UPI, Credit Card → card, none → cash, Bank Transfer → deposit, unknown → cash), cash tendered kept, no row for unpaid sales, and returns keeping their amounts.
+
+**Implementation notes.** `sale_returns.applied_to_due` records option A (the part of a return that reduced the sale's due; check `paid + due + applied_to_due = total`). Credit applies to *completed* sales: a pending order is neither checked against the limit nor given a due date until it is completed. Existing sales keep no due date (never Overdue). Overdue is worked out when read (due > 0 and due date before today in the shop's time zone); the stored payment_status stays Paid / Partial / Unpaid. A sale paid by a collection, like one with returns, cannot be edited or voided until the collection is reversed.
+
 ### 5.3 Refunds and dues — decided 2026-11-02: option A
 *Today* (corrected): a return records its own refund (`sale_returns.paid`) and **does not change the original sale's amount due**. The Customer Due report reads only `sales.due`, so it ignores returns: a customer who returned goods from an unpaid sale still shows the full due. "Returns reduce dues as today" in the first draft was wrong.
 

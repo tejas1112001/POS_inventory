@@ -85,6 +85,10 @@ type Receipt struct {
 	StoreName, StoreAddress, StorePhone string
 	Header, Footer                      []string
 	Attached, Void                      bool
+	// S10 item 5: payment lines ("Cash: ₹500.00"), the balance due and
+	// its due date (empty when fully paid).
+	Payments     []string
+	Due, DueDate string
 }
 
 type receiptView struct {
@@ -101,6 +105,8 @@ func RenderReceipt(d Receipt) (Rendered, error) {
 	d.Reference, d.Date, d.Total = oneLine(d.Reference, 60), oneLine(d.Date, 60), oneLine(d.Total, 60)
 	d.StoreName, d.StoreAddress, d.StorePhone = oneLine(d.StoreName, 120), oneLine(d.StoreAddress, 300), oneLine(d.StorePhone, 40)
 	d.Header, d.Footer = lines(d.Header), lines(d.Footer)
+	d.Payments = lines(d.Payments)
+	d.Due, d.DueDate = oneLine(d.Due, 60), oneLine(d.DueDate, 60)
 	subj := "Your receipt from " + d.BusinessName + " (" + d.Reference + ")"
 	if d.Void {
 		subj = "Voided receipt from " + d.BusinessName + " (" + d.Reference + ")"

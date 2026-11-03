@@ -57,6 +57,16 @@ func TestReceiptEmail(t *testing.T) {
 	golden(t, "receipt", r)
 	checkSafe(t, r)
 
+	// Part payment (S10 item 5): each payment, the balance and its date.
+	part := d
+	part.Payments, part.Due, part.DueDate = []string{"Cash: ₹500.00", "UPI: ₹300.00 (txn 4411)"}, "₹1,059.93", "19 Nov 2026"
+	pr, err := RenderReceipt(part)
+	require.NoError(t, err)
+	require.Contains(t, pr.Text, "Paid:    UPI: ₹300.00 (txn 4411)")
+	require.Contains(t, pr.Text, "Balance due: ₹1,059.93 by 19 Nov 2026")
+	require.Contains(t, pr.HTML, "<strong>₹1,059.93</strong> by 19 Nov 2026")
+	checkSafe(t, pr)
+
 	d.BusinessName, d.CustomerName, d.StoreName = hostile, hostile, hostile
 	d.Header, d.Footer = []string{hostile}, []string{hostile}
 	d.LogoURL = "javascript:alert(1)"

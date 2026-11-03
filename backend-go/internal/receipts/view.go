@@ -39,6 +39,15 @@ type TaxRow struct {
 	Label, Taxable, Amount string
 }
 
+// PaymentLine is one payment on a receipt.
+type PaymentLine struct {
+	Method, Amount, Reference string
+}
+
+// MethodLabels are the payment methods as receipts and lists show them.
+var MethodLabels = map[string]string{"cash": "Cash", "upi": "UPI", "card": "Card", "credit": "On account",
+	"cheque": "Cheque", "deposit": "Bank deposit", "points": "Points"}
+
 // View is everything a receipt (PDF or email) shows, formatted for the
 // tenant's currency, number format and time zone.
 type View struct {
@@ -60,6 +69,10 @@ type View struct {
 	Subtotal, Discount, Tax, Shipping, Total, Paid, Tendered, Change, Due string
 	HasDiscount, HasShipping, HasTendered, HasDue                         bool
 	PaymentMethod, PaymentStatus                                          string
+	// S10 item 5: each payment of the sale ("Cash", "₹500.00"), and when
+	// the balance is due.
+	Payments []PaymentLine
+	DueDate  string
 
 	Header, Footer []string
 
@@ -77,7 +90,8 @@ const (
 	qReceipt = `SELECT sale_id, sale_version FROM receipts WHERE id = $1`
 	qSale    = `SELECT s.reference, s.date, s.status, s.payment_status, s.payment_method, s.subtotal, s.discount, s.tax,
 			s.shipping, s.total, s.paid, s.due, s.tendered, s.change_due, s.currency, s.version, s.receipt_email::text,
-			s.voided_at, s.void_reason, st.name, st.address, st.phone, c.name, c.email::text, u.name
+			s.voided_at, s.void_reason, st.name, st.address, st.phone, c.name, c.email::text, u.name,
+			to_char(s.due_date, 'YYYY-MM-DD')
 		FROM sales s
 		JOIN stores st ON st.id = s.store_id
 		JOIN customers c ON c.id = s.customer_id
@@ -157,10 +171,11 @@ func Load(ctx context.Context, tx tenancy.TenantTx, receiptID int64) (View, erro
 		tendered, change                       *decimal.Decimal
 		version                                int
 		voidedAt                               *time.Time
+		dueDate                                *string
 	)
 	if err := tx.QueryRow(ctx, qSale, v.SaleID).Scan(&v.Reference, &date, &status, &payStatus, &method, &sub, &disc, &tax,
 		&ship, &total, &paid, &due, &tendered, &change, &currency, &version, &receiptEmail, &voidedAt, &voidReason,
-		&v.StoreName, &storeAddr, &storePhone, &v.Customer, &custEmail, &v.Cashier); err != nil {
+		&v.StoreName, &storeAddr, &storePhone, &v.Customer, &custEmail, &v.Cashier, &dueDate); err != nil {
 		return v, err
 	}
 	if version != v.Version {
@@ -194,6 +209,35 @@ func Load(ctx context.Context, tx tenancy.TenantTx, receiptID int64) (View, erro
 		}
 	}
 	v.PaymentMethod, v.PaymentStatus = deref(method), payStatus
+	if dueDate != nil && due.IsPositive() {
+		// A calendar day: parsed at noon in the shop's zone, so the zone
+		// conversion in Date cannot move it to another day.
+		if d, err := time.ParseInLocation("2006-01-02", *dueDate, b.Location()); err == nil {
+			v.DueDate = f.Date(d.Add(12 * time.Hour))
+		}
+	}
+	prows, err := tx.Query(ctx, `SELECT method, amount, coalesce(reference, '') FROM sale_payments
+		WHERE sale_id = $1 AND customer_payment_id IS NULL AND method <> 'credit' ORDER BY id`, v.SaleID)
+	if err != nil {
+		return v, err
+	}
+	for prows.Next() {
+		var m, ref string
+		var amt decimal.Decimal
+		if err := prows.Scan(&m, &amt, &ref); err != nil {
+			prows.Close()
+			return v, err
+		}
+		label := MethodLabels[m]
+		if label == "" {
+			label = m
+		}
+		v.Payments = append(v.Payments, PaymentLine{Method: label, Amount: f.Money(amt), Reference: ref})
+	}
+	prows.Close()
+	if err := prows.Err(); err != nil {
+		return v, err
+	}
 	if status == "Void" {
 		v.Void, v.VoidReason = true, deref(voidReason)
 		if voidedAt != nil {

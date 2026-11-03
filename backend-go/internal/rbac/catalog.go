@@ -92,6 +92,17 @@ var Catalog = []Permission{
 	{"audit", "view", "View audit log"},
 	{"billing", "view", "View billing"},
 	{"billing", "manage", "Manage billing"},
+	// S10 item 5 (P1).
+	{"sales", "credit", "Sell on credit or part payment"},
+	{"customers", "credit_limit", "Set customer credit limits"},
+	{"customers", "collect", "Collect customer payments"},
+}
+
+// OwnerOnly are permissions the admin system role does not get: billing,
+// and selling on credit and setting credit limits (S10 P1). The owner can
+// give them to custom roles.
+func OwnerOnly(p Permission) bool {
+	return p.Module == "billing" || p.Key() == "sales:credit" || p.Key() == "customers:credit_limit"
 }
 
 // BillerDefaults are the biller role's seeded permissions (API_CONTRACT §3).
@@ -111,7 +122,7 @@ func InSystemRole(roleKey string, p Permission) bool {
 	case RoleOwner:
 		return true
 	case RoleAdmin:
-		return p.Module != "billing"
+		return !OwnerOnly(p)
 	case RoleBiller:
 		return BillerDefaults[p.Key()]
 	}

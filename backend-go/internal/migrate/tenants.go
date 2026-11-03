@@ -218,6 +218,7 @@ const (
 		ON CONFLICT DO NOTHING`
 	qGrantAdminAll = `INSERT INTO role_permissions (role_id, permission_id)
 		SELECT r.id, p.id FROM roles r CROSS JOIN permissions p WHERE r.system_key = 'admin' AND p.module <> 'billing'
+			AND (p.module || ':' || p.action) NOT IN ('sales:credit', 'customers:credit_limit')
 		ON CONFLICT DO NOTHING`
 )
 

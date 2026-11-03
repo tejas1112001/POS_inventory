@@ -59,14 +59,17 @@ type returnCustomer struct {
 // (customerName, productName, ...) and adds the nested customer and
 // product objects and paymentStatus that SalesReturnList.jsx reads.
 type ReturnJSON struct {
-	ID             int64            `json:"id"`
-	Reference      string           `json:"reference"`
-	Date           time.Time        `json:"date"`
-	Status         string           `json:"status"`
-	Total          decimal.Decimal  `json:"total"`
-	Tax            decimal.Decimal  `json:"tax"`
-	Paid           decimal.Decimal  `json:"paid"`
-	Due            decimal.Decimal  `json:"due"`
+	ID        int64           `json:"id"`
+	Reference string          `json:"reference"`
+	Date      time.Time       `json:"date"`
+	Status    string          `json:"status"`
+	Total     decimal.Decimal `json:"total"`
+	Tax       decimal.Decimal `json:"tax"`
+	Paid      decimal.Decimal `json:"paid"`
+	Due       decimal.Decimal `json:"due"`
+	// AppliedToDue is the part of the return that reduced what the
+	// customer still owed on the sale (S10 refund rule, option A).
+	AppliedToDue   decimal.Decimal  `json:"appliedToDue"`
 	PaymentStatus  string           `json:"payment_status"`
 	PaymentStatusC string           `json:"paymentStatus"`
 	Currency       string           `json:"currency"`
@@ -92,7 +95,7 @@ type ReturnJSON struct {
 }
 
 const (
-	qLoadReturns = `SELECT r.id, r.reference, r.date, r.status, r.payment_status, r.total, r.tax, r.paid, r.due, r.currency, r.note,
+	qLoadReturns = `SELECT r.id, r.reference, r.date, r.status, r.payment_status, r.total, r.tax, r.paid, r.due, r.applied_to_due, r.currency, r.note,
 			r.sale_id, s.reference, r.customer_id, r.store_id, st.name, r.created_by, r.created_at, r.updated_at,
 			c.name, c.email::text, c.phone, c.image_file_id
 		FROM sale_returns r
@@ -137,7 +140,7 @@ func loadReturns(ctx context.Context, tx tenancy.TenantTx, ids []int64) ([]Retur
 		x := &ReturnJSON{Items: []ReturnItemJSON{}}
 		var name, email, phone *string
 		var img *uuid.UUID
-		if err := rows.Scan(&x.ID, &x.Reference, &x.Date, &x.Status, &x.PaymentStatus, &x.Total, &x.Tax, &x.Paid, &x.Due,
+		if err := rows.Scan(&x.ID, &x.Reference, &x.Date, &x.Status, &x.PaymentStatus, &x.Total, &x.Tax, &x.Paid, &x.Due, &x.AppliedToDue,
 			&x.Currency, &x.Note, &x.SaleID, &x.SaleReference, &x.CustomerID, &x.StoreID, &x.StoreName, &x.CreatedBy,
 			&x.CreatedAt, &x.UpdatedAt, &name, &email, &phone, &img); err != nil {
 			rows.Close()

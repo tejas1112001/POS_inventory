@@ -75,6 +75,7 @@ type PeriodFigures struct {
 	Net       decimal.Decimal `json:"net"`
 	Paid      decimal.Decimal `json:"paid"`
 	Due       decimal.Decimal `json:"due"`
+	Collected decimal.Decimal `json:"collected"` // payments received in the period (S10 item 5)
 	Discounts decimal.Decimal `json:"discounts"`
 	Orders    int             `json:"orders"`
 	ItemsSold int64           `json:"itemsSold"`
@@ -106,15 +107,25 @@ var sliceColors = []string{"#4F46E5", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6"
 
 const chartMonths = 12
 
+// sqlOverdue: something due past its due date (shop time zone).
+const sqlOverdue = `(s.due > 0 AND s.due_date IS NOT NULL
+	AND s.due_date < (now() AT TIME ZONE (SELECT timezone FROM settings WHERE id = 1))::date)`
+
 // Sales in scope: not void, the user filter, the store and the dates.
 const qScope = `s.status <> 'Void' AND ($1 = 0 OR s.user_id = $1) AND ($2 = 0 OR s.store_id = $2)
 	AND ($3::timestamptz IS NULL OR s.date >= $3) AND ($4::timestamptz IS NULL OR s.date < $4)`
 
 const (
+	// Unpaid and overdue split by the due date (S10 item 5).
 	qDashTotals = `SELECT coalesce(sum(s.total), 0), count(*), coalesce(sum(s.paid), 0),
-			coalesce(sum(s.due) FILTER (WHERE s.payment_status IN ('Unpaid','Partial')), 0),
-			coalesce(sum(s.due) FILTER (WHERE s.payment_status = 'Overdue'), 0)
+			coalesce(sum(s.due) FILTER (WHERE s.due > 0 AND NOT ` + sqlOverdue + `), 0),
+			coalesce(sum(s.due) FILTER (WHERE ` + sqlOverdue + `), 0)
 		FROM sales s WHERE ` + qScope
+	// Money taken in the period, whatever sale it pays: payments at the
+	// till and collections against dues (reversals subtract).
+	qDashCollected = `SELECT coalesce(sum(p.amount), 0) FROM sale_payments p JOIN sales s ON s.id = p.sale_id
+		WHERE p.method <> 'credit' AND s.status <> 'Void' AND ($1 = 0 OR s.user_id = $1) AND ($2 = 0 OR s.store_id = $2)
+		AND ($3::timestamptz IS NULL OR p.created_at >= $3) AND ($4::timestamptz IS NULL OR p.created_at < $4)`
 	// Returns dated in the period at the store; for one user, only returns
 	// of that user's sales.
 	qDashReturns = `SELECT coalesce(sum(r.total), 0) FROM sale_returns r LEFT JOIN sales s ON s.id = r.sale_id
@@ -297,6 +308,9 @@ func periodFigures(ctx context.Context, tx tenancy.TenantTx, args []any) (Period
 		return f, err
 	}
 	if err := tx.QueryRow(ctx, qDashItems, args...).Scan(&f.ItemsSold); err != nil {
+		return f, err
+	}
+	if err := tx.QueryRow(ctx, qDashCollected, args...).Scan(&f.Collected); err != nil {
 		return f, err
 	}
 	f.Net = f.Revenue.Sub(f.Returns)

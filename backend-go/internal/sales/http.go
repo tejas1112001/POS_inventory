@@ -105,7 +105,8 @@ const (
 		AND ($3 = '' OR s.reference ILIKE $3 OR EXISTS (SELECT 1 FROM customers c WHERE c.id = s.customer_id AND c.name ILIKE $3))
 		AND ($4::timestamptz IS NULL OR s.date >= $4) AND ($5::timestamptz IS NULL OR s.date < $5)
 		AND ($6 = 0 OR s.store_id = $6) AND ($7 = 0 OR s.customer_id = $7)
-		AND ($8 = '' OR s.payment_status = $8) AND ($9 = '' OR s.status = $9)`
+		AND ($8 = '' OR ($8 = 'Overdue' AND ` + sqlOverdue + `) OR ($8 <> 'Overdue' AND s.payment_status = $8 AND NOT ` + sqlOverdue + `))
+		AND ($9 = '' OR s.status = $9)`
 	qSaleCount = `SELECT count(*)` + qSaleFilter
 	qSaleIDs   = `SELECT s.id` + qSaleFilter + ` ORDER BY s.date DESC, s.id DESC LIMIT $10 OFFSET $11`
 )
@@ -220,7 +221,8 @@ type invoiceCustomer struct {
 
 const (
 	qInvoiceFilter = ` FROM sales s WHERE s.status <> 'Void' AND ($1 = 0 OR s.user_id = $1)`
-	qInvoices      = `SELECT s.id, s.reference, s.date, s.total, s.paid, s.due, s.payment_status, c.name, c.image_file_id
+	qInvoices      = `SELECT s.id, s.reference, s.date, s.due_date, s.total, s.paid, s.due,
+			CASE WHEN ` + sqlOverdue + ` THEN 'Overdue' ELSE s.payment_status END, c.name, c.image_file_id
 		FROM sales s LEFT JOIN customers c ON c.id = s.customer_id
 		WHERE s.status <> 'Void' AND ($1 = 0 OR s.user_id = $1)
 		ORDER BY s.date DESC, s.id DESC LIMIT $2 OFFSET $3`
@@ -252,13 +254,17 @@ func (a *API) invoices(w http.ResponseWriter, r *http.Request) {
 			var (
 				inv  InvoiceJSON
 				date time.Time
+				due  *time.Time
 				name *string
 				img  *uuid.UUID
 			)
-			if err := rows.Scan(&inv.ID, &inv.InvoiceNo, &date, &inv.Amount, &inv.Paid, &inv.AmountDue, &inv.Status, &name, &img); err != nil {
+			if err := rows.Scan(&inv.ID, &inv.InvoiceNo, &date, &due, &inv.Amount, &inv.Paid, &inv.AmountDue, &inv.Status, &name, &img); err != nil {
 				return err
 			}
 			inv.DueDate = date.In(s.loc).Format("02 Jan 2006")
+			if due != nil {
+				inv.DueDate = due.UTC().Format("02 Jan 2006")
+			}
 			inv.Customer = invoiceCustomer{Name: "N/A"}
 			if name != nil {
 				inv.Customer.Name = *name
@@ -281,9 +287,9 @@ func (a *API) invoices(w http.ResponseWriter, r *http.Request) {
 
 const qInsertSale = `INSERT INTO sales (reference, date, status, payment_status, payment_method, payment_note, note,
 		subtotal, discount, tax, shipping, total, paid, due, tendered, change_due, currency,
-		customer_id, store_id, user_id, receipt_email)
+		customer_id, store_id, user_id, receipt_email, due_date)
 	VALUES ($1, $2, $3, $4, NULLIF($5, ''), NULLIF($6, ''), NULLIF($7, ''), $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
-		$18, $19, $20, NULLIF($21, ''))
+		$18, $19, $20, NULLIF($21, ''), $22)
 	RETURNING id`
 
 func (a *API) create(w http.ResponseWriter, r *http.Request) {
@@ -367,11 +373,28 @@ func (a *API) create(w http.ResponseWriter, r *http.Request) {
 		if receiptTo == "" && custEmail != nil && mailer.ValidEmail(*custEmail) {
 			receiptTo = *custEmail
 		}
-		pm := pay(pr.quote.Total, c.paid, c.tendered, s.currency)
+		st, err := settle(pr.quote.Total, c, s.currency)
+		if err != nil {
+			return err
+		}
+		// Credit applies to completed sales: a pending order is not handed
+		// over yet, so it is neither checked nor given a due date.
+		var due *time.Time
+		if st.due.IsPositive() && status == "Completed" {
+			if err := creditCheck(ctx, tx, p, s, cust, 0, c.customerID != 0, st.due); err != nil {
+				return err
+			}
+			if due, err = dueDate(c.dueDate, date, s.loc); err != nil {
+				return err
+			}
+		}
 		var id int64
-		if err := tx.QueryRow(ctx, qInsertSale, ref, date, status, pm.status, deref(c.paymentMethod), deref(c.paymentNote),
+		if err := tx.QueryRow(ctx, qInsertSale, ref, date, status, st.status, st.methodLabel(c.paymentMethod), deref(c.paymentNote),
 			deref(c.note), pr.quote.Subtotal, pr.quote.Discount, pr.quote.Tax, pr.quote.Shipping, pr.quote.Total,
-			pm.paid, pm.due, pm.tendered, pm.chg, s.currency, cust, c.storeID, p.UserID, receiptTo).Scan(&id); err != nil {
+			st.paid, st.due, st.tendered, st.chg, s.currency, cust, c.storeID, p.UserID, receiptTo, due).Scan(&id); err != nil {
+			return err
+		}
+		if err := writePayments(ctx, tx, id, p.UserID, date, st.rows); err != nil {
 			return err
 		}
 		if err := insertItems(ctx, tx, id, pr); err != nil {
@@ -448,18 +471,19 @@ type saleRow struct {
 	date                time.Time
 	method, pnote, note *string
 	email               *string
-	total               decimal.Decimal
+	total, due          decimal.Decimal
+	dueDate             *time.Time
 }
 
 const qLockSale = `SELECT user_id, store_id, status, paid, tendered, date, payment_method, payment_note, note,
-		receipt_email::text, total FROM sales WHERE id = $1 FOR UPDATE`
+		receipt_email::text, total, due, due_date FROM sales WHERE id = $1 FOR UPDATE`
 
 // lockSale locks a sale the principal may change (own-only without
 // sales:view_all; others' sales are reported as not found).
 func lockSale(ctx context.Context, tx tenancy.TenantTx, id int64, p auth.Principal) (saleRow, error) {
 	var s saleRow
 	err := tx.QueryRow(ctx, qLockSale, id).Scan(&s.userID, &s.storeID, &s.status, &s.paid, &s.tendered, &s.date,
-		&s.method, &s.pnote, &s.note, &s.email, &s.total)
+		&s.method, &s.pnote, &s.note, &s.email, &s.total, &s.due, &s.dueDate)
 	if isNoRows(err) {
 		return s, apperr.NotFound()
 	}
@@ -495,6 +519,13 @@ func oldItems(ctx context.Context, tx tenancy.TenantTx, saleID int64) ([]oldItem
 	return out, rows.Err()
 }
 
+func keepPtr(v, old *string) *string {
+	if v != nil {
+		return v
+	}
+	return old
+}
+
 func keep(v, old *string) string {
 	if v != nil {
 		return *v
@@ -505,7 +536,7 @@ func keep(v, old *string) string {
 const qUpdateSale = `UPDATE sales SET date = $2, status = $3, payment_status = $4, payment_method = NULLIF($5, ''),
 		payment_note = NULLIF($6, ''), note = NULLIF($7, ''), subtotal = $8, discount = $9, tax = $10, shipping = $11,
 		total = $12, paid = $13, due = $14, tendered = $15, change_due = $16, customer_id = $17, store_id = $18,
-		receipt_email = NULLIF($19, ''), updated_by = $20, version = version + 1, updated_at = now()
+		receipt_email = NULLIF($19, ''), updated_by = $20, due_date = $21, version = version + 1, updated_at = now()
 	WHERE id = $1 RETURNING version`
 
 // update replaces a sale's lines and recomputes it. The original biller
@@ -542,6 +573,9 @@ func (a *API) update(w http.ResponseWriter, r *http.Request) {
 			return apperr.Conflict(apperr.CodeInvalidState, "A voided sale cannot be edited.")
 		}
 		if err := refuseIfReturned(ctx, tx, id, "edited"); err != nil {
+			return err
+		}
+		if err := refuseIfCollected(ctx, tx, id, "edited"); err != nil {
 			return err
 		}
 		s, err := loadSettings(ctx, tx)
@@ -594,21 +628,54 @@ func (a *API) update(w http.ResponseWriter, r *http.Request) {
 		if status == "" {
 			status = old.status
 		}
-		paid := c.paid
-		if paid == nil {
-			v := decimal.Min(old.paid, pr.quote.Total)
-			paid = &v
+		// Without new payment fields the old payments stay (split kept) as
+		// long as they still fit the new total.
+		if c.payments == nil && c.paid == nil {
+			kept, err := ownPayments(ctx, tx, id)
+			if err != nil {
+				return err
+			}
+			if old.paid.LessThanOrEqual(pr.quote.Total) {
+				c.payments = kept
+			} else {
+				v := pr.quote.Total
+				c.paid = &v
+				if len(kept) > 0 && c.paymentMethod == nil {
+					m := kept[0].method
+					c.paymentMethod = &m
+				}
+			}
 		}
-		tendered := c.tendered
-		if tendered == nil {
-			tendered = old.tendered
+		if c.tendered == nil && c.payments == nil {
+			c.tendered = old.tendered
 		}
-		pm := pay(pr.quote.Total, paid, tendered, s.currency)
+		st, err := settle(pr.quote.Total, c, s.currency)
+		if err != nil {
+			return err
+		}
+		due := old.dueDate
+		if st.due.IsPositive() && status == "Completed" {
+			if st.due.GreaterThan(old.due) || old.status != "Completed" {
+				if err := creditCheck(ctx, tx, p, s, cust, id, c.customerID != 0, st.due); err != nil {
+					return err
+				}
+			}
+			if c.dueDate != "" || due == nil {
+				if due, err = dueDate(c.dueDate, date, s.loc); err != nil {
+					return err
+				}
+			}
+		} else {
+			due = nil
+		}
 		var version int
-		if err := tx.QueryRow(ctx, qUpdateSale, id, date, status, pm.status, keep(c.paymentMethod, old.method),
+		if err := tx.QueryRow(ctx, qUpdateSale, id, date, status, st.status, st.methodLabel(keepPtr(c.paymentMethod, old.method)),
 			keep(c.paymentNote, old.pnote), keep(c.note, old.note), pr.quote.Subtotal, pr.quote.Discount, pr.quote.Tax,
-			pr.quote.Shipping, pr.quote.Total, pm.paid, pm.due, pm.tendered, pm.chg, cust, c.storeID,
-			keep(c.receiptEmail, old.email), p.UserID).Scan(&version); err != nil {
+			pr.quote.Shipping, pr.quote.Total, st.paid, st.due, st.tendered, st.chg, cust, c.storeID,
+			keep(c.receiptEmail, old.email), p.UserID, due).Scan(&version); err != nil {
+			return err
+		}
+		if err := writePayments(ctx, tx, id, p.UserID, date, st.rows); err != nil {
 			return err
 		}
 		if receiptID, err = receipts.Create(ctx, tx, id, version); err != nil {
@@ -619,7 +686,7 @@ func (a *API) update(w http.ResponseWriter, r *http.Request) {
 		e := meta
 		e.Action = "sale.update"
 		e.Before = map[string]any{"total": old.total, "paid": old.paid, "store_id": old.storeID, "lines": len(items)}
-		e.After = map[string]any{"total": pr.quote.Total, "paid": pm.paid, "store_id": c.storeID, "lines": len(pr.lines)}
+		e.After = map[string]any{"total": pr.quote.Total, "paid": st.paid, "store_id": c.storeID, "lines": len(pr.lines)}
 		if err := audit.Write(ctx, tx, e); err != nil {
 			return err
 		}
@@ -684,6 +751,9 @@ func (a *API) void(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		if err := refuseIfReturned(ctx, tx, id, "voided"); err != nil {
+			return err
+		}
+		if err := refuseIfCollected(ctx, tx, id, "voided"); err != nil {
 			return err
 		}
 		items, err := oldItems(ctx, tx, id)

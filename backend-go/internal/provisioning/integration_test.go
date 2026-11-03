@@ -93,14 +93,14 @@ func TestProvisionHappyPath(t *testing.T) {
 	perms := func(key string) int {
 		return count(t, admin, `SELECT count(*) FROM `+schema+`.role_permissions rp JOIN `+schema+`.roles r ON r.id = rp.role_id WHERE r.system_key = $1`, key)
 	}
-	billing := 0
+	ownerOnly := 0
 	for _, p := range rbac.Catalog {
-		if p.Module == "billing" {
-			billing++
+		if rbac.OwnerOnly(p) {
+			ownerOnly++
 		}
 	}
 	require.Equal(t, len(rbac.Catalog), perms("owner"))
-	require.Equal(t, len(rbac.Catalog)-billing, perms("admin"))
+	require.Equal(t, len(rbac.Catalog)-ownerOnly, perms("admin"), "admin: all but billing and the credit permissions (S10 P1)")
 	require.Equal(t, len(rbac.BillerDefaults), perms("biller"))
 
 	// Owner: active, owner role, no password yet.

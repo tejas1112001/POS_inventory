@@ -182,15 +182,25 @@ func RenderPDF(v View, logo []byte) ([]byte, error) {
 		total("Shipping", v.Shipping)
 	}
 	total("Total", v.Total, bold)
+	for _, p := range v.Payments {
+		label := p.Method
+		if p.Reference != "" {
+			label += " (" + p.Reference + ")"
+		}
+		total(label, p.Amount, muted)
+	}
 	total("Paid", v.Paid)
 	if v.HasTendered {
 		total("Received", v.Tendered)
 		total("Change", v.Change)
 	}
 	if v.HasDue {
-		total("Due", v.Due, bold)
+		total("Balance due", v.Due, bold)
+		if v.DueDate != "" {
+			total("Due by", v.DueDate)
+		}
 	}
-	if v.PaymentMethod != "" {
+	if len(v.Payments) == 0 && v.PaymentMethod != "" {
 		total("Payment", v.PaymentMethod+" ("+v.PaymentStatus+")")
 	}
 	m.AddRow(5)

@@ -19,6 +19,7 @@ func TestOrderListFilters(t *testing.T) {
 	cu := do(t, rq{method: "POST", host: host, path: "/api/customers", token: tok, body: map[string]any{"name": "Zebulon Orderfilter"}})
 	require.Equal(t, 201, cu.Code, cu.Raw)
 	// 2004: a year no other test uses.
+	setCreditLimit(t, "a", cu.Body["id"], "10000")
 	paid := dated(store, "2004-02-01", nil, line(p, 1))
 	paid["customerId"] = cu.Body["id"]
 	unpaid := dated(store, "2004-02-02", 0, line(p, 1))
@@ -42,7 +43,10 @@ func TestOrderListFilters(t *testing.T) {
 	}
 	require.ElementsMatch(t, ids[:2], refs(""), "voided orders hidden by default")
 	require.ElementsMatch(t, ids[:2], refs("&search=orderfilter"), "search by customer name")
-	require.Equal(t, []any{ids[1]}, refs("&paymentStatus=Unpaid"))
+	// Sold in 2004 with nothing paid: due 30 days later, so now Overdue
+	// (S10 item 5), and no longer listed as Unpaid.
+	require.Equal(t, []any{ids[1]}, refs("&paymentStatus=Overdue"))
+	require.Empty(t, refs("&paymentStatus=Unpaid"))
 	require.Equal(t, []any{ids[0]}, refs("&paymentStatus=Paid"))
 	require.Equal(t, []any{ids[2]}, refs("&status=Void"))
 	require.Len(t, refs("&paymentStatus=Bogus"), 2, "unknown values are ignored")

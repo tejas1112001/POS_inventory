@@ -90,13 +90,25 @@ type SaleJSON struct {
 	Store         *NameRef         `json:"Store"`
 	Items         []ItemJSON       `json:"items"`
 	ReceiptURL    string           `json:"receiptUrl"`
+	// S10 item 5: how the sale was paid, when the rest is due (YYYY-MM-DD)
+	// and whether it is overdue (payment_status is then "Overdue").
+	Payments []PaymentJSON `json:"payments"`
+	DueDate  *string       `json:"dueDate"`
+	Overdue  bool          `json:"overdue"`
 }
+
+// sqlToday is today's date in the shop's time zone.
+const sqlToday = `(now() AT TIME ZONE (SELECT timezone FROM settings WHERE id = 1))::date`
+
+// sqlOverdue is true for a sale with something due past its due date.
+const sqlOverdue = `(s.due > 0 AND s.due_date IS NOT NULL AND s.due_date < ` + sqlToday + `)`
 
 const (
 	qLoadSales = `SELECT s.id, s.reference, s.date, s.status, s.payment_status, s.payment_method, s.payment_note, s.note,
 			s.subtotal, s.discount, s.tax, s.shipping, s.total, s.paid, s.due, s.tendered, s.change_due, s.currency,
 			s.customer_id, s.store_id, s.user_id, s.updated_by, s.receipt_email::text, s.voided_at, s.voided_by, s.void_reason,
-			s.version, s.created_at, s.updated_at, c.name, u.name, st.name
+			s.version, s.created_at, s.updated_at, c.name, u.name, st.name,
+			to_char(s.due_date, 'YYYY-MM-DD'), ` + sqlOverdue + `
 		FROM sales s
 		LEFT JOIN customers c ON c.id = s.customer_id
 		LEFT JOIN users u ON u.id = s.user_id
@@ -126,9 +138,13 @@ func load(ctx context.Context, tx tenancy.TenantTx, ids []int64) ([]SaleJSON, er
 		if err := rows.Scan(&s.ID, &s.Reference, &s.Date, &s.Status, &s.PaymentStatus, &s.PaymentMethod, &s.PaymentNote, &s.Note,
 			&s.Subtotal, &s.Discount, &s.Tax, &s.Shipping, &s.Total, &s.Paid, &s.Due, &s.Tendered, &s.Change, &s.Currency,
 			&s.CustomerID, &s.StoreID, &s.UserID, &s.UpdatedBy, &s.ReceiptEmail, &s.VoidedAt, &s.VoidedBy, &s.VoidReason,
-			&s.Version, &s.CreatedAt, &s.UpdatedAt, &cust, &user, &store); err != nil {
+			&s.Version, &s.CreatedAt, &s.UpdatedAt, &cust, &user, &store, &s.DueDate, &s.Overdue); err != nil {
 			rows.Close()
 			return nil, err
+		}
+		s.Payments = []PaymentJSON{}
+		if s.Overdue && s.Status != "Void" {
+			s.PaymentStatus = "Overdue"
 		}
 		s.Customer, s.User, s.Store = ref(cust), ref(user), ref(store)
 		s.ReceiptURL = "/api/sales/" + strconv.FormatInt(s.ID, 10) + "/receipt"
@@ -162,6 +178,27 @@ func load(ctx context.Context, tx tenancy.TenantTx, ids []int64) ([]SaleJSON, er
 		}
 		if s := byID[it.SaleID]; s != nil {
 			s.Items = append(s.Items, it)
+		}
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	rows, err = tx.Query(ctx, `SELECT id, sale_id, method, amount, tendered, change_due, reference, customer_payment_id, created_at
+		FROM sale_payments WHERE sale_id = ANY($1) ORDER BY sale_id, id`, ids)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var p PaymentJSON
+		var saleID int64
+		if err := rows.Scan(&p.ID, &saleID, &p.Method, &p.Amount, &p.Tendered, &p.Change, &p.Reference, &p.CustomerPaymentID, &p.CreatedAt); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		if s := byID[saleID]; s != nil {
+			s.Payments = append(s.Payments, p)
 		}
 	}
 	rows.Close()

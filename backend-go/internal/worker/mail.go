@@ -619,6 +619,7 @@ func (m *Mailer) buildReceipt(ctx context.Context, st *tenantState, r row, c *co
 		BusinessName: st.biz.Name, LogoURL: logo, CustomerName: c.to.Name, Reference: v.Reference, Date: v.Date,
 		Total: v.Total, StoreName: v.StoreName, StoreAddress: v.StoreAddress, StorePhone: v.StorePhone,
 		Header: v.Header, Footer: v.Footer, Attached: perr == nil, Void: v.Void,
+		Payments: receiptPayments(v), Due: dueIf(v), DueDate: v.DueDate,
 	})
 	if err != nil {
 		return err
@@ -918,4 +919,24 @@ func refreshPlatform(ctx context.Context, m *Mailer, r row) bool {
 func isConflict(err error) bool {
 	e, ok := apperr.As(err)
 	return ok && e.Kind == apperr.KindConflict
+}
+
+// receiptPayments are the payment lines of an email receipt.
+func receiptPayments(v receipts.View) []string {
+	out := make([]string, 0, len(v.Payments))
+	for _, p := range v.Payments {
+		l := p.Method + ": " + p.Amount
+		if p.Reference != "" {
+			l += " (" + p.Reference + ")"
+		}
+		out = append(out, l)
+	}
+	return out
+}
+
+func dueIf(v receipts.View) string {
+	if v.HasDue && !v.Void {
+		return v.Due
+	}
+	return ""
 }

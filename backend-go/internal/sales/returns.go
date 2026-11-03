@@ -442,6 +442,7 @@ func unlinkedRows(ctx context.Context, tx tenancy.TenantTx, c cleanReturn, curre
 type returnSale struct {
 	userID, storeID, customerID int64
 	status, currency, reference string
+	due                         decimal.Decimal
 }
 
 // lockReturnSale locks the sale a return refers to. Every return of a sale
@@ -450,8 +451,8 @@ type returnSale struct {
 // reported as not found (C-10).
 func lockReturnSale(ctx context.Context, tx tenancy.TenantTx, id int64, p auth.Principal) (returnSale, error) {
 	var s returnSale
-	err := tx.QueryRow(ctx, `SELECT user_id, store_id, customer_id, status, currency, reference FROM sales WHERE id = $1 FOR UPDATE`, id).
-		Scan(&s.userID, &s.storeID, &s.customerID, &s.status, &s.currency, &s.reference)
+	err := tx.QueryRow(ctx, `SELECT user_id, store_id, customer_id, status, currency, reference, due FROM sales WHERE id = $1 FOR UPDATE`, id).
+		Scan(&s.userID, &s.storeID, &s.customerID, &s.status, &s.currency, &s.reference, &s.due)
 	if isNoRows(err) {
 		return s, apperr.Invalid("saleId", "Sale not found.")
 	}
@@ -479,8 +480,8 @@ func nextReturnReference(ctx context.Context, tx tenancy.TenantTx) (string, erro
 
 const (
 	qInsertReturn = `INSERT INTO sale_returns (reference, date, status, payment_status, total, tax, paid, due, currency, note,
-			sale_id, customer_id, store_id, created_by)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NULLIF($10, ''), $11, $12, $13, $14)
+			sale_id, customer_id, store_id, created_by, applied_to_due)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NULLIF($10, ''), $11, $12, $13, $14, $15)
 		RETURNING id`
 	qInsertReturnItem = `INSERT INTO return_items (sale_return_id, order_item_id, product_id, variant_id, product_name, sku, quantity,
 			unit_price, discount, tax_amount, cgst, sgst, igst, subtotal, reason)
@@ -533,8 +534,9 @@ func (a *API) createReturn(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		var (
-			rows   []returnRow
-			saleID *int64
+			rows    []returnRow
+			saleID  *int64
+			saleDue decimal.Decimal
 		)
 		storeID, custID, currency := c.storeID, c.customerID, s.currency
 		if c.saleID > 0 {
@@ -552,7 +554,7 @@ func (a *API) createReturn(w http.ResponseWriter, r *http.Request) {
 			if err := f.err(); err != nil {
 				return err
 			}
-			storeID, custID, currency, saleID = sale.storeID, sale.customerID, sale.currency, &c.saleID
+			storeID, custID, currency, saleID, saleDue = sale.storeID, sale.customerID, sale.currency, &c.saleID, sale.due
 			sold, err := soldLines(ctx, tx, c.saleID)
 			if err != nil {
 				return err
@@ -574,7 +576,10 @@ func (a *API) createReturn(w http.ResponseWriter, r *http.Request) {
 			total, tax = total.Add(x.subtotal), tax.Add(x.tax)
 			deltas[inventory.Key{Store: storeID, Variant: x.variantID}] += int(x.qty)
 		}
-		pm := pay(total, c.paid, nil, currency)
+		// Refund rule (S10 §5.3, option A): the return first reduces what the
+		// customer still owes on the sale; only the rest is refunded.
+		applied := decimal.Min(total, saleDue)
+		pm := pay(total.Sub(applied), c.paid, nil, currency)
 		keys, _, err := inventory.Lock(ctx, tx, deltas, nil)
 		if err != nil {
 			return err
@@ -585,8 +590,16 @@ func (a *API) createReturn(w http.ResponseWriter, r *http.Request) {
 		}
 		var id int64
 		if err := tx.QueryRow(ctx, qInsertReturn, ref, date, c.status, pm.status, total, tax, pm.paid, pm.due, currency, c.note,
-			saleID, custID, storeID, p.UserID).Scan(&id); err != nil {
+			saleID, custID, storeID, p.UserID, applied).Scan(&id); err != nil {
 			return err
+		}
+		if applied.IsPositive() {
+			if _, err := tx.Exec(ctx, `UPDATE sales SET due = due - $2,
+					payment_status = CASE WHEN due - $2 <= 0 THEN 'Paid' WHEN paid > 0 THEN 'Partial' ELSE 'Unpaid' END,
+					due_date = CASE WHEN due - $2 <= 0 THEN NULL ELSE due_date END, updated_at = now()
+				WHERE id = $1`, *saleID, applied); err != nil {
+				return err
+			}
 		}
 		for _, x := range rows {
 			if _, err := tx.Exec(ctx, qInsertReturnItem, id, x.orderItemID, x.productID, x.variantID, x.name, x.sku, x.qty,
@@ -597,7 +610,8 @@ func (a *API) createReturn(w http.ResponseWriter, r *http.Request) {
 		if err := inventory.Apply(ctx, tx, keys, deltas, inventory.ReasonReturn, inventory.Ref{Type: "sale_return", ID: id}, p.UserID); err != nil {
 			return err
 		}
-		after := map[string]any{"reference": ref, "total": total, "lines": len(rows), "store_id": storeID}
+		after := map[string]any{"reference": ref, "total": total, "lines": len(rows), "store_id": storeID,
+			"applied_to_due": applied, "refunded": pm.paid}
 		if saleID != nil {
 			after["sale_id"] = *saleID
 		}
