@@ -305,3 +305,11 @@ How to check (new checkout):
 Known problems:
 - Held bills are not in tenant exports (transient, like product locks).
 - The old POS screen has no Hold/Recall.
+
+## S10 – Item 8: Onboarding checklist
+
+How to check (owner, or anyone who can edit settings):
+1. Dashboard of a new shop: **Get your shop ready**, "N of M done" with a progress bar and the steps: Business profile and tax number, Logo, Store address, First product, First staff user, Email sending, First sale, and Online shop (only when the plan includes the online shop). Each step opens its page.
+2. Ticks come from the shop's data, never from clicking: e.g. add a product → "First product" is ticked on the next dashboard load; sell something → "First sale"; fill address, phone and tax number in Settings → "Business profile and tax number". "Email sending" ticks when the shop's own email server is verified or any email has been sent.
+3. **Hide checklist** → confirm → it disappears for everyone in the shop, for good (audit: settings.onboarding_hidden). When every step is done it disappears by itself.
+4. Cashiers (no settings:edit) never see it.

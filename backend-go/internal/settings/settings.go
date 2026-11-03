@@ -82,6 +82,9 @@ func (a *API) Mount(rt *rbac.Router) {
 	rt.Handle(http.MethodPut, "/settings/email", req("email_settings", "edit"), a.putEmail)
 	rt.Handle(http.MethodDelete, "/settings/email", req("email_settings", "edit"), a.deleteEmail)
 	rt.Handle(http.MethodPost, "/settings/email/test", req("email_settings", "edit"), a.testEmail)
+	// Onboarding checklist (S10 item 8).
+	rt.Handle(http.MethodGet, "/onboarding", req("settings", "edit"), a.onboarding)
+	rt.Handle(http.MethodPost, "/onboarding/hide", req("settings", "edit"), a.hideOnboarding)
 }
 
 // ---------------------------------------------------------------- model

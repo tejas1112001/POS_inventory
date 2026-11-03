@@ -10,6 +10,7 @@ import { usePermission } from '@/context/PermissionContext';
 import { ErrorState } from '@/components/kit/States';
 import { formatCurrency, formatNumber, getFormatSettings, todayInShop } from '@/lib/format';
 import { cn } from '@/lib/utils';
+import OnboardingCard from '@/components/dashboard/OnboardingCard';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, Filler, Tooltip);
 
@@ -285,6 +286,8 @@ export default function Dashboard() {
                 </Button>
               </div>
             )}
+
+            <OnboardingCard />
 
             <section aria-label={`${rangeLabel} figures`} className="grid grid-cols-2 gap-3 lg:grid-cols-4">
               <Stat big label="Net sales" value={formatCurrency(cur.net)} delta={prev && change(cur.net, prev.net)} hint={prev ? 'vs previous period' : 'after returns'} />

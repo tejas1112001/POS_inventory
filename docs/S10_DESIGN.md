@@ -1,6 +1,6 @@
 # S10 — Design note
 
-Status: **approved 2026-11-02 with the owner's changes** (marked *Changed*). Items 1–8 are being built in order; the refund rule (§5.3) was decided on 2026-11-02: **option A**. Each change to stored data (D), permissions (P) or billing rules (B) is numbered; the last section lists them for a yes/no. Shifts, cash count, day-end report and GST per sale are out of scope (later).
+Status: **approved 2026-11-02 with the owner's changes** (marked *Changed*). Items 1–8 were built in order (2026-11-02/03, local commits, not pushed); the refund rule (§5.3) was decided on 2026-11-02: **option A**. How to check each item: docs/UI_CHECKLIST.md (S10 – Item 1…8). Each change to stored data (D), permissions (P) or billing rules (B) is numbered; the last section lists them for a yes/no. Shifts, cash count, day-end report and GST per sale are out of scope (later).
 
 Common rules for every item: S4b design (Inter, navy/slate/blue, 100dvh), kit components, server checks first (the UI only hides what the server refuses), audit rows for every change, tenant-isolation tests for every new endpoint, the console under its strict CSP.
 
