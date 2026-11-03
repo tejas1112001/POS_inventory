@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/shopspring/decimal"
 
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/apperr"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/files"
@@ -362,6 +363,9 @@ type customerJSON struct {
 	Country string  `json:"country"`
 	Image   *string `json:"image"`
 	Status  string  `json:"status"`
+	// S10 item 5: the credit limit (null: no credit) and what is owed now.
+	CreditLimit *decimal.Decimal `json:"creditLimit"`
+	Due         decimal.Decimal  `json:"due"`
 	stamp
 	imageID *uuid.UUID
 }
@@ -379,7 +383,8 @@ type customerIn struct {
 }
 
 const (
-	qCusCols  = `x.id, x.name, coalesce(x.email::text, ''), coalesce(x.phone, ''), coalesce(x.address, ''), coalesce(x.city, ''), coalesce(x.country, ''), x.image_file_id, x.status, x.created_by, coalesce(u.name, 'Unknown'), x.created_at, x.updated_at`
+	qCusCols = `x.id, x.name, coalesce(x.email::text, ''), coalesce(x.phone, ''), coalesce(x.address, ''), coalesce(x.city, ''), coalesce(x.country, ''), x.image_file_id, x.status, x.created_by, coalesce(u.name, 'Unknown'), x.created_at, x.updated_at,
+		x.credit_limit, (SELECT coalesce(sum(s.due), 0) FROM sales s WHERE s.customer_id = x.id AND s.status <> 'Void' AND s.due > 0)`
 	qCusCount = `SELECT count(*) FROM customers WHERE deleted_at IS NULL AND ($1 = '' OR name ILIKE $1 OR phone ILIKE $1 OR email::text ILIKE $1) AND ($2 = '' OR status = $2)`
 	qCusList  = `SELECT ` + qCusCols + ` FROM customers x LEFT JOIN users u ON u.id = x.created_by
 		WHERE x.deleted_at IS NULL AND ($3 = '' OR x.name ILIKE $3 OR x.phone ILIKE $3 OR x.email::text ILIKE $3) AND ($4 = '' OR x.status = $4)
@@ -395,7 +400,8 @@ const (
 
 func scanCustomer(row pgx.Row) (customerJSON, error) {
 	var x customerJSON
-	err := row.Scan(&x.ID, &x.Name, &x.Email, &x.Phone, &x.Address, &x.City, &x.Country, &x.imageID, &x.Status, &x.CreatedBy, &x.CreatedByName, &x.CreatedAt, &x.UpdatedAt)
+	err := row.Scan(&x.ID, &x.Name, &x.Email, &x.Phone, &x.Address, &x.City, &x.Country, &x.imageID, &x.Status, &x.CreatedBy, &x.CreatedByName,
+		&x.CreatedAt, &x.UpdatedAt, &x.CreditLimit, &x.Due)
 	x.Image = files.URLPtr(x.imageID, files.PurposeCustomerImage)
 	return x, err
 }
