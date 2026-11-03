@@ -1,6 +1,8 @@
+import { toast } from '../../../shared/toast/store';
+import { HoldDialog, RecallDialog } from './HeldBills';
 import { usePermission } from '@/context/PermissionContext';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Banknote, HelpCircle, Loader2, Minus, Plus, RefreshCw, Search, ShoppingCart, Star, Trash2, User, X } from 'lucide-react';
+import { Banknote, HelpCircle, ListRestart, Loader2, Minus, PauseCircle, Plus, RefreshCw, Search, ShoppingCart, Star, Trash2, User, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
@@ -57,6 +59,8 @@ const finePointer = () => typeof window !== 'undefined' && window.matchMedia?.('
 // "Use the new checkout" in Settings. Totals shown before PAY are the
 // server's (POST /api/sales/quote); the sale itself is unchanged.
 export default function Checkout() {
+  const [holding, setHolding] = useState(false);
+  const [recalling, setRecalling] = useState(false);
   const { hasPermission } = usePermission();
   const { currentUser } = usePos();
   const { settings } = useShopSettings();
@@ -153,6 +157,30 @@ export default function Checkout() {
     if (lines.length && c.quoteReady) setPayOpen(true);
   }, [lines.length, c.quoteReady]);
 
+  // Held bills (S10 item 7): park the cart, or load a parked one.
+  const holdBill = async (label) => {
+    await api.post(
+      '/api/held-carts',
+      {
+        storeId: Number(c.storeId),
+        ...(c.customerId && String(c.customerId) !== String(c.walkIn?.id) ? { customerId: Number(c.customerId) } : {}),
+        label,
+        discount: c.discount || 0,
+        lines: lines.map((l) => ({ productId: l.productId, variantId: l.variantId, quantity: l.quantity, unitPrice: l.unitPrice, name: l.name, label: l.label || '' })),
+      },
+      { quiet: true }
+    );
+    setHolding(false);
+    c.clearCart();
+    if (c.walkIn) c.setCustomerId(c.walkIn.id);
+    toast.success(label ? `Bill "${label}" held.` : 'Bill held.');
+  };
+  const recallBill = async (held) => {
+    setRecalling(false);
+    await c.restoreCart(held);
+    toast.success(held.label ? `Bill "${held.label}" recalled.` : 'Bill recalled.');
+  };
+
   const askClear = async () => {
     const ok = await confirm({ title: 'Clear the cart?', body: 'All items are removed from the current sale.', confirmLabel: 'Clear cart', destructive: true });
     if (ok) c.clearCart();
@@ -209,6 +237,16 @@ export default function Checkout() {
       if (e.key === 'F4') {
         e.preventDefault();
         setPickCustomer(true);
+        return;
+      }
+      if (e.key === 'F6') {
+        e.preventDefault();
+        if (lines.length) setHolding(true);
+        return;
+      }
+      if (e.key === 'F7') {
+        e.preventDefault();
+        setRecalling(true);
         return;
       }
       if (e.key === 'F8') {
@@ -281,9 +319,17 @@ export default function Checkout() {
           <h2 className="text-base font-semibold">Current sale</h2>
           {itemCount > 0 && <span className="rounded-full bg-muted px-2 text-xs font-medium tabular-nums">{itemCount}</span>}
         </div>
-        <Button variant="ghost" size="sm" className="text-danger hover:text-danger" disabled={!lines.length} onClick={askClear}>
-          <X className="size-4" aria-hidden="true" /> Clear
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button variant="ghost" size="sm" disabled={!lines.length} onClick={() => setHolding(true)} title="Park this bill (F6)">
+            <PauseCircle className="size-4" aria-hidden="true" /> Hold
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => setRecalling(true)} title="Held bills (F7)">
+            <ListRestart className="size-4" aria-hidden="true" /> Recall
+          </Button>
+          <Button variant="ghost" size="sm" className="text-danger hover:text-danger" disabled={!lines.length} onClick={askClear}>
+            <X className="size-4" aria-hidden="true" /> Clear
+          </Button>
+        </div>
       </div>
       <button type="button" onClick={() => setPickCustomer(true)} className="flex min-h-11 items-center justify-between gap-2 border-b bg-muted/40 px-4 py-2 text-left text-sm hover:bg-muted">
         <span className="flex min-w-0 items-center gap-2">
@@ -544,6 +590,8 @@ export default function Checkout() {
         onAdded={(cu) => c.setCustomers((prev) => [...prev, cu])}
       />
       <ShortcutsHelp open={help} onClose={() => setHelp(false)} />
+      <HoldDialog open={holding} onClose={() => setHolding(false)} onHold={holdBill} />
+      <RecallDialog open={recalling} storeId={c.storeId} cartBusy={lines.length > 0} onClose={() => setRecalling(false)} onRecall={recallBill} />
       <PaymentSheet
         open={payOpen}
         onClose={() => setPayOpen(false)}

@@ -291,3 +291,17 @@ How to check:
 
 Known problems:
 - The email goes out at the first hourly run after 08:00 shop time (up to an hour later).
+
+## S10 – Item 7: Held bills
+
+How to check (new checkout):
+1. Add items, choose a customer, give a discount → **Hold** (or F6) → optional label (e.g. "Table 4") → **Hold bill**. The cart empties and the toast says "Bill "Table 4" held." Stock does not change.
+2. **Recall** (or F7) on another till of the same store (another cashier is fine): the list shows the label, items, an estimate, who held it and when. **Recall** loads the cart with the customer and discount; prices are checked again (a changed price shows "Prices have changed"), quantities are cut to what is in stock now with a note.
+3. Recall on two tills at once: the second gets "Someone else recalled or discarded that bill." The trash button discards a bill.
+4. Recall is disabled while the cart has items ("Hold or clear it before recalling another bill").
+5. Another store's held bills are not listed; held bills disappear after 7 days; one user can hold at most 20 ("You already hold 20 bills…").
+6. Shortcuts help (?) lists F6 and F7.
+
+Known problems:
+- Held bills are not in tenant exports (transient, like product locks).
+- The old POS screen has no Hold/Recall.

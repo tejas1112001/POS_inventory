@@ -4,6 +4,8 @@ const SHORTCUTS = [
   ['F2', 'Search products'],
   ['Enter', 'Add the exact SKU, or the only match'],
   ['F4', 'Choose the customer'],
+  ['F6', 'Hold this bill'],
+  ['F7', 'Held bills (recall)'],
   ['F8', 'Discount'],
   ['F10 or Ctrl+Enter', 'Pay'],
   ['↑ / ↓', 'Select a cart line (search box empty)'],

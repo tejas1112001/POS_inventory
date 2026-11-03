@@ -79,6 +79,12 @@ func (m *Maintenance) SweepPOSLocks(ctx context.Context) (int64, error) {
 		return m.Jobs.InTenantTx(ctx, t, tenancy.TxOptions{Access: tenancy.ReadWrite}, func(tx tenancy.TenantTx) error {
 			tag, err := tx.Exec(ctx, `DELETE FROM pos_locks WHERE expires_at < now() - interval '1 minute'`)
 			total += tag.RowsAffected()
+			if err != nil {
+				return err
+			}
+			// Held carts past their 7 days (S10 item 7).
+			tag, err = tx.Exec(ctx, `DELETE FROM held_carts WHERE expires_at < now()`)
+			total += tag.RowsAffected()
 			return err
 		})
 	})

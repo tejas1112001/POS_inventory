@@ -226,6 +226,57 @@ export default function useCheckout({ defaultCustomerId }) {
     [lines, storeId, changeQuantity, replaceProduct]
   );
 
+  // restoreCart loads a held bill (S10 item 7): the customer, the discount
+  // and the lines, locking each product at this till again. Nothing was
+  // reserved while it was held, so stock is read fresh; the quote then
+  // re-prices the cart (a changed price opens "Prices have changed").
+  const restoreCart = useCallback(
+    async (held) => {
+      setProblem(null);
+      const notes = [];
+      const next = [];
+      for (const pid of [...new Set(held.lines.map((l) => l.productId))]) {
+        let fresh = null;
+        try {
+          fresh = await lock(pid, storeId, true);
+          locked.current.add(pid);
+          replaceProduct(fresh);
+        } catch (err) {
+          const name = held.lines.find((l) => l.productId === pid)?.name || 'An item';
+          notes.push(err.code === 'PRODUCT_LOCKED' ? `"${name}" is in use at another till.` : `"${name}" could not be added.`);
+          continue;
+        }
+        const many = variantsOf(fresh).length > 1;
+        for (const l of held.lines.filter((x) => x.productId === pid)) {
+          const v = variantsOf(fresh).find((x) => x.id === l.variantId);
+          const stock = v ? Math.max(0, variantStock(v)) : 0;
+          if (!v || stock <= 0) {
+            notes.push(`"${l.name || fresh.name}" is out of stock here.`);
+            continue;
+          }
+          if (l.quantity > stock) notes.push(`Only ${stock} of "${l.name || fresh.name}" left here.`);
+          next.push({
+            key: v.id,
+            productId: pid,
+            variantId: v.id,
+            name: fresh.name,
+            label: many ? variantLabel(v) : '',
+            image: fresh.image,
+            price: Number(l.unitPrice ?? v.price),
+            unitPrice: l.unitPrice ?? v.price,
+            quantity: Math.min(l.quantity, stock),
+            maxQty: stock,
+          });
+        }
+      }
+      setLines(next);
+      setDiscountText(Number(held.discount) ? String(held.discount) : '');
+      if (held.customerId) setCustomerId(held.customerId);
+      if (notes.length) setProblem(notes.join(' '));
+    },
+    [storeId, replaceProduct]
+  );
+
   const clearCart = useCallback(() => {
     setLines([]);
     setDiscountText('');
@@ -351,6 +402,7 @@ export default function useCheckout({ defaultCustomerId }) {
     setQuantity,
     removeLine,
     clearCart,
+    restoreCart,
     discountText,
     setDiscountText,
     discount,

@@ -24,6 +24,7 @@ var (
 		"refresh_tokens":   "live sessions",
 		"auth_tokens":      "invite and password-reset links",
 		"pos_locks":        "transient",
+		"held_carts":       "transient: parked checkout carts, 7 days",
 		"idempotency_keys": "transient",
 		"goose_db_version": "migration bookkeeping; a restore runs the migrations itself",
 	}

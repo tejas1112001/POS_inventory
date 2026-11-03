@@ -814,4 +814,9 @@ func (a *API) Mount(rt *rbac.Router) {
 	rt.Handle(http.MethodGet, "/customers/{id}/statement", req("customers", "view"), a.statement)
 	rt.Handle(http.MethodPut, "/customers/{id}/credit-limit", req("customers", "credit_limit"), a.setCreditLimit)
 	rt.Handle(http.MethodPost, "/customer-payments/{id}/reverse", req("customers", "collect"), a.reverse)
+	// Held bills (S10 item 7).
+	rt.Handle(http.MethodGet, "/held-carts", req("pos", "create"), a.listHeld)
+	rt.Handle(http.MethodPost, "/held-carts", req("pos", "create"), a.hold)
+	rt.Handle(http.MethodPost, "/held-carts/{id}/recall", req("pos", "create"), a.take("recall"))
+	rt.Handle(http.MethodDelete, "/held-carts/{id}", req("pos", "create"), a.take("discard"))
 }
