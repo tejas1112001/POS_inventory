@@ -4,7 +4,9 @@
 FROM golang:1.27.3-bookworm@sha256:972b4110ba0f47539a975c31e52c64765e1ff19f2d74469ae4a595c6676e80a5 AS build
 WORKDIR /src
 COPY go.mod go.sum ./
-RUN --mount=type=cache,target=/go/pkg/mod go mod download
+# Retry: proxy.golang.org sometimes drops a download mid-stream (CI, 2026-11-04).
+RUN --mount=type=cache,target=/go/pkg/mod \
+    for i in 1 2 3; do go mod download && exit 0; echo "go mod download failed (try $i), retrying"; sleep $((i * 5)); done; exit 1
 COPY . .
 ARG VERSION=dev
 ARG COMMIT=none
