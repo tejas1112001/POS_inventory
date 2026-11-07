@@ -1,0 +1,64 @@
+[
+  {
+    "step": "Purchases list: any way to receive UI-AUDIT-PUR-3?",
+    "url": "/purchases",
+    "messages": [],
+    "http": [
+      "401 POST /api/auth/refresh "
+    ],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "",
+    "shot": "final-01.jpg"
+  },
+  {
+    "step": "Sales Report: UI-AUDIT lines",
+    "url": "/sales-report",
+    "messages": [],
+    "http": [],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "",
+    "shot": "final-02.jpg"
+  },
+  {
+    "step": "Customer Due report",
+    "url": "/customer-due-report",
+    "messages": [],
+    "http": [],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "",
+    "shot": "final-03.jpg"
+  },
+  {
+    "step": "Customer Report",
+    "url": "/customer-report",
+    "messages": [],
+    "http": [],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "",
+    "shot": "final-04.jpg"
+  },
+  {
+    "step": "Stock history",
+    "url": "/stock-adjustments",
+    "messages": [],
+    "http": [],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "",
+    "shot": "final-05.jpg"
+  },
+  {
+    "step": "Dashboard after the audit",
+    "url": "/dashboard",
+    "messages": [],
+    "http": [],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "",
+    "shot": "final-06.jpg"
+  }
+]

@@ -1,0 +1,10 @@
+{{define "body"}}
+<p style="margin:0 0 12px;">Hello {{.Name}},</p>
+<p style="margin:0 0 12px;">These items at {{.BusinessName}} are at or below their low-stock level ({{.Date}}):</p>
+<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;font-size:13px;border-collapse:collapse;margin:0 0 12px;">
+<tr><th align="left" style="padding:4px 8px 4px 0;border-bottom:1px solid #e4e4e7;">Item</th><th align="left" style="padding:4px 8px;border-bottom:1px solid #e4e4e7;">Store</th><th align="right" style="padding:4px 0 4px 8px;border-bottom:1px solid #e4e4e7;">Left / alert</th></tr>
+{{range .Items}}<tr><td style="padding:4px 8px 4px 0;">{{.Name}}{{if .SKU}} <span style="color:#71717a;">{{.SKU}}</span>{{end}}</td><td style="padding:4px 8px;">{{.Store}}</td><td align="right" style="padding:4px 0 4px 8px;">{{.Qty}} / {{.Alert}}</td></tr>
+{{end}}</table>
+{{if .More}}<p style="margin:0 0 12px;">… and {{.More}} more.</p>{{end}}
+{{if .Link}}<p style="margin:0 0 12px;"><a href="{{.Link}}" style="display:inline-block;background:#2563eb;color:#ffffff;padding:10px 16px;border-radius:6px;text-decoration:none;">See stock</a></p>{{end}}
+{{end}}

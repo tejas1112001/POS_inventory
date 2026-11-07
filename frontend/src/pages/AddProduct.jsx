@@ -1,3 +1,4 @@
+import { toast } from '../../shared/toast/store';
 import React, { useState, useEffect } from 'react';
 import PageHeader from '../components/forms/PageHeader';
 import FormFooter from '../components/forms/FormFooter';
@@ -9,7 +10,9 @@ import SubcategoryModal from '../components/forms/SubcategoryModal';
 import SupplierModal from '../components/forms/SupplierModal'; 
 import StoreModal from '../components/forms/StoreModal';
 import { usePos } from '../hooks/usePos';
+import { usePermission } from '../hooks/usePermission';
 import { api } from '../services/api';
+import { checkWizard, formValues, stepClass } from '../lib/wizard';
 import {
   ArrowLeftIcon,
   ArrowPathIcon,
@@ -87,10 +90,10 @@ const AddProduct = () => {
   };
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+    if (!checkWizard(e.target, goToStep)) return;
+
     try {
-      const formData = new FormData(e.target);
-      const data = Object.fromEntries(formData.entries());
+      const data = formValues(e.target);
       
       // Convert image to base64 if exists
       if (selectedImages.length > 0) {
@@ -175,6 +178,7 @@ const AddProduct = () => {
       }
       
       await api.post('/api/products', productData);
+      toast.success('Product added.');
       navigate('/products');
     } catch (error) {
       console.error('Error creating product:', error);
@@ -214,7 +218,7 @@ const AddProduct = () => {
     <FormPageLayout>
       <PageHeader />
 
-      <form className="flex min-h-0 flex-1 flex-col" onSubmit={handleSubmit}>
+      <form className="flex min-h-0 flex-1 flex-col" onSubmit={handleSubmit} noValidate>
         <FormCard>
           <FormBody>
             <FormStepper
@@ -223,8 +227,7 @@ const AddProduct = () => {
               onStepClick={goToStep}
             />
 
-          {currentStep === 0 && (
-          <div>
+          <div data-step="0" className={stepClass(currentStep, 0)}>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
                 <div className="flex items-center justify-between mb-1">
@@ -359,7 +362,7 @@ const AddProduct = () => {
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Sub Category <span className="text-red-500">*</span>
+                    Sub Category
                   </label>
                   <button 
                     type="button" 
@@ -383,7 +386,7 @@ const AddProduct = () => {
               
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Brand <span className="text-red-500">*</span>
+                  Brand
                 </label>
                 <select name="brandId" className="w-full px-3 py-2 border border-gray-600 rounded-lg">
                   <option value="">Select</option>
@@ -395,7 +398,7 @@ const AddProduct = () => {
               
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Unit <span className="text-red-500">*</span>
+                  Unit
                 </label>
                 <select name="unitId" className="w-full px-3 py-2 border border-gray-600 rounded-lg">
                   <option value="">Select</option>
@@ -447,10 +450,8 @@ const AddProduct = () => {
               <p className="text-sm text-gray-500 mt-1">Maximum 60 Words</p>
             </div>
           </div>
-          )}
 
-          {currentStep === 1 && (
-          <div>
+          <div data-step="1" className={stepClass(currentStep, 1)}>
             <div className="mb-6">
               <label className="block text-sm font-medium text-gray-700 mb-3">
                 Product Type <span className="text-red-500">*</span>
@@ -490,7 +491,8 @@ const AddProduct = () => {
                   <input 
                     name="quantity"
                     type="number" 
-                    className="w-full px-3 py-2 border border-gray-600 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                    
+                    step="1" min="0"className="w-full px-3 py-2 border border-gray-600 rounded-lg focus:ring-blue-500 focus:border-blue-500"
                     placeholder="Enter quantity"
                     required
                   />
@@ -503,7 +505,8 @@ const AddProduct = () => {
                   <input 
                     name="price"
                     type="number" 
-                    className="w-full px-3 py-2 border border-gray-600 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                    
+                    step="0.01" min="0"className="w-full px-3 py-2 border border-gray-600 rounded-lg focus:ring-blue-500 focus:border-blue-500"
                     placeholder="Enter price"
                     required
                   />
@@ -524,12 +527,15 @@ const AddProduct = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Tax
                   </label>
-                  <select name="tax" className="w-full px-3 py-2 border border-gray-600 rounded-lg focus:ring-blue-500 focus:border-blue-500">
-                    <option value="">Select</option>
-                    <option value="8">IGST (8%)</option>
-                    <option value="5">GST (5%)</option>
-                    <option value="4">SGST (4%)</option>
-                  </select>
+                  <input
+                    name="tax"
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.01"
+                    placeholder="Tax rate in %, e.g. 18"
+                    className="w-full px-3 py-2 border border-gray-600 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                  />
                 </div>
                 
                 <div>
@@ -550,7 +556,8 @@ const AddProduct = () => {
                   <input 
                     name="discountValue"
                     type="number" 
-                    className="w-full px-3 py-2 border border-gray-600 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                    
+                    step="0.01" min="0"className="w-full px-3 py-2 border border-gray-600 rounded-lg focus:ring-blue-500 focus:border-blue-500"
                     placeholder="Enter discount"
                   />
                 </div>
@@ -562,7 +569,8 @@ const AddProduct = () => {
                   <input 
                     name="quantityAlert"
                     type="number" 
-                    className="w-full px-3 py-2 border border-gray-600 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                    
+                    step="1" min="0"className="w-full px-3 py-2 border border-gray-600 rounded-lg focus:ring-blue-500 focus:border-blue-500"
                     placeholder="Enter alert quantity"
                   />
                 </div>
@@ -604,39 +612,40 @@ const AddProduct = () => {
                           <input name="variantAttribute1"
                             type="text" 
                             className="w-full px-2 py-1 border border-gray-600 rounded focus:ring-blue-500 focus:border-blue-500"
-                            defaultValue="Color"
+                            placeholder="Color"
                           />
                         </td>
                         <td className="px-4 py-3">
                           <input name="variantValue1"
                             type="text" 
                             className="w-full px-2 py-1 border border-gray-600 rounded focus:ring-blue-500 focus:border-blue-500"
-                            defaultValue="Red"
+                            placeholder="Red"
                           />
                         </td>
                         <td className="px-4 py-3">
                           <input name="variantSKU1"
                             type="text" 
                             className="w-full px-2 py-1 border border-gray-600 rounded focus:ring-blue-500 focus:border-blue-500"
-                            defaultValue="FD001-RED"
+                            placeholder="FD001-RED"
                           />
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center">
-                            <button className="px-2 py-1 bg-gray-200 rounded-l">-</button>
+                            <button type="button" className="px-2 py-1 bg-gray-200 rounded-l" aria-hidden="true" tabIndex={-1}>-</button>
                             <input name="variantQuantity1"
                               type="number" 
                               className="w-16 px-2 py-1 border-y border-gray-600 text-center"
-                              defaultValue="10"
+                              placeholder="10"
                             />
-                            <button className="px-2 py-1 bg-gray-200 rounded-r">+</button>
+                            <button type="button" className="px-2 py-1 bg-gray-200 rounded-r" aria-hidden="true" tabIndex={-1}>+</button>
                           </div>
                         </td>
                         <td className="px-4 py-3">
                           <input name="variantPrice1"
                             type="number" 
-                            className="w-full px-2 py-1 border border-gray-600 rounded focus:ring-blue-500 focus:border-blue-500"
-                            defaultValue="7.99"
+                            
+                            step="0.01" min="0"className="w-full px-2 py-1 border border-gray-600 rounded focus:ring-blue-500 focus:border-blue-500"
+                            placeholder="7.99"
                           />
                         </td>
                         <td className="px-4 py-3 flex space-x-2">
@@ -653,39 +662,40 @@ const AddProduct = () => {
                           <input name="variantAttribute2"
                             type="text" 
                             className="w-full px-2 py-1 border border-gray-600 rounded focus:ring-blue-500 focus:border-blue-500"
-                            defaultValue="Color"
+                            placeholder="Color"
                           />
                         </td>
                         <td className="px-4 py-3">
                           <input name="variantValue2"
                             type="text" 
                             className="w-full px-2 py-1 border border-gray-600 rounded focus:ring-blue-500 focus:border-blue-500"
-                            defaultValue="Blue"
+                            placeholder="Blue"
                           />
                         </td>
                         <td className="px-4 py-3">
                           <input name="variantSKU2"
                             type="text" 
                             className="w-full px-2 py-1 border border-gray-600 rounded focus:ring-blue-500 focus:border-blue-500"
-                            defaultValue="FD001-BLUE"
+                            placeholder="FD001-BLUE"
                           />
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center">
-                            <button className="px-2 py-1 bg-gray-200 rounded-l">-</button>
+                            <button type="button" className="px-2 py-1 bg-gray-200 rounded-l" aria-hidden="true" tabIndex={-1}>-</button>
                             <input name="variantQuantity2"
                               type="number" 
                               className="w-16 px-2 py-1 border-y border-gray-600 text-center"
-                              defaultValue="15"
+                              placeholder="15"
                             />
-                            <button className="px-2 py-1 bg-gray-200 rounded-r">+</button>
+                            <button type="button" className="px-2 py-1 bg-gray-200 rounded-r" aria-hidden="true" tabIndex={-1}>+</button>
                           </div>
                         </td>
                         <td className="px-4 py-3">
                           <input name="variantPrice2"
                             type="number" 
-                            className="w-full px-2 py-1 border border-gray-600 rounded focus:ring-blue-500 focus:border-blue-500"
-                            defaultValue="7.99"
+                            
+                            step="0.01" min="0"className="w-full px-2 py-1 border border-gray-600 rounded focus:ring-blue-500 focus:border-blue-500"
+                            placeholder="7.99"
                           />
                         </td>
                         <td className="px-4 py-3 flex space-x-2">
@@ -703,10 +713,8 @@ const AddProduct = () => {
               </div>
             )}
           </div>
-          )}
 
-          {currentStep === 2 && (
-          <div>
+          <div data-step="2" className={stepClass(currentStep, 2)}>
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Upload Product Images
@@ -751,10 +759,8 @@ const AddProduct = () => {
               </div>
             )}
           </div>
-          )}
 
-          {currentStep === 3 && (
-          <div>
+          <div data-step="3" className={stepClass(currentStep, 3)}>
             <div className="p-3 bg-gray-50 rounded-lg border border-gray-600 mb-6">
               <div className="flex flex-wrap gap-4">
                 <label className="flex items-center">
@@ -840,13 +846,12 @@ const AddProduct = () => {
               )}
             </div>
           </div>
-          )}
           </FormBody>
 
         <FormFooter 
           cancelPath="/products" 
           submitLabel="Add Product" 
-          disabled={!isAdmin}
+          disabled={!hasPermission('products', 'create')}
           showStepNav
           currentStep={currentStep}
           totalSteps={4}

@@ -1,52 +1,20 @@
-import React, { createContext, useEffect, useState, useContext } from 'react';
+import React, { createContext, useContext } from 'react';
+import { toast } from '../../shared/toast/store';
 
-const ErrorContext = createContext();
+// ErrorContext keeps the old useError().showError API; every message now
+// goes through the shared toast system (docs/UI_REDESIGN_PLAN.md §2).
+// The <Toaster /> itself is mounted once in Root.jsx.
+const ErrorContext = createContext({ showError: (m) => toast.error(m) });
 
-export const useError = () => {
-  return useContext(ErrorContext);
-};
+// eslint-disable-next-line react-refresh/only-export-components -- hook kept next to its provider
+export const useError = () => useContext(ErrorContext);
 
-export const ErrorProvider = ({ children }) => {
-  const [error, setError] = useState(null);
+const value = { showError: (message) => toast.error(message) };
 
-  const showError = (message) => {
-    setError(message);
-  };
+export const ErrorProvider = ({ children }) => (
+  <ErrorContext.Provider value={value}>
+    {children}
+  </ErrorContext.Provider>
+);
 
-  useEffect(() => {
-    if (!error) return;
-    const timer = setTimeout(() => {
-      setError(null);
-    }, 5000);
-    return () => clearTimeout(timer);
-  }, [error]);
-
-  return (
-    <ErrorContext.Provider value={{ showError }}>
-      {children}
-      {error && <ErrorToast message={error} onClose={() => setError(null)} />}
-    </ErrorContext.Provider>
-  );
-};
-
-const ErrorToast = ({ message, onClose }) => {
-  return (
-    <div
-      role="alert"
-      aria-live="assertive"
-      className="fixed top-5 right-5 z-50 w-full max-w-sm rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 shadow-lg"
-    >
-      <div className="flex items-start justify-between gap-3">
-        <span>{message}</span>
-        <button
-          type="button"
-          className="text-red-600 hover:text-red-800"
-          onClick={onClose}
-          aria-label="Dismiss error"
-        >
-          ×
-        </button>
-      </div>
-    </div>
-  );
-};
+export { toast };

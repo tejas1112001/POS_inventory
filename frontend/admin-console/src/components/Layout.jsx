@@ -1,0 +1,50 @@
+import { useEffect, useState } from 'react';
+import { NavLink, useLocation } from 'react-router-dom';
+import ErrorBoundary from './ErrorBoundary';
+import { useSession } from '../session';
+import styles from './Layout.module.css';
+
+const NAV = [
+  { to: '/tenants', label: 'Tenants', perm: 'tenants:view' },
+  { to: '/plans', label: 'Plans', perm: ['plans:manage', 'billing:view'] },
+  { to: '/billing', label: 'Billing', perm: 'billing:view' },
+  { to: '/audit', label: 'Audit log', perm: ['audit:view_all', 'audit:view_own'] },
+  { to: '/platform-users', label: 'Platform users', perm: 'platform_users:manage' },
+];
+
+// Layout: navigation by permission, the signed-in user, sign-out.
+export default function Layout({ children }) {
+  const { user, can, signOut } = useSession();
+  const { pathname } = useLocation();
+  const allowed = (perm) => (Array.isArray(perm) ? perm.some(can) : can(perm));
+  const [menu, setMenu] = useState(false); // phones: the menu is a drop-down
+  useEffect(() => setMenu(false), [pathname]);
+  return (
+    <div className={styles.shell}>
+      <header className={styles.top}>
+        <span className={styles.brand}>Platform console</span>
+        <button type="button" className={styles.menuButton} aria-expanded={menu} aria-controls="console-nav" onClick={() => setMenu((m) => !m)}>
+          {menu ? 'Close' : 'Menu'}
+        </button>
+        <nav id="console-nav" className={`${styles.nav} ${menu ? styles.navOpen : ''}`} aria-label="Main">
+          {NAV.filter((n) => allowed(n.perm)).map((n) => (
+            <NavLink key={n.to} to={n.to} className={({ isActive }) => `${styles.link} ${isActive ? styles.active : ''}`}>
+              {n.label}
+            </NavLink>
+          ))}
+        </nav>
+        <div className={styles.user}>
+          <span className="muted small">
+            {user?.email} · {String(user?.role || '').replace('_', ' ')}
+          </span>
+          <button type="button" className="btn" onClick={signOut}>
+            Sign out
+          </button>
+        </div>
+      </header>
+      <main className={styles.main}>
+        <ErrorBoundary resetKey={pathname}>{children}</ErrorBoundary>
+      </main>
+    </div>
+  );
+}

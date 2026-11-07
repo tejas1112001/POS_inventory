@@ -1,0 +1,12 @@
+Your shop {{if eq (len .Shops) 1}}address{{else}}addresses{{end}}
+
+Hello,
+
+Someone asked for the shop addresses linked to this email on {{.PlatformName}}. Staff sign in at these addresses:
+
+{{range .Shops}}- {{.Name}}: {{.URL}}
+{{end}}
+If you did not ask for this, you can ignore this email. Nothing about your account has changed.
+
+-- 
+{{.Footnote}}

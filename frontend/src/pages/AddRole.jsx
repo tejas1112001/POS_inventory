@@ -1,3 +1,4 @@
+import { toast } from '../../shared/toast/store';
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ShieldCheck, Check, ArrowLeft } from 'lucide-react';
@@ -119,6 +120,7 @@ export default function AddRole() {
       }
 
       await refreshPermissions();
+      toast.success(isEditing ? 'Role updated.' : 'Role created.');
       navigate('/roles');
     } catch (err) {
       setError(err?.message || 'Failed to save role');
@@ -220,7 +222,6 @@ export default function AddRole() {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {Object.entries(groupedPermissions).map(([moduleName, perms]) => {
                     const allSelected = perms.every((p) => selectedPermissionIds.has(p.id));
-                    const someSelected = perms.some((p) => selectedPermissionIds.has(p.id));
 
                     return (
                       <div

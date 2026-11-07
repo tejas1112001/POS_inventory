@@ -1,31 +1,27 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { getStoredPermissions, setStoredPermissions, getToken } from '../lib/authStorage';
+import { getSession, subscribeSession, updateSession } from '../lib/session';
 import { api } from '../services/api';
 
 const PermissionContext = createContext();
 
+// Permissions come with the session (login, refresh, /api/auth/me) and are
+// re-read every minute so role changes by an admin show up.
 export const PermissionProvider = ({ children }) => {
-  const [permissions, setPermissions] = useState(() => getStoredPermissions());
+  const [permissions, setPermissions] = useState(() => getSession().permissions);
   const [loadingPermissions, setLoadingPermissions] = useState(false);
 
+  useEffect(() => subscribeSession((s) => setPermissions(s.permissions)), []);
+
   const updatePermissions = useCallback((newPerms) => {
-    if (Array.isArray(newPerms)) {
-      setPermissions(newPerms);
-      setStoredPermissions(newPerms);
-    }
+    if (Array.isArray(newPerms)) updateSession({ permissions: newPerms });
   }, []);
 
   const refreshPermissions = useCallback(async () => {
-    const token = getToken();
-    if (!token) {
-      setPermissions([]);
-      return;
-    }
+    if (!getSession().token) return;
     try {
       setLoadingPermissions(true);
-      const res = await api.get('/api/auth/permissions');
-      const fetched = res?.permissions || [];
-      updatePermissions(fetched);
+      const res = await api.get('/api/auth/permissions', { quiet: true });
+      updatePermissions(res?.permissions || []);
     } catch (err) {
       console.warn('Failed to refresh permissions:', err?.message);
     } finally {
@@ -33,18 +29,8 @@ export const PermissionProvider = ({ children }) => {
     }
   }, [updatePermissions]);
 
-  // Sync on token change or startup
   useEffect(() => {
-    refreshPermissions();
-  }, [refreshPermissions]);
-
-  // Periodic background refresh every 30 seconds to pick up admin updates dynamically
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (getToken()) {
-        refreshPermissions();
-      }
-    }, 30000);
+    const interval = setInterval(refreshPermissions, 60_000);
     return () => clearInterval(interval);
   }, [refreshPermissions]);
 
@@ -103,6 +89,8 @@ export const PermissionProvider = ({ children }) => {
           return hasPermission('invoices', 'view');
         case 'stores':
           return hasPermission('stores', 'view');
+        case 'billing':
+          return hasPermission('billing', 'view');
         default:
           return true;
       }
@@ -126,6 +114,7 @@ export const PermissionProvider = ({ children }) => {
   );
 };
 
+// eslint-disable-next-line react-refresh/only-export-components -- hook kept next to its provider
 export const usePermission = () => {
   const context = useContext(PermissionContext);
   if (!context) {

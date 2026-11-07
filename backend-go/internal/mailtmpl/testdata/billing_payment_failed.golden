@@ -1,0 +1,38 @@
+Subject: Payment failed for Asha General Stores
+
+--- text ---
+We could not take your payment
+
+Hello,
+
+The latest payment for Asha General Stores on POS Cloud did not go through.
+
+Please pay by 31 Oct 2026. After that the shop is suspended until payment is made.
+
+Pay now: https://rzp.io/i/abc123
+
+-- 
+Sent by POS Cloud about the account of Asha General Stores.
+
+--- html ---
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Payment failed for Asha General Stores</title></head>
+<body style="margin:0;padding:24px;background:#f4f4f5;font-family:Arial,Helvetica,sans-serif;color:#18181b;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:8px;">
+<tr><td style="padding:24px;">
+
+
+<h1 style="font-size:20px;margin:0 0 16px;">We could not take your payment</h1>
+<p style="margin:0 0 8px;">Hello,</p>
+<p style="margin:0 0 12px;">The latest payment for Asha General Stores on POS Cloud did not go through.</p>
+<p style="margin:0 0 12px;">Please pay by 31 Oct 2026. After that the shop is suspended until payment is made.</p>
+<p style="margin:4px 0 16px;"><a href="https://rzp.io/i/abc123" style="display:inline-block;padding:10px 18px;background:#4f46e5;color:#ffffff;text-decoration:none;border-radius:6px;">Pay now</a></p>
+<p style="margin:0 0 16px;font-size:12px;word-break:break-all;color:#52525b;">https://rzp.io/i/abc123</p>
+
+
+</td></tr>
+</table>
+<p style="max-width:560px;margin:16px auto 0;font-size:12px;color:#71717a;text-align:center;">Sent by POS Cloud about the account of Asha General Stores.</p>
+</body>
+</html>

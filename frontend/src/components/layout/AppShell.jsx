@@ -2,7 +2,7 @@ import { cn } from '@/lib/utils';
 
 export function AppShell({ children }) {
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="flex min-h-dvh bg-background">
       {children}
     </div>
   );
@@ -19,12 +19,14 @@ export function PageWrapper({ children, className }) {
 export function MainLayout({
   sidebar,
   topbar,
+  banner,
   children,
   fullBleed = false,
   sidebarCollapsed = false,
+  bottomNav = null,
 }) {
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-background">
+    <div className="flex h-dvh w-full overflow-hidden bg-background">
       {sidebar}
       <div
         className={cn(
@@ -33,14 +35,17 @@ export function MainLayout({
         )}
       >
         <div className="shrink-0">{topbar}</div>
+        {banner && <div className="shrink-0">{banner}</div>}
         <main
           className={cn(
             'flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto no-scrollbar',
-            fullBleed ? 'p-0' : 'p-4 sm:p-6'
+            fullBleed ? 'p-0' : 'p-4 sm:p-6',
+            bottomNav && 'max-md:pb-24'
           )}
         >
           {children}
         </main>
+        {bottomNav}
       </div>
     </div>
   );

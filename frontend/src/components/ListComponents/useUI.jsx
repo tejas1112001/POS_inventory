@@ -1,5 +1,4 @@
 import {
-  flexRender,
   getCoreRowModel,
   getFilteredRowModel,
   getPaginationRowModel,
@@ -7,8 +6,8 @@ import {
   useReactTable
 } from '@tanstack/react-table';
 import { ChevronUpIcon } from '@heroicons/react/24/outline';
-import LoopIcon from '@mui/icons-material/Loop';
-import { exportToPDF, exportToExcel } from './exportFunctions';
+import { RefreshCw as LoopIcon } from 'lucide-react';
+import { exportToExcel } from './exportFunctions';
 
 
 
@@ -39,12 +38,7 @@ export const useUI = ({
 
   const controlButtons = [
     {
-      icon: <img src="assets/icons/pdf.svg" alt="pdf" className="w-5 h-5" />,
-      onClick: () => exportToPDF(filteredData, moduleName),
-      title: 'Export to PDF',
-    },
-    {
-      icon: <img src="assets/icons/excel.svg" alt="excel" className="w-5 h-5" />,
+      icon: <img src="/assets/icons/excel.svg" alt="excel" className="w-5 h-5" />,
       onClick: () => { void exportToExcel(filteredData, moduleName); },
       title: 'Export to Excel',
     },
@@ -106,7 +100,7 @@ export const useUI = ({
             key="add"
             onClick={onAddItem}
             disabled={isAddDisabled}
-            className="inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-xs hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-xs hover:bg-[color-mix(in_oklch,var(--primary),black_12%)] disabled:cursor-not-allowed disabled:opacity-50"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"

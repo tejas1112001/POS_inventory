@@ -8,7 +8,7 @@ import ListControlButtons from '../ListComponents/ListControlButtons';
 import DateRangePicker from '../ListComponents/DateRangePicker';
 import SelectField from '../ListComponents/SelectField';
 import GenerateButton from '../ListComponents/GenerateButton';
-import { exportToPDF } from '../ListComponents/exportFunctions';
+import { exportToExcel } from '../ListComponents/exportFunctions';
 import { PrinterIcon } from '@heroicons/react/24/outline';
 import { formatCurrency } from '@/lib/format';
 
@@ -37,7 +37,7 @@ export default function CustomerReportList({ reports }) {
     window.print();
   };
   const handleGenerate = () => {
-    exportToPDF(filteredData, 'customer_report');
+    void exportToExcel(filteredData, 'customer_report');
   };
 
   // Columns configuration
@@ -46,10 +46,10 @@ export default function CustomerReportList({ reports }) {
       indexColumn(),
       {
         accessorKey: 'reference',
-        header: 'Reference',
+        header: 'Last receipt',
         size: 120,
         cell: ({ getValue }) => (
-          <a href="#" className="text-blue-600 hover:underline">{getValue()}</a>
+          <span>{getValue()}</span>
         )
       },
       {
@@ -57,13 +57,6 @@ export default function CustomerReportList({ reports }) {
         header: 'Customer',
         cell: ({ row }) => (
           <div className="flex items-center">
-            <div className="bg-gray-100 rounded-full p-1 mr-3">
-              <img 
-                src={row.original.customer.image} 
-                alt={row.original.customer.name} 
-                className="w-8 h-8 rounded-full object-cover"
-              />
-            </div>
             <span>{row.original.customer.name}</span>
           </div>
         ),
@@ -71,13 +64,13 @@ export default function CustomerReportList({ reports }) {
       },
       {
         accessorKey: 'totalOrders',
-        header: 'Total Orders',
+        header: 'Sales',
         size: 100,
         meta: { align: 'center' }
       },
       {
         accessorKey: 'amount',
-        header: 'Amount',
+        header: 'Net amount',
         cell: ({ getValue }) => <span>{formatCurrency(getValue())}</span>,
         size: 110,
       },
@@ -141,7 +134,6 @@ export default function CustomerReportList({ reports }) {
   const {
     table,
     controlButtons,
-    primaryButtons,
     emptyState
   } = useUI({
     moduleName: 'customer reports',
@@ -210,7 +202,7 @@ export default function CustomerReportList({ reports }) {
             placeholder="All"
             colClass="md:col-span-2"
           />
-          <GenerateButton onClick={handleGenerate} label="Generate PDF" />
+          <GenerateButton onClick={handleGenerate} label="Export to Excel" />
         </div>
       }
       table={table}

@@ -33,13 +33,15 @@ const FormFooter = ({
           <NavLink to={cancelPath}>{cancelLabel}</NavLink>
         </Button>
 
+        {/* Distinct keys: React must not turn the clicked Next button into
+            the submit button mid-click, or the browser submits the form. */}
         {showStepNav && !isLastStep ? (
-          <Button type="button" onClick={onNext}>
+          <Button key="next" type="button" onClick={onNext}>
             Next
             <ChevronRight className="ml-1 size-4" />
           </Button>
         ) : (
-          <Button type="submit" disabled={disabled}>
+          <Button key="submit" type="submit" disabled={disabled}>
             {submitLabel}
           </Button>
         )}

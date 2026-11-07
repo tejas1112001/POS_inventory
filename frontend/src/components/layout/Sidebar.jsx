@@ -1,29 +1,7 @@
 import { useState } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
-import {
-  LayoutDashboard,
-  ShoppingCart,
-  ReceiptText,
-  RotateCcw,
-  FileText,
-  Package,
-  Boxes,
-  Truck,
-  Tag,
-  Award,
-  Ruler,
-  Users,
-  UserCog,
-  BarChart3,
-  ChevronsLeft,
-  ChevronsRight,
-  LogOut,
-  X,
-  Plus,
-  Settings,
-  ShieldCheck,
-  Globe,
-} from 'lucide-react';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { isItemActive, visibleNav } from './navigation';
+import { ShoppingCart, ChevronsLeft, LogOut, X } from 'lucide-react';
 import { usePos } from '@/hooks/usePos';
 import { usePermission } from '@/hooks/usePermission';
 import { cn } from '@/lib/utils';
@@ -31,82 +9,22 @@ import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { initials } from '@/lib/format';
 
-const navSections = [
-  {
-    title: 'Overview',
-    items: [{ label: 'Dashboard', path: '/', icon: LayoutDashboard, menuKey: 'dashboard' }],
-  },
-  {
-    title: 'Sales',
-    items: [
-      { label: 'POS', path: '/pos', icon: ShoppingCart, menuKey: 'pos' },
-      { label: 'Sales', path: '/sales', icon: ReceiptText, menuKey: 'sales' },
-      { label: 'Sales Returns', path: '/sales-return', icon: RotateCcw, menuKey: 'sales_returns' },
-      { label: 'Invoices', path: '/invoices', icon: FileText, menuKey: 'invoices' },
-    ],
-  },
-  {
-    title: 'Inventory',
-    items: [
-      { label: 'Products', path: '/products', icon: Package, menuKey: 'products' },
-      { label: 'Inventory', path: '/inventory', icon: Boxes, menuKey: 'inventory' },
-      { label: 'Purchases', path: '/purchases', icon: Truck, menuKey: 'purchases' },
-    ],
-  },
-  {
-    title: 'Master Data',
-    items: [
-      { label: 'Categories', path: '/categories', icon: Tag, menuKey: 'categories' },
-      { label: 'Brands', path: '/brands', icon: Award, menuKey: 'brands' },
-      { label: 'Units', path: '/units', icon: Ruler, menuKey: 'units' },
-      { label: 'Suppliers', path: '/suppliers', icon: Truck, menuKey: 'suppliers' },
-    ],
-  },
-  {
-    title: 'People',
-    items: [
-      { label: 'Customers', path: '/customers', icon: Users, menuKey: 'customers' },
-    ],
-  },
-  {
-    title: 'Reports',
-    items: [
-      { label: 'Sales Report', path: '/sales-report', icon: BarChart3, menuKey: 'reports' },
-      { label: 'Purchase Report', path: '/purchase-report', icon: BarChart3, menuKey: 'reports' },
-      { label: 'Customer Report', path: '/customer-report', icon: BarChart3, menuKey: 'reports' },
-      { label: 'Customer Due', path: '/customer-due-report', icon: BarChart3, menuKey: 'reports' },
-    ],
-  },
-  {
-    title: 'System',
-    items: [
-      { label: 'Product Showcase', path: '/showcase-settings', icon: Globe, menuKey: 'stores' },
-      { label: 'Users', path: '/users', icon: UserCog, menuKey: 'users' },
-      { label: 'Roles & Permissions', path: '/roles', icon: ShieldCheck, menuKey: 'roles' },
-      { label: 'Settings', path: '/settings', icon: Settings, menuKey: 'stores' },
-    ],
-  },
-];
 
 export default function Sidebar({ mobileOpen, setMobileOpen, collapsed: controlledCollapsed, onCollapsedChange }) {
   const [internalCollapsed, setInternalCollapsed] = useState(false);
   const collapsed = controlledCollapsed ?? internalCollapsed;
   const setCollapsed = onCollapsedChange ?? setInternalCollapsed;
-  const { currentUser, logout } = usePos();
-  const { canAccessMenu } = usePermission();
+  const { currentUser, logout, tenant } = usePos();
+  const { hasPermission } = usePermission();
   const navigate = useNavigate();
 
-  const handleSignOut = () => {
-    logout();
-    navigate('/signin');
+  const handleSignOut = async () => {
+    await logout();
+    navigate('/login', { replace: true });
   };
 
-  const visibleSections = navSections
-    .map((section) => ({
-      ...section,
-      items: section.items.filter((item) => canAccessMenu(item.menuKey)),
-    }))
-    .filter((section) => section.items.length > 0);
+  const { pathname } = useLocation();
+  const visibleSections = visibleNav(hasPermission);
 
   return (
     <>
@@ -120,7 +38,7 @@ export default function Sidebar({ mobileOpen, setMobileOpen, collapsed: controll
 
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-50 flex h-screen flex-col overflow-hidden border-r bg-sidebar text-sidebar-foreground transition-[width,transform] duration-200',
+          'fixed inset-y-0 left-0 z-50 flex h-dvh flex-col overflow-hidden border-r bg-sidebar text-sidebar-foreground transition-[width,transform] duration-200',
           collapsed ? 'w-[68px]' : 'w-64',
           mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         )}
@@ -145,15 +63,17 @@ export default function Sidebar({ mobileOpen, setMobileOpen, collapsed: controll
                   <ShoppingCart className="size-5" />
                 </div>
                 <div className="flex flex-col leading-tight">
-                  <span className="text-sm font-bold tracking-tight text-foreground">ReactronPOS</span>
-                  <span className="text-[10px] font-medium text-muted-foreground">Retail Suite</span>
+                  <span className="max-w-[150px] truncate text-sm font-bold tracking-tight text-white" title={tenant?.name || ''}>
+                    {tenant?.name || 'Point of Sale'}
+                  </span>
+                  <span className="text-[10px] font-medium text-sidebar-muted">Point of sale</span>
                 </div>
               </div>
               <div className="flex items-center gap-1">
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="hidden lg:flex size-7 text-muted-foreground hover:text-foreground"
+                  className="hidden lg:flex size-7 text-sidebar-muted hover:bg-sidebar-accent hover:text-white"
                   onClick={() => setCollapsed(true)}
                   aria-label="Collapse sidebar"
                   title="Collapse sidebar"
@@ -163,7 +83,7 @@ export default function Sidebar({ mobileOpen, setMobileOpen, collapsed: controll
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="lg:hidden size-7 text-muted-foreground hover:text-foreground"
+                  className="lg:hidden size-9 text-sidebar-muted hover:bg-sidebar-accent hover:text-white"
                   onClick={() => setMobileOpen(false)}
                   aria-label="Close sidebar"
                 >
@@ -179,7 +99,7 @@ export default function Sidebar({ mobileOpen, setMobileOpen, collapsed: controll
             {visibleSections.map((section) => (
               <div key={section.title}>
                 {!collapsed && (
-                  <h3 className="mb-1.5 px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  <h3 className="mb-1.5 px-2 text-[10px] font-semibold uppercase tracking-wider text-sidebar-muted">
                     {section.title}
                   </h3>
                 )}
@@ -190,13 +110,13 @@ export default function Sidebar({ mobileOpen, setMobileOpen, collapsed: controll
                       <li key={item.path}>
                         <NavLink
                           to={item.path}
-                          end={item.path === '/'}
                           onClick={() => setMobileOpen(false)}
-                          className={({ isActive }) =>
+                          aria-current={isItemActive(item, pathname) ? 'page' : undefined}
+                          className={() =>
                             cn(
                               'flex items-center rounded-xl text-sm transition-all',
                               collapsed ? 'size-10 justify-center mx-auto' : 'w-full gap-3 px-3 py-2.5',
-                              isActive
+                              isItemActive(item, pathname)
                                 ? 'bg-primary text-primary-foreground shadow-xs font-semibold'
                                 : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground font-medium'
                             )
@@ -215,35 +135,37 @@ export default function Sidebar({ mobileOpen, setMobileOpen, collapsed: controll
           </div>
         </nav>
 
-        <div className="border-t p-2 shrink-0">
+        <div className="border-t border-sidebar-border p-2 shrink-0">
           {collapsed ? (
             <button
+              type="button"
               onClick={handleSignOut}
               title={`Sign out (${currentUser?.name || 'User'})`}
-              className="flex size-10 mx-auto items-center justify-center rounded-xl hover:bg-destructive/10 text-sidebar-foreground hover:text-destructive transition-colors group"
+              aria-label={`Sign out (${currentUser?.name || 'User'})`}
+              className="flex size-10 mx-auto items-center justify-center rounded-xl hover:bg-sidebar-accent text-sidebar-foreground transition-colors group"
             >
-              <Avatar className="size-8 shrink-0 ring-2 ring-primary/20 group-hover:ring-destructive/30">
-                <AvatarFallback className="bg-primary/10 text-primary text-xs font-bold group-hover:bg-destructive/10 group-hover:text-destructive">
+              <Avatar className="size-8 shrink-0 ring-2 ring-white/15 group-hover:ring-white/40">
+                <AvatarFallback className="bg-sidebar-accent text-white text-xs font-bold">
                   {currentUser ? initials(currentUser.name) : 'U'}
                 </AvatarFallback>
               </Avatar>
             </button>
           ) : (
-            <div className="flex items-center gap-2 rounded-xl p-2 bg-sidebar-accent/50">
+            <div className="flex items-center gap-2 rounded-xl p-2 bg-sidebar-accent">
               <Avatar className="size-8 shrink-0">
-                <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
+                <AvatarFallback className="bg-primary text-white text-xs font-semibold">
                   {currentUser ? initials(currentUser.name) : 'U'}
                 </AvatarFallback>
               </Avatar>
               <div className="flex flex-1 items-center justify-between overflow-hidden">
                 <div className="overflow-hidden leading-tight">
-                  <p className="truncate text-sm font-semibold text-foreground">{currentUser?.name}</p>
-                  <p className="truncate text-xs text-muted-foreground capitalize">{currentUser?.role}</p>
+                  <p className="truncate text-sm font-semibold text-white">{currentUser?.name}</p>
+                  <p className="truncate text-xs text-sidebar-muted capitalize">{currentUser?.role}</p>
                 </div>
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="size-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                  className="size-8 text-sidebar-muted hover:text-white hover:bg-red-600"
                   onClick={handleSignOut}
                   aria-label="Sign out"
                   title="Sign out"

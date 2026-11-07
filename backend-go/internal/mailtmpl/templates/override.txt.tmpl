@@ -1,0 +1,13 @@
+{{.Heading}}
+
+Tenant: {{.TenantName}} ({{.Slug}})
+Setting: {{.Label}}
+Value: {{.Value}}
+Reason: {{.Reason}}
+Ends: {{.Expires}}
+{{if .Revoked}}Revoked by: {{.Actor}} at {{.At}}
+Revoke reason: {{.RevokeReason}}
+{{else}}Set by: {{.Actor}} at {{.At}}
+{{end}}
+-- 
+{{.Footnote}}

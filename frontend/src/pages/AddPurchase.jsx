@@ -1,3 +1,4 @@
+import { toast } from '../../shared/toast/store';
 import React, { useState, useEffect } from 'react';
 import PageHeader from '../components/forms/PageHeader';
 import FormFooter from '../components/forms/FormFooter';
@@ -7,7 +8,7 @@ import { useFormWizard, FORM_STEPS } from '../hooks/useFormWizard';
 import { useNavigate } from 'react-router-dom';
 import SupplierModal from '../components/forms/SupplierModal';
 import { api } from '../services/api';
-import { usePos } from '../hooks/usePos';
+import { todayInShop } from '@/lib/format';
 import { usePermission } from '../hooks/usePermission';
 import {
   InformationCircleIcon,
@@ -22,7 +23,6 @@ const AddPurchase = () => {
   const [showSupplierModal, setShowSupplierModal] = useState(false);
   const [purchaseItems, setPurchaseItems] = useState([]);
   const { currentStep, goNext, goBack, goToStep } = useFormWizard(2);
-  const { currentUser } = usePos();
   const { hasPermission } = usePermission();
   
   const navigate = useNavigate();
@@ -81,7 +81,7 @@ const AddPurchase = () => {
       const purchaseData = {
         reference: data.reference,
         date: data.date || new Date().toISOString().split('T')[0],
-        status: data.status || 'Received',
+        status: data.status || 'Pending',
         payment_status: data.payment_status || 'Unpaid',
         total: total,
         paid: paid,
@@ -91,6 +91,7 @@ const AddPurchase = () => {
       };
       
       await api.post('/api/purchases', purchaseData);
+      toast.success('Purchase saved.');
       navigate('/purchases');
     } catch (error) {
       console.error('Error creating purchase:', error);
@@ -102,8 +103,8 @@ const AddPurchase = () => {
       productId: '', 
       variantId: '', 
       storeId: stores[0]?.id || '', 
-      quantity: 1, 
-      unitPrice: 0 
+      quantity: '1',
+      unitPrice: ''
     }]);
   };
 
@@ -119,7 +120,7 @@ const AddPurchase = () => {
     
     // If product changes, auto-select the first variant
     if (field === 'productId') {
-      const product = products.find(p => p.id === value);
+      const product = products.find(p => String(p.id) === String(value));
       if (product && product.ProductVariants && product.ProductVariants.length > 0) {
         newItems[index].variantId = product.ProductVariants[0].id;
       } else {
@@ -131,7 +132,7 @@ const AddPurchase = () => {
   };
 
   const getProductVariants = (productId) => {
-    const product = products.find(p => p.id === productId);
+    const product = products.find(p => String(p.id) === String(productId));
     return product?.ProductVariants || [];
   };
 
@@ -145,13 +146,8 @@ const AddPurchase = () => {
   };
 
   // Calculate total from purchase items
-  const calculateTotal = () => {
-    return purchaseItems.reduce((total, item, index) => {
-      const quantity = parseFloat(document.querySelector(`[name="quantity_${index}"]`)?.value) || 0;
-      const unitPrice = parseFloat(document.querySelector(`[name="unitPrice_${index}"]`)?.value) || 0;
-      return total + (quantity * unitPrice);
-    }, 0);
-  };
+  const lineTotal = (item) => (parseFloat(item.quantity) || 0) * (parseFloat(item.unitPrice) || 0);
+  const calculateTotal = () => purchaseItems.reduce((total, item) => total + lineTotal(item), 0);
 
   // Update total when purchase items change
   useEffect(() => {
@@ -204,7 +200,7 @@ const AddPurchase = () => {
                   type="date" 
                   className="w-full px-3 py-2 border border-gray-600 rounded-lg focus:ring-blue-500 focus:border-blue-500"
                   required
-                  defaultValue={new Date().toISOString().split('T')[0]}
+                  defaultValue={todayInShop()}
                 />
               </div>
               
@@ -245,9 +241,10 @@ const AddPurchase = () => {
                   className="w-full px-3 py-2 border border-gray-600 rounded-lg focus:ring-blue-500 focus:border-blue-500"
                   required
                 >
-                  <option value="Received">Received</option>
+                  {/* Received is final and moves stock in: it needs purchases:approve (C-09). */}
                   <option value="Pending">Pending</option>
                   <option value="Ordered">Ordered</option>
+                  {hasPermission('purchases', 'approve') && <option value="Received">Received</option>}
                 </select>
               </div>
               
@@ -397,7 +394,8 @@ const AddPurchase = () => {
                               type="number" 
                               className="w-full px-2 py-1 border border-gray-600 rounded focus:ring-blue-500 focus:border-blue-500"
                               min="1"
-                              defaultValue="1"
+                              value={item.quantity}
+                              onChange={(e) => updatePurchaseItem(index, 'quantity', e.target.value)}
                               required
                             />
                           </td>
@@ -409,6 +407,8 @@ const AddPurchase = () => {
                               className="w-full px-2 py-1 border border-gray-600 rounded focus:ring-blue-500 focus:border-blue-500"
                               step="0.01"
                               min="0"
+                              value={item.unitPrice}
+                              onChange={(e) => updatePurchaseItem(index, 'unitPrice', e.target.value)}
                               required
                             />
                           </td>
@@ -418,11 +418,7 @@ const AddPurchase = () => {
                               type="text" 
                               className="w-full px-2 py-1 border border-gray-600 rounded bg-gray-100"
                               readOnly
-                              value={(() => {
-                                const quantity = parseFloat(document.querySelector(`[name="quantity_${index}"]`)?.value) || 0;
-                                const unitPrice = parseFloat(document.querySelector(`[name="unitPrice_${index}"]`)?.value) || 0;
-                                return (quantity * unitPrice).toFixed(2);
-                              })()}
+                              value={lineTotal(item).toFixed(2)}
                             />
                           </td>
                           
@@ -452,7 +448,7 @@ const AddPurchase = () => {
         <FormFooter 
           cancelPath="/purchases" 
           submitLabel="Add Purchase" 
-          disabled={!isAdmin}
+          disabled={!hasPermission('purchases', 'create')}
           showStepNav
           currentStep={currentStep}
           totalSteps={2}

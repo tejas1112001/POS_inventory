@@ -1,44 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import ListPageShell from '../components/layout/ListPageShell';
-import SupplierList from '../components/lists/SupplierList';
-import { useNavigate } from 'react-router-dom';
-import { api } from '../services/api';
+import RecordsPage from '@/components/kit/RecordsPage';
+import { supplierConfig } from './recordConfigs';
 
-export default function Suppliers() {
-  const [suppliers, setSuppliers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    fetchSuppliers();
-  }, []);
-
-  const fetchSuppliers = async () => {
-    try {
-      setLoading(true);
-      const data = await api.get('/api/suppliers');
-      
-      setSuppliers(Array.isArray(data) ? data : []);
-      setError(null);
-    } catch (err) {
-      setError('Failed to fetch suppliers');
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (loading) return <div className="p-6">Loading suppliers...</div>;
-  if (error) return <div className="p-6 text-red-500">{error}</div>;
-
-  return (
-    <ListPageShell>
-      <SupplierList
-        suppliers={suppliers || []}
-        setShowForm={() => navigate('/add-supplier')}
-        onRefresh={fetchSuppliers}
-      />
-    </ListPageShell>
-  );
+// Suppliers: server-paged list with search, status filter and add/edit in a sheet.
+export default function Suppliers({ startNew = false }) {
+  return <RecordsPage config={supplierConfig} startNew={startNew} />;
 }

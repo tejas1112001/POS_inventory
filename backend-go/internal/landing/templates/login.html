@@ -1,0 +1,20 @@
+{{define "main"}}
+<section class="section page">
+<div class="wrap narrow">
+<h1>Staff sign-in</h1>
+<p class="lead">Staff sign in at their shop's own address. Enter it and we take you there.</p>
+<form class="form" method="get" action="/login/go" novalidate>
+<div class="field">
+<label for="shop">Shop address</label>
+<div class="suffix">
+<input id="shop" name="shop" type="text" autocapitalize="none" autocomplete="off" spellcheck="false" required maxlength="100" placeholder="your-shop" value="{{.Shop}}" aria-describedby="shop-hint{{if .ShopError}} shop-err{{end}}"{{if .ShopError}} aria-invalid="true"{{end}}>
+<span class="suffix-text" id="shop-hint">.{{.Site.Domain}}</span>
+</div>
+{{with .ShopError}}<p class="err" id="shop-err">{{.}}</p>{{end}}
+</div>
+<button class="btn" type="submit">Continue</button>
+</form>
+<p>Don't know your shop's address? <a href="/find-my-shop">Find my shop</a>.</p>
+</div>
+</section>
+{{end}}

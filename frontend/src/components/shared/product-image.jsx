@@ -1,5 +1,6 @@
 import { initials } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { AuthImage } from "./auth-image";
 
 export function ProductImage({
   name,
@@ -10,22 +11,11 @@ export function ProductImage({
   className,
   rounded = "rounded-md",
 }) {
-  if (src) {
-    return (
-      <img
-        src={src}
-        alt={alt || name}
-        title={name}
-        className={cn("shrink-0 object-cover", rounded, className)}
-        style={size ? { width: size, height: size } : undefined}
-      />
-    );
-  }
-
-  return (
+  const initialsBox = (
     <div
       className={cn(
-        "flex items-center justify-center font-semibold text-white shrink-0",
+        "flex items-center justify-center font-semibold shrink-0",
+        color ? "text-white" : "bg-slate-100 text-slate-600 ring-1 ring-inset ring-slate-200",
         rounded,
         className
       )}
@@ -39,5 +29,17 @@ export function ProductImage({
     >
       {initials(name).slice(0, 2) || "PR"}
     </div>
+  );
+
+  if (!src) return initialsBox;
+  return (
+    <AuthImage
+      src={src}
+      alt={alt || name}
+      title={name}
+      className={cn("shrink-0 object-cover", rounded, className)}
+      style={size ? { width: size, height: size } : undefined}
+      fallback={initialsBox}
+    />
   );
 }

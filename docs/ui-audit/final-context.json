@@ -1,0 +1,23 @@
+{
+  "purchaseRowButtons": [
+    [
+      "Select row",
+      "View"
+    ]
+  ],
+  "salesReport": "Sold lines with returns netted. Voided sales are left out. | Search | Choose Date | Store | All | Product | All | Download | Excel | PDF | Sold | ₹672.54 | Returned | ₹142.19 | Net sales | ₹530.35 | Items sold | 5 | #\tDATE\tRECEIPT\tSKU\tPRODUCT\tCATEGORY\tCUSTOMER\tSTORE\tSOLD\tRETURNED\tSOLD AMOUNT\tNET\tIN STOCK | 1\t01 Nov 2026\tPOS-INV-000034\tSO-34-34\t | UI-AUDIT Lifecycle Tea | No Brand | \tUI-AUDIT Category\tWalk-in Customer\tMain Store\t1\t0\t₹127.97\t₹127.97\t6 | 2\t01 Nov 2026\tPOS-INV-000032\tSO-32-32\t | UI-AUDIT Inclusive Soap | No Brand | \tUI-AUDIT Category\tWalk-in Customer\tMain Store\t1\t0\t₹118.00\t₹118.00\t5 | 3\t01 Nov 2026\tPOS-INV-000031\tSO-31-31\t | UI-AUDIT Lifecycle Tea | No Brand | \tUI-AUDIT Category\tWalk-in Customer\tMain Store\t2\t1\t₹284.38\t₹142.19\t6 | 4\t31 Oct 2026\tPOS-INV-000033\tSO-33-33\t | UI-AUDIT Lifecycle Tea | No Brand | \tUI-AUDIT Category\tUI-AUDIT Customer\tMain Store\t1\t0\t₹142.19\t₹142.19\t6 | Showing 1 to 4 of 4 results | Rows | 10 | Prev | Next",
+  "due": "Customer Report | Customer Due | Manage your customer due reports | Choose Date | Customer | All | Payment Method | All | Payment Status | All | Generate PDF | #\tREFERENCE\tCUSTOMER\tTOTAL AMOUNT\tPAID\tDUE\tSTATUS | 1\tPOS-INV-000033\t | UI-AUDIT Customer | \t₹182.19\t₹100.00\t₹82.19\tPartial | Showing 1 to 1 of 1 results | Rows | 10 | Prev | Next",
+  "custReport": "Customer Report | Customer Due | Manage your customer reports | Choose Date | Customer | All | Payment Method | All | Payment Status | All | Generate PDF | #\tLAST RECEIPT\tCUSTOMER\tSALES\tNET AMOUNT\tPAYMENT METHOD\tSTATUS | 1\tPOS-INV-000034\t | Walk-in Customer | \t31\t₹1,748.96\t-\tCompleted | 2\tPOS-INV-000033\t | UI-AUDIT Customer | \t1\t₹142.19\t-\tCompleted | Total | ₹1,891.15 | Showing 1 to 2 of 2 results | Rows | 10 | Prev | Next",
+  "history": "Adjustments | Stock history | All stores | Main Store | New adjustment | Every change to stock: sales, returns, purchases, adjustments and imports. | Date\tProduct\tStore\tReason\t\tChange\tStock after\t | 01 Nov 2026, 03:02 am\t | UI-AUDIT Lifecycle Tea | UIA-TEA-1 | \tMain Store\tSale\t\t−1\t6\t | 01 Nov 2026, 02:51 am\t | UI-AUDIT T-Shirt | UIA-TS-L | \tMain Store\tmanual_set\t\t+2\t6\t | 01 Nov 2026, 02:51 am\t | UI-AUDIT Lifecycle Tea | UIA-TEA-1 | \tMain Store\tAdjustment\t\t−1\t7\t | 01 Nov 2026, 02:51 am\t | UI-AUDIT Inclusive Soap | UIA-SOAP-1 | \tMain Store\tReturn\t\t+1\t5\t | 01 Nov 2026, 02:51 am\t | UI-AUDIT Lifecycle Tea | UIA-TEA-1 | \tMain Store\tReturn\t\t+1\t8\t | 01 Nov 2026, 02:50 am\t | UI-AUDIT Lifecycle Tea | UIA-TEA-1 | \tMain Store\tSale\t\t−1\t7\t | 01 Nov 2026, 02:50 am\t | UI-AUDIT Inclusive Soap | UIA-SOAP-1 | \tMain Store\tSale\t\t−1\t4\t | 01 Nov 2026, 02:50 am\t | UI-AUDIT Lifecycle Tea | UIA-TEA-1 | \tMain Store\tSale\t\t−2\t8\t | 01 Nov 2026, 02:49 am\t | UI-AUDIT Lifecycle Tea | UIA-TEA-1 | \tMain Store\tPurchase received\t\t+10\t10\t | 01 Nov 2026, 02:48 am\t | UI-AUDIT T-Shirt | UIA-TS-L | \tMain Store\tImport\t\t+4\t4\t | 01 Nov 2026, 02:48 am\t | UI-AUDIT T-Shirt | UIA-TS-M | \tMain Store\tImport\t\t+4\t4\t | 01 Nov 2026, 02:48 am\t | UI-AUDIT Inclusive Soap | UIA-SOAP-1 | \tMain Store\tImport\t\t+5\t5\t | 25 Oct 2026, 05:13 pm\t | Smoke Tea | SMOKE-7731 | \tMain Store\tReturn\t\t+1\t92\t | 25 Oct 2026, 05:13 pm\t | Smoke Tea | SMOKE-7",
+  "dash": "Welcome back, Admin. Overview of your store performance. | Revenue | Orders | Total Revenue | ₹2,535.34 | Total Orders | 32 | Total Customers | 2 | Total Products | 4 | Total Amount | ₹2,535.34 | Total Paid | ₹2,453.15 | Total Unpaid | ₹82.19 | Total Overdue | ₹0.00 | Revenue Overview | Sales Distribution",
+  "toastBox": {
+    "x": -20,
+    "y": 20,
+    "w": 360,
+    "h": 46,
+    "vw": 360
+  },
+  "toastAfter5s": false,
+  "tileDisabledAfterAdd": true,
+  "phoneError": "locator.click: Timeout 30000ms exceeded."
+}

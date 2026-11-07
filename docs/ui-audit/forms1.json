@@ -1,0 +1,185 @@
+[
+  {
+    "step": "Category: empty name",
+    "url": "/add-category",
+    "messages": [
+      "Your trial ends on 02 Nov 2026. Choose a plan to keep selling.\nChoose a plan"
+    ],
+    "http": [],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "",
+    "shot": "forms1-01.jpg"
+  },
+  {
+    "step": "Category: valid \"UI-AUDIT Category\"",
+    "url": "/categories",
+    "messages": [
+      "Your trial ends on 02 Nov 2026. Choose a plan to keep selling.\nChoose a plan"
+    ],
+    "http": [
+      "401 GET /api/files/128706e5-d415-479c-bd21-e0b5648608a9"
+    ],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "",
+    "shot": "forms1-02.jpg"
+  },
+  {
+    "step": "Category: duplicate",
+    "url": "/add-category",
+    "messages": [
+      "Your trial ends on 02 Nov 2026. Choose a plan to keep selling.\nChoose a plan"
+    ],
+    "http": [
+      "409 POST /api/categories"
+    ],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "",
+    "shot": "forms1-03.jpg"
+  },
+  {
+    "step": "Brand: empty name",
+    "url": "/add-brand",
+    "messages": [
+      "Your trial ends on 02 Nov 2026. Choose a plan to keep selling.\nChoose a plan"
+    ],
+    "http": [],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "",
+    "shot": "forms1-04.jpg"
+  },
+  {
+    "step": "Brand: valid \"UI-AUDIT Brand\"",
+    "url": "/add-brand",
+    "messages": [
+      "Your trial ends on 02 Nov 2026. Choose a plan to keep selling.\nChoose a plan"
+    ],
+    "http": [
+      "400 POST /api/brands"
+    ],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "",
+    "shot": "forms1-05.jpg"
+  },
+  {
+    "step": "Brand: duplicate",
+    "url": "/add-brand",
+    "messages": [
+      "Your trial ends on 02 Nov 2026. Choose a plan to keep selling.\nChoose a plan"
+    ],
+    "http": [
+      "400 POST /api/brands"
+    ],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "",
+    "shot": "forms1-06.jpg"
+  },
+  {
+    "step": "Unit: valid \"UI-AUDIT Unit\"",
+    "url": "/units",
+    "messages": [
+      "Your trial ends on 02 Nov 2026. Choose a plan to keep selling.\nChoose a plan"
+    ],
+    "http": [],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "",
+    "shot": "forms1-07.jpg"
+  },
+  {
+    "step": "Role: empty name",
+    "url": "/add-role",
+    "messages": [
+      "Your trial ends on 02 Nov 2026. Choose a plan to keep selling.\nChoose a plan"
+    ],
+    "http": [],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "",
+    "shot": "forms1-08.jpg"
+  },
+  {
+    "step": "Role: \"UI-AUDIT Role\" with a few permissions",
+    "url": "/roles",
+    "messages": [
+      "Your trial ends on 02 Nov 2026. Choose a plan to keep selling.\nChoose a plan"
+    ],
+    "http": [],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "",
+    "shot": "forms1-09.jpg"
+  },
+  {
+    "step": "User: short password",
+    "url": "/users",
+    "messages": [
+      "Your trial ends on 02 Nov 2026. Choose a plan to keep selling.\nChoose a plan"
+    ],
+    "http": [],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "",
+    "shot": "forms1-10.jpg"
+  },
+  {
+    "step": "User: \"UI-AUDIT Cashier\" (Biller)",
+    "url": "/users",
+    "messages": [
+      "Your trial ends on 02 Nov 2026. Choose a plan to keep selling.\nChoose a plan"
+    ],
+    "http": [],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "",
+    "shot": "forms1-11.jpg"
+  },
+  {
+    "step": "Import: bad file",
+    "url": "/products",
+    "messages": [
+      "Your trial ends on 02 Nov 2026. Choose a plan to keep selling.\nChoose a plan",
+      "Nothing was imported. Fix these rows and try again:\nRow 1, sku: required column missing"
+    ],
+    "http": [
+      "400 POST /api/products/import?dryRun=true"
+    ],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "",
+    "shot": "forms1-12.jpg"
+  },
+  {
+    "step": "Import: check UI-AUDIT file",
+    "url": "/products",
+    "messages": [
+      "Your trial ends on 02 Nov 2026. Choose a plan to keep selling.\nChoose a plan",
+      "Nothing was imported. Fix these rows and try again:\nRow 2, brand: unknown brand\nRow 3, brand: unknown brand"
+    ],
+    "http": [
+      "400 POST /api/products/import?dryRun=true"
+    ],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "",
+    "shot": "forms1-13.jpg"
+  },
+  {
+    "step": "Import: import UI-AUDIT file",
+    "url": "/products",
+    "messages": [
+      "Your trial ends on 02 Nov 2026. Choose a plan to keep selling.\nChoose a plan",
+      "Nothing was imported. Fix these rows and try again:\nRow 2, brand: unknown brand\nRow 3, brand: unknown brand"
+    ],
+    "http": [],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "page.click: Timeout 30000ms exceeded.",
+    "shot": "forms1-14.jpg"
+  }
+]

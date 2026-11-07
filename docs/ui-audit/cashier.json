@@ -1,0 +1,80 @@
+[
+  {
+    "step": "Cashier menu",
+    "url": "/dashboard",
+    "messages": [],
+    "http": [
+      "401 POST /api/auth/refresh "
+    ],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "",
+    "shot": "cashier-01.jpg"
+  },
+  {
+    "step": "POS: discount 12.06 (above 10%)",
+    "url": "/pos",
+    "messages": [],
+    "http": [
+      "403 POST /api/sales {\"error\":\"Discounts above 10% need the price override permission.\",\"code\":\"FORBIDDEN\"}\n"
+    ],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "",
+    "shot": "cashier-02.jpg"
+  },
+  {
+    "step": "POS: discount 12.05 (at the limit)",
+    "url": "/pos",
+    "messages": [],
+    "http": [],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "",
+    "shot": "cashier-03.jpg"
+  },
+  {
+    "step": "Cashier: Sales list (own only)",
+    "url": "/sales",
+    "messages": [],
+    "http": [],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "",
+    "shot": "cashier-04.jpg"
+  },
+  {
+    "step": "Cashier: Products row buttons",
+    "url": "/products",
+    "messages": [],
+    "http": [],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "",
+    "shot": "cashier-05.jpg"
+  },
+  {
+    "step": "Cashier: Showcase publish toggle (no edit permission)",
+    "url": "/showcase-settings",
+    "messages": [
+      "You do not have permission for this action ×"
+    ],
+    "http": [
+      "403 POST /api/stores/1/showcase/toggle-product {\"error\":\"You do not have permission for this action\",\"code\":\"FORBIDDEN\"}\n"
+    ],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "",
+    "shot": "cashier-06.jpg"
+  },
+  {
+    "step": "Cashier: Settings",
+    "url": "/settings",
+    "messages": [],
+    "http": [],
+    "dialogs": [],
+    "pageerrors": [],
+    "error": "",
+    "shot": "cashier-07.jpg"
+  }
+]

@@ -1,0 +1,267 @@
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { api, query } from '../api';
+import { useSession } from '../session';
+import { Button, Modal, Notice, Pager, Select, StatusBadge, Table, TextInput } from '../components/ui';
+import { bytes, formatDate, formatDateTime } from '../lib/format';
+
+const STATUSES = ['', 'trialing', 'active', 'past_due', 'grace', 'cancelled', 'read_only', 'suspended', 'pending_deletion', 'provisioning', 'failed', 'deleted'];
+const SLUG = /^[a-z0-9](?:[a-z0-9-]{1,28}[a-z0-9])$/;
+const SORTS = [
+  ['newest', 'Newest first'],
+  ['oldest', 'Oldest first'],
+  ['name', 'Name A–Z'],
+  ['activity', 'Last activity'],
+  ['storage', 'Storage used'],
+];
+const SAVED_KEY = 'console.tenantViews';
+
+// Saved views (search, status, sort) are kept in this browser only.
+function readViews() {
+  try {
+    const v = JSON.parse(localStorage.getItem(SAVED_KEY) || '[]');
+    return Array.isArray(v) ? v.filter((x) => x && typeof x.name === 'string').slice(0, 12) : [];
+  } catch {
+    return [];
+  }
+}
+function writeViews(v) {
+  try {
+    localStorage.setItem(SAVED_KEY, JSON.stringify(v));
+  } catch {
+    /* private window: not kept */
+  }
+}
+
+// Tenants lists the shops (search by name, slug or email; status filter;
+// sort; saved views) and creates new ones.
+export default function Tenants() {
+  const { can } = useSession();
+  const navigate = useNavigate();
+  const [filters, setFilters] = useState({ q: '', status: '', sort: 'newest', overrides: false, page: 1 });
+  const [views, setViews] = useState(readViews);
+  const [naming, setNaming] = useState(false);
+  const [search, setSearch] = useState('');
+  const [data, setData] = useState({ rows: [], total: 0, totalPages: 0, loading: true, error: '' });
+  const [creating, setCreating] = useState(false);
+
+  useEffect(() => {
+    const t = setTimeout(() => setFilters((f) => (f.q === search.trim() ? f : { ...f, q: search.trim(), page: 1 })), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  useEffect(() => {
+    let active = true;
+    setData((d) => ({ ...d, loading: true }));
+    api
+      .get(`/tenants${query({ q: filters.q, status: filters.status, sort: filters.sort, overrides: filters.overrides ? '1' : '', page: filters.page, limit: 50 })}`)
+      .then((res) => active && setData({ rows: res.data || [], total: res.pagination?.total || 0, totalPages: res.pagination?.totalPages || 0, loading: false, error: '' }))
+      .catch((err) => active && setData({ rows: [], total: 0, totalPages: 0, loading: false, error: err.message }));
+    return () => {
+      active = false;
+    };
+  }, [filters]);
+
+  return (
+    <div className="stack">
+      <div className="row-between">
+        <h1>Tenants</h1>
+        {can('tenants:create') && (
+          <Button variant="primary" onClick={() => setCreating(true)}>
+            New tenant
+          </Button>
+        )}
+      </div>
+      <div className="row">
+        <input className="input" type="search" placeholder="Search name, subdomain or owner email" aria-label="Search tenants" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <select className="select" aria-label="Status" value={filters.status} onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value, page: 1 }))}>
+          {STATUSES.map((s) => (
+            <option key={s} value={s}>
+              {s ? s.replace(/_/g, ' ') : 'All statuses'}
+            </option>
+          ))}
+        </select>
+        <select className="select" aria-label="Sort" value={filters.sort} onChange={(e) => setFilters((f) => ({ ...f, sort: e.target.value, page: 1 }))}>
+          {SORTS.map(([v, l]) => (
+            <option key={v} value={v}>
+              {l}
+            </option>
+          ))}
+        </select>
+        <label className="check">
+          <input type="checkbox" checked={filters.overrides} onChange={(e) => setFilters((f) => ({ ...f, overrides: e.target.checked, page: 1 }))} />
+          <span>Has overrides</span>
+        </label>
+        <Button onClick={() => setNaming(true)}>Save view</Button>
+        <span className="muted small">{data.total} tenants</span>
+      </div>
+      {views.length > 0 && (
+        <div className="row" aria-label="Saved views">
+          {views.map((v) => (
+            <span key={v.name} className="chip">
+              <button
+                type="button"
+                className="chip-main"
+                onClick={() => {
+                  setSearch(v.q || '');
+                  setFilters({ q: v.q || '', status: v.status || '', sort: v.sort || 'newest', overrides: !!v.overrides, page: 1 });
+                }}
+              >
+                {v.name}
+              </button>
+              <button
+                type="button"
+                className="chip-x"
+                aria-label={`Delete saved view ${v.name}`}
+                onClick={() => {
+                  const next = views.filter((x) => x.name !== v.name);
+                  setViews(next);
+                  writeViews(next);
+                }}
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+      <Notice kind="error">{data.error}</Notice>
+      <Table
+        loading={data.loading}
+        rows={data.rows}
+        onRowClick={(r) => navigate(`/tenants/${r.id}`)}
+        empty="No tenants match."
+        columns={[
+          { key: 'name', label: 'Name', render: (r) => <strong>{r.name}</strong> },
+          { key: 'slug', label: 'Subdomain', render: (r) => <span className="mono">{r.slug}</span> },
+          {
+            key: 'status',
+            label: 'Status',
+            render: (r) => (
+              <span className="row">
+                <StatusBadge status={r.status} />
+                {r.overridesExpiringSoon ? (
+                  <span className="badge badge-warn">override ending soon</span>
+                ) : r.activeOverrides > 0 ? (
+                  <span className="badge badge-muted">{r.activeOverrides} override{r.activeOverrides === 1 ? '' : 's'}</span>
+                ) : null}
+              </span>
+            ),
+          },
+          { key: 'plan', label: 'Plan' },
+          { key: 'ownerEmail', label: 'Owner' },
+          { key: 'lastActivityAt', label: 'Last activity', render: (r) => formatDateTime(r.lastActivityAt, '—'), className: 'nowrap' },
+          { key: 'storageBytes', label: 'Storage', render: (r) => bytes(r.storageBytes), className: 'nowrap' },
+          { key: 'createdAt', label: 'Created', render: (r) => formatDate(r.createdAt), className: 'nowrap' },
+        ]}
+      />
+      <Pager page={filters.page} totalPages={data.totalPages} onPage={(p) => setFilters((f) => ({ ...f, page: p }))} />
+      {naming && (
+        <SaveView
+          onClose={() => setNaming(false)}
+          onSave={(name) => {
+            const next = [...views.filter((x) => x.name !== name), { name, q: filters.q, status: filters.status, sort: filters.sort, overrides: filters.overrides }].slice(-12);
+            setViews(next);
+            writeViews(next);
+            setNaming(false);
+          }}
+        />
+      )}
+      {creating && <CreateTenant onClose={() => setCreating(false)} onCreated={(id) => navigate(`/tenants/${id}`)} />}
+    </div>
+  );
+}
+
+function CreateTenant({ onClose, onCreated }) {
+  const { can } = useSession();
+  const [form, setForm] = useState({ name: '', slug: '', ownerEmail: '', ownerName: '', planCode: '', currency: 'INR', locale: 'en-IN', timezone: 'Asia/Kolkata' });
+  const [plans, setPlans] = useState([]);
+  const [fields, setFields] = useState({});
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const set = (k) => (v) => setForm((f) => ({ ...f, [k]: v }));
+
+  useEffect(() => {
+    if (can('plans:manage') || can('billing:view')) api.get('/plans').then((p) => setPlans((p || []).filter((x) => x.isActive))).catch(() => {});
+  }, [can]);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    const f = {};
+    if (!form.name.trim()) f.name = 'Enter the business name.';
+    if (!SLUG.test(form.slug) || form.slug.includes('--')) f.slug = '3–30 lowercase letters, digits and single hyphens.';
+    if (!form.ownerEmail.includes('@')) f.ownerEmail = 'Enter the owner’s email.';
+    setFields(f);
+    if (Object.keys(f).length) return;
+    setBusy(true);
+    setError('');
+    try {
+      const res = await api.post('/tenants', { ...form, name: form.name.trim(), ownerEmail: form.ownerEmail.trim(), ownerName: form.ownerName.trim() });
+      onCreated(res.id);
+    } catch (err) {
+      setFields(err.fields || {});
+      setError(err.code === 'CONFLICT' ? 'That subdomain is taken or reserved.' : err.fields ? 'Please correct the marked fields.' : err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal title="New tenant" onClose={onClose} wide>
+      <form onSubmit={submit} className="stack" noValidate>
+        <div className="grid-2">
+          <TextInput label="Business name" value={form.name} onChange={set('name')} error={fields.name} maxLength={120} />
+          <TextInput label="Subdomain" value={form.slug} onChange={(v) => set('slug')(v.toLowerCase())} error={fields.slug} hint="The shop's address: subdomain.your-domain" maxLength={30} />
+          <TextInput label="Owner email" type="email" value={form.ownerEmail} onChange={set('ownerEmail')} error={fields.ownerEmail} />
+          <TextInput label="Owner name" value={form.ownerName} onChange={set('ownerName')} error={fields.ownerName} />
+          <Select
+            label="Plan"
+            value={form.planCode}
+            onChange={set('planCode')}
+            error={fields.planCode}
+            options={[{ value: '', label: 'Default (trial)' }, ...plans.map((p) => ({ value: p.code, label: `${p.name} (${p.code})` }))]}
+          />
+          <TextInput label="Currency" value={form.currency} onChange={(v) => set('currency')(v.toUpperCase())} error={fields.currency} maxLength={3} />
+          <TextInput label="Number format" value={form.locale} onChange={set('locale')} error={fields.locale} hint="en-IN, en-US, …" />
+          <TextInput label="Time zone" value={form.timezone} onChange={set('timezone')} error={fields.timezone} />
+        </div>
+        <p className="small muted">The owner gets a welcome email with a link to set a password.</p>
+        <Notice kind="error">{error}</Notice>
+        <div className="row right">
+          <Button onClick={onClose}>Cancel</Button>
+          <Button type="submit" variant="primary" busy={busy}>
+            Create tenant
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function SaveView({ onClose, onSave }) {
+  const [name, setName] = useState('');
+  const [error, setError] = useState('');
+  return (
+    <Modal title="Save this view" onClose={onClose}>
+      <form
+        className="stack"
+        noValidate
+        onSubmit={(e) => {
+          e.preventDefault();
+          const n = name.trim();
+          if (!n || n.length > 40) return setError('1–40 characters.');
+          onSave(n);
+        }}
+      >
+        <p className="muted small">The search, status and sort are kept in this browser.</p>
+        <TextInput label="Name" value={name} onChange={setName} error={error} maxLength={40} />
+        <div className="row right">
+          <Button onClick={onClose}>Cancel</Button>
+          <Button variant="primary" type="submit">
+            Save view
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}

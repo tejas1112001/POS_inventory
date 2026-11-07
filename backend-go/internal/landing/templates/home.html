@@ -1,0 +1,102 @@
+{{define "main"}}
+<section class="hero">
+<div class="wrap">
+<h1>Point of sale and stock for shops with one store or many</h1>
+<p class="lead">Check out customers, keep stock right in every store, email receipts and put each store's products online, all in {{.Site.Name}}.</p>
+<p class="actions">
+<a class="btn" href="#contact">Request a demo</a>
+<a class="btn btn-ghost" href="/login">Staff login</a>
+</p>
+</div>
+</section>
+
+<section id="features" class="section" aria-labelledby="features-h">
+<div class="wrap">
+<h2 id="features-h">What it does</h2>
+<ul class="grid cards">
+{{range .Features}}<li class="card">
+{{icon .Icon}}
+<h3>{{.Title}}</h3>
+<p>{{.Text}}</p>
+</li>
+{{end}}</ul>
+</div>
+</section>
+
+<section id="how" class="section alt" aria-labelledby="how-h">
+<div class="wrap">
+<h2 id="how-h">How it works</h2>
+<ol class="steps">
+{{range .Steps}}<li>
+<h3>{{.Title}}</h3>
+<p>{{.Text}}</p>
+</li>
+{{end}}</ol>
+</div>
+</section>
+
+<section id="more" class="section" aria-labelledby="more-h">
+<div class="wrap">
+<h2 id="more-h">Also included</h2>
+<ul class="grid cards small-cards">
+{{range .More}}<li class="card">
+{{icon .Icon}}
+<h3>{{.Title}}</h3>
+<p>{{.Text}}</p>
+</li>
+{{end}}</ul>
+</div>
+</section>
+
+<section id="pricing" class="section alt" aria-labelledby="pricing-h">
+<div class="wrap">
+<h2 id="pricing-h">Pricing</h2>
+{{if .Plans}}<p class="muted">Prices in Indian rupees (INR).</p>
+<ul class="grid plans">
+{{range .Plans}}<li class="card plan">
+<h3>{{.Name}}</h3>
+<p class="price"><span class="amount">{{.Price}}</span> <span class="per">/ {{.Per}}</span></p>
+{{if .TrialDays}}<p class="trial">{{.TrialDays}}-day trial</p>
+{{end}}{{if or .Limits .Features}}<ul class="ticks">
+{{range .Limits}}<li>{{icon "check"}}<span>{{.}}</span></li>
+{{end}}{{range .Features}}<li>{{icon "check"}}<span>{{.}}</span></li>
+{{end}}</ul>
+{{end}}<a class="btn btn-ghost" href="#contact">Request a demo</a>
+</li>
+{{end}}</ul>
+{{else}}<div class="card notice">
+<p class="notice-title">Contact us for pricing</p>
+<p>Tell us about your business and how many stores you run, and we will send you a price.</p>
+<a class="btn" href="#contact">Contact us</a>
+</div>
+{{end}}</div>
+</section>
+
+<section id="faq" class="section" aria-labelledby="faq-h">
+<div class="wrap narrow">
+<h2 id="faq-h">Questions</h2>
+<div class="faq">
+{{range .FAQs}}<details>
+<summary>{{.Q}}</summary>
+<p>{{.A}}</p>
+</details>
+{{end}}</div>
+</div>
+</section>
+
+<section id="find" class="section alt" aria-labelledby="find-h">
+<div class="wrap narrow">
+<h2 id="find-h">Find my shop</h2>
+<p>Forgot your shop's address? Enter the owner or billing email of the shop. If it matches a shop, we send the address to that email.</p>
+{{template "findform" .}}
+</div>
+</section>
+
+<section id="contact" class="section" aria-labelledby="contact-h">
+<div class="wrap narrow">
+<h2 id="contact-h">Request a demo</h2>
+<p>Tell us about your business. We reply by email.</p>
+{{template "contactform" .}}
+</div>
+</section>
+{{end}}

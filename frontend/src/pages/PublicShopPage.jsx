@@ -1,5 +1,6 @@
+import { toast } from '../../shared/toast/store';
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   Store,
   MapPin,
@@ -22,13 +23,44 @@ import {
 } from 'lucide-react';
 import { formatCurrency } from '@/lib/format';
 
-export default function PublicShopPage() {
-  const { slug } = useParams();
-  const shopSlug = slug || 'islamabad-main';
+// StoreSwitcher moves between the tenant's public stores: the default one
+// lives at /, the others at /shop/:slug. Hidden with fewer than two.
+function StoreSwitcher({ stores, current, homeSlug }) {
+  const navigate = useNavigate();
+  if (stores.length < 2 || !stores.some((s) => s.slug === current)) return null;
+  const path = (slug) =>
+    homeSlug && slug.toLowerCase() === homeSlug.toLowerCase() ? '/' : `/shop/${encodeURIComponent(slug)}`;
+  return (
+    <label className="flex items-center gap-2 bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5">
+      <Store className="size-4 text-emerald-400 shrink-0" />
+      <span className="sr-only">Store</span>
+      <select
+        value={current}
+        onChange={(e) => navigate(path(e.target.value))}
+        className="bg-transparent text-xs text-slate-100 focus:outline-none cursor-pointer"
+      >
+        {stores.map((s) => (
+          <option key={s.slug} value={s.slug} className="bg-slate-900">
+            {s.name}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+// PublicShopPage is a store's public showcase. Root.jsx passes the store
+// slug (the default store at /, any other at /shop/:slug), the default
+// store's slug for the switcher (null when / shows the sign-in), and
+// onMissing for a store that does not exist.
+export default function PublicShopPage({ slug, homeSlug = null, onMissing }) {
+  const shopSlug = encodeURIComponent(slug);
 
   const [shop, setShop] = useState(null);
+  const [stores, setStores] = useState([]);
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [categoryIds, setCategoryIds] = useState({});
   const [featuredProducts, setFeaturedProducts] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [search, setSearch] = useState('');
@@ -38,7 +70,7 @@ export default function PublicShopPage() {
 
   // Selected product modal state
   const [selectedProduct, setSelectedProduct] = useState(null);
-  const [selectedVariant, setSelectedVariant] = useState(null);
+  const [, setSelectedVariant] = useState(null);
 
   useEffect(() => {
     fetchPublicShopData();
@@ -54,7 +86,11 @@ export default function PublicShopPage() {
     try {
       setLoading(true);
       setError(null);
-      const res = await fetch(`http://localhost:3000/api/public/shop/${shopSlug}`);
+      const res = await fetch(`/api/public/shop/${shopSlug}`);
+      if (res.status === 404 && onMissing) {
+        onMissing();
+        return;
+      }
       if (!res.ok) {
         throw new Error('Shop showcase unavailable or not found.');
       }
@@ -62,15 +98,22 @@ export default function PublicShopPage() {
       setShop(data);
 
       if (data.isPublicEnabled) {
+        // The tenant's other public stores, for the switcher.
+        fetch('/api/public/shops')
+          .then((r) => (r.ok ? r.json() : null))
+          .then((d) => setStores(Array.isArray(d?.stores) ? d.stores : []))
+          .catch(() => setStores([]));
+
         // Fetch categories
-        const catRes = await fetch(`http://localhost:3000/api/public/shop/${shopSlug}/categories`);
+        const catRes = await fetch(`/api/public/shop/${shopSlug}/categories`);
         if (catRes.ok) {
           const cats = await catRes.json();
           setCategories(['All', ...cats.map((c) => c.name)]);
+          setCategoryIds(Object.fromEntries(cats.map((c) => [c.name, c.id])));
         }
 
         // Fetch featured products
-        const featRes = await fetch(`http://localhost:3000/api/public/shop/${shopSlug}/featured`);
+        const featRes = await fetch(`/api/public/shop/${shopSlug}/featured`);
         if (featRes.ok) {
           const feats = await featRes.json();
           setFeaturedProducts(feats || []);
@@ -86,11 +129,12 @@ export default function PublicShopPage() {
 
   const fetchPublicProducts = async () => {
     try {
-      let url = `http://localhost:3000/api/public/shop/${shopSlug}/products?sort=${sort}`;
+      let url = `/api/public/shop/${shopSlug}/products?sort=${sort}`;
       if (search) url += `&search=${encodeURIComponent(search)}`;
       if (selectedCategory && selectedCategory !== 'All') {
-        const catObj = categories.find((c) => c === selectedCategory);
-        if (catObj) url += `&categoryId=${selectedCategory}`;
+        // The API filters by category ID, not by name.
+        const id = categoryIds[selectedCategory];
+        if (id) url += `&categoryId=${id}`;
       }
 
       const res = await fetch(url);
@@ -102,6 +146,16 @@ export default function PublicShopPage() {
       console.error('Failed to load products:', err);
     }
   };
+
+  // The tab shows the shop's name; the staff app's title comes back after.
+  useEffect(() => {
+    if (!shop?.name) return undefined;
+    const before = document.title;
+    document.title = shop.name;
+    return () => {
+      document.title = before;
+    };
+  }, [shop?.name]);
 
   const openProductDetails = (product) => {
     setSelectedProduct(product);
@@ -168,6 +222,7 @@ export default function PublicShopPage() {
 
             {/* Shop Contact Cards */}
             <div className="flex flex-wrap items-center gap-3 text-xs text-slate-300 w-full md:w-auto">
+              <StoreSwitcher stores={stores} current={shop.slug} homeSlug={homeSlug} />
               {shop.address && (
                 <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2">
                   <MapPin className="size-4 text-emerald-400 shrink-0" />
@@ -452,7 +507,7 @@ export default function PublicShopPage() {
                   <button
                     type="button"
                     onClick={() => {
-                      alert(`To purchase this product, please visit ${shop.name} at:\n${shop.address || 'our physical store location'}`);
+                      toast.info(`To buy this product, visit ${shop.name}${shop.address ? ` at ${shop.address}` : ' in person'}.`);
                     }}
                     className="w-full bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold py-3 px-4 rounded-xl text-sm shadow-lg shadow-emerald-500/20 transition-all flex items-center justify-center gap-2"
                   >
@@ -470,6 +525,11 @@ export default function PublicShopPage() {
       <footer className="border-t border-slate-800/80 bg-slate-950 py-8 text-center text-xs text-slate-500 space-y-2">
         <p>© {new Date().getFullYear()} {shop.name}. All rights reserved.</p>
         <p className="text-[11px] text-slate-600">Product Showcase Powered by POS Retail Suite</p>
+        <p>
+          <Link to="/login" rel="nofollow" className="text-[11px] text-slate-500 hover:text-slate-300 underline-offset-2 hover:underline">
+            Staff sign-in
+          </Link>
+        </p>
       </footer>
     </div>
   );

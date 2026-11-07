@@ -1,0 +1,40 @@
+Subject: Your shop addresses on POS Test
+
+--- text ---
+Your shop addresses
+
+Hello,
+
+Someone asked for the shop addresses linked to this email on POS Test. Staff sign in at these addresses:
+
+- Demo Shop: https://demo-shop.pos.test/login
+- Second: https://second.pos.test/login
+
+If you did not ask for this, you can ignore this email. Nothing about your account has changed.
+
+-- 
+Sent by POS Test.
+
+--- html ---
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Your shop addresses on POS Test</title></head>
+<body style="margin:0;padding:24px;background:#f4f4f5;font-family:Arial,Helvetica,sans-serif;color:#18181b;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:8px;">
+<tr><td style="padding:24px;">
+
+
+<h1 style="font-size:20px;margin:0 0 16px;">Your shop addresses</h1>
+<p style="margin:0 0 8px;">Hello,</p>
+<p style="margin:0 0 12px;">Someone asked for the shop addresses linked to this email on POS Test. Staff sign in at these addresses:</p>
+<ul style="margin:0 0 16px;padding-left:20px;">
+<li style="margin:0 0 8px;"><strong>Demo Shop</strong><br><a href="https://demo-shop.pos.test/login" style="word-break:break-all;">https://demo-shop.pos.test/login</a></li>
+<li style="margin:0 0 8px;"><strong>Second</strong><br><a href="https://second.pos.test/login" style="word-break:break-all;">https://second.pos.test/login</a></li>
+</ul>
+<p style="margin:0 0 8px;font-size:13px;color:#52525b;">If you did not ask for this, you can ignore this email. Nothing about your account has changed.</p>
+
+</td></tr>
+</table>
+<p style="max-width:560px;margin:16px auto 0;font-size:12px;color:#71717a;text-align:center;">Sent by POS Test.</p>
+</body>
+</html>

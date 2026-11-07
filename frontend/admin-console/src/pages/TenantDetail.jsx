@@ -1,0 +1,401 @@
+import { toast } from '../../../shared/toast/store';
+import { useCallback, useEffect, useState } from 'react';
+import { Link, useParams } from 'react-router-dom';
+import { api } from '../api';
+import { useSession } from '../session';
+import { useStepUp } from '../stepup';
+import ActionDialog from '../components/ActionDialog';
+import { Button, Facts, Modal, Notice, StatusBadge, Tabs } from '../components/ui';
+import { bytes, formatDate, formatDateTime } from '../lib/format';
+
+const LIVE = ['trialing', 'active', 'past_due', 'grace', 'read_only', 'cancelled'];
+
+// TenantDetail: one tenant's facts and the console actions on it. Each
+// action needs its permission; the destructive ones also need step-up
+// (asked for when the server requires it).
+export default function TenantDetail({ extraTabs = [] }) {
+  const { id } = useParams();
+  const { can } = useSession();
+  const [tenant, setTenant] = useState(null);
+  const [error, setError] = useState('');
+  const [tab, setTab] = useState('overview');
+
+  const load = useCallback(() => {
+    api
+      .get(`/tenants/${encodeURIComponent(id)}`)
+      .then((t) => {
+        setTenant(t);
+        setError('');
+      })
+      .catch((err) => setError(err.status === 404 ? 'No such tenant.' : err.message));
+  }, [id]);
+  useEffect(load, [load]);
+
+  if (!tenant) {
+    return (
+      <div className="stack">
+        <Link to="/tenants">← Tenants</Link>
+        {error ? <Notice kind="error">{error}</Notice> : <p className="muted">Loading…</p>}
+      </div>
+    );
+  }
+
+  const tabs = [{ key: 'overview', label: 'Overview' }, ...extraTabs.filter((t) => !t.perm || t.perm.some(can))];
+  const Extra = extraTabs.find((t) => t.key === tab)?.Component;
+
+  return (
+    <div className="stack">
+      <Link to="/tenants">← Tenants</Link>
+      <div className="row-between">
+        <div className="row">
+          <h1>{tenant.name}</h1>
+          <StatusBadge status={tenant.status} />
+        </div>
+        <span className="mono muted">{tenant.slug}</span>
+      </div>
+      {tenant.overridesExpiringSoon ? (
+        <Notice kind="warn">An override of this shop ends within 7 days. See the Overrides tab.</Notice>
+      ) : tenant.activeOverrides > 0 ? (
+        <Notice kind="info">This shop has {tenant.activeOverrides} active override{tenant.activeOverrides === 1 ? '' : 's'} (Overrides tab).</Notice>
+      ) : null}
+      <Tabs tabs={tabs} value={tab} onChange={setTab} />
+      {tab === 'overview' ? <Overview tenant={tenant} reload={load} /> : Extra ? <Extra tenant={tenant} reload={load} /> : null}
+    </div>
+  );
+}
+
+function Overview({ tenant: t, reload }) {
+  const { can } = useSession();
+  const withStepUp = useStepUp();
+  const [dialog, setDialog] = useState(null);
+  const [invite, setInvite] = useState(null);
+  const [notice, setNotice] = useState(null);
+  const path = `/tenants/${encodeURIComponent(t.id)}`;
+  const done = (text) => () => {
+    setDialog(null);
+    setNotice(null);
+    toast.success(text);
+    reload();
+  };
+
+  const dialogs = {
+    edit: {
+      title: 'Edit details',
+      fields: [
+        { key: 'name', label: 'Business name', required: true, initial: t.name, maxLength: 120 },
+        { key: 'billingEmail', label: 'Billing email', initial: t.billingEmail || '', hint: 'Billing emails go here instead of the owner.' },
+        { key: 'notes', label: 'Internal notes', type: 'textarea', initial: t.notes || '', maxLength: 2000 },
+      ],
+      submitLabel: 'Save',
+      onSubmit: (v) => api.patch(path, { name: v.name.trim(), billingEmail: v.billingEmail.trim(), notes: v.notes }),
+      onDone: done('Details saved.'),
+    },
+    slug: {
+      title: 'Change subdomain',
+      intro: 'The old address keeps redirecting for a while, and stays reserved. Staff must use the new address to sign in.',
+      fields: [{ key: 'slug', label: 'New subdomain', required: true, initial: t.slug, maxLength: 30 }],
+      submitLabel: 'Change subdomain',
+      onSubmit: (v) => api.post(`${path}/slug`, { slug: v.slug.trim().toLowerCase() }),
+      onDone: done('Subdomain changed.'),
+    },
+    suspend: {
+      title: 'Suspend tenant',
+      intro: 'Nobody can sign in while the tenant is suspended. Data is kept.',
+      fields: [{ key: 'reason', label: 'Reason', type: 'textarea', required: true, minLength: 5, maxLength: 500 }],
+      submitLabel: 'Suspend',
+      danger: true,
+      onSubmit: (v) => api.post(`${path}/suspend`, { reason: v.reason.trim() }),
+      onDone: done('Tenant suspended.'),
+    },
+    reactivate: {
+      title: 'Reactivate tenant',
+      intro: 'Staff can sign in again. A billing suspension comes back if the subscription is still unpaid.',
+      submitLabel: 'Reactivate',
+      onSubmit: () => api.post(`${path}/reactivate`),
+      onDone: done('Tenant reactivated.'),
+    },
+    delete: {
+      title: 'Delete tenant',
+      intro: 'The tenant moves to pending deletion: nobody can sign in and a final export is taken. The deletion date is 30 days from now; the owner and billing contact are warned 14, 7 and 1 day(s) before. It can be restored until it is deleted for good.',
+      fields: [{ key: 'reason', label: 'Reason (optional)', type: 'textarea', maxLength: 500 }],
+      confirmWord: t.slug,
+      submitLabel: 'Delete',
+      danger: true,
+      onSubmit: (v) => api.del(path, v.reason.trim() ? { reason: v.reason.trim() } : undefined),
+      onDone: done('Tenant moved to pending deletion.'),
+    },
+    restore: {
+      title: 'Restore tenant',
+      intro: 'The pending deletion is cancelled. The tenant comes back suspended; reactivate it when it should open again.',
+      submitLabel: 'Restore',
+      onSubmit: () => api.post(`${path}/restore`),
+      onDone: done('Tenant restored (suspended).'),
+    },
+  };
+
+  const retry = async () => {
+    try {
+      await api.post(`${path}/provisioning/retry`);
+      setNotice(null);
+    toast.success('Provisioning started again.');
+      reload();
+    } catch (err) {
+      setNotice({ kind: 'error', text: err.message });
+    }
+  };
+
+  const ownerInvite = async () => {
+    try {
+      setInvite(await withStepUp(() => api.post(`${path}/owner-invite`)));
+    } catch (err) {
+      if (err.code !== 'CANCELLED') setNotice({ kind: 'error', text: err.message });
+    }
+  };
+
+  const live = LIVE.includes(t.status);
+  const actions = [
+    can('tenants:edit') && ['edit', 'Edit details'],
+    can('tenants:edit') && live && ['slug', 'Change subdomain'],
+    can('tenants:suspend') && live && ['suspend', 'Suspend'],
+    can('tenants:suspend') && t.status === 'suspended' && ['reactivate', 'Reactivate'],
+    can('tenants:delete') && (live || t.status === 'suspended') && ['delete', 'Delete'],
+    can('tenants:delete') && t.status === 'pending_deletion' && ['restore', 'Restore'],
+  ].filter(Boolean);
+
+  return (
+    <div className="stack">
+      <Notice kind={notice?.kind}>{notice?.text}</Notice>
+      <div className="grid-2">
+        <div className="card stack">
+          <h2>Tenant</h2>
+          <Facts
+            items={[
+              ['ID', <span key="id" className="mono">{t.id}</span>],
+              ['Owner', t.ownerEmail],
+              ['Billing email', t.billingEmail],
+              ['Plan', t.plan],
+              ['Created', formatDate(t.createdAt)],
+              ['Last activity', t.lastActivityAt ? formatDateTime(t.lastActivityAt) : 'None yet'],
+              ['Schema version', t.schemaVersion],
+              ['Storage', bytes(t.storageBytes)],
+              ['Suspended', t.suspendedAt ? `${formatDateTime(t.suspendedAt)}${t.suspendReason ? ` (${t.suspendReason})` : ''}` : null],
+            ]}
+          />
+          {t.notes && (
+            <>
+              <h3>Notes</h3>
+              <p className="pre-line">{t.notes}</p>
+            </>
+          )}
+        </div>
+        <div className="stack">
+          {t.subscription && (
+            <div className="card stack">
+              <h2>Subscription</h2>
+              <Facts
+                items={[
+                  ['Status', <StatusBadge key="s" status={t.subscription.status} />],
+                  ['Trial ends', t.subscription.trialEnd && formatDate(t.subscription.trialEnd)],
+                  ['Period ends', t.subscription.currentPeriodEnd && formatDate(t.subscription.currentPeriodEnd)],
+                ]}
+              />
+            </div>
+          )}
+          {t.provisioning && t.provisioning.status !== 'succeeded' && (
+            <div className="card stack">
+              <h2>Provisioning</h2>
+              <Facts
+                items={[
+                  ['Status', <StatusBadge key="p" status={t.provisioning.status} />],
+                  ['Step', t.provisioning.step],
+                  ['Attempts', t.provisioning.attempts],
+                  ['Last error', t.provisioning.lastError],
+                ]}
+              />
+              {can('tenants:create') && t.status === 'failed' && (
+                <div>
+                  <Button onClick={retry}>Retry provisioning</Button>
+                </div>
+              )}
+            </div>
+          )}
+          <Health tenant={t} />
+          {['pending_deletion', 'deleted'].includes(t.status) && <Deletion tenant={t} reload={reload} />}
+          <div className="card stack">
+            <h2>Actions</h2>
+            <div className="row">
+              {actions.map(([key, label]) => (
+                <Button key={key} variant={['suspend', 'delete'].includes(key) ? 'danger' : undefined} onClick={() => setDialog(key)}>
+                  {label}
+                </Button>
+              ))}
+              {can('tenants:edit') && live && <Button onClick={ownerInvite}>Owner sign-in link</Button>}
+            </div>
+            {actions.length === 0 && !can('tenants:edit') && <p className="muted">Your role has no actions on tenants.</p>}
+          </div>
+        </div>
+      </div>
+      {dialog && <ActionDialog {...dialogs[dialog]} onClose={() => setDialog(null)} />}
+      {invite && (
+        <Modal title="Owner sign-in link" onClose={() => setInvite(null)}>
+          <p>Send this link to the owner privately. It works once and expires {formatDateTime(invite.expiresAt)}. It replaces earlier links.</p>
+          <p className="mono small select-all">{invite.inviteUrl}</p>
+          <div className="row right">
+            <Button onClick={() => navigator.clipboard?.writeText(invite.inviteUrl)}>Copy</Button>
+            <Button variant="primary" onClick={() => setInvite(null)}>
+              Done
+            </Button>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+const LIMIT_LABELS = { max_stores: 'Stores', max_users: 'Users', max_products: 'Products', max_emails_per_day: 'Emails a day', max_storage_mb: 'Storage (MB)' };
+
+// Health: plan limits, storage against its limit, schema version, mail
+// waiting and recent notices (platform data only; the shop's own data is
+// not read from the console).
+function Health({ tenant }) {
+  const [o, setO] = useState(null);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    let active = true;
+    api
+      .get(`/tenants/${encodeURIComponent(tenant.id)}/overview`)
+      .then((v) => active && setO(v))
+      .catch((err) => active && setError(err.message));
+    return () => {
+      active = false;
+    };
+  }, [tenant.id]);
+  if (error) return <Notice kind="error">{error}</Notice>;
+  if (!o) return <p className="muted">Loading health…</p>;
+  const limits = Object.entries(o.limits || {}).filter(([k]) => LIMIT_LABELS[k]);
+  const behind = o.schemaVersion < o.latestSchema;
+  return (
+    <div className="card stack">
+      <h2>Health and plan</h2>
+      <Facts
+        items={[
+          ['Plan', o.planName || '-'],
+          ['Schema', behind ? `${o.schemaVersion} of ${o.latestSchema} (behind)` : `${o.schemaVersion} (up to date)`],
+          ['Receipts waiting to send', o.mailPendingSince ? `since ${formatDateTime(o.mailPendingSince)}` : 'None'],
+          ['Contacts / notes', `${o.contactCount} / ${o.noteCount}`],
+        ]}
+      />
+      <div className="stack">
+        <span className="small">
+          Storage: {bytes(o.storageBytes)}
+          {o.storageLimitBytes ? ` of ${bytes(o.storageLimitBytes)}` : ' (no limit)'}
+        </span>
+        {o.storageLimitBytes > 0 && <meter className="usage" min={0} max={o.storageLimitBytes} high={o.storageLimitBytes * 0.9} value={o.storageBytes} aria-label="Storage used" />}
+      </div>
+      {limits.length > 0 && (
+        <>
+          <h3>Plan limits and use</h3>
+          <Facts
+            items={limits.map(([k, v]) => {
+              const used = o.usage && { max_stores: o.usage.stores, max_users: o.usage.users, max_products: o.usage.products }[k];
+              const lim = Number(v) > 0 ? v : 'no limit';
+              return [LIMIT_LABELS[k], used != null ? `${used} used of ${lim}` : lim];
+            })}
+          />
+        </>
+      )}
+      {o.usage ? (
+        <>
+          <h3>Receipt emails</h3>
+          <Facts
+            items={[
+              ['Sent (7 days)', o.usage.receiptsSent7d],
+              ['Failed (7 days)', o.usage.receiptsFailed7d],
+              ['Waiting', o.usage.receiptsWaiting],
+            ]}
+          />
+          <p className="muted small">Counts from the worker's snapshot of {formatDateTime(o.usage.takenAt)} (every 15 minutes; the console never reads shop data).</p>
+        </>
+      ) : (
+        <p className="muted small">No usage snapshot yet (the worker writes one every 15 minutes).</p>
+      )}
+      {o.notices.length > 0 && (
+        <>
+          <h3>Recent notices</h3>
+          <ul className="stack small">
+            {o.notices.map((n) => (
+              <li key={`${n.kind}-${n.period}`}>
+                {formatDateTime(n.createdAt)} · {n.kind.replace(/_/g, ' ')}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </div>
+  );
+}
+
+// Deletion (S10 item 4): the deletion date, warnings sent, the final
+// export and its restore test, and Finalise deletion once all are done.
+function Deletion({ tenant: t, reload }) {
+  const { can } = useSession();
+  const [d, setD] = useState(null);
+  const [error, setError] = useState('');
+  const [open, setOpen] = useState(false);
+  const path = `/tenants/${encodeURIComponent(t.id)}`;
+  const load = useCallback(() => {
+    api
+      .get(`${path}/deletion`)
+      .then(setD)
+      .catch((err) => setError(err.message));
+  }, [path]);
+  useEffect(load, [load]);
+  if (!d) return error ? <Notice kind="error">{error}</Notice> : null;
+  return (
+    <div className="card stack">
+      <h2>Deletion</h2>
+      <Facts
+        items={[
+          ['Requested', d.requestedAt && formatDateTime(d.requestedAt)],
+          ['Deletion date', d.deletionDate && formatDateTime(d.deletionDate)],
+          ['Warnings sent', d.warningsSent?.length ? d.warningsSent.join(', ') + ' before' : 'None yet'],
+          ['Final export', d.finalExportStatus ? `${d.finalExportStatus}${d.finalExportAt ? `, ${formatDateTime(d.finalExportAt)}` : ''}` : 'Not yet'],
+          ['Restore test', d.restoreTestStatus ? `${d.restoreTestStatus}${d.restoreTestAt ? `, ${formatDateTime(d.restoreTestAt)}` : ''}` : 'Not yet'],
+          ['Payment provider', d.providerToCancel ? 'Subscription is cancelled at once when finalised' : null],
+          ['Deleted', d.deletedAt && formatDateTime(d.deletedAt)],
+        ]}
+      />
+      {t.status === 'pending_deletion' && (
+        <>
+          {d.blocker && <p className="muted">{d.blocker}</p>}
+          {can('tenants:delete') && (
+            <div>
+              <Button variant="danger" disabled={!d.canFinalise} onClick={() => setOpen(true)}>
+                Finalise deletion
+              </Button>
+            </div>
+          )}
+        </>
+      )}
+      {t.status === 'deleted' && <p className="muted">Sign-ins are blocked and sessions ended. The schema and files are kept until an operator removes them.</p>}
+      {open && (
+        <ActionDialog
+          title={`Finalise deletion of ${t.slug}?`}
+          intro="The tenant becomes deleted: every sign-in is blocked, every session ends, and the payment provider's subscription is cancelled now. This cannot be undone from the console. The final export is kept."
+          fields={[{ key: 'reason', label: 'Reason', type: 'textarea', required: true, minLength: 10, maxLength: 500, hint: 'Kept in the audit log.' }]}
+          confirmWord={t.slug}
+          submitLabel="Finalise deletion"
+          danger
+          onSubmit={(v) => api.post(`${path}/finalise-deletion`, { reason: v.reason.trim(), confirm: t.slug })}
+          onDone={() => {
+            setOpen(false);
+            toast.success('Tenant deleted.');
+            load();
+            reload();
+          }}
+          onClose={() => setOpen(false)}
+        />
+      )}
+    </div>
+  );
+}

@@ -1,0 +1,9 @@
+{{define "body"}}
+<h1 style="font-size:20px;margin:0 0 16px;">Your shop {{if eq (len .Shops) 1}}address{{else}}addresses{{end}}</h1>
+<p style="margin:0 0 8px;">Hello,</p>
+<p style="margin:0 0 12px;">Someone asked for the shop addresses linked to this email on {{.PlatformName}}. Staff sign in at these addresses:</p>
+<ul style="margin:0 0 16px;padding-left:20px;">
+{{range .Shops}}<li style="margin:0 0 8px;"><strong>{{.Name}}</strong><br><a href="{{.URL}}" style="word-break:break-all;">{{.URL}}</a></li>
+{{end}}</ul>
+<p style="margin:0 0 8px;font-size:13px;color:#52525b;">If you did not ask for this, you can ignore this email. Nothing about your account has changed.</p>
+{{end}}

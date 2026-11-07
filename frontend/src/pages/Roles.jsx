@@ -1,3 +1,5 @@
+import { useConfirm } from '../components/feedback/ConfirmDialog';
+import { toast } from '../../shared/toast/store';
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ShieldCheck, Plus, Edit, Trash2, Users, CheckCircle2 } from 'lucide-react';
@@ -15,6 +17,7 @@ export default function Roles() {
   const [error, setError] = useState(null);
   const navigate = useNavigate();
   const { hasPermission, refreshPermissions } = usePermission();
+  const confirm = useConfirm();
 
   useEffect(() => {
     fetchRoles();
@@ -35,18 +38,23 @@ export default function Roles() {
 
   const handleDeleteRole = async (role) => {
     if (role.is_system) {
-      alert('System roles cannot be deleted.');
+      toast.error('System roles cannot be deleted.');
       return;
     }
-    if (!window.confirm(`Are you sure you want to delete the role "${role.name}"?`)) {
-      return;
-    }
+    const ok = await confirm({
+      title: `Delete the role "${role.name}"?`,
+      body: 'Users must be moved to another role first. This cannot be undone.',
+      confirmLabel: 'Delete role',
+      destructive: true,
+    });
+    if (!ok) return;
     try {
-      await api.delete(`/api/roles/${role.id}`);
+      await api.delete(`/api/roles/${role.id}`, { quiet: true });
+      toast.success(`Role "${role.name}" deleted.`);
       fetchRoles();
       refreshPermissions();
     } catch (err) {
-      alert(err?.message || 'Failed to delete role');
+      toast.error(err?.message || 'The role could not be deleted.');
     }
   };
 
@@ -80,7 +88,7 @@ export default function Roles() {
           {hasPermission('roles', 'create') && (
             <button
               onClick={() => navigate('/add-role')}
-              className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 transition-all"
+              className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-[color-mix(in_oklch,var(--primary),black_12%)] transition-all"
             >
               <Plus className="h-4 w-4" />
               Create Custom Role

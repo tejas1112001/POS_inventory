@@ -167,21 +167,18 @@ export default function EditProductForm({ product, onSaved, onCancel }) {
         name: 'categoryId',
         label: 'Category',
         type: 'select',
-        required: true,
         options: buildSelectOptions(options.categories),
       },
       {
         name: 'brandId',
         label: 'Brand',
         type: 'select',
-        required: true,
         options: buildSelectOptions(options.brands),
       },
       {
         name: 'unitId',
         label: 'Unit',
         type: 'select',
-        required: true,
         options: buildSelectOptions(options.units),
       },
       {

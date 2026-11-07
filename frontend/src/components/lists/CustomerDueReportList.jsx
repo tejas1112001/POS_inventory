@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom';
+import { ProductImage } from '@/components/shared/product-image';
 import React, { useState, useMemo } from 'react';
 import { useUI } from "../ListComponents/useUI";
 import { indexColumn } from '../ListComponents/columnHelpers';
@@ -10,7 +12,7 @@ import ListControlButtons from '../ListComponents/ListControlButtons';
 import DateRangePicker from '../ListComponents/DateRangePicker';
 import SelectField from '../ListComponents/SelectField';
 import GenerateButton from '../ListComponents/GenerateButton';
-import { exportToPDF } from '../ListComponents/exportFunctions';
+import { exportToExcel } from '../ListComponents/exportFunctions';
 
 export default function CustomerDueReportList({ reports }) {
   const [search, setSearch] = useState('');
@@ -20,7 +22,7 @@ export default function CustomerDueReportList({ reports }) {
   const [paymentMethodFilter, setPaymentMethodFilter] = useState('All');
   const [paymentStatusFilter, setPaymentStatusFilter] = useState('All');
   const handleGenerate = () => {
-    exportToPDF(filteredData, 'customer_due_report');
+    void exportToExcel(filteredData, 'customer_due_report');
   };
   
   // Customer options
@@ -43,7 +45,7 @@ export default function CustomerDueReportList({ reports }) {
       header: 'Reference',
       size: 120,
       cell: ({ getValue }) => (
-        <a href="#" className="text-blue-600 hover:underline">{getValue()}</a>
+        <span>{getValue()}</span>
       )
     },
     {
@@ -51,14 +53,14 @@ export default function CustomerDueReportList({ reports }) {
       header: 'Customer',
       cell: ({ row }) => (
         <div className="flex items-center">
-          <div className="bg-gray-100 rounded-full p-1 mr-3">
-            <img 
-              src={row.original.customer.image} 
-              alt={row.original.customer.name} 
-              className="w-8 h-8 rounded-full object-cover"
-            />
-          </div>
-          <span>{row.original.customer.name}</span>
+          <ProductImage name={row.original.customer.name} src={row.original.customer.image} size={32} rounded="rounded-full" className="mr-3" />
+          {row.original.customer.id ? (
+            <Link to={`/customers/${row.original.customer.id}`} className="text-primary hover:underline">
+              {row.original.customer.name}
+            </Link>
+          ) : (
+            <span>{row.original.customer.name}</span>
+          )}
         </div>
       ),
       size: 200,
@@ -130,7 +132,6 @@ export default function CustomerDueReportList({ reports }) {
   const {
     table,
     controlButtons,
-    primaryButtons,
     emptyState
   } = useUI({
     moduleName: 'customer due reports',
@@ -201,7 +202,7 @@ export default function CustomerDueReportList({ reports }) {
             placeholder="All"
             colClass="md:col-span-2"
           />
-          <GenerateButton onClick={handleGenerate} label="Generate PDF" />
+          <GenerateButton onClick={handleGenerate} label="Export to Excel" />
         </div>
       }
       table={table}

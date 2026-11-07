@@ -1,0 +1,128 @@
+/* Design tokens shared by the shop app and the Super Admin console.
+   Plain CSS custom properties (no run-time styles: the console's CSP only
+   allows stylesheets from its own origin). Contrast of every text/background
+   pair is at least 4.5:1. */
+
+:root {
+  /* Brand palette (S4b). Contrast with white text: blue 5.2:1, navy 17.9:1.
+     Muted text is never lighter than #64748B (4.8:1 on white). */
+  --ds-navy: #0f172a;        /* sidebar, headings */
+  --ds-slate: #1e293b;       /* sidebar hover, secondary dark surfaces */
+  --ds-blue: #2563eb;        /* primary buttons, active items, links */
+  --ds-blue-hover: #1d4ed8;
+  --ds-bg: #f8fafc;          /* page background */
+  --ds-sidebar-text: #cbd5e1;
+  --ds-sidebar-muted: #94a3b8;
+
+  /* Status colours: solid (icons, borders), background, text on background. */
+  --ds-success: #15803d;
+  --ds-success-bg: #ecfdf3;
+  --ds-success-fg: #14532d;
+  --ds-info: #0369a1;
+  --ds-info-bg: #eff8ff;
+  --ds-info-fg: #0c4a6e;
+  --ds-warning: #b45309;
+  --ds-warning-bg: #fffbeb;
+  --ds-warning-fg: #78350f;
+  --ds-danger: #b91c1c;
+  --ds-danger-bg: #fef2f2;
+  --ds-danger-fg: #7f1d1d;
+
+  --ds-surface: #ffffff;
+  --ds-text: #334155;
+  --ds-text-muted: #64748b;
+  --ds-border: #e2e8f0;
+  --ds-border-strong: #cbd5e1;
+  --ds-focus: #2563eb;
+  --ds-shadow-1: 0 1px 2px rgb(15 23 42 / 0.05);
+  --ds-shadow-2: 0 2px 6px -1px rgb(15 23 42 / 0.08), 0 1px 3px -1px rgb(15 23 42 / 0.05);
+  --ds-shadow-3: 0 10px 20px -6px rgb(15 23 42 / 0.14), 0 4px 8px -4px rgb(15 23 42 / 0.06);
+
+  /* Type */
+  --ds-font: 'Inter Variable', Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --ds-text-xs: 0.75rem;
+  --ds-text-sm: 0.875rem;
+  --ds-text-md: 1rem;
+  --ds-text-lg: 1.125rem;
+  --ds-text-xl: 1.25rem;
+  --ds-text-2xl: 1.5rem;
+  --ds-text-3xl: 1.875rem;
+
+  /* Spacing (4 px grid), radius, motion, touch */
+  --ds-space-1: 4px;
+  --ds-space-2: 8px;
+  --ds-space-3: 12px;
+  --ds-space-4: 16px;
+  --ds-space-6: 24px;
+  --ds-space-8: 32px;
+  --ds-space-12: 48px;
+  --ds-radius-input: 6px;
+  --ds-radius-card: 10px;
+  --ds-radius-sheet: 16px;
+  --ds-motion-fast: 150ms;
+  --ds-motion: 250ms;
+  --ds-touch: 44px;
+  --ds-touch-pos: 48px;
+}
+
+/* Dark: the console follows the system setting; the shop app also has a
+   .dark class (its theme switch). */
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    --ds-success: #4ade80;
+    --ds-success-bg: #0f2a1b;
+    --ds-success-fg: #bbf7d0;
+    --ds-info: #38bdf8;
+    --ds-info-bg: #0b2333;
+    --ds-info-fg: #bae6fd;
+    --ds-warning: #fbbf24;
+    --ds-warning-bg: #2d1f06;
+    --ds-warning-fg: #fde68a;
+    --ds-danger: #f87171;
+    --ds-danger-bg: #2c1010;
+    --ds-danger-fg: #fecaca;
+    --ds-surface: #1e293b;
+    --ds-text: #e2e8f0;
+    --ds-text-muted: #94a3b8;
+    --ds-border: #334155;
+    --ds-border-strong: #475569;
+    --ds-focus: #60a5fa;
+    --ds-bg: #0f172a;
+  }
+}
+
+.dark {
+  --ds-success: #4ade80;
+  --ds-success-bg: #0f2a1b;
+  --ds-success-fg: #bbf7d0;
+  --ds-info: #38bdf8;
+  --ds-info-bg: #0b2333;
+  --ds-info-fg: #bae6fd;
+  --ds-warning: #fbbf24;
+  --ds-warning-bg: #2d1f06;
+  --ds-warning-fg: #fde68a;
+  --ds-danger: #f87171;
+  --ds-danger-bg: #2c1010;
+  --ds-danger-fg: #fecaca;
+  --ds-surface: #1e293b;
+  --ds-text: #e2e8f0;
+  --ds-text-muted: #94a3b8;
+  --ds-border: #334155;
+  --ds-border-strong: #475569;
+  --ds-focus: #60a5fa;
+  --ds-bg: #0f172a;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --ds-motion-fast: 0ms;
+    --ds-motion: 0ms;
+  }
+}
+
+/* Money and other figures line up in columns. */
+table,
+.tabular,
+.money {
+  font-variant-numeric: tabular-nums;
+}

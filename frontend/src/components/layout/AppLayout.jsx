@@ -2,14 +2,21 @@ import { useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
+import BannerArea from './BannerArea';
 import { MainLayout } from './AppShell';
-import { getRouteTitle } from './routeTitles';
+import { pageTitle } from './navigation';
+import BottomNav from './BottomNav';
+import useShortcuts from './useShortcuts';
+import ErrorBoundary from '../errors/ErrorBoundary';
+import { PageError } from '../errors/ErrorScreens';
 
 export default function AppLayout({ children, fullBleed = false }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const location = useLocation();
-  const title = getRouteTitle(location.pathname);
+  const title = pageTitle(location.pathname);
+  useShortcuts();
+  const showTabs = !fullBleed;
 
   return (
     <MainLayout
@@ -24,8 +31,12 @@ export default function AppLayout({ children, fullBleed = false }) {
         />
       }
       topbar={<Topbar title={title} onOpenMobileMenu={() => setMobileOpen(true)} />}
+      banner={<BannerArea />}
+      bottomNav={showTabs ? <BottomNav onMore={() => setMobileOpen(true)} /> : null}
     >
-      {children}
+      <ErrorBoundary resetKey={location.pathname} fallback={(p) => <PageError {...p} />}>
+        {children}
+      </ErrorBoundary>
     </MainLayout>
   );
 }

@@ -34,3 +34,9 @@ backend/.env
 
 # Git submodule references (local only)
 .gitmodules
+
+# Super Admin console build
+frontend/dist-admin
+
+# Browser test output
+frontend/test-results/

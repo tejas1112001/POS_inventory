@@ -1,3 +1,4 @@
+import { ProductImage } from '@/components/shared/product-image';
 import React, { useState, useMemo } from 'react';
 import { useUI } from "../ListComponents/useUI";
 import { selectColumn, indexColumn, statusColumn } from '../ListComponents/columnHelpers';
@@ -7,6 +8,7 @@ import ListPageLayout from '../ListComponents/ListPageLayout';
 import SearchInput from '../ListComponents/SearchInput';
 import SelectField from '../ListComponents/SelectField';
 import ListControlButtons from '../ListComponents/ListControlButtons';
+import { formatCurrency } from '@/lib/format';
 
 export default function InvoiceList({ invoices }) {
   const [search, setSearch] = useState('');
@@ -42,13 +44,7 @@ export default function InvoiceList({ invoices }) {
       header: 'Customer',
       cell: ({ row }) => (
         <div className="flex items-center">
-          <div className="bg-gray-100 rounded-full p-1 mr-3">
-            <img 
-              src={row.original.customer.avatar} 
-              alt={row.original.customer.name} 
-              className="w-8 h-8 rounded-full object-cover"
-            />
-          </div>
+          <ProductImage name={row.original.customer.name} src={row.original.customer.avatar} size={32} rounded="rounded-full" className="mr-3" />
           <span>{row.original.customer.name}</span>
         </div>
       ),
@@ -62,19 +58,19 @@ export default function InvoiceList({ invoices }) {
     {
       accessorKey: 'amount',
       header: 'Amount',
-      cell: ({ getValue }) => <span>${getValue()}</span>,
+      cell: ({ getValue }) => <span>{formatCurrency(getValue())}</span>,
       size: 100,
     },
     {
       accessorKey: 'paid',
       header: 'Paid',
-      cell: ({ getValue }) => <span>${getValue()}</span>,
+      cell: ({ getValue }) => <span>{formatCurrency(getValue())}</span>,
       size: 100,
     },
     {
       accessorKey: 'amountDue',
       header: 'Amount Due',
-      cell: ({ getValue }) => <span>${getValue()}</span>,
+      cell: ({ getValue }) => <span>{formatCurrency(getValue())}</span>,
       size: 120,
     },
     statusColumn('status', 'Status'),
