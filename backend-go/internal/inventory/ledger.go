@@ -24,6 +24,7 @@ const (
 	ReasonManualSet   = "manual_set"
 	ReasonProductEdit = "product_edit"
 	ReasonImport      = "import"
+	ReasonStockCount  = "stock_count" // industry P1 item 7
 )
 
 // ErrInsufficient means a decrement would take stock below zero.

@@ -33,9 +33,14 @@ function savedLayout() {
 // PrintLabelsDialog (industry P1 item 5, A9/A10): copies per variant, a
 // label layout, in-store barcodes for variants without one, then the label
 // PDF in a new tab. A scan adds one copy of the matching variant.
-export default function PrintLabelsDialog({ product, canGenerate, onClose, onChanged }) {
-  const variants = product.ProductVariants || [];
-  const [copies, setCopies] = useState(() => Object.fromEntries(variants.map((v) => [v.id, 1])));
+//
+// From a product page it takes the product; from a stock count (item 7) it
+// takes rows [{id, name, sku, itemBarcode, price?, copies}] and a title.
+export default function PrintLabelsDialog({ product, rows, title, canGenerate, onClose, onChanged }) {
+  const variants = rows || product.ProductVariants || [];
+  const [copies, setCopies] = useState(() =>
+    Object.fromEntries(variants.map((v) => [v.id, rows ? Math.min(500, Math.max(0, v.copies ?? 1)) : 1]))
+  );
   const [layouts, setLayouts] = useState(BUILTIN);
   const [layoutId, setLayoutId] = useState(() => savedLayout() || BUILTIN[0].id);
   const [busy, setBusy] = useState('');
@@ -56,13 +61,15 @@ export default function PrintLabelsDialog({ product, canGenerate, onClose, onCha
   const missing = variants.filter((v) => !v.itemBarcode);
   const layout = layouts.find((l) => l.id === layoutId);
   const sheets = layout && layout.columns * layout.rows > 1 ? Math.ceil(total / (layout.columns * layout.rows)) : 0;
-  const products = useMemo(() => [product], [product]);
+  const products = useMemo(() => (rows ? [{ name: title, ProductVariants: rows }] : [product]), [product, rows, title]);
+  const heading = rows ? title : product.name;
+  const optionName = (v) => (rows ? v.name : variants.length > 1 ? variantLabel(v) : product.name);
 
   useScanner((code) => {
     const hit = findByCode(products, code);
     if (!hit) {
       beep();
-      toast.error(`No option of ${product.name} has the code ${code}.`);
+      toast.error(rows ? `Nothing in this list has the code ${code}.` : `No option of ${product.name} has the code ${code}.`);
       return;
     }
     setCopies((cur) => ({ ...cur, [hit.variant.id]: Math.min((Number(cur[hit.variant.id]) || 0) + 1, 500) }));
@@ -109,7 +116,7 @@ export default function PrintLabelsDialog({ product, canGenerate, onClose, onCha
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent sheet className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Print labels for {product.name}</DialogTitle>
+          <DialogTitle>Print labels for {heading}</DialogTitle>
           <DialogDescription>Set how many labels each option needs. Scanning a label adds one more of that option.</DialogDescription>
         </DialogHeader>
         <div className="grid max-h-[60vh] gap-4 overflow-y-auto">
@@ -136,11 +143,11 @@ export default function PrintLabelsDialog({ product, canGenerate, onClose, onCha
               {variants.map((v) => (
                 <tr key={v.id}>
                   <td className="py-1.5 pr-3">
-                    <div className="font-medium">{variants.length > 1 ? variantLabel(v) : product.name}</div>
+                    <div className="font-medium">{optionName(v)}</div>
                     <div className="text-xs text-muted-foreground">{v.sku}</div>
                   </td>
                   <td className="py-1.5 pr-3 font-mono text-xs">{v.itemBarcode || <span className="font-sans text-muted-foreground">None: prints the SKU</span>}</td>
-                  <td className="py-1.5 pr-3 text-right tabular-nums">{formatCurrency(v.price)}</td>
+                  <td className="py-1.5 pr-3 text-right tabular-nums">{v.price == null ? '—' : formatCurrency(v.price)}</td>
                   <td className="py-1.5">
                     <input
                       type="number"
@@ -149,7 +156,7 @@ export default function PrintLabelsDialog({ product, canGenerate, onClose, onCha
                       className={inputCls}
                       value={copies[v.id]}
                       onChange={(e) => setCopy(v.id, e.target.value)}
-                      aria-label={`Copies of ${variantLabel(v)}`}
+                      aria-label={`Copies of ${optionName(v)}`}
                     />
                   </td>
                 </tr>

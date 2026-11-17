@@ -102,7 +102,10 @@ var Catalog = []Permission{
 	{"attributes", "create", "Create product attributes"},
 	{"attributes", "edit", "Edit product attributes"},
 	{"attributes", "delete", "Delete product attributes"},
-	{"labels", "print", "Print barcode labels"}, // P3 (admin; not billers)
+	{"labels", "print", "Print barcode labels"},   // P3 (admin; not billers)
+	{"stock_counts", "view", "View stock counts"}, // P4 (admin; not billers)
+	{"stock_counts", "create", "Count stock"},
+	{"stock_counts", "complete", "Complete stock counts (post differences)"},
 }
 
 // ownerOnlyKeys are single permissions the admin system role does not get

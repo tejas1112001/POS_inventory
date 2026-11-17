@@ -95,6 +95,9 @@ func newShop(t *testing.T, prefix string) shop {
 		VALUES ($1, 'image', 'tenant_logo', 'image/png', 3, decode(repeat('ab', 32), 'hex'), $2)`,
 		uuid.New(), "tenants/"+s.ID+"/images/logo-"+s.Marker+".png")
 	q(`UPDATE @s.settings SET receipt_footer = E'Thanks!\nVisit again', max_discount_pct_without_override = 12.50`)
+	// Industry P1 item 7: a stock count (the new tables travel too).
+	q(`INSERT INTO @s.stock_counts (reference, store_id, scope, note)
+		SELECT 'CNT-000001', id, '{"brandId": 2}', $1 FROM @s.stores ORDER BY id LIMIT 1`, "count "+s.Marker)
 	// Rows that must never leave the database.
 	q(`INSERT INTO @s.refresh_tokens (id, user_id, family_id, token_hash, remember, expires_at, absolute_expires_at, user_agent)
 		VALUES ($1, 1, $1, '\xdeadbeef', true, now() + interval '1 day', now() + interval '2 days', $2)`, uuid.New(), "session-"+s.Marker)

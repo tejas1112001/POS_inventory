@@ -48,6 +48,7 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/security"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/settings"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/shop"
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/stockcounts"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/tenancy"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/tenantapi"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/tenantio"
@@ -359,7 +360,7 @@ func (a *App) tenantAPI(cfg *config.Config, log *slog.Logger, network httpx.Netw
 		Auth: authSvc, Users: users.NewService(a.sessions, authSvc, hasher, planSvc, cfg.MaxUnpagedRows),
 		States: states, Signer: signer, Sessions: a.sessions, Network: network, Metrics: a.metrics, MaxRows: cfg.MaxUnpagedRows,
 		LoginPerTenant: a.opts.tenantLoginLimit, Industry: modSvc,
-		Modules: []interface{ Mount(*rbac.Router) }{a.catalog, productAPI, attributes.New(a.sessions), labels.New(a.sessions, modSvc), salesAPI, purchaseAPI, adjustmentAPI, reportAPI, shopAPI, settingsAPI, receiptAPI,
+		Modules: []interface{ Mount(*rbac.Router) }{a.catalog, productAPI, attributes.New(a.sessions), labels.New(a.sessions, modSvc), stockcounts.New(stockcounts.Deps{Sessions: a.sessions, MaxRows: cfg.MaxUnpagedRows}), salesAPI, purchaseAPI, adjustmentAPI, reportAPI, shopAPI, settingsAPI, receiptAPI,
 			&billing.TenantAPI{Svc: a.billing}},
 	})
 	return api, authSvc, nil

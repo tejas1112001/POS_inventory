@@ -204,6 +204,7 @@ const REASON = {
   opening: 'Opening stock',
   manual_set: 'Set by hand',
   product_edit: 'Product edited',
+  stock_count: 'Stock count',
 };
 
 function HistoryList({ storeId, storeName, reload }) {

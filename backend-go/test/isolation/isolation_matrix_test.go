@@ -98,6 +98,11 @@ func seedCanary(t *testing.T) canaryTenant {
 	ad := post("/api/attributes", map[string]any{"label": m + " fit", "key": "fit", "level": "variant", "kind": "text"})
 	c.ids = append(c.ids, id(ad.Body["id"]))
 
+	// Industry P1 item 7: a draft stock count.
+	sc := post("/api/stock-counts", map[string]any{"storeId": storeIDs(t, l, tok)[0], "note": m + " count"})
+	require.Equal(t, 201, sc.Code, sc.Raw)
+	c.ids = append(c.ids, id(sc.Body["id"]))
+
 	// Industry P1 item 6: a failed import leaves an error report holding
 	// the file's rows.
 	failed := uploadCSV(t, l, tok, "name,sku,price\n"+m+"-import,"+m+"-SKU,not-a-price\n", false)

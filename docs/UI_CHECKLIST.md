@@ -426,3 +426,26 @@ Known problems:
 - Import creates products only; it does not update existing ones or add options to an existing article (an existing SKU or barcode is a row error).
 - Only the first sheet of a workbook is read; formulas are read as their last saved value.
 - An .xls (Excel 97–2003) file is refused: save it as .xlsx or CSV UTF-8.
+
+## Industry P1 – Item 7: Stock counts
+
+Set the shop to **Clothing** (Stock counts is on by default). Have a product with 3 options (5 in stock each) and another product in a brand.
+
+How to check:
+1. Sidebar → Inventory → **Stock counts** → **New count** → Everything in the store → **Start counting**: a count CNT-000001, Draft; "Not counted yet" lists all items.
+2. Scan option A twice (or type its barcode/SKU in the box and press Enter): A shows Counted 2, In stock now 5, Difference −3. Click outside any box and scan again: 3.
+3. Type 1 in B's Counted box and press Enter: Difference −4.
+4. **Upload a count sheet**: a CSV `sku,counted_qty` with `C,9` → C counted 9. A sheet with an unknown SKU → "Nothing was imported" and the row listed; nothing changes.
+5. Sell one C at checkout, then reload the count: C shows "Stock changed by −1 since counted" and a warning at the top.
+6. **New count** → One brand → that brand: scanning an option of the first product says it is not part of this count. Another whole-store count cannot take A ("already in draft count CNT-000001").
+7. **Labels** (Barcode labels on): copies = the counted quantities; print.
+8. **Review and complete**: the dialog says how many items change and by how many units → **Complete and update stock**: Completed; Stock shows A 3, B 1, C 9; the branded product unchanged. Adjustments & history → Stock changes lists "Stock count" lines.
+9. A completed or cancelled count has no boxes or buttons. **Cancel count** on a draft keeps it as Cancelled with no stock change.
+10. Roles: Admin has the three "stock count" permissions; a Biller has no Stock counts menu. A role with View + Count but not Complete has no **Review and complete** button.
+11. Settings → untick **Stock counts** → the menu item disappears and the pages say no access; stock changes made by counts stay in the history.
+
+Known problems:
+- With Stock counts turned off, the count pages are hidden (not read-only); their stock changes stay in Adjustments & history.
+- A scan while a Counted box has the focus types into the box; click outside it first.
+- "Not counted yet" lists up to 200 items (those with most stock); the total is always shown.
+- Two people can scan into the same count at once; a typed number replaces whatever was there.

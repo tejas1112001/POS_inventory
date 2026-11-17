@@ -46,6 +46,8 @@ import SetPassword from './pages/SetPassword';
 import Settings from './pages/Settings';
 import Billing from './pages/Billing';
 import StockAdjustments from './pages/StockAdjustments';
+import StockCounts from './pages/StockCounts';
+import StockCountDetail from './pages/StockCountDetail';
 import ShowcaseSettings from './pages/ShowcaseSettings';
 import Stores from './pages/Stores';
 
@@ -129,6 +131,8 @@ function AppRoutes() {
       <Route path="/customer-report" element={<ProtectedLayout module="reports" action="view"><CustomerReport /></ProtectedLayout>} />
       <Route path="/inventory" element={<ProtectedLayout module="inventory" action="view"><Inventory /></ProtectedLayout>} />
       <Route path="/stock-adjustments" element={<ProtectedLayout module="stock_adjustments" action="view"><StockAdjustments /></ProtectedLayout>} />
+      <Route path="/stock-counts" element={<ProtectedLayout module="stock_counts" action="view"><StockCounts /></ProtectedLayout>} />
+      <Route path="/stock-counts/:id" element={<ProtectedLayout module="stock_counts" action="view"><StockCountDetail /></ProtectedLayout>} />
       <Route path="/settings" element={<ProtectedLayout><Settings /></ProtectedLayout>} />
       <Route path="/billing" element={<ProtectedLayout module="billing" action="view"><Billing /></ProtectedLayout>} />
       <Route path="/stores" element={<ProtectedLayout module="stores" action="view"><Stores /></ProtectedLayout>} />
