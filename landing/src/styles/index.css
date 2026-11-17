@@ -1,0 +1,109 @@
+@import "tailwindcss";
+@import "@fontsource-variable/inter";
+
+/* Design tokens. Components use these names, not raw hex values. */
+@theme {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+
+  --color-night: #0b1220; /* dark hero, header, footer */
+  --color-ink: #0f172a; /* headings, dark cards */
+  --color-body: #475569; /* paragraph text on white (7.5:1) */
+  --color-muted: #64748b; /* small captions on white (4.8:1) */
+  --color-line: #e2e8f0; /* card borders */
+  --color-surface: #f8fafc; /* light section background */
+
+  --color-brand: #2563eb;
+  --color-brand-strong: #1d4ed8;
+  --color-brand-bright: #60a5fa; /* brand on dark backgrounds */
+  --color-brand-soft: #eff6ff;
+
+  --color-ok: #34d399; /* checks on dark */
+  --color-ok-strong: #065f46; /* success text on light */
+  --color-ok-soft: #ecfdf5;
+  --color-warn: #f59e0b;
+  --color-warn-strong: #9a3412;
+  --color-warn-soft: #fff7ed;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: #ffffff;
+    color: #334155;
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Tailwind v4 resets buttons to the default cursor. */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  summary {
+    cursor: pointer;
+  }
+
+  :focus-visible {
+    outline: 2px solid #3b82f6;
+    outline-offset: 2px;
+  }
+
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+/* Faint blueprint grid used on dark surfaces. */
+@utility bg-grid {
+  background-image:
+    linear-gradient(rgba(148, 163, 184, 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.07) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+/* Card that lifts slightly on hover (motion-safe only). */
+@utility card-lift {
+  transition:
+    border-color 150ms ease-out,
+    transform 150ms ease-out,
+    box-shadow 150ms ease-out;
+  &:hover {
+    border-color: #93c5fd;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    &:hover {
+      transform: translateY(-2px);
+    }
+  }
+}
+
+/* Barcode stripes for the label preview. */
+@utility barcode {
+  background: repeating-linear-gradient(
+    90deg,
+    #0f172a 0 2px,
+    #fff 2px 4px,
+    #0f172a 4px 5px,
+    #fff 5px 8px,
+    #0f172a 8px 11px,
+    #fff 11px 12px
+  );
+}
