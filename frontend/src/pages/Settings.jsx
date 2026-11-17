@@ -5,6 +5,8 @@ import ShopSettings from '@/components/settings/ShopSettings';
 import EmailSettings from '@/components/settings/EmailSettings';
 import BusinessSettings from '@/components/settings/BusinessSettings';
 import ScannerSettings from '@/components/settings/ScannerSettings';
+import LabelSettings from '@/components/settings/LabelSettings';
+import { useModules } from '@/hooks/useModules';
 import { usePermission } from '@/context/PermissionContext';
 import { SectionCard } from '@/components/shared/section-card';
 import { useTheme, THEME_PRESETS } from '@/context/ThemeContext';
@@ -14,9 +16,11 @@ import { cn } from '@/lib/utils';
 // SMTP server (email_settings:view/edit) and this browser's theme.
 export default function Settings() {
   const { hasPermission } = usePermission();
+  const { hasModule } = useModules();
   const tabs = [
     hasPermission('settings', 'view') && { key: 'shop', label: 'Shop' },
     hasPermission('email_settings', 'view') && { key: 'email', label: 'Email' },
+    hasPermission('settings', 'view') && hasModule('barcode_labels') && { key: 'labels', label: 'Labels' },
     { key: 'appearance', label: 'Appearance' },
     hasPermission('stores', 'view') && { key: 'stores', label: 'Stores', to: '/stores' },
     hasPermission('billing', 'view') && { key: 'billing', label: 'Plan & billing', to: '/billing' },
@@ -53,6 +57,7 @@ export default function Settings() {
         </div>
       )}
       {tab === 'email' && <EmailSettings canEdit={hasPermission('email_settings', 'edit')} />}
+      {tab === 'labels' && <LabelSettings canEdit={hasPermission('settings', 'edit')} canPrint={hasPermission('labels', 'print')} />}
       {tab === 'appearance' && (
         <div className="space-y-3">
           <Appearance />

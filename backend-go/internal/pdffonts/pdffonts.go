@@ -28,3 +28,7 @@ func Load() ([]entity.CustomFont, error) {
 		AddUTF8FontFromBytes(Family, fontstyle.Bold, bold).
 		Load()
 }
+
+// TTF returns the raw fonts, for code that drives gofpdf directly (label
+// sheets).
+func TTF() (regularTTF, boldTTF []byte) { return regular, bold }

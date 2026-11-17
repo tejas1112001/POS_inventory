@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { InlineAlert } from '@/components/feedback/InlineAlert';
 import { api } from '@/services/api';
+import { useModules } from '@/hooks/useModules';
 import { toast } from '../../../shared/toast/store';
 
 const inputCls =
@@ -23,6 +24,9 @@ export default function VariantMatrixDialog({ product, defs, onClose, onCreated 
   const [preview, setPreview] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  const { hasModule } = useModules();
+  const canBarcode = hasModule('barcode_labels');
+  const [barcodes, setBarcodes] = useState(false);
 
   const defaultPattern = (product.articleNo ? '{article}' : 'P{id}') + dims.map((k) => `-{${k}}`).join('');
   const valuesOf = (k) => (defs[k]?.kind === 'choice' ? picked[k] : texts[k].split(',').map((s) => s.trim()).filter(Boolean));
@@ -31,6 +35,7 @@ export default function VariantMatrixDialog({ product, defs, onClose, onCreated 
     skuPattern: pattern.trim() || undefined,
     price: price === '' ? undefined : Number(price),
     cost: cost === '' ? undefined : Number(cost),
+    generateBarcodes: canBarcode && barcodes ? true : undefined,
   });
   const toggle = (k, c) => {
     setPreview(null);
@@ -44,7 +49,7 @@ export default function VariantMatrixDialog({ product, defs, onClose, onCreated 
       const r = await api.post(`/api/products/${product.id}/variants/matrix${dry ? '?dryRun=true' : ''}`, body(), { quiet: true });
       if (dry) setPreview(r);
       else {
-        toast.success(`${r.created} variants created with stock 0.`);
+        toast.success(`${r.created} variants created with stock 0${barcodes && canBarcode ? ', each with an in-store barcode' : ''}.`);
         onCreated();
         onClose();
       }
@@ -112,6 +117,12 @@ export default function VariantMatrixDialog({ product, defs, onClose, onCreated 
               <input type="number" min="0" step="0.01" className={inputCls} value={cost} onChange={(e) => setCost(e.target.value)} />
             </label>
           </div>
+          {canBarcode && (
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" className="size-4" checked={barcodes} onChange={(e) => setBarcodes(e.target.checked)} />
+              Give each new variant an in-store barcode (starts with 2), ready for labels
+            </label>
+          )}
           {error && (
             <InlineAlert>
               {error.message}

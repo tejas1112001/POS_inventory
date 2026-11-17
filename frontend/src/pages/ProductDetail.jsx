@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, History, Pencil, Trash2 } from 'lucide-react';
+import { ArrowLeft, History, Pencil, Printer, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { usePermission } from '@/context/PermissionContext';
 import { useConfirm } from '@/components/feedback/ConfirmDialog';
@@ -12,6 +12,7 @@ import { ProductImage } from '@/components/shared/product-image';
 import { variantLabel } from '@/components/pos/stock';
 import EditProductSheet from '@/components/products/EditProductSheet';
 import AttributesCard from '@/components/products/AttributesCard';
+import PrintLabelsDialog from '@/components/products/PrintLabelsDialog';
 import { useModules } from '@/hooks/useModules';
 import { formatCurrency, formatNumber } from '@/lib/format';
 import { cn } from '@/lib/utils';
@@ -36,6 +37,7 @@ export default function ProductDetail() {
   const [stores, setStores] = useState([]);
   const [error, setError] = useState('');
   const [editing, setEditing] = useState(false);
+  const [printing, setPrinting] = useState(false);
   const { hasModule } = useModules();
 
   const load = useCallback(() => {
@@ -113,6 +115,11 @@ export default function ProductDetail() {
           {hasPermission('inventory', 'view') && (
             <Button type="button" variant="outline" className="max-sm:h-11" onClick={() => navigate(`/inventory?q=${encodeURIComponent(variants[0]?.sku || product.name)}`)}>
               <History className="size-4" aria-hidden="true" /> Stock
+            </Button>
+          )}
+          {hasModule('barcode_labels') && hasPermission('labels', 'print') && (
+            <Button type="button" variant="outline" className="max-sm:h-11" onClick={() => setPrinting(true)}>
+              <Printer className="size-4" aria-hidden="true" /> Labels
             </Button>
           )}
           {hasPermission('products', 'edit') && (
@@ -204,6 +211,9 @@ export default function ProductDetail() {
       )}
 
       <EditProductSheet product={editing ? product : null} onClose={() => setEditing(false)} onSaved={load} />
+      {printing && (
+        <PrintLabelsDialog product={product} canGenerate={hasPermission('products', 'edit')} onClose={() => setPrinting(false)} onChanged={load} />
+      )}
     </div>
   );
 }

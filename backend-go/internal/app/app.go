@@ -29,6 +29,7 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/db"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/files"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/httpx"
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/labels"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/landing"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/mailer"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/migrate"
@@ -358,7 +359,7 @@ func (a *App) tenantAPI(cfg *config.Config, log *slog.Logger, network httpx.Netw
 		Auth: authSvc, Users: users.NewService(a.sessions, authSvc, hasher, planSvc, cfg.MaxUnpagedRows),
 		States: states, Signer: signer, Sessions: a.sessions, Network: network, Metrics: a.metrics, MaxRows: cfg.MaxUnpagedRows,
 		LoginPerTenant: a.opts.tenantLoginLimit, Industry: modSvc,
-		Modules: []interface{ Mount(*rbac.Router) }{a.catalog, productAPI, attributes.New(a.sessions), salesAPI, purchaseAPI, adjustmentAPI, reportAPI, shopAPI, settingsAPI, receiptAPI,
+		Modules: []interface{ Mount(*rbac.Router) }{a.catalog, productAPI, attributes.New(a.sessions), labels.New(a.sessions, modSvc), salesAPI, purchaseAPI, adjustmentAPI, reportAPI, shopAPI, settingsAPI, receiptAPI,
 			&billing.TenantAPI{Svc: a.billing}},
 	})
 	return api, authSvc, nil

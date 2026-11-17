@@ -383,5 +383,25 @@ How to check:
 
 Known problems:
 - The variant grid creates variants with stock 0; receive stock with a purchase or a stock count (item 7).
-- Generating barcodes for new variants arrives with item 5 (barcode labels).
 - Existing shops' Biller role does not get "View product attributes" automatically (roles are never reset); the owner can add it.
+
+## Industry P1 – Item 5: Barcodes and labels
+
+Set the shop to **Clothing** (Barcode labels is on by default) and have a product with 2–3 options, one without a barcode.
+
+How to check:
+1. **Scan check first** (design §5 spike): Settings → **Labels** → A4 sheet → **Test page**. Print it at **Actual size / 100 %** (not "Fit to page"). Scan two labels with a phone barcode app and with the shop's scanner (Settings → Appearance → Test scan): each reads 13 digits starting with 2, e.g. 2000000000015. Do the same on the 50 × 25 roll if the shop has a label printer.
+2. Product page → **Labels**: each option with its barcode (or "None: prints the SKU"), price and copies 1. **Create barcodes** → the missing ones get a code starting with 2; options that had a barcode keep it.
+3. Set copies 3 / 0 / 2, A4 sheet → the line under the table says "5 labels on 1 sheet" → **Print 5 labels**: a PDF opens in a new tab with 5 labels (name, option, price, bars, digits, SKU).
+4. Click outside the copy boxes and scan one of the option's labels: its copies go up by 1. Scan an unknown code: a beep and "No option of … has the code …".
+5. Checkout: scan a printed label → that option is added.
+6. Copies totalling more than 2,000 → the Print button is disabled with "At most 2000 labels per print".
+7. Settings → Labels → **Add layout** "Shelf 40 × 30": page 40 × 30, label 40 × 30, 1 × 1, fields Name, Price, Barcode bars → saved; **Test page** prints it. A label wider than the page → "the labels need … mm across but the page is … mm wide".
+8. Products → a product with sizes → **Create variants** → tick **Give each new variant an in-store barcode** → the new options have codes starting with 2.
+9. Roles: Admin has "Print barcode labels"; a Biller has not (no **Labels** button).
+10. Settings → untick **Barcode labels** → the Labels button, the Labels settings tab and the matrix tick box disappear; barcodes already made still scan at checkout.
+
+Known problems:
+- Labels print Latin text only well: names in Devanagari or other complex scripts show unjoined letters (same as receipts). Long names are cut with "…".
+- Printing from a received purchase (copies = quantity received) arrives with item 8, and from a stock count with item 7.
+- A scan while a copies box has the focus types into the box; click outside it first.
