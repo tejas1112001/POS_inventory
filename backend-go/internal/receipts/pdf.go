@@ -148,6 +148,9 @@ func RenderPDF(v View, logo []byte) ([]byte, error) {
 		if l.SKU != "" {
 			name += " · SKU " + l.SKU
 		}
+		if l.HSN != "" {
+			name += " · HSN " + l.HSN
+		}
 		disc := ""
 		if l.HasDiscount {
 			disc = l.Discount

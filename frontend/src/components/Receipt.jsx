@@ -19,7 +19,8 @@ const n = (v) => Number(v) || 0;
 const pct = (v) => `${Number(n(v).toFixed(3))}%`;
 const lines = (s) => (s || '').split('\n').map((x) => x.trim()).filter(Boolean);
 
-// Paper sizes for printing; the choice is kept in this browser.
+// Paper sizes for printing. The shop sets a default (Settings, industry P1
+// item 10); a choice made here is kept in this browser and wins.
 const PAPERS = [
   { value: 'a4', label: 'A4', page: '@page { size: A4; margin: 12mm; }', narrow: false },
   { value: '80mm', label: '80 mm', page: '@page { size: 80mm auto; margin: 3mm; } body { width: 74mm; }', narrow: true },
@@ -29,9 +30,9 @@ const PAPER_KEY = 'pos.receiptPaper';
 function savedPaper() {
   try {
     const v = localStorage.getItem(PAPER_KEY);
-    return PAPERS.some((p) => p.value === v) ? v : 'a4';
+    return PAPERS.some((p) => p.value === v) ? v : '';
   } catch {
-    return 'a4';
+    return '';
   }
 }
 
@@ -169,6 +170,7 @@ function ReceiptBody({ sale, store, settings, businessName, taxLabel, logoUrl, n
                   {i.product_name || i.name}
                   {attrs && ` (${attrs})`}
                   {i.sku && <span className="rc-sku">SKU {i.sku}</span>}
+                  {i.hsn_code && <span className="rc-sku">HSN {i.hsn_code}</span>}
                 </td>
                 <td className="rc-qty">{i.quantity}</td>
                 <td>{formatCurrency(i.unit_price)}</td>
@@ -311,7 +313,8 @@ export default function Receipt({ isOpen = true, onClose, sale: given, saleId, s
     };
   }, [given, saleId]);
 
-  const paperDef = useMemo(() => PAPERS.find((p) => p.value === paper) || PAPERS[0], [paper]);
+  const shopPaper = settings?.receiptPaper;
+  const paperDef = useMemo(() => PAPERS.find((p) => p.value === (paper || shopPaper)) || PAPERS[0], [paper, shopPaper]);
   const printed = useRef(false);
 
   const canDownload = hasPermission('receipts', 'view');
@@ -437,7 +440,7 @@ export default function Receipt({ isOpen = true, onClose, sale: given, saleId, s
             <div className="flex w-full flex-wrap items-center gap-2">
               <label className="flex items-center gap-2 text-sm text-muted-foreground">
                 Paper
-                <select className="h-10 rounded-md border bg-card px-2 text-foreground" value={paper} onChange={(e) => choosePaper(e.target.value)}>
+                <select className="h-10 rounded-md border bg-card px-2 text-foreground" value={paperDef.value} onChange={(e) => choosePaper(e.target.value)}>
                   {PAPERS.map((p) => (
                     <option key={p.value} value={p.value}>
                       {p.label}

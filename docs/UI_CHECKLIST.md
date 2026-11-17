@@ -449,3 +449,20 @@ Known problems:
 - A scan while a Counted box has the focus types into the box; click outside it first.
 - "Not counted yet" lists up to 200 items (those with most stock); the total is always shown.
 - Two people can scan into the same count at once; a typed number replaces whatever was there.
+
+## Industry P1 – Item 10: Thermal receipt and HSN on lines
+
+Have a product with an HSN code (Products → edit → HSN, e.g. 0902) and one without.
+
+How to check:
+1. Settings → Shop → Receipt text → **Receipt paper** shows A4 (as before). Choose **80 mm thermal roll** → Save.
+2. Sell both products → the receipt opens; its paper box shows 80 mm (on a computer that never picked a size). **Print**: the preview is a narrow roll, text black, long names wrap, each line shows "SKU …" and, for the first product, "HSN 0902".
+3. Pick **58 mm** in the receipt's paper box and print: narrower still. Reopen a receipt: this computer keeps 58 mm; another computer uses the shop's 80 mm.
+4. **Download PDF** / email: still A4, the first line shows "· HSN 0902".
+5. Change the product's HSN to 6109, reopen the old receipt: it still shows 0902 (the code at sale time). Receipts of sales made before this update show no HSN, as before.
+6. On the counter printer, print one receipt at 80 mm and check margins (hardware checklist §0.1); if the edges are cut, set the printer driver's margins to none.
+
+Known problems:
+- Browser print margins depend on the printer driver; some drivers add their own margin on thermal rolls.
+- Names in Devanagari or other complex scripts print well on screen and thermal (browser), but not in the PDF (as before).
+

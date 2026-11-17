@@ -71,10 +71,12 @@ func TestReceiptsBackfill(t *testing.T) {
 
 	sc := s.String()
 	var nPurchases, received, receipts, lines, mismatches int
-	_, err = admin.Exec(ctx, `SET search_path TO `+sc+`, extensions`)
+	rtx, err := admin.Begin(ctx)
 	require.NoError(t, err)
-	require.NoError(t, admin.QueryRow(ctx, reportSQL).Scan(new(string), &nPurchases, &received, &receipts, &lines, &mismatches))
-	_, _ = admin.Exec(ctx, `RESET search_path`)
+	_, err = rtx.Exec(ctx, `SET LOCAL search_path TO `+sc+`, extensions`)
+	require.NoError(t, err)
+	require.NoError(t, rtx.QueryRow(ctx, reportSQL).Scan(new(string), &nPurchases, &received, &receipts, &lines, &mismatches))
+	require.NoError(t, rtx.Rollback(ctx))
 	t.Logf("backfill report: purchases=%d received=%d receipts=%d receipt_lines=%d mismatches=%d", nPurchases, received, receipts, lines, mismatches)
 	require.Equal(t, 5, nPurchases)
 	require.Equal(t, 2, received)

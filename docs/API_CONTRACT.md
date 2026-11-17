@@ -393,6 +393,8 @@ Permission P3: `labels:print` (admin; billers do not get it). Migration 00020: `
 
 Permission P4: `stock_counts:view`, `stock_counts:create`, `stock_counts:complete` (admin; billers get none). Migration 00021: `stock_counts`, `stock_count_lines` (DB11), doc counter `stock_count`, ledger reason `stock_count` (DB12). All A15 routes are in the `stock_counts` module (403 `MODULE_OFF` when off); counts and their ledger movements are kept, and the movements stay visible in the stock history.
 
+Industry P1 item 10 (migration 00023): `GET/PUT /api/settings` add `receiptPaper` (`a4` default \| `80mm` \| `58mm`; other values → 400 `fields.receiptPaper`; audited in `settings.update`) (DB23). Sale lines (`GET /api/sales/{id}` `items[]`) add `hsn_code`: the product's HSN code when the sale was made, `null` on older sales (DB24). Receipts (screen, PDF, email) show "HSN …" under the line when present.
+
 Phase 1 modules: `product_attributes`, `barcode_labels`, `stock_counts`. Presets: clothing and footwear → all three; pharmacy → `barcode_labels`, `stock_counts`; retail → none. The onboarding checklist (`GET /api/onboarding`) of a clothing or footwear shop shows "Import your catalogue (<type> template)" instead of "First product" (Q7).
 
 Platform console: `POST /api/platform/tenants` takes `businessType` (default `retail`, validated); tenant views include `businessType`; `GET /api/platform/tenants?businessType=` filters; override keys gain `product_attributes`, `barcode_labels`, `stock_counts` (flag; `false` turns the module off for that shop).

@@ -12,8 +12,9 @@ How to check each item: `docs/UI_CHECKLIST.md`. Last updated: 2026-11-17.
 | 5 (e) | Barcode generation and label PDF | Done, committed, deployed to the dev stack (tenant migration 00020). The scan check on a real scanner and phone is for the owner (checklist step 1) |
 | 6 (f) | Import templates | Done, committed, deployed to the dev stack (no migration) |
 | 7 (g) | Stock counts | Done, committed, deployed to the dev stack (tenant migration 00021) |
-| 8 (h) | Partial purchase receiving | STOPPED for the owner: copy run done (report in the design note, §8). Draft migration 00022 and TestReceiptsBackfill sit in the working tree, not committed |
-| 9, 10 (i, j) | After the owner's OK on item 8 | Not started |
+| 8 (h) | Partial purchase receiving | Groundwork committed and pushed (migration 00022, backfill + report, export tables). Left: receiving endpoint A16, A17 old path, purchase screen, isolation tests, docs |
+| 9 (i) | Returns policy, exchanges, store credit | Not started (L; next session) |
+| 10 (j) | Thermal receipt, HSN on lines | Done (migration 00023, settings receiptPaper, HSN snapshot on sale lines, receipts and PDF, thermal CSS); committed and deployed |
 
 ## Notes
 - Test database: `max_connections` raised to 200 in `internal/testdb` (the isolation suite ran out of connections at the default 100 once items 4 and 5 added test shops). Test setup only.
@@ -22,7 +23,7 @@ How to check each item: `docs/UI_CHECKLIST.md`. Last updated: 2026-11-17.
 - Temporary worktree `D:/pos_baseline` (detached `main`, used for baseline test runs) to be removed at the end.
 
 ## Next step
-Waiting for the owner's OK on the item 8 backfill report (design note §8). Usage left is low (19% on 2026-11-17). Plan if OK: item 10 first (small, fits), then item 8 (from the drafted migration 00022 and TestReceiptsBackfill in the working tree), then item 9 in a later session. Each item: lint, both builds, backend and isolation tests, deploy, commit, checklist.
+Item 8 rest (A16 receipts endpoint, A17, purchase screen, tests, docs), then item 9 (returns policy, exchanges, store credit; L) in a new session. Branch industry/phase1 is pushed to origin.
 
 ## Decisions to confirm
 - Item 7: every stock-count route is in the `stock_counts` module (the item 1 route registry), so with the module off the count pages are hidden rather than read-only. Their stock movements stay in the stock history. Design §1 says completed counts stay readable; making the two GET routes readable while the module is off needs a small change to the item 1 route check.

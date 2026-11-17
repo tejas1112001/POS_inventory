@@ -533,12 +533,14 @@ func nextReference(ctx context.Context, tx tenancy.TenantTx, prefix string) (str
 	return fmt.Sprintf("%s-%06d", prefix, n), nil
 }
 
-// qInsertItem also snapshots the variant label ("M / Blue", "UK 8 /
+// qInsertItem snapshots the product's HSN code (industry P1 item 10,
+// DB24) and the variant label ("M / Blue", "UK 8 /
 // Black": attributes.Label in SQL) when the product has variant
 // dimensions (industry P1 item 4, DB8); NULL otherwise.
 const qInsertItem = `INSERT INTO order_items (sale_id, product_id, variant_id, product_name, sku, quantity, unit_price,
-		catalog_price, discount, tax_type, tax_rate, tax_amount, cgst, sgst, igst, subtotal, variant_label)
+		catalog_price, discount, tax_type, tax_rate, tax_amount, cgst, sgst, igst, subtotal, hsn_code, variant_label)
 	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
+		(SELECT hsn_code FROM products WHERE id = $2),
 		(SELECT string_agg(CASE WHEN d.k = 'size' AND coalesce(p.attributes ->> 'size_system', '') <> ''
 		          THEN (p.attributes ->> 'size_system') || ' ' ELSE '' END || (v.attributes ->> d.k), ' / ' ORDER BY d.ord)
 		   FROM product_variants v JOIN products p ON p.id = v.product_id

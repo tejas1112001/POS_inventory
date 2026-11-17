@@ -54,6 +54,9 @@ type ItemJSON struct {
 	// VariantLabel is the "M / Blue" snapshot taken at sale time (industry
 	// P1 item 4); null for older lines and products without dimensions.
 	VariantLabel *string `json:"variantLabel"`
+	// HSN is the product's HSN code at sale time (industry P1 item 10;
+	// null on older sales).
+	HSN *string `json:"hsn_code"`
 }
 
 // SaleJSON keeps the old field names (snake_case columns, camelCase
@@ -120,7 +123,7 @@ const (
 	qLoadItems = `SELECT i.id, i.sale_id, i.product_id, i.variant_id, i.product_name, i.sku, i.quantity, i.unit_price,
 			i.catalog_price, i.discount, i.tax_type, i.tax_rate, i.tax_amount, i.cgst, i.sgst, i.igst, i.subtotal,
 			i.created_at, v.attributes,
-			coalesce((SELECT sum(r.quantity) FROM return_items r WHERE r.order_item_id = i.id), 0), i.variant_label
+			coalesce((SELECT sum(r.quantity) FROM return_items r WHERE r.order_item_id = i.id), 0), i.variant_label, i.hsn_code
 		FROM order_items i LEFT JOIN product_variants v ON v.id = i.variant_id
 		WHERE i.sale_id = ANY($1) ORDER BY i.sale_id, i.id`
 )
@@ -167,7 +170,7 @@ func load(ctx context.Context, tx tenancy.TenantTx, ids []int64) ([]SaleJSON, er
 		var attrs []byte
 		if err := rows.Scan(&it.ID, &it.SaleID, &it.ProductID, &it.VariantID, &it.ProductName, &it.SKU, &it.Quantity, &it.UnitPrice,
 			&it.CatalogPrice, &it.Discount, &it.TaxType, &it.TaxRate, &it.TaxAmount, &it.CGST, &it.SGST, &it.IGST, &it.Subtotal,
-			&it.CreatedAt, &attrs, &it.ReturnedQty, &it.VariantLabel); err != nil {
+			&it.CreatedAt, &attrs, &it.ReturnedQty, &it.VariantLabel, &it.HSN); err != nil {
 			rows.Close()
 			return nil, err
 		}

@@ -47,7 +47,7 @@ func sampleView() View {
 		Reference: "POS-INV-000042", Date: "20 Oct 2026, 23:30", Cashier: "Ravi", Customer: "Kiran Patil",
 		CustomerEmail: "kiran@example.test",
 		Lines: []Line{
-			{Name: "Masala Chai 250g", Attributes: "Pack: 250g", SKU: "TEA-250", Qty: 2, UnitPrice: "₹120.50", TaxRate: "5%", TaxAmount: "₹12.05", Total: "₹253.05"},
+			{Name: "Masala Chai 250g", Attributes: "Pack: 250g", SKU: "TEA-250", HSN: "0902", Qty: 2, UnitPrice: "₹120.50", TaxRate: "5%", TaxAmount: "₹12.05", Total: "₹253.05"},
 			{Name: "Cotton Shirt", Attributes: "Color: Blue, Size: M", SKU: "SHIRT-M", Qty: 1, UnitPrice: "₹1,499.00", Discount: "₹100.00", HasDiscount: true, TaxRate: "12%", TaxAmount: "₹167.88", Total: "₹1,566.88"},
 		},
 		TaxRows:  []TaxRow{{Label: "CGST 2.5%", Taxable: "₹241.00", Amount: "₹6.03"}, {Label: "SGST 2.5%", Taxable: "₹241.00", Amount: "₹6.02"}},
