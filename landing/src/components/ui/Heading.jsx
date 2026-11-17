@@ -28,10 +28,10 @@ export function SectionTitle({ children, className, as: Tag = 'h2' }) {
   );
 }
 
-/** Max-width page container with the standard side gutter. */
+/** Full-width page container with a small side gutter so text never touches the screen edge. */
 export function Container({ children, className, as: Tag = 'div', ...rest }) {
   return (
-    <Tag className={cn('mx-auto w-full max-w-[1200px] px-4 sm:px-6', className)} {...rest}>
+    <Tag className={cn('w-full px-4 sm:px-6 lg:px-8', className)} {...rest}>
       {children}
     </Tag>
   );
