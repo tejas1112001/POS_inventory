@@ -12,7 +12,7 @@ How to check each item: `docs/UI_CHECKLIST.md`. Last updated: 2026-11-17.
 | 5 (e) | Barcode generation and label PDF | Done, committed, deployed to the dev stack (tenant migration 00020). The scan check on a real scanner and phone is for the owner (checklist step 1) |
 | 6 (f) | Import templates | Done, committed, deployed to the dev stack (no migration) |
 | 7 (g) | Stock counts | Done, committed, deployed to the dev stack (tenant migration 00021) |
-| 8 (h) | Partial purchase receiving | Waiting: stop here and show the backfill report from the copy run |
+| 8 (h) | Partial purchase receiving | STOPPED for the owner: copy run done (report in the design note, §8). Draft migration 00022 and TestReceiptsBackfill sit in the working tree, not committed |
 | 9, 10 (i, j) | After the owner's OK on item 8 | Not started |
 
 ## Notes
@@ -22,7 +22,7 @@ How to check each item: `docs/UI_CHECKLIST.md`. Last updated: 2026-11-17.
 - Temporary worktree `D:/pos_baseline` (detached `main`, used for baseline test runs) to be removed at the end.
 
 ## Next step
-Commit and deploy item 7. Then STOP before item 8 (partial purchase receiving) and show the owner the backfill report from the copy run; wait for OK before items 9 and 10.
+Waiting for the owner's OK on the item 8 backfill report (design note §8). After OK: build items 9 and 10 (and item 8 itself, from the drafted migration).
 
 ## Decisions to confirm
 - Item 7: every stock-count route is in the `stock_counts` module (the item 1 route registry), so with the module off the count pages are hidden rather than read-only. Their stock movements stay in the stock history. Design §1 says completed counts stay readable; making the two GET routes readable while the module is off needs a small change to the item 1 route check.

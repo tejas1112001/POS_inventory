@@ -350,6 +350,17 @@ Everything else (attributes, matrix, labels, stock counts, exchanges, store cred
 - **Backfill**: every `Received` purchase gets `received_qty = quantity` and one receipt row dated `received_at`. This runs **on a copy first**, with a per-shop report (purchases, rows created, mismatches = 0), as in S10 §5.2.
 - **DB15** `purchases.status` CHECK gains `'Partially received'`.
 
+**Backfill report (2026-11-17, copy run, before building item 8).** Draft tenant migration 00022 (DB13–DB15 and the backfill; not committed yet).
+- *Copy first*: the dev database was copied into a separate database (`pg_dump | pg_restore` as `pos_copy`, inside the Postgres container), the migration's Up SQL and the report query were run on every shop schema of the copy, then the copy was dropped. The dev database has **0 shops** at the moment (`platform.tenants` is empty), so the copy had nothing to backfill: 0 shops, 0 purchases, 0 receipts, 0 mismatches.
+- *Scratch shop* (`TestReceiptsBackfill`, the same migration on a shop schema at version 21 with 5 purchases: 2 Received, 1 Ordered, 1 Pending, 1 Cancelled):
+
+| Shop | Purchases | Received | Receipts created | Receipt lines created | Mismatches |
+|---|---|---|---|---|---|
+| scratch test shop | 5 | 2 | 2 (GRN-000001, GRN-000002, oldest first, dated when received) | 3 (full quantities) | 0 |
+
+- Mismatches count: a received purchase without exactly one receipt; a line whose `received_qty` is not its full quantity on a received purchase (or not 0 on any other); a line whose `received_qty` differs from its receipt lines; a receipt dated differently from its purchase's `received_at`.
+- *Then dev*: `posctl migrate tenants up` runs it when item 8 is committed, with the same report.
+
 **Permissions**: existing `purchases:approve` (receiving is approving stock in).
 
 **Risks**
