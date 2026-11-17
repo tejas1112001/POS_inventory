@@ -343,6 +343,23 @@ Both forms: same-origin `Origin` required (`403`), `application/x-www-form-urlen
 
 Search engines: the admin host sends `X-Robots-Tag: noindex, nofollow` on every response; tenant staff pages (`/login`, back office) send `noindex`; tenant storefront pages (`/`, `/product/*`, `/shop/*`) are indexable.
 
+### 5.5 Industry Phase 1 (`docs/INDUSTRY_PHASE1_DESIGN.md`)
+
+Additive only: old requests and responses stay valid. Numbers (A1…) follow the design note §0.3. Written as each item is built.
+
+**Modules.** A route in an industry module answers `403 MODULE_OFF` ("<module> is turned off for this shop. The owner can turn it on in Settings.") when the module is not entitled (a plan names it `false`, or a console override turns it off; plans that do not name it allow it) or not switched on in `settings.modules`. The check runs after authentication and the permission check, so a signed-out call is still `401` and a call without the permission `403 FORBIDDEN`. Startup fails if a route under a module's paths is registered without its module (`modules.CheckRoutes`).
+
+| # | Method | Path | Guard | Notes |
+|---|---|---|---|---|
+| A1 | GET | `/api/auth/me` | signed in | `tenant` gains `businessType` (`retail`\|`clothing`\|`footwear`\|`pharmacy`), `modules[]` (switched on and entitled: what the shop can use) and `entitledModules[]` |
+| A1 | GET, PUT | `/api/settings` | `settings:view` / `settings:edit` | Response gains `businessType`, `modules[]`, `enabledModules[]` (switched on, entitled or not) and `entitledModules[]`. PUT does not change them |
+| A2 | PUT | `/api/settings/business` | `modules:manage` (owner only by default) | `{businessType?, modules?[]}`. A new type without `modules` switches on the type's recommended modules; `modules` replaces the set (unknown key or missing dependency: `400 VALIDATION_FAILED`). Switching on a module that is not entitled: `403 FEATURE_NOT_IN_PLAN` (one that is already on may stay). A new type seeds its starting data only where none exists. Audited `settings.business_update` (before/after); a no-op writes nothing. Copies the type to `platform.tenants.business_type`. Returns the summary `{businessType, modules, enabledModules, entitledModules}` |
+| A3 | GET | `/api/modules` | `settings:view` | `{businessType, businessTypes[{key,label,description}], modules[{key,label,description,dependencies,permissions,recommendedFor,entitled,enabled}], recommended{type: keys[]}}` |
+
+Phase 1 modules: `product_attributes`, `barcode_labels`, `stock_counts`. Presets: clothing and footwear → all three; pharmacy → `barcode_labels`, `stock_counts`; retail → none. The onboarding checklist (`GET /api/onboarding`) of a clothing or footwear shop shows "Import your catalogue (<type> template)" instead of "First product" (Q7).
+
+Platform console: `POST /api/platform/tenants` takes `businessType` (default `retail`, validated); tenant views include `businessType`; `GET /api/platform/tenants?businessType=` filters; override keys gain `product_attributes`, `barcode_labels`, `stock_counts` (flag; `false` turns the module off for that shop).
+
 ---
 
 ## 6. Frontend changes (minimal set, Phase 2)

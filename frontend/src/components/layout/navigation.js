@@ -81,11 +81,14 @@ export const NAV = [
   },
 ];
 
-// visibleNav keeps the items the user may open and drops empty groups.
-export function visibleNav(hasPermission) {
-  return NAV.map((g) => ({ ...g, items: g.items.filter((i) => !i.perm || hasPermission(i.perm[0], i.perm[1])) })).filter(
-    (g) => g.items.length > 0
-  );
+// visibleNav keeps the items the user may open and drops empty groups. An
+// item with a module (industry P1) also needs that module switched on for
+// the shop; hasModule defaults to "on" for callers that do not pass it.
+export function visibleNav(hasPermission, hasModule = () => true) {
+  return NAV.map((g) => ({
+    ...g,
+    items: g.items.filter((i) => (!i.perm || hasPermission(i.perm[0], i.perm[1])) && (!i.module || hasModule(i.module))),
+  })).filter((g) => g.items.length > 0);
 }
 
 // isItemActive: the item's page or one of its sub-pages is open.

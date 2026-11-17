@@ -96,14 +96,36 @@ var Catalog = []Permission{
 	{"sales", "credit", "Sell on credit or part payment"},
 	{"customers", "credit_limit", "Set customer credit limits"},
 	{"customers", "collect", "Collect customer payments"},
+	// Industry Phase 1 (docs/INDUSTRY_PHASE1_DESIGN.md).
+	{"modules", "manage", "Change business type and modules"}, // P1, owner only
+}
+
+// ownerOnlyKeys are single permissions the admin system role does not get
+// (besides the whole billing module).
+var ownerOnlyKeys = []string{
+	"sales:credit", "customers:credit_limit", // S10 P1
+	"modules:manage", // industry P1
 }
 
 // OwnerOnly are permissions the admin system role does not get: billing,
-// and selling on credit and setting credit limits (S10 P1). The owner can
-// give them to custom roles.
+// selling on credit and setting credit limits (S10 P1), and changing the
+// business type and modules (industry P1). The owner can give them to
+// custom roles.
 func OwnerOnly(p Permission) bool {
-	return p.Module == "billing" || p.Key() == "sales:credit" || p.Key() == "customers:credit_limit"
+	if p.Module == "billing" {
+		return true
+	}
+	for _, k := range ownerOnlyKeys {
+		if p.Key() == k {
+			return true
+		}
+	}
+	return false
 }
+
+// OwnerOnlyKeys returns the single owner-only permissions (the billing
+// module is owner-only as a whole). The grant queries take this list.
+func OwnerOnlyKeys() []string { return append([]string(nil), ownerOnlyKeys...) }
 
 // BillerDefaults are the biller role's seeded permissions (API_CONTRACT §3).
 // The role is editable afterwards; it is never reset.

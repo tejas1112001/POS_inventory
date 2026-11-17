@@ -31,6 +31,7 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/landing"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/mailer"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/migrate"
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/modules"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/obs"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/plans"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/platform"
@@ -328,6 +329,7 @@ func (a *App) tenantAPI(cfg *config.Config, log *slog.Logger, network httpx.Netw
 	})
 	planSvc := plans.NewService(a.sessions)
 	a.plans = planSvc
+	modSvc := modules.NewService(a.sessions, planSvc)
 	fileSvc := files.NewService(storage, a.sessions, planSvc, log)
 	productAPI := products.New(products.Deps{Sessions: a.sessions, Files: fileSvc, Plans: planSvc, MaxRows: cfg.MaxUnpagedRows})
 	purchaseAPI := purchases.New(purchases.Deps{Sessions: a.sessions, MaxRows: cfg.MaxUnpagedRows})
@@ -347,14 +349,14 @@ func (a *App) tenantAPI(cfg *config.Config, log *slog.Logger, network httpx.Netw
 	receiptSvc := receipts.NewService(a.sessions, storage, log)
 	receiptSvc.Rendered = func(d time.Duration) { a.metrics.ReceiptRender.Observe(d.Seconds()) }
 	receiptAPI := receipts.NewAPI(receiptSvc, a.sessions)
-	settingsAPI := settings.New(settings.Deps{Sessions: a.sessions, Files: fileSvc, Plans: planSvc, Envelope: env,
+	settingsAPI := settings.New(settings.Deps{Sessions: a.sessions, Files: fileSvc, Plans: planSvc, Modules: modSvc, Envelope: env,
 		Guard: a.tenantMailGuard(), RootCAs: a.opts.mailRoots, MailDomain: cfg.MailDomain()})
 	a.catalog = catalog.New(catalog.Deps{Sessions: a.sessions, Files: fileSvc, Plans: planSvc, MaxRows: cfg.MaxUnpagedRows,
 		ShowcaseProducts: products.ShowcaseProducts(cfg.MaxUnpagedRows)})
 	api := tenantapi.New(tenantapi.Deps{
 		Auth: authSvc, Users: users.NewService(a.sessions, authSvc, hasher, planSvc, cfg.MaxUnpagedRows),
 		States: states, Signer: signer, Sessions: a.sessions, Network: network, Metrics: a.metrics, MaxRows: cfg.MaxUnpagedRows,
-		LoginPerTenant: a.opts.tenantLoginLimit,
+		LoginPerTenant: a.opts.tenantLoginLimit, Industry: modSvc,
 		Modules: []interface{ Mount(*rbac.Router) }{a.catalog, productAPI, salesAPI, purchaseAPI, adjustmentAPI, reportAPI, shopAPI, settingsAPI, receiptAPI,
 			&billing.TenantAPI{Svc: a.billing}},
 	})
@@ -491,6 +493,10 @@ func billingProvider(cfg *config.Config, log *slog.Logger) billing.Provider {
 	}
 	return nil
 }
+
+// Plans exposes the plan and override checks (tests clear its cache after
+// writing an override directly).
+func (a *App) Plans() *plans.Service { return a.plans }
 
 // Billing exposes the billing service (tests).
 func (a *App) Billing() *billing.Service { return a.billing }

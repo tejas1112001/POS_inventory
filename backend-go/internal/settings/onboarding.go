@@ -6,6 +6,7 @@ import (
 
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/audit"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/httpx"
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/modules"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/plans"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/tenancy"
 )
@@ -44,14 +45,16 @@ const qOnboarding = `SELECT s.onboarding_hidden_at,
 		OR EXISTS (SELECT 1 FROM email_outbox o WHERE o.status = 'sent'),
 	EXISTS (SELECT 1 FROM sales x WHERE x.status <> 'Void'),
 	EXISTS (SELECT 1 FROM store_products sp JOIN stores st ON st.id = sp.store_id
-		WHERE sp.is_published AND st.deleted_at IS NULL AND st.is_public_enabled)
+		WHERE sp.is_published AND st.deleted_at IS NULL AND st.is_public_enabled),
+	s.business_type
 FROM settings s WHERE s.id = 1`
 
 func (a *API) onboarding(w http.ResponseWriter, r *http.Request) {
 	var out Onboarding
 	var profile, logo, store, product, staff, email, sale, shop bool
+	var businessType string
 	err := a.ro(r.Context(), tenant(r), func(tx tenancy.TenantTx) error {
-		return tx.QueryRow(r.Context(), qOnboarding).Scan(&out.HiddenAt, &profile, &logo, &store, &product, &staff, &email, &sale, &shop)
+		return tx.QueryRow(r.Context(), qOnboarding).Scan(&out.HiddenAt, &profile, &logo, &store, &product, &staff, &email, &sale, &shop, &businessType)
 	})
 	if err != nil {
 		httpx.WriteError(w, r, err)
@@ -66,6 +69,12 @@ func (a *API) onboarding(w http.ResponseWriter, r *http.Request) {
 		{"staff", "First staff user", "Give each cashier their own sign-in.", "/users", staff},
 		{"email", "Email sending", "Receipts by email: set up your own email server, or send one receipt.", "/settings", email},
 		{"sale", "First sale", "Sell something at the checkout.", "/pos", sale},
+	}
+	// Industry Phase 1, Q7: a clothing or footwear shop starts from its
+	// catalogue spreadsheet instead of a first product.
+	if businessType == modules.Clothing || businessType == modules.Footwear {
+		out.Steps[3] = Step{"product", "Import your catalogue (" + businessType + " template)",
+			"Download the " + businessType + " template, fill in your articles, sizes and colours, and import it.", "/products?import=" + businessType, product}
 	}
 	if ok, err := a.d.Plans.HasFor(r.Context(), tenant(r), plans.FeaturePublicShop); err == nil && ok {
 		out.Steps = append(out.Steps, Step{"shop", "Online shop", "Publish products on your storefront.", "/showcase-settings", shop})

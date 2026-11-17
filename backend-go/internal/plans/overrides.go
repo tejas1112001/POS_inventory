@@ -119,6 +119,29 @@ func (s *Service) HasFor(ctx context.Context, t tenancy.Tenant, feature string) 
 	return s.Has(ctx, t.PlanID, feature)
 }
 
+// HasModule reports whether the tenant is entitled to an industry module
+// (docs/INDUSTRY_PHASE1_DESIGN.md item 1, E1/E2): an active flag override
+// wins, then the plan's flag when the plan names the module, else on. So
+// no plan row changes for Phase 1, and the console can turn a module off
+// for one shop.
+func (s *Service) HasModule(ctx context.Context, t tenancy.Tenant, feature string) (bool, error) {
+	o, err := s.overrides(ctx, t.ID)
+	if err != nil {
+		return false, err
+	}
+	if v, ok := o.flags[feature]; ok {
+		return v, nil
+	}
+	v, named, err := s.planFeature(ctx, t.PlanID, feature)
+	if err != nil {
+		return false, err
+	}
+	if !named {
+		return true, nil
+	}
+	return v, nil
+}
+
 // RequireFeatureFor returns 403 FEATURE_NOT_IN_PLAN unless HasFor.
 func (s *Service) RequireFeatureFor(ctx context.Context, t tenancy.Tenant, feature, what string) error {
 	ok, err := s.HasFor(ctx, t, feature)

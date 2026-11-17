@@ -25,6 +25,7 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/files"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/httpx"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/mailer"
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/modules"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/money"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/plans"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/rbac"
@@ -37,6 +38,7 @@ type Deps struct {
 	Sessions   *tenancy.Sessions
 	Files      *files.Service
 	Plans      *plans.Service
+	Modules    *modules.Service // industry module checks (item 1)
 	Envelope   *secrets.Envelope
 	Guard      mailer.Guard   // tenant SMTP SSRF guard
 	RootCAs    *x509.CertPool // nil: system roots
@@ -85,6 +87,9 @@ func (a *API) Mount(rt *rbac.Router) {
 	// Onboarding checklist (S10 item 8).
 	rt.Handle(http.MethodGet, "/onboarding", req("settings", "edit"), a.onboarding)
 	rt.Handle(http.MethodPost, "/onboarding/hide", req("settings", "edit"), a.hideOnboarding)
+	// Business type and modules (industry P1 item 1, A2, A3).
+	rt.Handle(http.MethodGet, "/modules", req("settings", "view"), a.listModules)
+	rt.Handle(http.MethodPut, "/settings/business", req("modules", "manage"), a.putBusiness)
 }
 
 // ---------------------------------------------------------------- model
@@ -184,6 +189,7 @@ type JSON struct {
 	NewCheckoutOK     bool            `json:"newCheckoutAllowed"` // false: the platform turned the new checkout off for this shop
 	LowStockEmail     bool            `json:"lowStockEmail"`
 	UpdatedAt         time.Time       `json:"updatedAt"`
+	modules.Summary                   // businessType, modules, enabledModules, entitledModules (A1)
 }
 
 func toJSON(b Business) JSON {
@@ -215,6 +221,10 @@ func (a *API) get(w http.ResponseWriter, r *http.Request) {
 	}
 	out.NewCheckoutOK = ok
 	out.NewCheckout = out.NewCheckout && ok
+	if out.Summary, err = a.d.Modules.Summarize(r.Context(), tenant(r)); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
 	httpx.WriteJSON(w, http.StatusOK, out)
 }
 
@@ -518,5 +528,10 @@ func (a *API) put(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, toJSON(out))
+	res := toJSON(out)
+	if res.Summary, err = a.d.Modules.Summarize(r.Context(), t); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, res)
 }

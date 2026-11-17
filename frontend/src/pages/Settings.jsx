@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { Palette, Check } from 'lucide-react';
 import ShopSettings from '@/components/settings/ShopSettings';
 import EmailSettings from '@/components/settings/EmailSettings';
+import BusinessSettings from '@/components/settings/BusinessSettings';
 import { usePermission } from '@/context/PermissionContext';
 import { SectionCard } from '@/components/shared/section-card';
 import { useTheme, THEME_PRESETS } from '@/context/ThemeContext';
@@ -44,7 +45,12 @@ export default function Settings() {
           </button>
         ))}
       </div>
-      {tab === 'shop' && <ShopSettings canEdit={hasPermission('settings', 'edit')} />}
+      {tab === 'shop' && (
+        <div className="space-y-3">
+          <BusinessSettings canManage={hasPermission('modules', 'manage')} />
+          <ShopSettings canEdit={hasPermission('settings', 'edit')} />
+        </div>
+      )}
       {tab === 'email' && <EmailSettings canEdit={hasPermission('email_settings', 'edit')} />}
       {tab === 'appearance' && <Appearance />}
     </div>

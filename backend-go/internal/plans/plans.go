@@ -55,25 +55,33 @@ func NewService(s *tenancy.Sessions) *Service {
 // Has reports whether a plan includes a feature. Plan 0 (no plan) has
 // every feature, as it has no limits; a missing or non-true flag is off.
 func (s *Service) Has(ctx context.Context, planID int64, feature string) (bool, error) {
+	v, _, err := s.planFeature(ctx, planID, feature)
+	return v, err
+}
+
+// planFeature returns a plan's flag and whether the plan names it at all.
+// Plan 0 (no plan) and an unknown plan name every feature as on.
+func (s *Service) planFeature(ctx context.Context, planID int64, feature string) (bool, bool, error) {
 	if planID == 0 {
-		return true, nil
+		return true, true, nil
 	}
 	if f, ok := s.features.Get(planID); ok {
-		return f[feature], nil
+		v, has := f[feature]
+		return v, has, nil
 	}
 	var raw []byte
 	err := s.sessions.InPlatformTx(ctx, tenancy.TxOptions{Access: tenancy.ReadOnly}, func(tx tenancy.PlatformTx) error {
 		return tx.QueryRow(ctx, `SELECT features FROM platform.plans WHERE id = $1`, planID).Scan(&raw)
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return true, nil
+		return true, true, nil
 	}
 	if err != nil {
-		return false, err
+		return false, false, err
 	}
 	var all map[string]any
 	if err := json.Unmarshal(raw, &all); err != nil {
-		return false, err
+		return false, false, err
 	}
 	f := make(map[string]bool, len(all))
 	for k, v := range all {
@@ -81,7 +89,8 @@ func (s *Service) Has(ctx context.Context, planID int64, feature string) (bool, 
 		f[k] = b
 	}
 	s.features.Set(planID, f, s.ttl)
-	return f[feature], nil
+	v, named := f[feature]
+	return v, named, nil
 }
 
 // RequireFeature returns 403 FEATURE_NOT_IN_PLAN unless the plan has it.

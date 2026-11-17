@@ -313,3 +313,19 @@ How to check (owner, or anyone who can edit settings):
 2. Ticks come from the shop's data, never from clicking: e.g. add a product → "First product" is ticked on the next dashboard load; sell something → "First sale"; fill address, phone and tax number in Settings → "Business profile and tax number". "Email sending" ticks when the shop's own email server is verified or any email has been sent.
 3. **Hide checklist** → confirm → it disappears for everyone in the shop, for good (audit: settings.onboarding_hidden). When every step is done it disappears by itself.
 4. Cashiers (no settings:edit) never see it.
+
+## Industry P1 – Item 1: Business type and modules
+
+How to check:
+1. An existing shop (owner): Settings → Shop shows a **Business type** card at the top with **Retail** chosen and no module ticked. Every other screen is unchanged (no new menu items).
+2. Choose **Clothing**: Sizes, colours and attributes, Barcode labels and Stock counts get ticked. Untick one, **Save business type** → "Business type saved." Reload: the choice is kept. Audit log: `settings.business_update` with before and after.
+3. Choose **Retail** again → every module unticked; save. Data from a module is never deleted when it goes off.
+4. As an admin or a cashier the card is read-only: "Only the owner can change the business type and modules." Roles & permissions lists **modules: Change business type and modules**; the Admin role does not have it, the Owner does.
+5. Super Admin console → Tenants: a **Type** column and an **All business types** filter. **New tenant** has a **Business type** field (default Retail). Create a Clothing shop: its owner's onboarding checklist shows "Import your catalogue (clothing template)" instead of "First product", and its Settings show Clothing with the three modules on.
+6. Console → a tenant → Overrides: the keys list has "Module: sizes, colours and attributes", "Module: barcode labels" and "Module: stock counts". Add one with value **off**: within 30 seconds the shop's Settings card shows that module as **Not in your plan**, and it can no longer be ticked (an already ticked one stays ticked but is not usable).
+7. API: `GET /api/auth/me` → `tenant.businessType`, `tenant.modules`, `tenant.entitledModules`.
+
+Known problems:
+- The modules themselves arrive with items 4 (attributes), 5 (labels) and 7 (stock counts); until then switching them on shows no new screen.
+- The onboarding "Import your catalogue" step opens the Products page; the template import itself arrives with item 6.
+- Existing shops' Biller role does not get new permissions automatically (roles are never reset); item 4 gives new shops' billers `attributes:view`.
