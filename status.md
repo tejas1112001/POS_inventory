@@ -22,7 +22,7 @@ How to check each item: `docs/UI_CHECKLIST.md`. Last updated: 2026-11-17.
 - Temporary worktree `D:/pos_baseline` (detached `main`, used for baseline test runs) to be removed at the end.
 
 ## Next step
-Waiting for the owner's OK on the item 8 backfill report (design note §8). After OK: build items 9 and 10 (and item 8 itself, from the drafted migration).
+Waiting for the owner's OK on the item 8 backfill report (design note §8). Usage left is low (19% on 2026-11-17). Plan if OK: item 10 first (small, fits), then item 8 (from the drafted migration 00022 and TestReceiptsBackfill in the working tree), then item 9 in a later session. Each item: lint, both builds, backend and isolation tests, deploy, commit, checklist.
 
 ## Decisions to confirm
 - Item 7: every stock-count route is in the `stock_counts` module (the item 1 route registry), so with the module off the count pages are hidden rather than read-only. Their stock movements stay in the stock history. Design §1 says completed counts stay readable; making the two GET routes readable while the module is off needs a small change to the item 1 route check.
