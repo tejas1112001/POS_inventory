@@ -98,6 +98,10 @@ var Catalog = []Permission{
 	{"customers", "collect", "Collect customer payments"},
 	// Industry Phase 1 (docs/INDUSTRY_PHASE1_DESIGN.md).
 	{"modules", "manage", "Change business type and modules"}, // P1, owner only
+	{"attributes", "view", "View product attributes"},         // P2
+	{"attributes", "create", "Create product attributes"},
+	{"attributes", "edit", "Edit product attributes"},
+	{"attributes", "delete", "Delete product attributes"},
 }
 
 // ownerOnlyKeys are single permissions the admin system role does not get
@@ -135,6 +139,7 @@ var BillerDefaults = map[string]bool{
 	"sales:view": true, "sales:create": true, "sales:discount": true,
 	"invoices:view": true, "reports:view": true, "stores:view": true, "settings:view": true,
 	"receipts:view": true, "receipts:resend": true,
+	"attributes:view": true, // industry P2: checkout shows attribute labels (new shops only)
 }
 
 // InSystemRole reports whether a permission belongs to a system role's fixed

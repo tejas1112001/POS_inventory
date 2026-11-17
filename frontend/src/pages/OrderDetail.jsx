@@ -165,7 +165,8 @@ export default function OrderDetail() {
               </thead>
               <tbody className="divide-y">
                 {items.map((i) => {
-                  const attrs = attrText(i.variant?.attributes);
+                  // The sale-time label ("M / Blue", industry P1 item 4) wins over today's attributes.
+                  const attrs = i.variantLabel || attrText(i.variant?.attributes);
                   return (
                     <tr key={i.id}>
                       <td className="px-4 py-2">

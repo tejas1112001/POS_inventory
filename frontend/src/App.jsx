@@ -23,6 +23,7 @@ import CheckoutEntry from './pages/checkout/CheckoutEntry';
 import Categories from './pages/Categories';
 import Brands from './pages/Brands';
 import Units from './pages/Units';
+import Attributes from './pages/Attributes';
 import Invoices from './pages/Invoices';
 import SalesReturn from './pages/SalesReturn';
 import ReturnDetail from './pages/ReturnDetail';
@@ -95,6 +96,7 @@ function AppRoutes() {
       <Route path="/add-product" element={<ProtectedLayout module="products" action="create"><AddProduct /></ProtectedLayout>} />
       <Route path="/brands" element={<ProtectedLayout module="brands" action="view"><Brands /></ProtectedLayout>} />
       <Route path="/add-brand" element={<ProtectedLayout module="brands" action="create"><Brands startNew /></ProtectedLayout>} />
+      <Route path="/attributes" element={<ProtectedLayout module="attributes" action="view"><Attributes /></ProtectedLayout>} />
       <Route path="/units" element={<ProtectedLayout module="units" action="view"><Units /></ProtectedLayout>} />
       <Route path="/add-unit" element={<ProtectedLayout module="units" action="create"><Units startNew /></ProtectedLayout>} />
       <Route path="/invoices" element={<ProtectedLayout module="invoices" action="view"><Invoices /></ProtectedLayout>} />

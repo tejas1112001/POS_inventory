@@ -19,6 +19,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/adjustments"
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/attributes"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/auth"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/authtoken"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/billing"
@@ -357,7 +358,7 @@ func (a *App) tenantAPI(cfg *config.Config, log *slog.Logger, network httpx.Netw
 		Auth: authSvc, Users: users.NewService(a.sessions, authSvc, hasher, planSvc, cfg.MaxUnpagedRows),
 		States: states, Signer: signer, Sessions: a.sessions, Network: network, Metrics: a.metrics, MaxRows: cfg.MaxUnpagedRows,
 		LoginPerTenant: a.opts.tenantLoginLimit, Industry: modSvc,
-		Modules: []interface{ Mount(*rbac.Router) }{a.catalog, productAPI, salesAPI, purchaseAPI, adjustmentAPI, reportAPI, shopAPI, settingsAPI, receiptAPI,
+		Modules: []interface{ Mount(*rbac.Router) }{a.catalog, productAPI, attributes.New(a.sessions), salesAPI, purchaseAPI, adjustmentAPI, reportAPI, shopAPI, settingsAPI, receiptAPI,
 			&billing.TenantAPI{Svc: a.billing}},
 	})
 	return api, authSvc, nil

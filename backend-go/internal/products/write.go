@@ -15,6 +15,7 @@ import (
 	"github.com/shopspring/decimal"
 
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/apperr"
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/attributes"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/audit"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/inventory"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/money"
@@ -86,6 +87,11 @@ type productIn struct {
 	ExpiryDate       money.Date `json:"expiryDate"`
 	ManufacturedDate money.Date `json:"manufacturedDate"`
 	CreatedBy        any        `json:"createdBy"` // ignored: comes from the session
+	// Industry P1 item 4 (A7). Left out (null) on an update: kept as they
+	// are, so older clients never clear them.
+	Attributes  *map[string]any `json:"attributes"`
+	VariantDims *[]string       `json:"variantDims"`
+	ArticleNo   *string         `json:"articleNo"`
 }
 
 var (
@@ -103,6 +109,14 @@ type clean struct {
 	tax, discountValue                                        *decimal.Decimal
 	categoryID, subCategoryID, brandID, unitID, supplierID    *int64
 	variants                                                  []cleanVariant
+	// Typed attributes (item 4). The *In fields are what the request sent
+	// (nil: keep); attrs, dims and article are the values written.
+	attrsIn   *map[string]any
+	dimsIn    *[]string
+	articleIn *string
+	attrs     map[string]string
+	dims      []string
+	article   *string
 }
 
 type cleanVariant struct {
@@ -111,6 +125,7 @@ type cleanVariant struct {
 	barcode              *string
 	price, cost, weight  decimal.Decimal
 	attributes           []byte
+	attrMap              map[string]any
 	expiry, manufactured *string
 	inventories          []cleanInventory
 }
@@ -242,6 +257,14 @@ func validate(in productIn) (clean, error) {
 	c.brandID = idPtr(f, "brandId", in.BrandID)
 	c.unitID = idPtr(f, "unitId", in.UnitID)
 	c.supplierID = idPtr(f, "supplierId", in.SupplierID)
+	c.attrsIn, c.dimsIn = in.Attributes, in.VariantDims
+	if in.ArticleNo != nil {
+		a := strings.TrimSpace(*in.ArticleNo)
+		if len([]rune(a)) > 64 || strings.ContainsRune(a, 0) {
+			f.add("articleNo", "articleNo must be at most 64 characters")
+		}
+		c.articleIn = &a
+	}
 
 	variants := in.Variants
 	if c.productType == "single" && len(variants) == 0 && in.SKU != nil {
@@ -326,6 +349,7 @@ func validateVariant(f fieldErrs, prefix string, v variantIn) (cleanVariant, err
 	if v.Attributes == nil {
 		v.Attributes = map[string]any{}
 	}
+	cv.attrMap = v.Attributes
 	cv.attributes, _ = json.Marshal(v.Attributes)
 	if len(cv.attributes) > 4000 {
 		f.add(prefix+".attributes", "attributes are too large")
@@ -442,14 +466,15 @@ func skuConflict(err error) error {
 const (
 	qInsertProduct = `INSERT INTO products (name, description, slug, status, image_file_id, selling_type, product_type, tax_type,
 		tax_rate, hsn_code, discount_type, discount_value, warranties, barcode_symbology, category_id, sub_category_id,
-		brand_id, unit_id, supplier_id, created_by)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, NULLIF($20, 0)) RETURNING id`
+		brand_id, unit_id, supplier_id, created_by, attributes, variant_dims, article_no)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, NULLIF($20, 0),
+		$21::jsonb, $22::text[], $23) RETURNING id`
 	qInsertVariant = `INSERT INTO product_variants (product_id, sku, item_barcode, price, cost, weight, attributes, expiry_date,
 		manufactured_date, created_by) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::date, $9::date, NULLIF($10, 0)) RETURNING id`
 	qUpdateProduct = `UPDATE products SET name = $2, description = $3, slug = $4, status = $5, image_file_id = $6, selling_type = $7,
 		tax_type = $8, tax_rate = $9, hsn_code = $10, discount_type = $11, discount_value = $12, warranties = $13,
 		barcode_symbology = $14, category_id = $15, sub_category_id = $16, brand_id = $17, unit_id = $18, supplier_id = $19,
-		updated_at = now() WHERE id = $1`
+		attributes = $20::jsonb, variant_dims = $21::text[], article_no = $22, updated_at = now() WHERE id = $1`
 	qUpdateVariant = `UPDATE product_variants SET sku = $2, item_barcode = $3, price = $4, cost = $5, weight = $6, attributes = $7,
 		expiry_date = $8::date, manufactured_date = $9::date, updated_at = now() WHERE id = $1 AND deleted_at IS NULL`
 )
@@ -476,10 +501,13 @@ func createProduct(ctx context.Context, tx tenancy.TenantTx, c clean, img *uuid.
 
 // createProductWith inserts a product, its variants and opening stock.
 func createProductWith(ctx context.Context, tx tenancy.TenantTx, c clean, img *uuid.UUID, userID int64, reason, action string) (int64, error) {
+	if err := applyAttributes(ctx, tx, &c, nil, nil, nil); err != nil {
+		return 0, err
+	}
 	var id int64
 	err := tx.QueryRow(ctx, qInsertProduct, c.name, c.description, c.slug, c.status, img, c.sellingType, c.productType, c.taxType,
 		c.tax, c.hsn, c.discountType, c.discountValue, c.warranties, c.barcodeSymbology, c.categoryID, c.subCategoryID,
-		c.brandID, c.unitID, c.supplierID, userID).Scan(&id)
+		c.brandID, c.unitID, c.supplierID, userID, attrsJSON(c.attrs), c.dims, c.article).Scan(&id)
 	if err != nil {
 		return 0, err
 	}
@@ -502,7 +530,11 @@ type existingVariant struct {
 // every stock change is written to the ledger.
 func updateProduct(ctx context.Context, tx tenancy.TenantTx, id int64, c clean, img *uuid.UUID, userID int64) error {
 	var ptype string
-	if err := tx.QueryRow(ctx, `SELECT product_type FROM products WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`, id).Scan(&ptype); err != nil {
+	var curAttrs map[string]string
+	var curDims []string
+	var curArticle *string
+	if err := tx.QueryRow(ctx, `SELECT product_type, attributes, variant_dims, article_no FROM products WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`,
+		id).Scan(&ptype, &curAttrs, &curDims, &curArticle); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return apperr.NotFound()
 		}
@@ -510,6 +542,9 @@ func updateProduct(ctx context.Context, tx tenancy.TenantTx, id int64, c clean, 
 	}
 	if ptype != c.productType {
 		return apperr.Invalid("productType", "productType cannot be changed")
+	}
+	if err := applyAttributes(ctx, tx, &c, curAttrs, curDims, curArticle); err != nil {
+		return err
 	}
 	rows, err := tx.Query(ctx, `SELECT id, price FROM product_variants WHERE product_id = $1 AND deleted_at IS NULL FOR UPDATE`, id)
 	if err != nil {
@@ -556,7 +591,7 @@ func updateProduct(ctx context.Context, tx tenancy.TenantTx, id int64, c clean, 
 	}
 	if _, err := tx.Exec(ctx, qUpdateProduct, id, c.name, c.description, c.slug, c.status, img, c.sellingType, c.taxType,
 		c.tax, c.hsn, c.discountType, c.discountValue, c.warranties, c.barcodeSymbology, c.categoryID, c.subCategoryID,
-		c.brandID, c.unitID, c.supplierID); err != nil {
+		c.brandID, c.unitID, c.supplierID, attrsJSON(c.attrs), c.dims, c.article); err != nil {
 		return err
 	}
 	ref := inventory.Ref{Type: "product", ID: id}
@@ -593,4 +628,64 @@ func updateProduct(ctx context.Context, tx tenancy.TenantTx, id int64, c clean, 
 	}
 	return audit.Write(ctx, tx, audit.Entry{ActorID: userID, Action: "product.update", Entity: "product",
 		EntityID: strconv.FormatInt(id, 10), After: map[string]any{"name": c.name, "variants": len(c.variants)}})
+}
+
+// attrsJSON is the products.attributes value.
+func attrsJSON(m map[string]string) string {
+	if m == nil {
+		m = map[string]string{}
+	}
+	b, _ := json.Marshal(m)
+	return string(b)
+}
+
+// applyAttributes settles a product's typed attributes (industry P1 item 4,
+// A7): what the request left out keeps the current value; a product with
+// variant dimensions or product-level attributes is validated against the
+// shop's definitions and its variant values are stored as the definitions
+// spell them. Others keep today's free variant attributes, unvalidated.
+func applyAttributes(ctx context.Context, tx tenancy.TenantTx, c *clean, curAttrs map[string]string, curDims []string, curArticle *string) error {
+	c.article = curArticle
+	if c.articleIn != nil {
+		c.article = nil
+		if *c.articleIn != "" {
+			c.article = c.articleIn
+		}
+	}
+	attrs := map[string]any{}
+	if c.attrsIn != nil {
+		attrs = *c.attrsIn
+	} else {
+		for k, v := range curAttrs {
+			attrs[k] = v
+		}
+	}
+	dims := curDims
+	if c.dimsIn != nil {
+		dims = *c.dimsIn
+	}
+	c.attrs, c.dims = map[string]string{}, []string{}
+	if len(dims) == 0 && len(attrs) == 0 {
+		return nil
+	}
+	defs, err := attributes.Load(ctx, tx)
+	if err != nil {
+		return err
+	}
+	variants := make([]map[string]any, len(c.variants))
+	for i, v := range c.variants {
+		variants[i] = v.attrMap
+	}
+	checked, f := defs.Check(attrs, dims, variants)
+	if len(f) > 0 {
+		return apperr.Fields(f)
+	}
+	c.attrs, c.dims = checked.Attributes, checked.Dims
+	if len(c.dims) > 0 {
+		for i := range c.variants {
+			c.variants[i].attrMap = checked.Variants[i]
+			c.variants[i].attributes, _ = json.Marshal(checked.Variants[i])
+		}
+	}
+	return nil
 }

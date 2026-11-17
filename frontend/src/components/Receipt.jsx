@@ -162,7 +162,7 @@ function ReceiptBody({ sale, store, settings, businessName, taxLabel, logoUrl, n
         </thead>
         <tbody>
           {items.map((i, k) => {
-            const attrs = attrText(i.variant?.attributes);
+            const attrs = i.variantLabel || attrText(i.variant?.attributes); // sale-time label first (industry P1 item 4)
             return (
               <tr key={i.id || k}>
                 <td>

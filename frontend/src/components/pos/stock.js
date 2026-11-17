@@ -9,6 +9,7 @@ export const productStock = (p) => variantsOf(p).reduce((n, v) => n + Math.max(0
 
 // variantLabel: "Size: M, Colour: Red", or the SKU when a variant has no attributes.
 export function variantLabel(v) {
+  if (v?.label) return v.label; // "M / Blue" from the variant's dimensions (industry P1 item 4)
   const attrs = v?.attributes && typeof v.attributes === 'object' ? Object.entries(v.attributes).filter(([, x]) => x !== '' && x != null) : [];
   return attrs.length ? attrs.map(([k, x]) => `${k}: ${x}`).join(', ') : v?.sku || `Option ${v?.id}`;
 }

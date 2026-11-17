@@ -2,6 +2,7 @@ package modules
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"time"
@@ -205,5 +206,22 @@ func SeedPreset(ctx context.Context, tx Execer, businessType string) error {
 	return seedAttributes(ctx, tx, businessType)
 }
 
-// seedAttributes is filled in by item 4 (typed attributes).
-var seedAttributes = func(context.Context, Execer, string) error { return nil }
+// seedAttributes adds the type's attribute definitions (item 4, presets in
+// presets.go). A key that already exists (live) is skipped, so a shop's own
+// definitions are never overwritten.
+var seedAttributes = func(ctx context.Context, tx Execer, businessType string) error {
+	for _, d := range AttributePresets[businessType] {
+		choices, err := json.Marshal(d.Choices)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, qSeedAttribute, d.Key, d.Label, d.Level, d.Kind, string(choices), d.Sort); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+const qSeedAttribute = `INSERT INTO attribute_defs (key, label, level, kind, choices, sort)
+	SELECT $1, $2, $3, $4, $5::jsonb, $6
+	WHERE NOT EXISTS (SELECT 1 FROM attribute_defs WHERE key = $1::citext AND deleted_at IS NULL)`

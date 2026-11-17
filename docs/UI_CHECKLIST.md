@@ -363,3 +363,25 @@ How to check:
 Known problems:
 - A scanner set to send Tab instead of Enter works; one set to send nothing after the code is not recognised (set the scanner to send Enter).
 - Scans are not recognised inside other text fields (on purpose, so typing a note is never taken as a scan).
+
+## Industry P1 – Item 4: Sizes, colours and attributes
+
+Set the shop to **Clothing** (Settings → Shop → Business type) first; a retail shop sees none of this.
+
+How to check:
+1. Menu → Catalogue setup → **Attributes** lists Department, Collection, Season, Size (XS…3XL) and Colour (free text). A Footwear shop gets Department, Size system, Size and Colour instead.
+2. **New attribute** "Fit", Variant, Choose from a list, choices Slim / Regular → saved. A second "fit" → "An attribute with this key already exists."
+3. Products → Add product → **Variable**, one variant (SKU TSH-01-S-RED). Open it: the **Sizes, colours and attributes** card. Enter article number TSH-01, Department Men, Season Spring/Summer; tick **Size** and **Colour**; give the variant Size S, Colour Red → **Save attributes**. The option now reads "S / Red".
+4. **Create variants** → tick S, M; Colour "Red, Blue" → **Preview**: 3 new variants (S / Red skipped) with SKUs TSH-01-S-BLUE, TSH-01-M-RED, TSH-01-M-BLUE → **Create 3 variants**. The product shows 4 options with stock 0.
+5. Create variants again with the same values → Preview says 0 new, 4 skipped. A pattern that repeats a SKU (e.g. "TSH-{colour}" with two sizes) → "The SKU pattern gives the same SKU to several variants".
+6. Products → search "tsh-01" finds the product by its article number.
+7. Checkout: the variant picker shows "S / Red", "M / Blue"…; sell S / Red (the only one with stock); Orders → that order shows "Crew tee (S / Red)", and it still does after the attribute is edited.
+8. Attributes → edit Size and remove "M" → refused: "M is used by 1 variants or products…". Adding "XXS" works. Delete Colour → refused while products use it; delete Fit → done.
+9. A plain product (no dimensions) still saves with any free attribute, as before.
+10. Settings → untick **Sizes, colours and attributes** → the Attributes menu and the product card disappear; products keep their labels; the Attributes page says the module is off.
+11. Roles: Admin has the four Attributes permissions; a new shop's Biller has "View product attributes".
+
+Known problems:
+- The variant grid creates variants with stock 0; receive stock with a purchase or a stock count (item 7).
+- Generating barcodes for new variants arrives with item 5 (barcode labels).
+- Existing shops' Biller role does not get "View product attributes" automatically (roles are never reset); the owner can add it.

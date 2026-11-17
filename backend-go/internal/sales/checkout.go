@@ -533,9 +533,17 @@ func nextReference(ctx context.Context, tx tenancy.TenantTx, prefix string) (str
 	return fmt.Sprintf("%s-%06d", prefix, n), nil
 }
 
+// qInsertItem also snapshots the variant label ("M / Blue", "UK 8 /
+// Black": attributes.Label in SQL) when the product has variant
+// dimensions (industry P1 item 4, DB8); NULL otherwise.
 const qInsertItem = `INSERT INTO order_items (sale_id, product_id, variant_id, product_name, sku, quantity, unit_price,
-		catalog_price, discount, tax_type, tax_rate, tax_amount, cgst, sgst, igst, subtotal)
-	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`
+		catalog_price, discount, tax_type, tax_rate, tax_amount, cgst, sgst, igst, subtotal, variant_label)
+	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
+		(SELECT string_agg(CASE WHEN d.k = 'size' AND coalesce(p.attributes ->> 'size_system', '') <> ''
+		          THEN (p.attributes ->> 'size_system') || ' ' ELSE '' END || (v.attributes ->> d.k), ' / ' ORDER BY d.ord)
+		   FROM product_variants v JOIN products p ON p.id = v.product_id
+		   CROSS JOIN LATERAL unnest(p.variant_dims) WITH ORDINALITY AS d(k, ord)
+		  WHERE v.id = $3 AND coalesce(v.attributes ->> d.k, '') <> ''))`
 
 // insertItems writes the order lines in one batch (one round trip).
 func insertItems(ctx context.Context, tx tenancy.TenantTx, saleID int64, p priced) error {

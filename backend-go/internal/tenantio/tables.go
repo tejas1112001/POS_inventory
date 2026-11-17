@@ -14,7 +14,7 @@ import (
 // export, so a migration that adds a table must decide which list it joins.
 var (
 	Tables = []string{
-		"audit_log", "brands", "categories", "customer_payment_allocations", "customer_payments", "customers", "doc_counters", "email_outbox", "files", "inventories",
+		"attribute_defs", "audit_log", "brands", "categories", "customer_payment_allocations", "customer_payments", "customers", "doc_counters", "email_outbox", "files", "inventories",
 		"order_items", "permissions", "product_variants", "products", "purchase_items", "purchases", "receipts",
 		"return_items", "role_permissions", "roles", "sale_payments", "sale_returns", "sales", "settings", "stock_adjustments",
 		"stock_movements", "store_products", "stores", "sub_categories", "suppliers", "tenant_email_settings", "units",

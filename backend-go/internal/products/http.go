@@ -15,6 +15,7 @@ import (
 	"github.com/shopspring/decimal"
 
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/apperr"
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/attributes"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/audit"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/auth"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/files"
@@ -79,7 +80,7 @@ func escapeLike(s string) string {
 
 const (
 	qProductFilter = ` FROM products p WHERE p.deleted_at IS NULL
-		AND ($1 = '' OR p.name ILIKE $1 OR EXISTS (SELECT 1 FROM product_variants v WHERE v.product_id = p.id
+		AND ($1 = '' OR p.name ILIKE $1 OR p.article_no ILIKE $1 OR EXISTS (SELECT 1 FROM product_variants v WHERE v.product_id = p.id
 		     AND v.deleted_at IS NULL AND (v.sku ILIKE $1 OR v.item_barcode ILIKE $1)))
 		AND ($2 = 0 OR p.category_id = $2) AND ($3 = 0 OR p.brand_id = $3) AND ($4 = '' OR p.status = $4)`
 	qProductCount = `SELECT count(*)` + qProductFilter
@@ -149,7 +150,8 @@ type posProduct struct {
 type posVariant struct {
 	ID          int64           `json:"id"`
 	SKU         string          `json:"sku"`
-	ItemBarcode *string         `json:"itemBarcode"` // industry P1 item 3: scans match locally
+	ItemBarcode *string         `json:"itemBarcode"`     // industry P1 item 3: scans match locally
+	Label       string          `json:"label,omitempty"` // industry P1 item 4: "M / Blue"
 	Price       decimal.Decimal `json:"price"`
 	Attributes  map[string]any  `json:"attributes"`
 	Inventories []posStock      `json:"Inventories"`
@@ -170,7 +172,7 @@ func slimPOS(list []ProductJSON) []posProduct {
 			for k, x := range v.Inventories {
 				inv[k] = posStock{Qty: x.Qty, QuantityAlert: x.QuantityAlert, StoreID: x.StoreID}
 			}
-			vs[j] = posVariant{ID: v.ID, SKU: v.SKU, ItemBarcode: v.ItemBarcode, Price: v.Price, Attributes: v.Attributes, Inventories: inv}
+			vs[j] = posVariant{ID: v.ID, SKU: v.SKU, ItemBarcode: v.ItemBarcode, Label: v.Label, Price: v.Price, Attributes: v.Attributes, Inventories: inv}
 		}
 		out[i] = posProduct{ID: p.ID, Name: p.Name, Image: p.Image, Category: p.Category, Price: p.Price, Qty: p.Qty,
 			Tax: p.Tax, TaxType: p.TaxType, IsLocked: p.IsLocked, LockedAt: p.LockedAt, LockedBy: p.LockedBy, ProductVariants: vs}
@@ -575,6 +577,7 @@ func (a *API) Mount(rt *rbac.Router) {
 	rt.Handle(http.MethodDelete, "/products/{id}", req("products", "delete"), a.remove)
 	rt.Handle(http.MethodPut, "/products/{id}/lock", req("pos", "create"), a.lock)
 	rt.Handle(http.MethodPost, "/product-variants", req("products", "edit"), a.addVariant)
+	rt.Handle(http.MethodPost, "/products/{id}/variants/matrix", req("products", "edit").InModule(attributes.Module), a.matrix)
 
 	rt.Handle(http.MethodGet, "/inventory", req("inventory", "view"), a.listInventory)
 	rt.Handle(http.MethodPost, "/inventory", req("inventory", "edit"), a.setInventory)

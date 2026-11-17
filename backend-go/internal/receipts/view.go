@@ -109,7 +109,7 @@ const (
 		JOIN users u ON u.id = s.user_id
 		WHERE s.id = $1`
 	qItems = `SELECT i.product_name, i.sku, i.quantity, i.unit_price, i.discount, i.tax_rate, i.tax_amount,
-			i.cgst, i.sgst, i.igst, i.subtotal, v.attributes
+			i.cgst, i.sgst, i.igst, i.subtotal, v.attributes, i.variant_label
 		FROM order_items i LEFT JOIN product_variants v ON v.id = i.variant_id
 		WHERE i.sale_id = $1 ORDER BY i.id`
 	qLogo = `SELECT storage_key FROM files WHERE id = $1`
@@ -282,11 +282,18 @@ func Load(ctx context.Context, tx tenancy.TenantTx, receiptID int64) (View, erro
 			unit, ldisc, rate, ltax, ltotal decimal.Decimal
 			cgst, sgst, igst                *decimal.Decimal
 			attrs                           []byte
+			label                           *string
 		)
-		if err := rows.Scan(&name, &sku, &qty, &unit, &ldisc, &rate, &ltax, &cgst, &sgst, &igst, &ltotal, &attrs); err != nil {
+		if err := rows.Scan(&name, &sku, &qty, &unit, &ldisc, &rate, &ltax, &cgst, &sgst, &igst, &ltotal, &attrs, &label); err != nil {
 			return v, err
 		}
-		v.Lines = append(v.Lines, Line{Name: name, Attributes: attributes(attrs), SKU: deref(sku), Qty: qty,
+		// The sale-time label ("M / Blue", industry P1 item 4) wins over
+		// the variant's current attributes; older lines have none.
+		attrText := attributes(attrs)
+		if label != nil && *label != "" {
+			attrText = *label
+		}
+		v.Lines = append(v.Lines, Line{Name: name, Attributes: attrText, SKU: deref(sku), Qty: qty,
 			UnitPrice: f.Money(unit), Discount: f.Money(ldisc), HasDiscount: ldisc.IsPositive(),
 			TaxRate: f.Percent(rate), TaxAmount: f.Money(ltax), Total: f.Money(ltotal)})
 		if !rate.IsPositive() {

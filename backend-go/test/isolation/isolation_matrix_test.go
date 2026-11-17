@@ -92,6 +92,11 @@ func seedCanary(t *testing.T) canaryTenant {
 	adj := postAdjustment(t, l, tok, ab, nil)
 	require.Equal(t, 201, adj.Code, adj.Raw)
 
+	// Industry P1 item 4: an attribute definition (module switched on).
+	setModules(t, l, "clothing")
+	ad := post("/api/attributes", map[string]any{"label": m + " fit", "key": "fit", "level": "variant", "kind": "text"})
+	c.ids = append(c.ids, id(ad.Body["id"]))
+
 	role := post("/api/roles", map[string]any{"name": m + "-role"})
 	c.ids = append(c.ids, id(role.Body["id"]))
 	c.ids = append(c.ids, jsonID(float64(createUser(t, l, tok, m+"-user@"+l+".test", "biller", "canary-user-pass-123"))))
