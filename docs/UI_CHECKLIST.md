@@ -405,3 +405,24 @@ Known problems:
 - Labels print Latin text only well: names in Devanagari or other complex scripts show unjoined letters (same as receipts). Long names are cut with "…".
 - Printing from a received purchase (copies = quantity received) arrives with item 8, and from a stock count with item 7.
 - A scan while a copies box has the focus types into the box; click outside it first.
+
+## Industry P1 – Item 6: Import templates
+
+Set the shop to **Clothing**. Have a user with the Admin role and one Biller.
+
+How to check:
+1. Products → **Import** → Template shows **Clothing** (the shop's type). **Excel template** → open it in Excel: a Products sheet with one example row (TSH-01) and a Help sheet listing each column and the allowed values (Men, Women…; sizes XS–3XL). **CSV template** gives the same columns.
+2. Choose **General** → the CSV template has the same columns as before (name, sku, price…).
+3. In the Excel template replace the example with 3 rows: TSH-01 Crew tee size M, TSH-01 Crew tee size L (both Blue, opening qty 5 and 3), and BAG-9 Tote bag with no size. Type a 13-digit barcode in one row: it stays as typed (the column is text). Save as .xlsx.
+4. Choose the file → **Check file**: "2 products (3 options) would be created". Click Crew tee → rows M / Blue and L / Blue with SKU, price and "5 at Main Store". Nothing is saved yet (Products list unchanged).
+5. **Import** → "Imported 2 products (3 options)". Crew tee has options M / Blue and L / Blue, Department Men, stock 8.
+6. Errors: in a CSV give the two rows of one article different departments, a size XXXL, and a barcode Excel turned into 8.90123E+12 → "Nothing was imported" with each row and column listed. **Download the error report** → an Excel file with Row, Column, Problem and the original row.
+7. Two rows of one article with the same size and colour (M Blue, m blue) → "the same size and colour as row 2".
+8. Leave the dialog with the error list open for more than an hour → **Download the error report** says the report has expired (reports are kept 1 hour, one per user, and only the user who ran the import can download it).
+9. A Biller has no Import button (and gets 403 on the template and import).
+10. A **Retail** shop: Import works as before with the General template; a CSV with only the old columns imports exactly as before.
+
+Known problems:
+- Import creates products only; it does not update existing ones or add options to an existing article (an existing SKU or barcode is a row error).
+- Only the first sheet of a workbook is read; formulas are read as their last saved value.
+- An .xls (Excel 97–2003) file is refused: save it as .xlsx or CSV UTF-8.

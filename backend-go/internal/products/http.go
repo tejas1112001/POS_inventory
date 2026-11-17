@@ -36,10 +36,14 @@ type Deps struct {
 }
 
 // API holds the handlers.
-type API struct{ d Deps }
+type API struct {
+	d Deps
+	// reports are failed imports' error reports (A14), one per user.
+	reports *tenancy.TTLCache[string, importReport]
+}
 
 // New creates the API.
-func New(d Deps) *API { return &API{d: d} }
+func New(d Deps) *API { return &API{d: d, reports: tenancy.NewTTLCache[string, importReport]()} }
 
 func tenant(r *http.Request) tenancy.Tenant {
 	t, _ := tenancy.TenantFrom(r.Context())
@@ -588,6 +592,7 @@ func (a *API) Mount(rt *rbac.Router) {
 
 	rt.Handle(http.MethodPost, "/products/import", rbac.Requirement{Kind: rbac.KindPermission, Perm: "products:import", BodyLimit: importBodyLimit}, a.importCSV)
 	rt.Handle(http.MethodGet, "/products/import/template", req("products", "import"), a.importTemplate)
+	rt.Handle(http.MethodGet, "/products/import/errors/{token}", req("products", "import"), a.importErrors)
 }
 
 func sortedKeys(m map[string]string) []string {

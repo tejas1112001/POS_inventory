@@ -26,7 +26,7 @@ func TestNULCharactersAreRefusedNot500(t *testing.T) {
 	// ever went missing these requests would get 401 and change nothing.
 	n := 0
 	for _, rt := range sortedRoutes(t) {
-		path := strings.NewReplacer("{id}", "1", "{slug}", "shop", "{product}", "1", "{barcode}", "123").Replace(rt.path)
+		path := strings.NewReplacer("{id}", "1", "{slug}", "shop", "{product}", "1", "{barcode}", "123", "{token}", "ab").Replace(rt.path)
 		var body any
 		if isWrite(rt.method) {
 			body = map[string]any{}
@@ -34,7 +34,7 @@ func TestNULCharactersAreRefusedNot500(t *testing.T) {
 		r := do(t, rq{method: rt.method, host: host, path: path + q, body: body})
 		require.Equal(t, 400, r.Code, "%s with NUL in the query: %s", rt.key, r.Raw)
 		if strings.Contains(rt.path, "{") {
-			nulPath := strings.NewReplacer("{id}", "1%00", "{slug}", "shop%00", "{product}", "1%00", "{barcode}", "12%003").Replace(rt.path)
+			nulPath := strings.NewReplacer("{id}", "1%00", "{slug}", "shop%00", "{product}", "1%00", "{barcode}", "12%003", "{token}", "a%00b").Replace(rt.path)
 			r = do(t, rq{method: rt.method, host: host, path: nulPath, body: body})
 			require.Equal(t, 400, r.Code, "%s with NUL in the path: %s", rt.key, r.Raw)
 		}
