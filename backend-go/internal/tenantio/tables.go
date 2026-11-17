@@ -15,7 +15,7 @@ import (
 var (
 	Tables = []string{
 		"attribute_defs", "audit_log", "brands", "categories", "customer_payment_allocations", "customer_payments", "customers", "doc_counters", "email_outbox", "files", "inventories",
-		"order_items", "permissions", "product_variants", "products", "purchase_items", "purchases", "receipts",
+		"order_items", "permissions", "product_variants", "products", "purchase_items", "purchase_receipt_items", "purchase_receipts", "purchases", "receipts",
 		"return_items", "role_permissions", "roles", "sale_payments", "sale_returns", "sales", "settings", "stock_adjustments",
 		"stock_count_lines", "stock_counts", "stock_movements", "store_products", "stores", "sub_categories", "suppliers", "tenant_email_settings", "units",
 		"users", "warehouses",
