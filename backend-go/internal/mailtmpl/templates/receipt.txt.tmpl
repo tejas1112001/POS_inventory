@@ -12,6 +12,7 @@ Date:    {{.Date}}
 Total:   {{.Total}}
 {{range .Payments}}Paid:    {{.}}
 {{end}}{{if .Due}}Balance due: {{.Due}}{{if .DueDate}} by {{.DueDate}}{{end}}
+{{end}}{{if .PaymentsNote}}{{.PaymentsNote}}
 {{end}}
 {{if .Attached}}Your receipt is attached as a PDF.{{else}}Your receipt could not be attached. Please ask the store for a copy.{{end}}
 

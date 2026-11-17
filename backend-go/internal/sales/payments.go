@@ -35,6 +35,17 @@ const (
 	MethodPoints  = "points"
 )
 
+// VerificationRecorded is the only payment verification in this release
+// (industry P1 item 2, D3): every payment is recorded by the cashier and
+// none is verified by a bank or provider.
+const VerificationRecorded = "recorded"
+
+// RecordedLabel are the methods that screens, receipts and reports label
+// "(recorded)" (Q4: every method except cash; the on-account part and
+// points are not money taken).
+var RecordedLabel = map[string]bool{MethodUPI: true, MethodCard: true, MethodCheque: true, MethodDeposit: true,
+	"exchange": true, "store_credit": true}
+
 var saleMethods = map[string]bool{MethodCash: true, MethodUPI: true, MethodCard: true, MethodCredit: true,
 	MethodCheque: true, MethodDeposit: true, MethodPoints: true}
 
@@ -328,6 +339,7 @@ type PaymentJSON struct {
 	Reference         *string          `json:"reference"`
 	CustomerPaymentID *int64           `json:"customerPaymentId"`
 	CreatedAt         time.Time        `json:"createdAt"`
+	Verification      string           `json:"verification"` // "recorded" (industry P1 item 2)
 }
 
 // ownPayments are a sale's own non-credit payments (not collections).

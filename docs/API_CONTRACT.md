@@ -356,6 +356,13 @@ Additive only: old requests and responses stay valid. Numbers (A1…) follow the
 | A2 | PUT | `/api/settings/business` | `modules:manage` (owner only by default) | `{businessType?, modules?[]}`. A new type without `modules` switches on the type's recommended modules; `modules` replaces the set (unknown key or missing dependency: `400 VALIDATION_FAILED`). Switching on a module that is not entitled: `403 FEATURE_NOT_IN_PLAN` (one that is already on may stay). A new type seeds its starting data only where none exists. Audited `settings.business_update` (before/after); a no-op writes nothing. Copies the type to `platform.tenants.business_type`. Returns the summary `{businessType, modules, enabledModules, entitledModules}` |
 | A3 | GET | `/api/modules` | `settings:view` | `{businessType, businessTypes[{key,label,description}], modules[{key,label,description,dependencies,permissions,recommendedFor,entitled,enabled}], recommended{type: keys[]}}` |
 
+| A4 | GET | `/api/sales`, `/api/sales/{id}`, checkout responses | as before | Each `payments[]` entry gains `verification` (`"recorded"`; nothing is verified by a bank or provider in this release) |
+| A4 | GET | `/api/customers/{id}/payments`, collection responses | as before | Each customer payment gains `verification: "recorded"` |
+| A4 | GET | `/api/sales/report/payment-methods` | as before | Rows gain `verification: "recorded"` and `recorded` (true for every method except cash and the on-account part, Q4) |
+| A4 | GET | `/api/customers/{id}/statement` | as before | Payment descriptions read `Upi (recorded) <ref>`; collections `Payment received (upi, recorded)`. Cash is unchanged |
+
+Receipts (PDF, email, print) label each non-cash payment "(recorded)" and add the line "Payments are recorded by the cashier and are not verified by a bank or payment provider." when one is shown.
+
 Phase 1 modules: `product_attributes`, `barcode_labels`, `stock_counts`. Presets: clothing and footwear → all three; pharmacy → `barcode_labels`, `stock_counts`; retail → none. The onboarding checklist (`GET /api/onboarding`) of a clothing or footwear shop shows "Import your catalogue (<type> template)" instead of "First product" (Q7).
 
 Platform console: `POST /api/platform/tenants` takes `businessType` (default `retail`, validated); tenant views include `businessType`; `GET /api/platform/tenants?businessType=` filters; override keys gain `product_attributes`, `barcode_labels`, `stock_counts` (flag; `false` turns the module off for that shop).

@@ -621,7 +621,7 @@ func (m *Mailer) buildReceipt(ctx context.Context, st *tenantState, r row, c *co
 		BusinessName: st.biz.Name, LogoURL: logo, CustomerName: c.to.Name, Reference: v.Reference, Date: v.Date,
 		Total: v.Total, StoreName: v.StoreName, StoreAddress: v.StoreAddress, StorePhone: v.StorePhone,
 		Header: v.Header, Footer: v.Footer, Attached: perr == nil, Void: v.Void,
-		Payments: receiptPayments(v), Due: dueIf(v), DueDate: v.DueDate,
+		Payments: receiptPayments(v), PaymentsNote: v.PaymentsNote, Due: dueIf(v), DueDate: v.DueDate,
 	})
 	if err != nil {
 		return err

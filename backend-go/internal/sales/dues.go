@@ -191,11 +191,13 @@ type CustomerPaymentJSON struct {
 	UserName    *string         `json:"userName"`
 	CreatedAt   time.Time       `json:"createdAt"`
 	Allocations []Allocation    `json:"allocations"`
+	// Verification is "recorded" (industry P1 item 2).
+	Verification string `json:"verification"`
 }
 
 const (
 	qLoadCustomerPayments = `SELECT p.id, p.customer_id, p.amount, p.method, p.reference, p.note, p.currency, p.reversal_of,
-			(SELECT x.id FROM customer_payments x WHERE x.reversal_of = p.id), p.reason, p.user_id, u.name, p.created_at
+			(SELECT x.id FROM customer_payments x WHERE x.reversal_of = p.id), p.reason, p.user_id, u.name, p.created_at, p.verification
 		FROM customer_payments p LEFT JOIN users u ON u.id = p.user_id`
 	qAllocations = `SELECT a.customer_payment_id, a.sale_id, s.reference, a.amount FROM customer_payment_allocations a
 		JOIN sales s ON s.id = a.sale_id WHERE a.customer_payment_id = ANY($1) ORDER BY a.id`
@@ -219,7 +221,7 @@ func loadCustomerPayments(ctx context.Context, tx tenancy.TenantTx, where string
 	for rows.Next() {
 		var p CustomerPaymentJSON
 		if err := rows.Scan(&p.ID, &p.CustomerID, &p.Amount, &p.Method, &p.Reference, &p.Note, &p.Currency, &p.ReversalOf,
-			&p.ReversedBy, &p.Reason, &p.UserID, &p.UserName, &p.CreatedAt); err != nil {
+			&p.ReversedBy, &p.Reason, &p.UserID, &p.UserName, &p.CreatedAt, &p.Verification); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -589,12 +591,16 @@ const qStatementEvents = `SELECT at, kind, reference, description, amount FROM (
 	SELECT s.date AS at, 1 AS ord, 'sale' AS kind, s.reference, 'Sale' AS description, s.total AS amount, s.id AS id
 		FROM sales s WHERE s.customer_id = $1 AND s.status <> 'Void'
 	UNION ALL
-	SELECT p.created_at, 2, 'payment', s.reference, initcap(p.method) || coalesce(' ' || p.reference, ''), -p.amount, p.id
+	SELECT p.created_at, 2, 'payment', s.reference, initcap(p.method)
+			|| CASE WHEN p.method IN ('upi','card','cheque','deposit','exchange','store_credit') THEN ' (recorded)' ELSE '' END
+			|| coalesce(' ' || p.reference, ''), -p.amount, p.id
 		FROM sale_payments p JOIN sales s ON s.id = p.sale_id
 		WHERE s.customer_id = $1 AND s.status <> 'Void' AND p.customer_payment_id IS NULL AND p.method <> 'credit'
 	UNION ALL
 	SELECT c.created_at, 3, CASE WHEN c.reversal_of IS NULL THEN 'collection' ELSE 'reversal' END, 'PAY-' || c.id,
-		CASE WHEN c.reversal_of IS NULL THEN 'Payment received (' || c.method || ')' ELSE 'Reversal of PAY-' || c.reversal_of || ': ' || c.reason END,
+		CASE WHEN c.reversal_of IS NULL THEN 'Payment received (' || c.method
+			|| CASE WHEN c.method IN ('upi','card','cheque','deposit') THEN ', recorded' ELSE '' END || ')'
+			ELSE 'Reversal of PAY-' || c.reversal_of || ': ' || c.reason END,
 		-c.amount, c.id
 		FROM customer_payments c WHERE c.customer_id = $1
 	UNION ALL

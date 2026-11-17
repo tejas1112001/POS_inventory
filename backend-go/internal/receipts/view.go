@@ -39,14 +39,23 @@ type TaxRow struct {
 	Label, Taxable, Amount string
 }
 
-// PaymentLine is one payment on a receipt.
+// PaymentLine is one payment on a receipt. Method is the label, with
+// " (recorded)" for every method except cash (industry P1 item 2, Q4).
 type PaymentLine struct {
 	Method, Amount, Reference string
+	Recorded                  bool
 }
+
+// RecordedMethods are labelled "(recorded)" (the list of sales.RecordedLabel;
+// receipts do not import sales).
+var RecordedMethods = map[string]bool{"upi": true, "card": true, "cheque": true, "deposit": true, "exchange": true, "store_credit": true}
+
+// RecordedNote is the legend printed under recorded payments.
+const RecordedNote = "Payments are recorded by the cashier and are not verified by a bank or payment provider."
 
 // MethodLabels are the payment methods as receipts and lists show them.
 var MethodLabels = map[string]string{"cash": "Cash", "upi": "UPI", "card": "Card", "credit": "On account",
-	"cheque": "Cheque", "deposit": "Bank deposit", "points": "Points"}
+	"cheque": "Cheque", "deposit": "Bank deposit", "points": "Points", "exchange": "Exchange", "store_credit": "Store credit"}
 
 // View is everything a receipt (PDF or email) shows, formatted for the
 // tenant's currency, number format and time zone.
@@ -73,6 +82,8 @@ type View struct {
 	// the balance is due.
 	Payments []PaymentLine
 	DueDate  string
+	// PaymentsNote is RecordedNote when a payment is labelled recorded.
+	PaymentsNote string
 
 	Header, Footer []string
 
@@ -232,7 +243,12 @@ func Load(ctx context.Context, tx tenancy.TenantTx, receiptID int64) (View, erro
 		if label == "" {
 			label = m
 		}
-		v.Payments = append(v.Payments, PaymentLine{Method: label, Amount: f.Money(amt), Reference: ref})
+		rec := RecordedMethods[m]
+		if rec {
+			label += " (recorded)"
+			v.PaymentsNote = RecordedNote
+		}
+		v.Payments = append(v.Payments, PaymentLine{Method: label, Amount: f.Money(amt), Reference: ref, Recorded: rec})
 	}
 	prows.Close()
 	if err := prows.Err(); err != nil {

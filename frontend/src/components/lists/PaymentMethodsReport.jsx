@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '@/services/api';
 import { formatCurrency, todayInShop } from '@/lib/format';
-import { addDays, methodLabel } from '@/lib/payments';
+import { addDays, isRecorded, paymentLabel, RECORDED_HINT, RECORDED_LEGEND } from '@/lib/payments';
 import { InlineAlert } from '@/components/feedback/InlineAlert';
 
 // PaymentMethodsReport (S10 item 5): money taken per payment method in a
@@ -61,7 +61,9 @@ export default function PaymentMethodsReport() {
           <tbody className="divide-y">
             {rows.map((r) => (
               <tr key={r.method}>
-                <td className="px-4 py-2">{methodLabel(r.method)}</td>
+                <td className="px-4 py-2" title={isRecorded(r.method) ? RECORDED_HINT : undefined}>
+                  {paymentLabel(r.method)}
+                </td>
                 <td className="px-3 py-2 text-right tabular-nums">{r.payments}</td>
                 <td className="hidden px-3 py-2 text-right tabular-nums sm:table-cell">{Number(r.collections) ? formatCurrency(r.collections) : '—'}</td>
                 <td className="px-4 py-2 text-right font-medium tabular-nums">{formatCurrency(r.amount)}</td>
@@ -78,6 +80,7 @@ export default function PaymentMethodsReport() {
           </tfoot>
         </table>
       )}
+      {rows && rows.some((r) => isRecorded(r.method)) && <p className="px-4 py-2 text-xs text-muted-foreground">{RECORDED_LEGEND}</p>}
     </section>
   );
 }

@@ -185,7 +185,7 @@ func load(ctx context.Context, tx tenancy.TenantTx, ids []int64) ([]SaleJSON, er
 		return nil, err
 	}
 
-	rows, err = tx.Query(ctx, `SELECT id, sale_id, method, amount, tendered, change_due, reference, customer_payment_id, created_at
+	rows, err = tx.Query(ctx, `SELECT id, sale_id, method, amount, tendered, change_due, reference, customer_payment_id, created_at, verification
 		FROM sale_payments WHERE sale_id = ANY($1) ORDER BY sale_id, id`, ids)
 	if err != nil {
 		return nil, err
@@ -193,7 +193,7 @@ func load(ctx context.Context, tx tenancy.TenantTx, ids []int64) ([]SaleJSON, er
 	for rows.Next() {
 		var p PaymentJSON
 		var saleID int64
-		if err := rows.Scan(&p.ID, &saleID, &p.Method, &p.Amount, &p.Tendered, &p.Change, &p.Reference, &p.CustomerPaymentID, &p.CreatedAt); err != nil {
+		if err := rows.Scan(&p.ID, &saleID, &p.Method, &p.Amount, &p.Tendered, &p.Change, &p.Reference, &p.CustomerPaymentID, &p.CreatedAt, &p.Verification); err != nil {
 			rows.Close()
 			return nil, err
 		}

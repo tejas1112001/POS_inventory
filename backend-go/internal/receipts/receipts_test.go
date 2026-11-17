@@ -83,6 +83,13 @@ func TestRenderPDF(t *testing.T) {
 		require.NoError(t, os.WriteFile(dir+"/void.pdf", vp, 0o600))
 	}
 
+	// Recorded payments and their legend (industry P1 item 2).
+	rv := sampleView()
+	rv.Payments = []PaymentLine{{Method: "Cash", Amount: "₹100.00"}, {Method: "UPI (recorded)", Amount: "₹50.00", Reference: "txn-1", Recorded: true}}
+	rv.PaymentsNote = RecordedNote
+	_, err = RenderPDF(rv, nil)
+	require.NoError(t, err)
+
 	// Hostile and unusual data renders without failing.
 	h := sampleView()
 	h.BusinessName = "<script>alert(1)</script> {{.Secret}} \r\nBcc: x"

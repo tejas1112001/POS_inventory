@@ -9,7 +9,7 @@ import { ErrorState } from '@/components/kit/States';
 import StatusBadge from '@/components/kit/StatusBadge';
 import { api } from '@/services/api';
 import { formatCurrency, formatDate, formatDateTime } from '@/lib/format';
-import { COLLECT_METHODS, formatDay, methodLabel, newKey } from '@/lib/payments';
+import { COLLECT_METHODS, formatDay, methodLabel, newKey, paymentLabel, RECORDED_HINT } from '@/lib/payments';
 import { toast } from '../../shared/toast/store';
 
 // CustomerAccount (S10 item 5): what a customer owes per sale (oldest due
@@ -158,7 +158,7 @@ export default function CustomerAccount() {
                 <li key={p.id} className="flex flex-wrap items-start justify-between gap-2 px-4 py-3 text-sm">
                   <div className="min-w-0">
                     <p className="font-medium">
-                      PAY-{p.id} · {reversal ? `Reversal of PAY-${p.reversalOf}` : methodLabel(p.method)}
+                      PAY-{p.id} · {reversal ? `Reversal of PAY-${p.reversalOf}` : <span title={RECORDED_HINT}>{paymentLabel(p.method)}</span>}
                       {p.reference && <span className="font-normal text-muted-foreground"> · {p.reference}</span>}
                       {p.reversedBy != null && <span className="ml-2 text-xs font-normal text-warning-fg">reversed by PAY-{p.reversedBy}</span>}
                     </p>

@@ -10,12 +10,24 @@ export const METHOD_LABELS = {
   cheque: 'Cheque',
   deposit: 'Bank deposit',
   points: 'Points',
+  exchange: 'Exchange',
+  store_credit: 'Store credit',
 };
 
 // Methods that can pay dues later (no on-account, no points).
 export const COLLECT_METHODS = ['cash', 'upi', 'card', 'cheque', 'deposit'];
 
 export const methodLabel = (m) => METHOD_LABELS[m] || m || '';
+
+// Industry P1 item 2 (D3, Q4): payments are recorded by the cashier and
+// never verified by a bank or provider in this release. Every method
+// except cash (and the on-account part and points, which are not money
+// taken) is labelled "(recorded)".
+export const RECORDED_METHODS = ['upi', 'card', 'cheque', 'deposit', 'exchange', 'store_credit'];
+export const isRecorded = (m) => RECORDED_METHODS.includes(m);
+export const RECORDED_HINT = 'Recorded by the cashier, not verified by a bank or payment provider.';
+export const RECORDED_LEGEND = 'Payments are recorded by the cashier and are not verified by a bank or payment provider.';
+export const paymentLabel = (m) => `${methodLabel(m)}${isRecorded(m) ? ' (recorded)' : ''}`;
 
 // newIdempotencyKey for one-off money actions (collect a payment).
 export function newKey() {

@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useImageSrc } from '@/components/shared/auth-image';
 import { cn } from '@/lib/utils';
+import { isRecorded, paymentLabel, RECORDED_LEGEND } from '@/lib/payments';
 import './receipt.css';
 import receiptCss from './receipt.css?raw';
 
@@ -97,6 +98,8 @@ async function printNode(node, paper, title) {
 
 function ReceiptBody({ sale, store, settings, businessName, taxLabel, logoUrl, narrow, bodyRef }) {
   const items = sale.items || [];
+  // The sale's own payments and collections, without the on-account part (as on the PDF).
+  const payments = (sale.payments || []).filter((p) => p.method !== 'credit');
   const rows = taxRows(items, taxLabel);
   const taxReg = settings?.taxRegistrationNo;
   const taxId = taxReg ? (taxLabel === 'GST' ? `GSTIN: ${taxReg}` : `${taxLabel} No: ${taxReg}`) : '';
@@ -210,6 +213,15 @@ function ReceiptBody({ sale, store, settings, businessName, taxLabel, logoUrl, n
           <span>Total</span>
           <span>{formatCurrency(sale.total)}</span>
         </div>
+        {payments.map((p) => (
+          <div key={p.id} className="rc-muted">
+            <span>
+              {paymentLabel(p.method)}
+              {p.reference ? ` (${p.reference})` : ''}
+            </span>
+            <span>{formatCurrency(p.amount)}</span>
+          </div>
+        ))}
         <div>
           <span>Paid</span>
           <span>{formatCurrency(sale.paid)}</span>
@@ -232,7 +244,7 @@ function ReceiptBody({ sale, store, settings, businessName, taxLabel, logoUrl, n
             <span>{formatCurrency(sale.due)}</span>
           </div>
         )}
-        {sale.payment_method && (
+        {payments.length === 0 && sale.payment_method && (
           <div>
             <span>Payment</span>
             <span>
@@ -241,6 +253,7 @@ function ReceiptBody({ sale, store, settings, businessName, taxLabel, logoUrl, n
           </div>
         )}
       </div>
+      {payments.some((p) => isRecorded(p.method)) && <p className="rc-center rc-muted">{RECORDED_LEGEND}</p>}
       <div className="rc-lines">
         {lines(settings?.receiptFooter).map((l, i) => (
           <p key={i} className="rc-center rc-muted">

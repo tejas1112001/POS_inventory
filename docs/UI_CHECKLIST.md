@@ -329,3 +329,17 @@ Known problems:
 - The modules themselves arrive with items 4 (attributes), 5 (labels) and 7 (stock counts); until then switching them on shows no new screen.
 - The onboarding "Import your catalogue" step opens the Products page; the template import itself arrives with item 6.
 - Existing shops' Biller role does not get new permissions automatically (roles are never reset); item 4 gives new shops' billers `attributes:view`.
+
+## Industry P1 – Item 2: Payments are "recorded"
+
+How to check:
+1. Checkout: sell one item paid part **Cash**, part **UPI** (with a reference). Sale done screen: "UPI (recorded)"; Cash has no label.
+2. Orders → that sale: the payments list shows "UPI (recorded)" and, under it, "Payments are recorded by the cashier and are not verified by a bank or payment provider."
+3. Print the receipt and download the PDF: the UPI line reads "UPI (recorded)" and the same sentence is printed above the footer. A cash-only sale shows neither the label nor the sentence.
+4. Email the receipt (customer with an email): the email shows the same label and sentence.
+5. Customer account: collect a dues payment by **Card** → the history shows "Card (recorded)" (hover for the hint). The statement shows "Payment received (card, recorded)".
+6. Reports → Sales by payment method: non-cash rows carry "(recorded)" and the legend is shown under the table.
+7. Old sales from before this change show the same labels (every existing payment is "recorded").
+
+Known problems:
+- Nothing can be marked "verified" in this release; that needs a payment provider (a later release).

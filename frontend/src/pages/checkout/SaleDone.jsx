@@ -1,4 +1,4 @@
-import { formatDay, methodLabel } from '@/lib/payments';
+import { formatDay, paymentLabel } from '@/lib/payments';
 import { useEffect, useState } from 'react';
 import { CheckCircle2, FileText, Plus, Printer } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -64,7 +64,7 @@ export default function SaleDone({ sale, onPrint, onReceipt, onNewSale }) {
             <DialogDescription>
               {sale.reference} · {formatCurrency(sale.total)}
               {sale.payments?.length
-                ? ` · ${[...new Set(sale.payments.map((p) => methodLabel(p.method)))].join(' + ')}`
+                ? ` · ${[...new Set(sale.payments.map((p) => paymentLabel(p.method)))].join(' + ')}`
                 : sale.payment_method
                   ? ` · ${sale.payment_method}`
                   : ''}
