@@ -4,6 +4,7 @@ import { Palette, Check } from 'lucide-react';
 import ShopSettings from '@/components/settings/ShopSettings';
 import EmailSettings from '@/components/settings/EmailSettings';
 import BusinessSettings from '@/components/settings/BusinessSettings';
+import ScannerSettings from '@/components/settings/ScannerSettings';
 import { usePermission } from '@/context/PermissionContext';
 import { SectionCard } from '@/components/shared/section-card';
 import { useTheme, THEME_PRESETS } from '@/context/ThemeContext';
@@ -52,7 +53,12 @@ export default function Settings() {
         </div>
       )}
       {tab === 'email' && <EmailSettings canEdit={hasPermission('email_settings', 'edit')} />}
-      {tab === 'appearance' && <Appearance />}
+      {tab === 'appearance' && (
+        <div className="space-y-3">
+          <Appearance />
+          <ScannerSettings />
+        </div>
+      )}
     </div>
   );
 }

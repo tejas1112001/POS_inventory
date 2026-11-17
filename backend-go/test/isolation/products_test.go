@@ -152,7 +152,13 @@ func TestPOSListBarcodeAndLocks(t *testing.T) {
 	bc := get(t, host, fmt.Sprintf("/api/products/barcode/BCPOS-1?storeId=%v", s1), tok)
 	require.Equal(t, 200, bc.Code)
 	require.Equal(t, pid, bc.Body["id"])
-	require.Equal(t, 200, get(t, host, "/api/products/barcode/pos-1", tok).Code, "SKU works too")
+	vid := bc.Body["ProductVariants"].([]any)[0].(map[string]any)["id"]
+	require.Equal(t, vid, bc.Body["variantId"], "A5: the matched variant")
+	bySKU := get(t, host, "/api/products/barcode/pos-1", tok)
+	require.Equal(t, 200, bySKU.Code, "SKU works too")
+	require.Equal(t, vid, bySKU.Body["variantId"])
+	// The POS list carries the barcode, so a scan matches without a lookup.
+	require.Contains(t, get(t, host, fmt.Sprintf("/api/products/pos?storeId=%v", s1), tok).Raw, `"itemBarcode":"BCPOS-1"`)
 	require.Equal(t, 404, get(t, host, "/api/products/barcode/NOPE-999", tok).Code)
 
 	// Locks per (store, product), atomic, owner-only release.

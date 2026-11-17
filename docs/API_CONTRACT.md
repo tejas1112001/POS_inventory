@@ -360,6 +360,8 @@ Additive only: old requests and responses stay valid. Numbers (A1…) follow the
 | A4 | GET | `/api/customers/{id}/payments`, collection responses | as before | Each customer payment gains `verification: "recorded"` |
 | A4 | GET | `/api/sales/report/payment-methods` | as before | Rows gain `verification: "recorded"` and `recorded` (true for every method except cash and the on-account part, Q4) |
 | A4 | GET | `/api/customers/{id}/statement` | as before | Payment descriptions read `Upi (recorded) <ref>`; collections `Payment received (upi, recorded)`. Cash is unchanged |
+| A5 | GET | `/api/products/barcode/{code}?storeId=` | `pos:view` | Response gains `variantId`: the variant the code matched (an exact barcode wins over a SKU). Still `404` when unknown |
+| A5 | GET | `/api/products/pos?storeId=` | `pos:view` | Each variant gains `itemBarcode` (null when none), so checkout matches a scan without a request |
 
 Receipts (PDF, email, print) label each non-cash payment "(recorded)" and add the line "Payments are recorded by the cashier and are not verified by a bank or payment provider." when one is shown.
 

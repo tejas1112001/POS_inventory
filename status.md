@@ -7,8 +7,8 @@ How to check each item: `docs/UI_CHECKLIST.md`. Last updated: 2026-11-17.
 |---|---|---|
 | 1 (a) | Business type, module registry, entitlements | Done, committed (`7016f97`), deployed to the dev stack |
 | 2 (b) | Payments labelled "recorded" | Done, committed, deployed to the dev stack (tenant migration 00018) |
-| 3 (c) | Barcode scanning (checkout, returns, purchases, scanner settings) | Frontend written and unit-tested (8 tests); backend A5 (`variantId`, barcode on the POS list) prepared, applied after item 2 is committed |
-| 4 (d) | Product attributes, variant matrix | Not started |
+| 3 (c) | Barcode scanning (checkout, returns, purchases, scanner settings) | Done, committed, deployed to the dev stack |
+| 4 (d) | Product attributes, variant matrix | In progress |
 | 5 (e) | Barcode generation and label PDF | Not started |
 | 6 (f) | Import templates | Not started |
 | 7 (g) | Stock counts | Not started |
@@ -21,4 +21,4 @@ How to check each item: `docs/UI_CHECKLIST.md`. Last updated: 2026-11-17.
 - Temporary worktree `D:/pos_baseline` (detached `main`, used for baseline test runs) to be removed at the end.
 
 ## Next step
-Item 3: apply the backend A5 change, run the full check and integration, deploy and commit.
+Item 4: migration 00019 (attribute_defs, product attributes, variant dims, article no, sale line variant label), attributes API (A6), product changes (A7), matrix (A8), permissions P2, attribute presets, UI.

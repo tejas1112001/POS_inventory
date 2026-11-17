@@ -343,3 +343,23 @@ How to check:
 
 Known problems:
 - Nothing can be marked "verified" in this release; that needs a payment provider (a later release).
+
+## Industry P1 – Item 3: Barcode scanning
+
+Use a USB or Bluetooth scanner in keyboard mode (it types the code and presses Enter). Without one, type the code fast and press Enter, or type it into the search box and press Enter.
+
+How to check:
+1. Settings → Appearance → **Barcode scanner**: click the test box and scan → "Scan recognised: <code> (n characters)". If a slow scanner is not recognised, raise "Time between scanner keystrokes" (stored in this browser only).
+2. Checkout: scan a product's barcode with the cursor anywhere (not in a field) → the exact variant is added with quantity 1. Scan again → quantity 2. Scanning while the search box has focus does the same and clears the box.
+3. Checkout: scan a variant's SKU → the same as a barcode.
+4. Checkout: scan an unknown code → a low beep, the toast "No product with barcode <code>", and the code stays in the search box so it can be fixed.
+5. Checkout: type a barcode into the search box and press Enter → that variant is added. Typing a product name and pressing Enter still works as before.
+6. Checkout: a product that is in use at another till → "… is in use at another till." and nothing is added.
+7. Checkout with the payment dialog open: scanning does nothing (no item added behind the dialog).
+8. Returns → New return, step Items with a sale chosen: scanning an item of that sale adds 1 to "Return now" (never more than is left); an item not on the sale → beep and "No item still returnable on this sale with barcode …". Without a sale (unlinked return): a scan adds a line, or 1 more on the same variant's line.
+9. Purchases → Add purchase, step Items: a scan adds a line (quantity 1, the variant's cost as the unit price), or 1 more on the same variant's line.
+10. A shop with no barcodes on its products: nothing changes; typing in the search box works as before.
+
+Known problems:
+- A scanner set to send Tab instead of Enter works; one set to send nothing after the code is not recognised (set the scanner to send Enter).
+- Scans are not recognised inside other text fields (on purpose, so typing a note is never taken as a scan).

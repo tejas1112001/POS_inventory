@@ -1,4 +1,6 @@
 import { toast } from '../../shared/toast/store';
+import { beep, findByCode } from '@/lib/scan';
+import { useScanner } from '@/hooks/useScanner';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useNavigate } from 'react-router-dom';
@@ -97,6 +99,47 @@ export default function AddSalesReturn() {
 
   const variantsOf = (pid) => lookups.products.find((p) => String(p.id) === String(pid))?.ProductVariants || [];
   const setLine = (key, patch) => setLines((prev) => prev.map((l) => (l.key === key ? { ...l, ...patch } : l)));
+
+  // Barcode scanning on the Items step (industry P1 item 3): one more of
+  // the scanned item per scan. With a sale, the item must be on it (by SKU,
+  // or by barcode through the server lookup); without one, any product.
+  const noMatch = (code, where) => {
+    beep();
+    toast.error(`No ${where} with barcode ${code}`);
+  };
+  const onScan = async (code) => {
+    if (mode === 'linked' && sale) {
+      const open = (sale.items || []).filter((i) => left(i) > 0);
+      let item = open.find((i) => (i.sku || '').toLowerCase() === code.toLowerCase());
+      if (!item) {
+        try {
+          const p = await api.get(`/api/products/barcode/${encodeURIComponent(code)}`, { quiet: true });
+          item = open.find((i) => p.variantId != null && String(i.variant_id) === String(p.variantId));
+        } catch {
+          // unknown code: handled below
+        }
+      }
+      if (!item) return noMatch(code, 'item still returnable on this sale');
+      setQty((q) => {
+        const cur = Number(q[item.id]?.quantity) || 0;
+        return { ...q, [item.id]: { ...q[item.id], quantity: String(Math.min(left(item), cur + 1)) } };
+      });
+      return undefined;
+    }
+    if (mode === 'unlinked') {
+      const hit = findByCode(lookups.products, code);
+      if (!hit) return noMatch(code, 'product');
+      setLines((prev) => {
+        const same = prev.find((l) => String(l.variantId) === String(hit.variant.id));
+        if (same) return prev.map((l) => (l === same ? { ...l, quantity: (Number(l.quantity) || 0) + 1 } : l));
+        const line = { productId: String(hit.product.id), variantId: String(hit.variant.id), quantity: 1, unitPrice: String(hit.variant.price ?? '') };
+        const empty = prev.find((l) => !l.productId);
+        return empty ? prev.map((l) => (l === empty ? { ...l, ...line } : l)) : [...prev, { ...freeLine(), ...line }];
+      });
+    }
+    return undefined;
+  };
+  useScanner(onScan, { enabled: currentStep === 1 });
 
   const validate = () => {
     if (mode === 'linked') {

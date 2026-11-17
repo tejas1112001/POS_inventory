@@ -149,6 +149,7 @@ type posProduct struct {
 type posVariant struct {
 	ID          int64           `json:"id"`
 	SKU         string          `json:"sku"`
+	ItemBarcode *string         `json:"itemBarcode"` // industry P1 item 3: scans match locally
 	Price       decimal.Decimal `json:"price"`
 	Attributes  map[string]any  `json:"attributes"`
 	Inventories []posStock      `json:"Inventories"`
@@ -169,7 +170,7 @@ func slimPOS(list []ProductJSON) []posProduct {
 			for k, x := range v.Inventories {
 				inv[k] = posStock{Qty: x.Qty, QuantityAlert: x.QuantityAlert, StoreID: x.StoreID}
 			}
-			vs[j] = posVariant{ID: v.ID, SKU: v.SKU, Price: v.Price, Attributes: v.Attributes, Inventories: inv}
+			vs[j] = posVariant{ID: v.ID, SKU: v.SKU, ItemBarcode: v.ItemBarcode, Price: v.Price, Attributes: v.Attributes, Inventories: inv}
 		}
 		out[i] = posProduct{ID: p.ID, Name: p.Name, Image: p.Image, Category: p.Category, Price: p.Price, Qty: p.Qty,
 			Tax: p.Tax, TaxType: p.TaxType, IsLocked: p.IsLocked, LockedAt: p.LockedAt, LockedBy: p.LockedBy, ProductVariants: vs}
@@ -208,25 +209,34 @@ func (a *API) pos(w http.ResponseWriter, r *http.Request) {
 }
 
 // barcode finds the product of a barcode or SKU (both unique per tenant).
+// barcodeJSON is the product of a scanned code plus the variant it matched
+// (industry P1 A5), so a scan adds that exact variant.
+type barcodeJSON struct {
+	ProductJSON
+	VariantID int64 `json:"variantId"`
+}
+
 func (a *API) barcode(w http.ResponseWriter, r *http.Request) {
 	code := strings.TrimSpace(chi.URLParam(r, "barcode"))
 	storeID, _ := queryInt(r, "storeId")
 	var (
-		out   ProductJSON
+		out   barcodeJSON
 		found bool
 	)
 	err := a.ro(r.Context(), tenant(r), func(tx tenancy.TenantTx) error {
 		var pid int64
-		err := tx.QueryRow(r.Context(), `SELECT v.product_id FROM product_variants v JOIN products p ON p.id = v.product_id
+		// An exact barcode wins over a SKU (coalesce: a NULL barcode would
+		// otherwise sort first under DESC).
+		err := tx.QueryRow(r.Context(), `SELECT v.product_id, v.id FROM product_variants v JOIN products p ON p.id = v.product_id
 			WHERE v.deleted_at IS NULL AND p.deleted_at IS NULL AND p.status = 'Active' AND (v.item_barcode = $1 OR v.sku = $1::citext)
-			ORDER BY (v.item_barcode = $1) DESC LIMIT 1`, code).Scan(&pid)
+			ORDER BY coalesce(v.item_barcode = $1, false) DESC, v.id LIMIT 1`, code).Scan(&pid, &out.VariantID)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil
 		}
 		if err != nil {
 			return err
 		}
-		out, found, err = loadOne(r.Context(), tx, pid, loadOpts{storeID: storeID})
+		out.ProductJSON, found, err = loadOne(r.Context(), tx, pid, loadOpts{storeID: storeID})
 		return err
 	})
 	if err != nil {
