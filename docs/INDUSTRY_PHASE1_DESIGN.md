@@ -1,6 +1,6 @@
 # Industry Phase 0 and Phase 1 — Design note
 
-Status: **draft, waiting for the owner's approval. Nothing is built yet.** Based on `docs/INDUSTRY_FIT_PLAN.md` (its "Current state vs this plan" section and owner decisions D1–D8) and the code on `main` at `59e2c64`.
+Status: **approved 2026-11-17 by the owner**: all of DB1–DB24, P1–P6 and E1–E2, with the answers to Q1–Q7 below. Build order: items 1–7 (a–g), then a stop before item 8 (h) to show the backfill report from the copy run, then items 9–10 (i–j). Go tests run in a Go Docker container with `-p 2`. Based on `docs/INDUSTRY_FIT_PLAN.md` (its "Current state vs this plan" section and owner decisions D1–D8) and the code on `main` at `59e2c64`.
 
 This note covers:
 - **Phase 0**: the deliverables (hardware checklist, gap matrix, API impact list).
@@ -453,17 +453,17 @@ Rough total: 8–11 weeks. Items 4–6 together unblock the clothing and footwea
 
 ## Questions for the owner (with my default)
 
-| # | Question | Default |
-|---|---|---|
-| Q1 | Unit conversions (box / strip / tablet) in Phase 1? | **No.** Needed only by pharmacy, after day one (D6). Stock stays in whole units. |
-| Q2 | Supplier returns, debit notes and a supplier payment ledger in Phase 1? | **No.** Phase 3 (pharmacy expiry returns) or later. |
-| Q3 | Customer GSTIN and place of supply per sale in Phase 1? | **No**, unless one of the three shops issues B2B invoices. |
-| Q4 | "Recorded" label on cash too? | **No**, only on UPI, card, cheque, bank deposit, exchange and store credit. |
-| Q5 | Does store credit expire? | **No** in Phase 1. |
-| Q6 | Does the Dashboard "collected" figure exclude exchange and store-credit payments? | **Yes.** |
-| Q7 | Does choosing a business type at provisioning (console) also send the owner a different onboarding checklist? | **Yes**: "Import your catalogue (clothing template)" replaces "First product". |
+| # | Question | Default | Owner (2026-11-17) |
+|---|---|---|---|
+| Q1 | Unit conversions (box / strip / tablet) in Phase 1? | **No.** Needed only by pharmacy, after day one (D6). Stock stays in whole units. | **No**, pending the pharmacy's answer. |
+| Q2 | Supplier returns, debit notes and a supplier payment ledger in Phase 1? | **No.** Phase 3 (pharmacy expiry returns) or later. | **No.** |
+| Q3 | Customer GSTIN and place of supply per sale in Phase 1? | **No**, unless one of the three shops issues B2B invoices. | **No.** |
+| Q4 | "Recorded" label on cash too? | **No**, only on UPI, card, cheque, bank deposit, exchange and store credit. | **No.** Cash has no label. |
+| Q5 | Does store credit expire? | **No** in Phase 1. | **No.** |
+| Q6 | Does the Dashboard "collected" figure exclude exchange and store-credit payments? | **Yes.** | **Yes.** |
+| Q7 | Does choosing a business type at provisioning (console) also send the owner a different onboarding checklist? | **Yes**: "Import your catalogue (clothing template)" replaces "First product". | **Yes.** |
 
-## Changes and approvals
+## Changes and approvals (all approved 2026-11-17)
 
 | # | Item | Change |
 |---|---|---|
