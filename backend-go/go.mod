@@ -6,6 +6,7 @@ toolchain go1.27.3
 
 require (
 	filippo.io/age v1.3.2
+	github.com/boombuler/barcode v1.1.0
 	github.com/caarlos0/env/v11 v11.4.1
 	github.com/gabriel-vasile/mimetype v1.4.15
 	github.com/go-chi/chi/v5 v5.5.0
@@ -16,6 +17,7 @@ require (
 	github.com/johnfercher/maroto/v2 v2.4.3
 	github.com/klauspost/compress v1.20.2
 	github.com/minio/minio-go/v7 v7.4.1
+	github.com/phpdave11/gofpdf v1.4.3
 	github.com/pressly/goose/v3 v3.29.0
 	github.com/prometheus/client_golang v1.25.0
 	github.com/riverqueue/river v0.49.0
@@ -40,7 +42,6 @@ require (
 	github.com/Azure/go-ansiterm v0.0.0-20261006220739-8c912ac31dd4 // indirect
 	github.com/Microsoft/go-winio v0.6.3 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
-	github.com/boombuler/barcode v1.1.0 // indirect
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
@@ -89,7 +90,6 @@ require (
 	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/pdfcpu/pdfcpu v0.11.1 // indirect
 	github.com/philhofer/fwd v1.2.0 // indirect
-	github.com/phpdave11/gofpdf v1.4.3 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
 	github.com/prometheus/client_model v0.6.3 // indirect
