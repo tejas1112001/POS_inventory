@@ -29,6 +29,5 @@ Each needs the owner's go-ahead or answers from outside. Source: design §9.
 
 ## 4. Housekeeping
 
-- [ ] **`status.md`:** its header still says the Phase 3 branch is "local only, no push or merge". Update it to say Phase 3 is merged into `main`.
 - [ ] **Dependabot:** 13 branches are open on GitHub. Review, merge or close them.
 - [ ] **Old remote branches:** `go-backend/phase2`, `landing_dev` and `landing_main`. Keep them or delete them.

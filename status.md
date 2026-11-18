@@ -1,6 +1,6 @@
-# Industry Phase 3 (pharmacy) build status
+# Industry Phase 3 (pharmacy) build status (merged)
 
-Branch `industry/phase3` (from main `2ac28f2`), local only: no push or merge without the owner's OK. Design: `docs/INDUSTRY_PHASE3_PHARMACY_DESIGN.md`, approved 2026-11-18 (all of §14; Q13 refuse, Q14 last, Q15 yes, Q16 0, Q17 later). Last updated: 2026-11-18.
+Merged into `main` on 2026-11-18 (`aea9af7`), with the owner's OK; the `industry/phase3` branch is deleted. What is left: `NEXT_STEPS.md`. Design: `docs/INDUSTRY_PHASE3_PHARMACY_DESIGN.md`, approved 2026-11-18 (all of §14; Q13 refuse, Q14 last, Q15 yes, Q16 0, Q17 later). Last updated: 2026-11-18.
 
 | Item | What | State |
 |---|---|---|
