@@ -489,6 +489,20 @@ A product counted with at least one batch line is counted **by batch**: on compl
 | A32 | GET | `/api/stock-counts/{id}` | as before | Lines gain `batchId, batchNo, expiry, expired, byBatch, tracksBatches`; for a product counted by batch, `currentQty`/`movedSince`/`difference` are the batch's. Drafts gain `uncountedBatches[{batchId, batchNo, expiry, unknown, variantId, productName, sku, currentQty}]` (set to 0 on completion; included in `totals`) |
 | A32 | POST | `/api/stock-counts/{id}/complete` | as before | Posts each batch's difference (ledger reason `stock_count` on both ledgers); the product's stock moves by their sum. Each line's `expected`/`difference` is its batch's |
 
+**Item 7: expiry report, dashboard, settings, digest** (tenant migration 00031: outbox kind `expiry_digest`; the DB36 settings came with 00026).
+
+Sections, per batch and store: `recalled` (a recalled batch, sellable and quarantined units), `expired` (expiry before today in the shop's time zone, sellable units), `expiring` (today to today + window, sellable units), `quarantined` (quarantined units of a batch that is not recalled). Values: cost (the batch's, else the variant's) and MRP (the batch's; none counts as 0), rounded to 2 places.
+
+| # | Method | Path | Guard | Notes |
+|---|---|---|---|---|
+| A33 | GET | `/api/reports/expiry?storeId&windowDays&section` | `reports:view`, module | `windowDays` 1–730 (default the shop's near-expiry days). Answer `{today, windowDays, storeId, summary{recalled,expired,expiring,quarantined: {batches, units, costValue, mrpValue}}, items[{section, batchId, batchNo, unknown, expiry, daysToExpiry, variantId, productId, productName, sku, storeId, storeName, quantity, costValue, mrpValue}]}`; summary totals equal the rows; at most 50,000 rows |
+| A33 | GET | `/api/reports/expiry/export?format=xlsx\|pdf` | `reports:export`, module | Same filters; audited like the other exports |
+| A33 | GET | `/api/dashboard` | as before | New `batches` (null unless the module is on and the user has `batches:view`): `{windowDays, expired, expiring, quarantined, recalled, unbatched}` in units, for the dashboard's store filter |
+| A34 | GET | `/api/settings/batches` | `settings:view` | `{nearExpiryDays, minDaysToSell, expiryDigest}`; works with the module off |
+| A34 | PUT | `/api/settings/batches` | `settings:edit` | Any of the three; `nearExpiryDays` 1–730, `minDaysToSell` 0–365 (400 with `fields`). Audit `settings.batches` |
+
+Daily digest: with `expiryDigest` on and the module on, the hourly job queues one email per active owner from 08:00 shop time, once a day (outbox key `expiry_digest:<day>:<user>`), only when the report has rows. It goes through the mail outbox and its daily limits.
+
 ---
 
 ## 6. Frontend changes (minimal set, Phase 2)

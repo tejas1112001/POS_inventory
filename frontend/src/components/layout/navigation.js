@@ -29,7 +29,7 @@ import {
   Store,
 } from 'lucide-react';
 
-export const REPORT_PATHS = ['/reports', '/sales-report', '/purchase-report', '/customer-report', '/customer-due-report'];
+export const REPORT_PATHS = ['/reports', '/sales-report', '/purchase-report', '/customer-report', '/customer-due-report', '/reports/expiry'];
 
 export const NAV = [
   { title: 'Overview', items: [{ label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard, perm: ['dashboard', 'view'] }] },
@@ -120,6 +120,7 @@ export const TITLES = {
   '/stock-counts': 'Stock counts',
   '/batches': 'Batches & expiry',
   '/write-offs': 'Write-offs',
+  '/reports/expiry': 'Reports',
   '/purchases': 'Purchases',
   '/add-purchase': 'New purchase',
   '/categories': 'Categories',

@@ -610,3 +610,20 @@ How to check:
 Known problems:
 - Scanning adds to the line with no batch; for a product counted by batch that line counts its "No batch" stock.
 
+## Industry P3 – Item 7: Expiry report, dashboard, settings, digest
+
+Use a pharmacy shop with an expired batch, one expiring within 90 days, one quarantined unit and one recalled batch.
+
+How to check:
+1. Reports → **Expiry** tab (shown only with Batches & expiry on): four boxes (Expired on hand, Expiring within 90 days, Quarantined, Recalled with stock) with units, batches, cost and MRP value. The table lists recalled first, then expired, expiring and quarantined.
+2. Select a box: only that section shows; select it again to show all. Change the store and the window (30/60/90/180 days).
+3. Select a batch number: the batch dialog opens (write off, recall, quarantine as allowed). After a write-off the report refreshes.
+4. Excel and PDF download the same rows.
+5. Dashboard: cards for expired, expiring soon, recalled and quarantined units (and "No batch" units); each opens the report filtered to that section ("No batch" opens Batches filtered to the unknown batch).
+6. Settings → **Batches**: near-expiry days (1–730), minimum days left to sell (0–365), daily expiry email (off by default). Out-of-range values show an error under the field.
+7. With the daily email on, the owner gets one email a day after 08:00 shop time, only when something is expired, expiring, quarantined or recalled.
+8. A retail shop (module off) shows no Expiry tab, no batch cards and no Batches settings tab.
+
+Known problems:
+- Exports are Excel and PDF like the other reports; the design said CSV and Excel.
+

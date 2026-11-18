@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/auth"
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/modules"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/plans"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/rbac"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/settings"
@@ -60,6 +61,9 @@ func (a *API) Mount(rt *rbac.Router) {
 	rt.Handle(http.MethodGet, "/sales/report/export", req("reports", "export"), a.salesExport)
 	rt.Handle(http.MethodGet, "/purchase/report/export", req("reports", "export"), a.purchaseExport)
 	rt.Handle(http.MethodGet, "/dashboard", req("dashboard", "view"), a.dashboard)
+	// Industry P3 item 7 (A33): the expiry report, in the batch_expiry module.
+	rt.Handle(http.MethodGet, "/reports/expiry", req("reports", "view").InModule(modules.BatchExpiry), a.expiryReport)
+	rt.Handle(http.MethodGet, "/reports/expiry/export", req("reports", "export").InModule(modules.BatchExpiry), a.expiryExport)
 }
 
 func tenant(r *http.Request) tenancy.Tenant {

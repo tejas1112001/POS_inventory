@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { AlertTriangle, ArrowDownRight, ArrowUpRight, CreditCard, PackageX, ShoppingCart, Truck, Users } from 'lucide-react';
+import { AlertTriangle, ArrowDownRight, ArrowUpRight, Ban, CalendarClock, CalendarX, CreditCard, PackageX, ShieldAlert, ShoppingCart, Truck, Users } from 'lucide-react';
 import { Bar, Line } from 'react-chartjs-2';
 import { BarElement, CategoryScale, Chart as ChartJS, Filler, LinearScale, LineElement, PointElement, Tooltip } from 'chart.js';
 import { Button } from '@/components/ui/button';
@@ -219,6 +219,15 @@ export default function Dashboard() {
     actions.push(<ActionCard key="low" icon={AlertTriangle} tone="warn" title="Low stock" value={x.lowStock} text="items running low" to={`/inventory?stockStatus=${encodeURIComponent('Low Stock')}`} />);
     if (x.outOfStock > 0) actions.push(<ActionCard key="out" icon={PackageX} tone="danger" title="Out of stock" value={x.outOfStock} text="items at zero" to={`/inventory?stockStatus=${encodeURIComponent('Out of Stock')}`} />);
   }
+  // Pharmacy (industry P3 item 7): batch figures, in units; each opens the expiry report.
+  const bx = data?.batches;
+  if (bx && hasPermission('reports', 'view')) {
+    if (bx.expired > 0) actions.push(<ActionCard key="bx-exp" icon={CalendarX} tone="danger" title="Expired on hand" value={bx.expired} text="units to remove" to="/reports/expiry?section=expired" />);
+    if (bx.expiring > 0) actions.push(<ActionCard key="bx-soon" icon={CalendarClock} tone="warn" title="Expiring soon" value={bx.expiring} text={`units within ${bx.windowDays} days`} to="/reports/expiry?section=expiring" />);
+    if (bx.recalled > 0) actions.push(<ActionCard key="bx-rec" icon={Ban} tone="danger" title="Recalled" value={bx.recalled} text="units still held" to="/reports/expiry?section=recalled" />);
+    if (bx.quarantined > 0) actions.push(<ActionCard key="bx-q" icon={ShieldAlert} title="Quarantined" value={bx.quarantined} text="units set aside" to="/reports/expiry?section=quarantined" />);
+  }
+  if (bx && bx.unbatched > 0) actions.push(<ActionCard key="bx-unb" icon={AlertTriangle} tone="warn" title="No batch" value={bx.unbatched} text="units without a batch number" to="/batches?status=unknown" />);
   if (x?.purchasesWaiting) actions.push(<ActionCard key="pur" icon={Truck} title="Purchases to receive" value={x.purchasesWaiting} text="ordered or pending" to="/purchases" />);
   if (x?.customersWithDues) actions.push(<ActionCard key="due" icon={Users} tone="warn" title="Customers with dues" value={x.customersWithDues} text="owe money" to="/customer-due-report" />);
   if (hasPermission('billing', 'view') && tenant?.status && tenant.status !== 'active') {

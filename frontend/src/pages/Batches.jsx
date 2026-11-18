@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { CalendarClock, Loader2 } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 import { SectionCard } from '@/components/shared/section-card';
 import { InlineAlert } from '@/components/feedback/InlineAlert';
 import { CheckField, SelectField } from '@/components/settings/FormKit';
@@ -28,7 +29,8 @@ export default function Batches() {
   const { hasPermission } = usePermission();
   const [stores, setStores] = useState([]);
   const [storeId, setStoreId] = useState('');
-  const [status, setStatus] = useState('');
+  const [params] = useSearchParams();
+  const [status, setStatus] = useState(params.get('status') || ''); // the dashboard links ?status=unknown
   const [within, setWithin] = useState('');
   const [includeEmpty, setIncludeEmpty] = useState(false);
   const [rows, setRows] = useState([]);

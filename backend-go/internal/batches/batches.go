@@ -67,6 +67,9 @@ func (a *API) Mount(rt *rbac.Router) {
 	rt.Handle(http.MethodPost, "/write-offs", need("write_off"), a.createWriteOff)
 	rt.Handle(http.MethodGet, "/write-offs", req("view"), a.listWriteOffs)
 	rt.Handle(http.MethodGet, "/write-offs/{id}", req("view"), a.getWriteOff)
+	// Item 7 (A34): batch settings, kept while the module is off.
+	rt.Handle(http.MethodGet, "/settings/batches", rbac.Require("settings", "view"), a.getSettings)
+	rt.Handle(http.MethodPut, "/settings/batches", rbac.Require("settings", "edit"), a.putSettings)
 }
 
 func tenant(r *http.Request) tenancy.Tenant {
