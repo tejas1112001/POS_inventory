@@ -6,6 +6,7 @@ import EmailSettings from '@/components/settings/EmailSettings';
 import BusinessSettings from '@/components/settings/BusinessSettings';
 import ScannerSettings from '@/components/settings/ScannerSettings';
 import LabelSettings from '@/components/settings/LabelSettings';
+import ReturnPolicySettings from '@/components/settings/ReturnPolicySettings';
 import { useModules } from '@/hooks/useModules';
 import { usePermission } from '@/context/PermissionContext';
 import { SectionCard } from '@/components/shared/section-card';
@@ -21,6 +22,7 @@ export default function Settings() {
     hasPermission('settings', 'view') && { key: 'shop', label: 'Shop' },
     hasPermission('email_settings', 'view') && { key: 'email', label: 'Email' },
     hasPermission('settings', 'view') && hasModule('barcode_labels') && { key: 'labels', label: 'Labels' },
+    hasPermission('settings', 'view') && { key: 'returns', label: 'Returns' },
     { key: 'appearance', label: 'Appearance' },
     hasPermission('stores', 'view') && { key: 'stores', label: 'Stores', to: '/stores' },
     hasPermission('billing', 'view') && { key: 'billing', label: 'Plan & billing', to: '/billing' },
@@ -58,6 +60,7 @@ export default function Settings() {
       )}
       {tab === 'email' && <EmailSettings canEdit={hasPermission('email_settings', 'edit')} />}
       {tab === 'labels' && <LabelSettings canEdit={hasPermission('settings', 'edit')} canPrint={hasPermission('labels', 'print')} />}
+      {tab === 'returns' && <ReturnPolicySettings canEdit={hasPermission('settings', 'edit')} />}
       {tab === 'appearance' && (
         <div className="space-y-3">
           <Appearance />

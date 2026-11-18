@@ -5,6 +5,9 @@ import { api } from '@/services/api';
 import StatusBadge from '@/components/kit/StatusBadge';
 import { ErrorState } from '@/components/kit/States';
 import { formatCurrency, formatDateTime } from '@/lib/format';
+import { CONDITIONS } from '@/lib/returns';
+
+const CONDITION_LABEL = Object.fromEntries(CONDITIONS.map((c) => [c.value, c.label]));
 
 const n = (v) => Number(v) || 0;
 
@@ -70,6 +73,19 @@ export default function ReturnDetail() {
           </Field>
           <Field label="Customer">{r.customerName}</Field>
           <Field label="Store">{r.storeName}</Field>
+          {r.settlement && r.settlement !== 'refund' && (
+            <Field label="Given back as">
+              {r.settlement === 'exchange' ? 'Exchange' : 'Store credit'}
+              {r.exchangeSale && (
+                <>
+                  {' · '}
+                  <Link to={`/sales/${r.exchangeSale.id}`} className="text-primary hover:underline">
+                    {r.exchangeSale.reference}
+                  </Link>
+                </>
+              )}
+            </Field>
+          )}
           {r.note && <Field label="Note">{r.note}</Field>}
         </dl>
       </section>
@@ -99,6 +115,12 @@ export default function ReturnDetail() {
                         {i.sku ? `SKU ${i.sku}` : ''}
                         <span className="md:hidden">{i.reason ? ` · ${i.reason}` : ''}</span>
                       </span>
+                      {i.condition && (
+                        <span className="block text-xs text-muted-foreground">
+                          {CONDITION_LABEL[i.condition] || i.condition}
+                          {i.restocked ? ' · back in stock' : ' · not restocked'}
+                        </span>
+                      )}
                     </td>
                     <td className="hidden px-3 py-2 md:table-cell">{i.reason || '—'}</td>
                     <td className="px-3 py-2 text-right tabular-nums">{i.quantity}</td>
@@ -126,6 +148,18 @@ export default function ReturnDetail() {
             <span>Paid back</span>
             <span className="tabular-nums">{formatCurrency(r.paid)}</span>
           </div>
+          {n(r.toExchange) > 0 && (
+            <div className="flex justify-between py-0.5 text-sm">
+              <span>Towards new goods</span>
+              <span className="tabular-nums">{formatCurrency(r.toExchange)}</span>
+            </div>
+          )}
+          {n(r.toStoreCredit) > 0 && (
+            <div className="flex justify-between py-0.5 text-sm">
+              <span>To store credit</span>
+              <span className="tabular-nums">{formatCurrency(r.toStoreCredit)}</span>
+            </div>
+          )}
           {n(r.due) > 0 && (
             <div className="flex justify-between py-0.5 text-sm font-semibold">
               <span>Still to pay back</span>

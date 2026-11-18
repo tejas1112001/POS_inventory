@@ -101,6 +101,10 @@ type SaleJSON struct {
 	Payments []PaymentJSON `json:"payments"`
 	DueDate  *string       `json:"dueDate"`
 	Overdue  bool          `json:"overdue"`
+	// Industry P1 item 9: the return an exchange came from, and the named
+	// customer's store credit now (receipts show "Store credit left").
+	ExchangeReturnID *int64          `json:"exchangeReturnId"`
+	StoreCreditLeft  decimal.Decimal `json:"storeCreditLeft"`
 }
 
 // sqlToday is today's date in the shop's time zone.
@@ -114,7 +118,8 @@ const (
 			s.subtotal, s.discount, s.tax, s.shipping, s.total, s.paid, s.due, s.tendered, s.change_due, s.currency,
 			s.customer_id, s.store_id, s.user_id, s.updated_by, s.receipt_email::text, s.voided_at, s.voided_by, s.void_reason,
 			s.version, s.created_at, s.updated_at, c.name, u.name, st.name,
-			to_char(s.due_date, 'YYYY-MM-DD'), ` + sqlOverdue + `
+			to_char(s.due_date, 'YYYY-MM-DD'), ` + sqlOverdue + `, s.exchange_return_id,
+			(SELECT coalesce(sum(e.amount), 0) FROM customer_credit_entries e WHERE e.customer_id = s.customer_id)
 		FROM sales s
 		LEFT JOIN customers c ON c.id = s.customer_id
 		LEFT JOIN users u ON u.id = s.user_id
@@ -144,7 +149,8 @@ func load(ctx context.Context, tx tenancy.TenantTx, ids []int64) ([]SaleJSON, er
 		if err := rows.Scan(&s.ID, &s.Reference, &s.Date, &s.Status, &s.PaymentStatus, &s.PaymentMethod, &s.PaymentNote, &s.Note,
 			&s.Subtotal, &s.Discount, &s.Tax, &s.Shipping, &s.Total, &s.Paid, &s.Due, &s.Tendered, &s.Change, &s.Currency,
 			&s.CustomerID, &s.StoreID, &s.UserID, &s.UpdatedBy, &s.ReceiptEmail, &s.VoidedAt, &s.VoidedBy, &s.VoidReason,
-			&s.Version, &s.CreatedAt, &s.UpdatedAt, &cust, &user, &store, &s.DueDate, &s.Overdue); err != nil {
+			&s.Version, &s.CreatedAt, &s.UpdatedAt, &cust, &user, &store, &s.DueDate, &s.Overdue, &s.ExchangeReturnID,
+			&s.StoreCreditLeft); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -191,7 +197,8 @@ func load(ctx context.Context, tx tenancy.TenantTx, ids []int64) ([]SaleJSON, er
 		return nil, err
 	}
 
-	rows, err = tx.Query(ctx, `SELECT id, sale_id, method, amount, tendered, change_due, reference, customer_payment_id, created_at, verification
+	rows, err = tx.Query(ctx, `SELECT id, sale_id, method, amount, tendered, change_due, reference, customer_payment_id, created_at, verification,
+			sale_return_id
 		FROM sale_payments WHERE sale_id = ANY($1) ORDER BY sale_id, id`, ids)
 	if err != nil {
 		return nil, err
@@ -199,7 +206,8 @@ func load(ctx context.Context, tx tenancy.TenantTx, ids []int64) ([]SaleJSON, er
 	for rows.Next() {
 		var p PaymentJSON
 		var saleID int64
-		if err := rows.Scan(&p.ID, &saleID, &p.Method, &p.Amount, &p.Tendered, &p.Change, &p.Reference, &p.CustomerPaymentID, &p.CreatedAt, &p.Verification); err != nil {
+		if err := rows.Scan(&p.ID, &saleID, &p.Method, &p.Amount, &p.Tendered, &p.Change, &p.Reference, &p.CustomerPaymentID, &p.CreatedAt, &p.Verification,
+			&p.SaleReturnID); err != nil {
 			rows.Close()
 			return nil, err
 		}

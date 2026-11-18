@@ -106,13 +106,16 @@ var Catalog = []Permission{
 	{"stock_counts", "view", "View stock counts"}, // P4 (admin; not billers)
 	{"stock_counts", "create", "Count stock"},
 	{"stock_counts", "complete", "Complete stock counts (post differences)"},
+	{"sales_returns", "override_policy", "Override the return policy (with a reason)"}, // P5 (owner, admin)
+	{"customers", "store_credit", "Adjust customer store credit"},                      // P6, owner only
 }
 
 // ownerOnlyKeys are single permissions the admin system role does not get
 // (besides the whole billing module).
 var ownerOnlyKeys = []string{
 	"sales:credit", "customers:credit_limit", // S10 P1
-	"modules:manage", // industry P1
+	"modules:manage",         // industry P1
+	"customers:store_credit", // industry P1 P6
 }
 
 // OwnerOnly are permissions the admin system role does not get: billing,

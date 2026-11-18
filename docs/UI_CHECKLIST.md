@@ -468,6 +468,20 @@ How to check:
 Known problems:
 - A partly received purchase that will never be completed cannot be closed; correct stock with a stock adjustment (as designed).
 
+## Industry P1 – Item 9: Returns policy, exchanges, store credit
+
+Have a named customer (not Walk-in), a few products in stock and two users: the owner and a cashier without "override return policy".
+
+How to check:
+1. Settings → **Returns**: Refunds is on, the rest off, no time limit — today's behaviour. A return made now works exactly as before.
+2. Turn on **Store credit** and **Exchanges**, set a time limit of 7 days and **Ask the condition** (restock: Resellable). Save.
+3. Sell 2 items to the customer. Returns → New → pick the sale, give each line a condition: one **Resellable**, one **Damaged**. Choose **Store credit** → Save. The return shows "Given back as Store credit", the damaged line says "not restocked", stock went up by 1 only.
+4. Customer account → **Store credit** shows the balance and the entry. As owner, **Adjust** (+50, reason) → balance goes up; −10000 is refused.
+5. Checkout for the same customer → payment **Store credit**: up to the balance; the receipt shows "Store credit left". For Walk-in there is no Store credit option.
+6. Returns → New → **Exchange**: pick the sale, a line to return, then scan or pick the new goods. The amounts update (customer pays / refund / to store credit). Pay the difference and save: you get a return and a new sale; the sale shows an "Exchange" payment. That sale cannot be voided.
+7. Return against a sale older than 7 days → refused with "Return window closed". As owner, type a reason (10+ characters) and save → it goes through; the audit log has "sale_return.policy_override". As the cashier the override box is not offered.
+8. Dashboard: collected today does not count exchange or store credit payments.
+
 ## Industry P1 – Item 10: Thermal receipt and HSN on lines
 
 Have a product with an HSN code (Products → edit → HSN, e.g. 0902) and one without.

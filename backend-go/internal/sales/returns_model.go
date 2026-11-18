@@ -36,6 +36,8 @@ type ReturnItemJSON struct {
 	IGST         *decimal.Decimal `json:"igst"`
 	Subtotal     decimal.Decimal  `json:"subtotal"`
 	Reason       string           `json:"reason"`
+	Condition    *string          `json:"condition"` // industry P1 item 9
+	Restocked    bool             `json:"restocked"`
 	CreatedAt    time.Time        `json:"createdAt"`
 	Product      returnProduct    `json:"product"`
 }
@@ -69,7 +71,13 @@ type ReturnJSON struct {
 	Due       decimal.Decimal `json:"due"`
 	// AppliedToDue is the part of the return that reduced what the
 	// customer still owed on the sale (S10 refund rule, option A).
-	AppliedToDue   decimal.Decimal  `json:"appliedToDue"`
+	AppliedToDue decimal.Decimal `json:"appliedToDue"`
+	// Industry P1 item 9: how the rest was given back (refund, store_credit
+	// or exchange) and the amounts that went to store credit or an exchange.
+	Settlement     string           `json:"settlement"`
+	ToStoreCredit  decimal.Decimal  `json:"toStoreCredit"`
+	ToExchange     decimal.Decimal  `json:"toExchange"`
+	ExchangeSale   *SaleRef         `json:"exchangeSale"`
 	PaymentStatus  string           `json:"payment_status"`
 	PaymentStatusC string           `json:"paymentStatus"`
 	Currency       string           `json:"currency"`
@@ -97,18 +105,25 @@ type ReturnJSON struct {
 const (
 	qLoadReturns = `SELECT r.id, r.reference, r.date, r.status, r.payment_status, r.total, r.tax, r.paid, r.due, r.applied_to_due, r.currency, r.note,
 			r.sale_id, s.reference, r.customer_id, r.store_id, st.name, r.created_by, r.created_at, r.updated_at,
-			c.name, c.email::text, c.phone, c.image_file_id
+			c.name, c.email::text, c.phone, c.image_file_id, r.settlement, r.to_store_credit, r.to_exchange, xs.id, xs.reference
 		FROM sale_returns r
+		LEFT JOIN sales xs ON xs.exchange_return_id = r.id
 		LEFT JOIN sales s ON s.id = r.sale_id
 		LEFT JOIN customers c ON c.id = r.customer_id
 		LEFT JOIN stores st ON st.id = r.store_id
 		WHERE r.id = ANY($1)`
 	qLoadReturnItems = `SELECT i.id, i.sale_return_id, i.order_item_id, i.product_id, i.variant_id, i.product_name, i.sku, i.quantity,
 			i.unit_price, i.discount, i.tax_amount, i.cgst, i.sgst, i.igst, i.subtotal, coalesce(i.reason, ''), i.created_at,
-			p.image_file_id
+			p.image_file_id, i.condition, i.restocked
 		FROM return_items i LEFT JOIN products p ON p.id = i.product_id
 		WHERE i.sale_return_id = ANY($1) ORDER BY i.sale_return_id, i.id`
 )
+
+// SaleRef is the sale an exchange made (industry P1 item 9).
+type SaleRef struct {
+	ID        int64  `json:"id"`
+	Reference string `json:"reference"`
+}
 
 // privateImage is the signed-in URL of a file (returns are never public).
 func privateImage(id *uuid.UUID) *string {
@@ -138,15 +153,19 @@ func loadReturns(ctx context.Context, tx tenancy.TenantTx, ids []int64) ([]Retur
 	}
 	for rows.Next() {
 		x := &ReturnJSON{Items: []ReturnItemJSON{}}
-		var name, email, phone *string
+		var name, email, phone, xsRef *string
+		var xsID *int64
 		var img *uuid.UUID
 		if err := rows.Scan(&x.ID, &x.Reference, &x.Date, &x.Status, &x.PaymentStatus, &x.Total, &x.Tax, &x.Paid, &x.Due, &x.AppliedToDue,
 			&x.Currency, &x.Note, &x.SaleID, &x.SaleReference, &x.CustomerID, &x.StoreID, &x.StoreName, &x.CreatedBy,
-			&x.CreatedAt, &x.UpdatedAt, &name, &email, &phone, &img); err != nil {
+			&x.CreatedAt, &x.UpdatedAt, &name, &email, &phone, &img, &x.Settlement, &x.ToStoreCredit, &x.ToExchange, &xsID, &xsRef); err != nil {
 			rows.Close()
 			return nil, err
 		}
 		x.PaymentStatusC = x.PaymentStatus
+		if xsID != nil && xsRef != nil {
+			x.ExchangeSale = &SaleRef{ID: *xsID, Reference: *xsRef}
+		}
 		x.CustomerName, x.CustomerEmail, x.CustomerPhone = str(name), str(email), str(phone)
 		if x.CustomerName == "" {
 			x.CustomerName = "Walk-In Customer"
@@ -173,7 +192,7 @@ func loadReturns(ctx context.Context, tx tenancy.TenantTx, ids []int64) ([]Retur
 		var img *uuid.UUID
 		if err := rows.Scan(&it.ID, &it.SaleReturnID, &it.OrderItemID, &it.ProductID, &it.VariantID, &it.ProductName, &it.SKU,
 			&it.Quantity, &it.UnitPrice, &it.Discount, &it.TaxAmount, &it.CGST, &it.SGST, &it.IGST, &it.Subtotal, &it.Reason,
-			&it.CreatedAt, &img); err != nil {
+			&it.CreatedAt, &img, &it.Condition, &it.Restocked); err != nil {
 			rows.Close()
 			return nil, err
 		}

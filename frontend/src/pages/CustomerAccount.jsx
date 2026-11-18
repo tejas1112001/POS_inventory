@@ -23,10 +23,15 @@ export default function CustomerAccount() {
   const [dues, setDues] = useState(null);
   const [payments, setPayments] = useState([]);
   const [error, setError] = useState('');
-  const [dialog, setDialog] = useState(null); // 'collect' | 'limit' | {reverse: payment}
+  const [dialog, setDialog] = useState(null); // 'collect' | 'limit' | 'credit' | {reverse: payment}
+  const [credit, setCredit] = useState(null); // store credit (industry P1 item 9, A21)
 
   const load = useCallback(() => {
     setError('');
+    api
+      .get(`/api/customers/${id}/store-credit`, { quiet: true })
+      .then(setCredit)
+      .catch(() => setCredit(null));
     Promise.all([api.get(`/api/customers/${id}/dues`, { quiet: true }), api.get(`/api/customers/${id}/payments`, { quiet: true })])
       .then(([d, p]) => {
         setDues(d);
@@ -96,6 +101,43 @@ export default function CustomerAccount() {
         />
         <Tile label="Credit left" value={dues.available == null ? '—' : formatCurrency(dues.available)} />
       </section>
+      {credit && !credit.walkIn && (Number(credit.balance) > 0 || credit.entries.length > 0 || credit.canAdjust) && (
+        <section className="overflow-hidden rounded-lg border bg-card shadow-xs" aria-labelledby="sc-h">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3">
+            <h3 id="sc-h" className="text-base font-semibold">
+              Store credit: <span className="tabular-nums">{formatCurrency(credit.balance)}</span>
+            </h3>
+            {credit.canAdjust && (
+              <Button type="button" variant="outline" size="sm" className="max-sm:h-11" onClick={() => setDialog('credit')}>
+                <Pencil className="size-4" aria-hidden="true" /> Adjust
+              </Button>
+            )}
+          </div>
+          {credit.entries.length === 0 ? (
+            <p className="px-4 py-4 text-sm text-muted-foreground">No store credit yet. Returns can be given as store credit when the shop's return policy allows it.</p>
+          ) : (
+            <ul className="divide-y text-sm">
+              {credit.entries.map((e) => (
+                <li key={e.id} className="flex flex-wrap items-baseline justify-between gap-2 px-4 py-2">
+                  <span>
+                    {CREDIT_KIND[e.kind] || e.kind}
+                    {e.reference ? ` ${e.reference}` : ''}
+                    {e.reason ? <span className="text-muted-foreground"> · {e.reason}</span> : null}
+                    <span className="block text-xs text-muted-foreground">
+                      {formatDateTime(e.createdAt)}
+                      {e.userName ? ` · ${e.userName}` : ''}
+                    </span>
+                  </span>
+                  <span className={`font-medium tabular-nums ${Number(e.amount) < 0 ? 'text-danger-fg' : 'text-success-fg'}`}>
+                    {Number(e.amount) > 0 ? '+' : ''}
+                    {formatCurrency(e.amount)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
       {Number(dues.owedByShop) > 0 && (
         <InlineAlert kind="info">The shop still owes {dues.name} {formatCurrency(dues.owedByShop)} from returns not yet refunded.</InlineAlert>
       )}
@@ -185,10 +227,63 @@ export default function CustomerAccount() {
         )}
       </section>
 
+      {dialog === 'credit' && <CreditDialog id={id} name={dues.name} balance={credit?.balance} onClose={() => setDialog(null)} onDone={() => done('Store credit adjusted.')} />}
       {dialog === 'collect' && <CollectDialog id={id} dues={dues} onClose={() => setDialog(null)} onDone={() => done('Payment recorded.')} />}
       {dialog === 'limit' && <LimitDialog id={id} dues={dues} onClose={() => setDialog(null)} onDone={() => done('Credit limit saved.')} />}
       {dialog?.reverse && <ReverseDialog payment={dialog.reverse} onClose={() => setDialog(null)} onDone={() => done('Payment reversed.')} />}
     </div>
+  );
+}
+
+const CREDIT_KIND = { return: 'Return', sale: 'Used on sale', adjust: 'Adjustment', reversal: 'Reversal' };
+
+// CreditDialog (customers:store_credit, owner only): add or take away store
+// credit, with a reason. The balance never goes below 0.
+function CreditDialog({ id, name, balance, onClose, onDone }) {
+  const [amount, setAmount] = useState('');
+  const [sign, setSign] = useState('+');
+  const [reason, setReason] = useState('');
+  const key = useRef(newKey());
+  const a = useAction(
+    () =>
+      api.post(
+        `/api/customers/${id}/store-credit/adjust`,
+        { amount: Number(`${sign}${amount}`), reason: reason.trim() },
+        { headers: { 'Idempotency-Key': key.current }, quiet: true }
+      ),
+    onDone
+  );
+  return (
+    <ActionDialog
+      title={`Adjust store credit: ${name}`}
+      description={`Balance ${formatCurrency(balance)}. Every change is kept with its reason.`}
+      error={a.error}
+      busy={a.busy}
+      submitLabel="Save adjustment"
+      onClose={onClose}
+      onSubmit={() => {
+        if (!(Number(amount) > 0)) return a.setError('Enter an amount above 0.');
+        if (reason.trim().length < 5) return a.setError('Write a reason (at least 5 characters).');
+        a.run();
+      }}
+    >
+      <div className="flex gap-4 text-sm">
+        <label className="flex items-center gap-2">
+          <input type="radio" checked={sign === '+'} onChange={() => setSign('+')} /> Add
+        </label>
+        <label className="flex items-center gap-2">
+          <input type="radio" checked={sign === '-'} onChange={() => setSign('-')} /> Take away
+        </label>
+      </div>
+      <label className="block space-y-1 text-sm font-medium">
+        Amount
+        <Input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ''))} className="h-11 text-right text-lg tabular-nums" />
+      </label>
+      <label className="block space-y-1 text-sm font-medium">
+        Reason
+        <Input value={reason} maxLength={500} onChange={(e) => setReason(e.target.value)} />
+      </label>
+    </ActionDialog>
   );
 }
 

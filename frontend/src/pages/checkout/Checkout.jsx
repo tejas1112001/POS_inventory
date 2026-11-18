@@ -634,6 +634,7 @@ export default function Checkout() {
         total={total}
         customerEmail={customer?.email || ''}
         onPay={pay}
+        creditCustomer={customer && String(customer.id) !== String(c.walkIn?.id) ? customer.id : null}
         onAccount={
           canCredit && customer && String(customer.id) !== String(c.walkIn?.id)
             ? { name: customer.name, owes: Number(customer.due) || 0, limit: customer.creditLimit == null ? null : Number(customer.creditLimit) }

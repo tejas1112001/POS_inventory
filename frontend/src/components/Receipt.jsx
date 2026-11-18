@@ -246,6 +246,12 @@ function ReceiptBody({ sale, store, settings, businessName, taxLabel, logoUrl, n
             <span>{formatCurrency(sale.due)}</span>
           </div>
         )}
+        {n(sale.storeCreditLeft) > 0 && (
+          <div>
+            <span>Store credit left</span>
+            <span>{formatCurrency(sale.storeCreditLeft)}</span>
+          </div>
+        )}
         {payments.length === 0 && sale.payment_method && (
           <div>
             <span>Payment</span>

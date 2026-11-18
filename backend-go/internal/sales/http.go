@@ -294,6 +294,16 @@ const qInsertSale = `INSERT INTO sales (reference, date, status, payment_status,
 		$18, $19, $20, NULLIF($21, ''), $22)
 	RETURNING id`
 
+// saleExtra is what an exchange (A20) hands insertSale: the new goods
+// already priced, the stock rows already locked (with the return's), and
+// the exchange payment linked to the return.
+type saleExtra struct {
+	priced   *priced
+	keys     []inventory.Key
+	deltas   map[inventory.Key]int
+	exchange *payLine
+}
+
 func (a *API) create(w http.ResponseWriter, r *http.Request) {
 	key, err := idempotency.Key(r)
 	if err != nil {
@@ -331,97 +341,11 @@ func (a *API) create(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
-		date, err := docdate.Parse(c.date, s.loc, now)
+		id, rid, _, err := a.insertSale(r, tx, p, c, s, now, saleExtra{})
 		if err != nil {
 			return err
 		}
-		cust, err := checkParties(ctx, tx, c, s)
-		if err != nil {
-			return err
-		}
-		byID, err := resolve(ctx, tx, c.lines)
-		if err != nil {
-			return err
-		}
-		pr, err := price(c, byID, s, p, nil)
-		if err != nil {
-			return err
-		}
-		deltas := map[inventory.Key]int{}
-		for _, l := range pr.lines {
-			deltas[inventory.Key{Store: c.storeID, Variant: l.v.id}] -= int(l.qty)
-		}
-		// Lock stock first, then the counter: the counter row serialises
-		// checkouts, so it is held for the shortest time.
-		keys, _, err := inventory.Lock(ctx, tx, deltas, skuMap(pr))
-		if err != nil {
-			return err
-		}
-		ref, err := nextReference(ctx, tx, s.prefix)
-		if err != nil {
-			return err
-		}
-		status := c.status
-		if status == "" {
-			status = "Completed"
-		}
-		var custName string
-		var custEmail *string
-		if err := tx.QueryRow(ctx, `SELECT name, email::text FROM customers WHERE id = $1`, cust).Scan(&custName, &custEmail); err != nil {
-			return err
-		}
-		// Receipt email: the address the cashier typed, else the customer's.
-		receiptTo := deref(c.receiptEmail)
-		if receiptTo == "" && custEmail != nil && mailer.ValidEmail(*custEmail) {
-			receiptTo = *custEmail
-		}
-		st, err := settle(pr.quote.Total, c, s.currency)
-		if err != nil {
-			return err
-		}
-		// Credit applies to completed sales: a pending order is not handed
-		// over yet, so it is neither checked nor given a due date.
-		var due *time.Time
-		if st.due.IsPositive() && status == "Completed" {
-			if err := creditCheck(ctx, tx, p, s, cust, 0, c.customerID != 0, st.due); err != nil {
-				return err
-			}
-			if due, err = dueDate(c.dueDate, date, s.loc); err != nil {
-				return err
-			}
-		}
-		var id int64
-		if err := tx.QueryRow(ctx, qInsertSale, ref, date, status, st.status, st.methodLabel(c.paymentMethod), deref(c.paymentNote),
-			deref(c.note), pr.quote.Subtotal, pr.quote.Discount, pr.quote.Tax, pr.quote.Shipping, pr.quote.Total,
-			st.paid, st.due, st.tendered, st.chg, s.currency, cust, c.storeID, p.UserID, receiptTo, due).Scan(&id); err != nil {
-			return err
-		}
-		if err := writePayments(ctx, tx, id, p.UserID, date, st.rows); err != nil {
-			return err
-		}
-		if err := insertItems(ctx, tx, id, pr); err != nil {
-			return err
-		}
-		if err := inventory.Apply(ctx, tx, keys, deltas, inventory.ReasonSale, inventory.Ref{Type: "sale", ID: id}, p.UserID); err != nil {
-			return err
-		}
-		if receiptID, err = receipts.Create(ctx, tx, id, 1); err != nil {
-			return err
-		}
-		if receiptTo != "" {
-			if _, err := outbox.Enqueue(ctx, tx, outbox.Item{Key: fmt.Sprintf("sale:%d:receipt", id), Kind: outbox.KindReceipt,
-				To: receiptTo, ToName: custName, Template: "receipt", ReceiptID: receiptID,
-				Data: map[string]any{"sale_id": id, "receipt_id": receiptID}}); err != nil {
-				return err
-			}
-		}
-		if len(pr.overrides) > 0 {
-			if err := audit.Write(ctx, tx, audit.Entry{ActorID: p.UserID, Action: "sale.price_override", Entity: "sale",
-				EntityID: strconv.FormatInt(id, 10), After: map[string]any{"reference": ref, "lines": pr.overrides},
-				RequestID: httpx.RequestID(ctx), UserAgent: r.UserAgent()}); err != nil {
-				return err
-			}
-		}
+		receiptID = rid
 		var found bool
 		if out, found, err = loadOne(ctx, tx, id); err != nil || !found {
 			return orInternal(err)
@@ -441,6 +365,119 @@ func (a *API) create(w http.ResponseWriter, r *http.Request) {
 	}
 	a.afterCommit(r, receiptID)
 	httpx.WriteJSON(w, http.StatusCreated, out)
+}
+
+// insertSale records a sale in the caller's transaction: lines, payments
+// (store credit is taken off the customer's balance), stock out, receipt
+// and receipt email. It returns the sale's ID, its receipt's ID and its
+// reference.
+func (a *API) insertSale(r *http.Request, tx tenancy.TenantTx, p auth.Principal, c cleanSale, s settings, now time.Time, x saleExtra) (int64, int64, string, error) {
+	ctx := r.Context()
+	date, err := docdate.Parse(c.date, s.loc, now)
+	if err != nil {
+		return 0, 0, "", err
+	}
+	cust, err := checkParties(ctx, tx, c, s)
+	if err != nil {
+		return 0, 0, "", err
+	}
+	var pr priced
+	if x.priced != nil {
+		pr = *x.priced
+	} else {
+		byID, err := resolve(ctx, tx, c.lines)
+		if err != nil {
+			return 0, 0, "", err
+		}
+		if pr, err = price(c, byID, s, p, nil); err != nil {
+			return 0, 0, "", err
+		}
+	}
+	keys, deltas := x.keys, x.deltas
+	if keys == nil {
+		deltas = map[inventory.Key]int{}
+		for _, l := range pr.lines {
+			deltas[inventory.Key{Store: c.storeID, Variant: l.v.id}] -= int(l.qty)
+		}
+		// Lock stock first, then the counter: the counter row serialises
+		// checkouts, so it is held for the shortest time.
+		if keys, _, err = inventory.Lock(ctx, tx, deltas, skuMap(pr)); err != nil {
+			return 0, 0, "", err
+		}
+	}
+	ref, err := nextReference(ctx, tx, s.prefix)
+	if err != nil {
+		return 0, 0, "", err
+	}
+	status := c.status
+	if status == "" {
+		status = "Completed"
+	}
+	var custName string
+	var custEmail *string
+	if err := tx.QueryRow(ctx, `SELECT name, email::text FROM customers WHERE id = $1`, cust).Scan(&custName, &custEmail); err != nil {
+		return 0, 0, "", err
+	}
+	// Receipt email: the address the cashier typed, else the customer's.
+	receiptTo := deref(c.receiptEmail)
+	if receiptTo == "" && custEmail != nil && mailer.ValidEmail(*custEmail) {
+		receiptTo = *custEmail
+	}
+	if x.exchange != nil {
+		c.payments = append([]payLine{*x.exchange}, c.payments...)
+	}
+	st, err := settle(pr.quote.Total, c, s.currency)
+	if err != nil {
+		return 0, 0, "", err
+	}
+	// Credit applies to completed sales: a pending order is not handed
+	// over yet, so it is neither checked nor given a due date.
+	var due *time.Time
+	if st.due.IsPositive() && status == "Completed" {
+		if err := creditCheck(ctx, tx, p, s, cust, 0, c.customerID != 0, st.due); err != nil {
+			return 0, 0, "", err
+		}
+		if due, err = dueDate(c.dueDate, date, s.loc); err != nil {
+			return 0, 0, "", err
+		}
+	}
+	var id int64
+	if err := tx.QueryRow(ctx, qInsertSale, ref, date, status, st.status, st.methodLabel(c.paymentMethod), deref(c.paymentNote),
+		deref(c.note), pr.quote.Subtotal, pr.quote.Discount, pr.quote.Tax, pr.quote.Shipping, pr.quote.Total,
+		st.paid, st.due, st.tendered, st.chg, s.currency, cust, c.storeID, p.UserID, receiptTo, due).Scan(&id); err != nil {
+		return 0, 0, "", err
+	}
+	if err := writePayments(ctx, tx, id, p.UserID, date, st.rows); err != nil {
+		return 0, 0, "", err
+	}
+	if err := spendCredit(ctx, tx, s, cust, id, p.UserID, creditPayments(st.rows)); err != nil {
+		return 0, 0, "", err
+	}
+	if err := insertItems(ctx, tx, id, pr); err != nil {
+		return 0, 0, "", err
+	}
+	if err := inventory.Apply(ctx, tx, keys, deltas, inventory.ReasonSale, inventory.Ref{Type: "sale", ID: id}, p.UserID); err != nil {
+		return 0, 0, "", err
+	}
+	receiptID, err := receipts.Create(ctx, tx, id, 1)
+	if err != nil {
+		return 0, 0, "", err
+	}
+	if receiptTo != "" {
+		if _, err := outbox.Enqueue(ctx, tx, outbox.Item{Key: fmt.Sprintf("sale:%d:receipt", id), Kind: outbox.KindReceipt,
+			To: receiptTo, ToName: custName, Template: "receipt", ReceiptID: receiptID,
+			Data: map[string]any{"sale_id": id, "receipt_id": receiptID}}); err != nil {
+			return 0, 0, "", err
+		}
+	}
+	if len(pr.overrides) > 0 {
+		if err := audit.Write(ctx, tx, audit.Entry{ActorID: p.UserID, Action: "sale.price_override", Entity: "sale",
+			EntityID: strconv.FormatInt(id, 10), After: map[string]any{"reference": ref, "lines": pr.overrides},
+			RequestID: httpx.RequestID(ctx), UserAgent: r.UserAgent()}); err != nil {
+			return 0, 0, "", err
+		}
+	}
+	return id, receiptID, ref, nil
 }
 
 func (a *API) afterCommit(r *http.Request, receiptID int64) {
@@ -579,6 +616,14 @@ func (a *API) update(w http.ResponseWriter, r *http.Request) {
 		}
 		if err := refuseIfCollected(ctx, tx, id, "edited"); err != nil {
 			return err
+		}
+		if err := refuseIfExchanged(ctx, tx, id, "edited"); err != nil {
+			return err
+		}
+		for _, pl := range c.payments {
+			if pl.method == MethodStoreCredit {
+				return apperr.Invalid("payments", "Store credit can be used only when the sale is made.")
+			}
 		}
 		s, err := loadSettings(ctx, tx)
 		if err != nil {
@@ -758,6 +803,9 @@ func (a *API) void(w http.ResponseWriter, r *http.Request) {
 		if err := refuseIfCollected(ctx, tx, id, "voided"); err != nil {
 			return err
 		}
+		if err := refuseIfExchanged(ctx, tx, id, "voided"); err != nil {
+			return err
+		}
 		items, err := oldItems(ctx, tx, id)
 		if err != nil {
 			return err
@@ -800,6 +848,7 @@ func (a *API) Mount(rt *rbac.Router) {
 	rt.Handle(http.MethodGet, "/sales", req("sales", "view"), a.list)
 	rt.Handle(http.MethodGet, "/sales/returns", req("sales_returns", "view"), a.listReturns)
 	rt.Handle(http.MethodPost, "/sales/returns", req("sales_returns", "create"), a.createReturn)
+	rt.Handle(http.MethodPost, "/sales/exchanges", req("sales_returns", "create"), a.exchange) // industry P1 item 9 (A20)
 	rt.Handle(http.MethodGet, "/sales/returns/{id}", req("sales_returns", "view"), a.getReturn)
 	rt.Handle(http.MethodGet, "/sales/{id}", req("sales", "view"), a.get)
 	rt.Handle(http.MethodPost, "/sales", req("sales", "create"), a.create)
@@ -813,6 +862,11 @@ func (a *API) Mount(rt *rbac.Router) {
 	rt.Handle(http.MethodPost, "/customers/{id}/payments", req("customers", "collect"), a.collect)
 	rt.Handle(http.MethodGet, "/customers/{id}/statement", req("customers", "view"), a.statement)
 	rt.Handle(http.MethodPut, "/customers/{id}/credit-limit", req("customers", "credit_limit"), a.setCreditLimit)
+	// Industry P1 item 9: store credit (A21) and the return policy (A18).
+	rt.Handle(http.MethodGet, "/customers/{id}/store-credit", req("customers", "view"), a.storeCredit)
+	rt.Handle(http.MethodPost, "/customers/{id}/store-credit/adjust", req("customers", "store_credit"), a.adjustCredit)
+	rt.Handle(http.MethodGet, "/settings/returns", req("settings", "view"), a.getPolicy)
+	rt.Handle(http.MethodPut, "/settings/returns", req("settings", "edit"), a.putPolicy)
 	rt.Handle(http.MethodPost, "/customer-payments/{id}/reverse", req("customers", "collect"), a.reverse)
 	// Held bills (S10 item 7).
 	rt.Handle(http.MethodGet, "/held-carts", req("pos", "create"), a.listHeld)

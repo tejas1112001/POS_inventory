@@ -6,14 +6,21 @@ package sales
 // come from the sale; the refund is the sold amount (client prices are
 // ignored); a return without a sale needs sales:price_override. Returned
 // goods go back to stock at once, through the ledger.
+//
+// Industry P1 item 9 (A19): the shop's return policy (policy.go) can turn
+// on a time limit, require a sale, ask each line's condition (only the
+// restock conditions go back to stock), and decide how the value is given
+// back: refund (default) or store credit. Exchanges are exchange.go.
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/shopspring/decimal"
 
@@ -45,6 +52,7 @@ type returnItemIn struct {
 	Quantity    money.Int `json:"quantity"`
 	UnitPrice   money.Dec `json:"unitPrice"`
 	Reason      *string   `json:"reason"`
+	Condition   *string   `json:"condition"` // industry P1 item 9: resellable, damaged, defective
 
 	// Accepted and ignored: the server computes line amounts.
 	Total    json.RawMessage `json:"total"`
@@ -63,6 +71,10 @@ type returnIn struct {
 	Status      *string        `json:"status"`
 	Paid        money.Dec      `json:"paid"`
 	Note        *string        `json:"note"`
+	// Industry P1 item 9: how the value is given back (refund default, or
+	// store_credit) and the reason for overriding the return policy.
+	Settlement           *string `json:"settlement"`
+	PolicyOverrideReason *string `json:"policyOverrideReason"`
 
 	// Accepted and ignored: the reference is generated and the totals,
 	// due amount and payment status are computed here.
@@ -77,7 +89,7 @@ type returnLine struct {
 	qty                               int64
 	price                             decimal.Decimal
 	priceSet                          bool
-	reason                            string
+	reason, condition                 string
 }
 
 type cleanReturn struct {
@@ -86,11 +98,13 @@ type cleanReturn struct {
 	status, date                string
 	paid                        *decimal.Decimal
 	note                        string
+	settlement                  string // refund or store_credit
+	overrideReason              string
 }
 
 func validateReturn(in returnIn) (cleanReturn, error) {
 	f := fieldErrs{}
-	c := cleanReturn{status: "Pending"}
+	c := cleanReturn{status: "Pending", settlement: SettleRefund}
 	sale := in.SaleID
 	if !sale.Valid {
 		sale = in.SaleIDAlias
@@ -147,6 +161,12 @@ func validateReturn(in returnIn) (cleanReturn, error) {
 				f[k+".reason"] = fmt.Sprintf("At most %d characters.", maxReasonLen)
 			}
 		}
+		if it.Condition != nil {
+			l.condition = strings.TrimSpace(*it.Condition)
+			if l.condition != "" && !slices.Contains(conditions, l.condition) {
+				f[k+".condition"] = "Condition must be resellable, damaged or defective."
+			}
+		}
 		c.lines = append(c.lines, l)
 	}
 	if in.Status != nil {
@@ -172,6 +192,23 @@ func validateReturn(in returnIn) (cleanReturn, error) {
 		c.note = strings.TrimSpace(*in.Note)
 		if len([]rune(c.note)) > maxNoteLen {
 			f["note"] = fmt.Sprintf("At most %d characters.", maxNoteLen)
+		}
+	}
+	if in.Settlement != nil {
+		switch s := strings.TrimSpace(*in.Settlement); s {
+		case "", SettleRefund:
+		case SettleStoreCredit:
+			c.settlement = s
+		case SettleExchange:
+			f["settlement"] = "Use POST /api/sales/exchanges for an exchange."
+		default:
+			f["settlement"] = "Settlement must be refund or store_credit."
+		}
+	}
+	if in.PolicyOverrideReason != nil {
+		c.overrideReason = strings.TrimSpace(*in.PolicyOverrideReason)
+		if len([]rune(c.overrideReason)) > maxReasonLen {
+			f["policyOverrideReason"] = fmt.Sprintf("At most %d characters.", maxReasonLen)
 		}
 	}
 	return c, f.err()
@@ -223,7 +260,8 @@ type returnRow struct {
 	qty                           int64
 	unit, discount, tax, subtotal decimal.Decimal
 	cgst, sgst, igst              *decimal.Decimal
-	reason                        string
+	reason, condition             string
+	restocked                     bool
 }
 
 // ReturnExcess is one entry of the RETURN_EXCEEDS_SOLD details.
@@ -315,7 +353,7 @@ func matchSold(c cleanReturn, sold []soldLine, currency string) ([]returnRow, er
 				cgst:     refundSharePtr(s.cgst, s.qty, s.returned, take, currency),
 				sgst:     refundSharePtr(s.sgst, s.qty, s.returned, take, currency),
 				igst:     refundSharePtr(s.igst, s.qty, s.returned, take, currency),
-				reason:   l.reason})
+				reason:   l.reason, condition: l.condition})
 			s.returned += take
 			if left -= take; left == 0 {
 				break
@@ -432,7 +470,7 @@ func unlinkedRows(ctx context.Context, tx tenancy.TenantTx, c cleanReturn, curre
 		}
 		pid, sku := v.productID, v.sku
 		out = append(out, returnRow{productID: &pid, variantID: ids[i], name: v.name, sku: &sku, qty: l.qty, unit: l.price,
-			subtotal: money.Round(l.price.Mul(decimal.NewFromInt(l.qty)), currency), reason: l.reason})
+			subtotal: money.Round(l.price.Mul(decimal.NewFromInt(l.qty)), currency), reason: l.reason, condition: l.condition})
 	}
 	return out, f.err()
 }
@@ -443,6 +481,7 @@ type returnSale struct {
 	userID, storeID, customerID int64
 	status, currency, reference string
 	due                         decimal.Decimal
+	date                        time.Time
 }
 
 // lockReturnSale locks the sale a return refers to. Every return of a sale
@@ -451,8 +490,8 @@ type returnSale struct {
 // reported as not found (C-10).
 func lockReturnSale(ctx context.Context, tx tenancy.TenantTx, id int64, p auth.Principal) (returnSale, error) {
 	var s returnSale
-	err := tx.QueryRow(ctx, `SELECT user_id, store_id, customer_id, status, currency, reference, due FROM sales WHERE id = $1 FOR UPDATE`, id).
-		Scan(&s.userID, &s.storeID, &s.customerID, &s.status, &s.currency, &s.reference, &s.due)
+	err := tx.QueryRow(ctx, `SELECT user_id, store_id, customer_id, status, currency, reference, due, date FROM sales WHERE id = $1 FOR UPDATE`, id).
+		Scan(&s.userID, &s.storeID, &s.customerID, &s.status, &s.currency, &s.reference, &s.due, &s.date)
 	if isNoRows(err) {
 		return s, apperr.Invalid("saleId", "Sale not found.")
 	}
@@ -480,13 +519,160 @@ func nextReturnReference(ctx context.Context, tx tenancy.TenantTx) (string, erro
 
 const (
 	qInsertReturn = `INSERT INTO sale_returns (reference, date, status, payment_status, total, tax, paid, due, currency, note,
-			sale_id, customer_id, store_id, created_by, applied_to_due)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NULLIF($10, ''), $11, $12, $13, $14, $15)
+			sale_id, customer_id, store_id, created_by, applied_to_due, settlement, to_store_credit, to_exchange)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NULLIF($10, ''), $11, $12, $13, $14, $15, $16, $17, $18)
 		RETURNING id`
 	qInsertReturnItem = `INSERT INTO return_items (sale_return_id, order_item_id, product_id, variant_id, product_name, sku, quantity,
-			unit_price, discount, tax_amount, cgst, sgst, igst, subtotal, reason)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NULLIF($15, ''))`
+			unit_price, discount, tax_amount, cgst, sgst, igst, subtotal, reason, condition, restocked)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NULLIF($15, ''), NULLIF($16, ''), $17)`
 )
+
+// preparedReturn is a return worked out under the sale's row lock, before
+// anything is written.
+type preparedReturn struct {
+	rows                []returnRow
+	saleID              *int64
+	saleDate            *time.Time
+	storeID, custID     int64
+	currency            string
+	date                time.Time
+	total, tax, applied decimal.Decimal
+}
+
+// prepareReturn locks the sale (when there is one) and prices the return:
+// linked lines from the sold amounts, unlinked lines from the given prices.
+// applied is the part that reduces what the customer still owes on the
+// sale (refund rule A, S10 §5.3).
+func prepareReturn(ctx context.Context, tx tenancy.TenantTx, p auth.Principal, c cleanReturn, s settings, now time.Time) (preparedReturn, error) {
+	var pr preparedReturn
+	date, err := docdate.Parse(c.date, s.loc, now)
+	if err != nil {
+		return pr, err
+	}
+	pr.date = date
+	var saleDue decimal.Decimal
+	pr.storeID, pr.custID, pr.currency = c.storeID, c.customerID, s.currency
+	if c.saleID > 0 {
+		sale, err := lockReturnSale(ctx, tx, c.saleID, p)
+		if err != nil {
+			return pr, err
+		}
+		f := fieldErrs{}
+		if pr.storeID != 0 && pr.storeID != sale.storeID {
+			f["storeId"] = "The store must be the sale's store."
+		}
+		if pr.custID != 0 && pr.custID != sale.customerID {
+			f["customerId"] = "The customer must be the sale's customer."
+		}
+		if err := f.err(); err != nil {
+			return pr, err
+		}
+		id, sd := c.saleID, sale.date
+		pr.storeID, pr.custID, pr.currency, pr.saleID, pr.saleDate, saleDue = sale.storeID, sale.customerID, sale.currency, &id, &sd, sale.due
+		sold, err := soldLines(ctx, tx, c.saleID)
+		if err != nil {
+			return pr, err
+		}
+		if pr.rows, err = matchSold(c, sold, pr.currency); err != nil {
+			return pr, err
+		}
+	} else {
+		if pr.custID, err = checkParties(ctx, tx, cleanSale{customerID: pr.custID, storeID: pr.storeID}, s); err != nil {
+			return pr, err
+		}
+		if pr.rows, err = unlinkedRows(ctx, tx, c, pr.currency); err != nil {
+			return pr, err
+		}
+	}
+	for _, x := range pr.rows {
+		pr.total, pr.tax = pr.total.Add(x.subtotal), pr.tax.Add(x.tax)
+	}
+	pr.applied = decimal.Min(pr.total, saleDue)
+	return pr, nil
+}
+
+// needConditions: with conditions on, every line names one.
+func needConditions(pol ReturnPolicy, c cleanReturn, field string) error {
+	if !pol.Conditions {
+		return nil
+	}
+	f := fieldErrs{}
+	for i, l := range c.lines {
+		if l.condition == "" {
+			f[fmt.Sprintf("%s[%d].condition", field, i)] = "Choose the condition: resellable, damaged or defective."
+		}
+	}
+	return f.err()
+}
+
+// markRestocked decides which rows go back to stock.
+func (pol ReturnPolicy) markRestocked(rows []returnRow) {
+	for i := range rows {
+		rows[i].restocked = pol.restocks(rows[i].condition)
+	}
+}
+
+// returnDeltas are the stock movements of the restocked rows.
+func returnDeltas(pr preparedReturn) map[inventory.Key]int {
+	d := map[inventory.Key]int{}
+	for _, x := range pr.rows {
+		if x.restocked {
+			d[inventory.Key{Store: pr.storeID, Variant: x.variantID}] += int(x.qty)
+		}
+	}
+	return d
+}
+
+// returnSettle is how the value left after rule A is given back.
+type returnSettle struct {
+	mode                            string
+	paid, due, toCredit, toExchange decimal.Decimal
+	payStatus                       string
+}
+
+// writeReturn numbers and stores the return, lowers the sale's due (rule
+// A) and moves the restocked lines into stock. The caller has locked keys.
+func writeReturn(ctx context.Context, tx tenancy.TenantTx, p auth.Principal, c cleanReturn, pr preparedReturn, st returnSettle,
+	keys []inventory.Key, deltas map[inventory.Key]int) (int64, string, error) {
+	ref, err := nextReturnReference(ctx, tx)
+	if err != nil {
+		return 0, "", err
+	}
+	var id int64
+	if err := tx.QueryRow(ctx, qInsertReturn, ref, pr.date, c.status, st.payStatus, pr.total, pr.tax, st.paid, st.due, pr.currency, c.note,
+		pr.saleID, pr.custID, pr.storeID, p.UserID, pr.applied, st.mode, st.toCredit, st.toExchange).Scan(&id); err != nil {
+		return 0, "", err
+	}
+	if pr.applied.IsPositive() {
+		if _, err := tx.Exec(ctx, `UPDATE sales SET due = due - $2,
+				payment_status = CASE WHEN due - $2 <= 0 THEN 'Paid' WHEN paid > 0 THEN 'Partial' ELSE 'Unpaid' END,
+				due_date = CASE WHEN due - $2 <= 0 THEN NULL ELSE due_date END, updated_at = now()
+			WHERE id = $1`, *pr.saleID, pr.applied); err != nil {
+			return 0, "", err
+		}
+	}
+	for _, x := range pr.rows {
+		if _, err := tx.Exec(ctx, qInsertReturnItem, id, x.orderItemID, x.productID, x.variantID, x.name, x.sku, x.qty,
+			x.unit, x.discount, x.tax, x.cgst, x.sgst, x.igst, x.subtotal, x.reason, x.condition, x.restocked); err != nil {
+			return 0, "", err
+		}
+	}
+	if err := inventory.Apply(ctx, tx, keys, deltas, inventory.ReasonReturn, inventory.Ref{Type: "sale_return", ID: id}, p.UserID); err != nil {
+		return 0, "", err
+	}
+	return id, ref, nil
+}
+
+// auditOverride records a return that went ahead against the policy.
+func auditOverride(r *http.Request, tx tenancy.TenantTx, p auth.Principal, id int64, ref string, codes []string, reason string) error {
+	if len(codes) == 0 {
+		return nil
+	}
+	ctx := r.Context()
+	return audit.Write(ctx, tx, audit.Entry{ActorID: p.UserID, Action: "sale_return.policy_override", Entity: "sale_return",
+		EntityID: strconv.FormatInt(id, 10), After: map[string]any{"reference": ref, "codes": codes, "reason": reason},
+		RequestID: httpx.RequestID(ctx), UserAgent: r.UserAgent()})
+}
 
 // createReturn is POST /api/sales/returns.
 func (a *API) createReturn(w http.ResponseWriter, r *http.Request) {
@@ -529,94 +715,59 @@ func (a *API) createReturn(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
-		date, err := docdate.Parse(c.date, s.loc, now)
+		pol, err := loadPolicy(ctx, tx)
 		if err != nil {
 			return err
 		}
-		var (
-			rows    []returnRow
-			saleID  *int64
-			saleDue decimal.Decimal
-		)
-		storeID, custID, currency := c.storeID, c.customerID, s.currency
-		if c.saleID > 0 {
-			sale, err := lockReturnSale(ctx, tx, c.saleID, p)
-			if err != nil {
-				return err
-			}
-			f := fieldErrs{}
-			if storeID != 0 && storeID != sale.storeID {
-				f["storeId"] = "The store must be the sale's store."
-			}
-			if custID != 0 && custID != sale.customerID {
-				f["customerId"] = "The customer must be the sale's customer."
-			}
-			if err := f.err(); err != nil {
-				return err
-			}
-			storeID, custID, currency, saleID, saleDue = sale.storeID, sale.customerID, sale.currency, &c.saleID, sale.due
-			sold, err := soldLines(ctx, tx, c.saleID)
-			if err != nil {
-				return err
-			}
-			if rows, err = matchSold(c, sold, currency); err != nil {
-				return err
-			}
-		} else {
-			if custID, err = checkParties(ctx, tx, cleanSale{customerID: custID, storeID: storeID}, s); err != nil {
-				return err
-			}
-			if rows, err = unlinkedRows(ctx, tx, c, currency); err != nil {
-				return err
-			}
+		if err := needConditions(pol, c, "returnItems"); err != nil {
+			return err
 		}
-		total, tax := decimal.Zero, decimal.Zero
-		deltas := map[inventory.Key]int{}
-		for _, x := range rows {
-			total, tax = total.Add(x.subtotal), tax.Add(x.tax)
-			deltas[inventory.Key{Store: storeID, Variant: x.variantID}] += int(x.qty)
+		pr, err := prepareReturn(ctx, tx, p, c, s, now)
+		if err != nil {
+			return err
 		}
-		// Refund rule (S10 §5.3, option A): the return first reduces what the
-		// customer still owes on the sale; only the rest is refunded.
-		applied := decimal.Min(total, saleDue)
-		pm := pay(total.Sub(applied), c.paid, nil, currency)
+		value := pr.total.Sub(pr.applied)
+		if c.settlement == SettleStoreCredit && s.defaultCustomer != nil && *s.defaultCustomer == pr.custID && value.IsPositive() {
+			return apperr.Invalid("settlement", "Store credit needs a named customer (not Walk-in).")
+		}
+		var linked *violation
+		if pol.RequireLinkedSale && pr.saleID == nil {
+			linked = &violation{CodeSaleRequired, "This shop takes returns only against a recorded sale. Choose the sale."}
+		}
+		codes, err := enforce(p, []*violation{linked, pol.windowClosed(pr.saleDate, now, s.loc), pol.settles(c.settlement, value)}, c.overrideReason)
+		if err != nil {
+			return err
+		}
+		pol.markRestocked(pr.rows)
+		deltas := returnDeltas(pr)
 		keys, _, err := inventory.Lock(ctx, tx, deltas, nil)
 		if err != nil {
 			return err
 		}
-		ref, err := nextReturnReference(ctx, tx)
+		st := returnSettle{mode: c.settlement}
+		if c.settlement == SettleStoreCredit {
+			st.toCredit, st.payStatus = value, "Paid"
+		} else {
+			pm := pay(value, c.paid, nil, pr.currency)
+			st.paid, st.due, st.payStatus = pm.paid, pm.due, pm.status
+		}
+		id, ref, err := writeReturn(ctx, tx, p, c, pr, st, keys, deltas)
 		if err != nil {
 			return err
 		}
-		var id int64
-		if err := tx.QueryRow(ctx, qInsertReturn, ref, date, c.status, pm.status, total, tax, pm.paid, pm.due, currency, c.note,
-			saleID, custID, storeID, p.UserID, applied).Scan(&id); err != nil {
+		if err := creditFromReturn(ctx, tx, s, pr.custID, id, p.UserID, st.toCredit); err != nil {
 			return err
 		}
-		if applied.IsPositive() {
-			if _, err := tx.Exec(ctx, `UPDATE sales SET due = due - $2,
-					payment_status = CASE WHEN due - $2 <= 0 THEN 'Paid' WHEN paid > 0 THEN 'Partial' ELSE 'Unpaid' END,
-					due_date = CASE WHEN due - $2 <= 0 THEN NULL ELSE due_date END, updated_at = now()
-				WHERE id = $1`, *saleID, applied); err != nil {
-				return err
-			}
-		}
-		for _, x := range rows {
-			if _, err := tx.Exec(ctx, qInsertReturnItem, id, x.orderItemID, x.productID, x.variantID, x.name, x.sku, x.qty,
-				x.unit, x.discount, x.tax, x.cgst, x.sgst, x.igst, x.subtotal, x.reason); err != nil {
-				return err
-			}
-		}
-		if err := inventory.Apply(ctx, tx, keys, deltas, inventory.ReasonReturn, inventory.Ref{Type: "sale_return", ID: id}, p.UserID); err != nil {
-			return err
-		}
-		after := map[string]any{"reference": ref, "total": total, "lines": len(rows), "store_id": storeID,
-			"applied_to_due": applied, "refunded": pm.paid}
-		if saleID != nil {
-			after["sale_id"] = *saleID
+		after := map[string]any{"reference": ref, "total": pr.total, "lines": len(pr.rows), "store_id": pr.storeID,
+			"applied_to_due": pr.applied, "refunded": st.paid, "settlement": st.mode, "to_store_credit": st.toCredit}
+		if pr.saleID != nil {
+			after["sale_id"] = *pr.saleID
 		}
 		if err := audit.Write(ctx, tx, audit.Entry{ActorID: p.UserID, Action: "sale_return.create", Entity: "sale_return",
 			EntityID: strconv.FormatInt(id, 10), After: after, RequestID: httpx.RequestID(ctx), UserAgent: r.UserAgent()}); err != nil {
+			return err
+		}
+		if err := auditOverride(r, tx, p, id, ref, codes, c.overrideReason); err != nil {
 			return err
 		}
 		l, err := loadReturns(ctx, tx, []int64{id})
