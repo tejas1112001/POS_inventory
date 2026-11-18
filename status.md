@@ -13,14 +13,14 @@ How to check each item: `docs/UI_CHECKLIST.md`. Last updated: 2026-11-18.
 | 6 (f) | Import templates | Done, committed, deployed to the dev stack (no migration) |
 | 7 (g) | Stock counts | Done, committed, deployed to the dev stack (tenant migration 00021) |
 | 8 (h) | Partial purchase receiving | Done (migration 00022 + backfill, A16 receipts endpoint, A17 old path, Receive goods screen with scanning and labels, report/dashboard); committed (`a6efa50`) and deployed |
-| 9 (i) | Returns policy, exchanges, store credit | Done (migration 00024, A18 policy settings, A19 policy on returns, A20 exchanges, A21/A22 store credit ledger and checkout method, P5/P6 permissions); committed and deployed |
+| 9 (i) | Returns policy, exchanges, store credit | Done (migration 00024, A18 policy settings, A19 policy on returns, A20 exchanges, A21/A22 store credit ledger and checkout method, P5/P6 permissions); committed (`2bb68b2`) and deployed |
 | 10 (j) | Thermal receipt, HSN on lines | Done (migration 00023, settings receiptPaper, HSN snapshot on sale lines, receipts and PDF, thermal CSS); committed and deployed |
 
 ## Notes
 - Test database: `max_connections` raised to 200 in `internal/testdb` (the isolation suite ran out of connections at the default 100 once items 4 and 5 added test shops). Test setup only.
-- Dev stack: running; platform migrations at 14. The dev database has no shops (create one in the console to check in the browser).
+- Dev stack: running; platform migrations at 14, tenant migrations at 24. The dev database has no shops (create one in the console to check in the browser).
 - govulncheck: 1 Go standard library finding (GO-2026-6859); the same on `main`, not caused by this work.
-- Temporary worktree `D:/pos_baseline` (detached `main`, used for baseline test runs) to be removed at the end.
+- Temporary worktree `D:/pos_baseline` removed.
 
 ## Next step
 All ten items are built. Left: owner review of the checklist in the browser, then merge when approved. Known flake: `TestLimitWaitsDoNotUseAttempts` (email quota timing) fails now and then in full runs and passes alone.
