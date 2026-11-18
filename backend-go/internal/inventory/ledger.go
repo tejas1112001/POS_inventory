@@ -29,6 +29,8 @@ const (
 	// batch's quarantine.
 	ReasonQuarantine        = "quarantine"
 	ReasonQuarantineRelease = "quarantine_release"
+	// ReasonWriteOff: units of batches leaving the shop for good (item 5).
+	ReasonWriteOff = "write_off"
 )
 
 // ErrInsufficient means a decrement would take stock below zero.

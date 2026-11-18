@@ -108,6 +108,8 @@ var Catalog = []Permission{
 	{"stock_counts", "complete", "Complete stock counts (post differences)"},
 	{"batches", "view", "View batches and expiry"},                                         // industry P3 P7 (admin, billers)
 	{"batches", "manage", "Manage batches (correct details, switch tracking on products)"}, // P8 (admin)
+	{"batches", "write_off", "Write off batch stock"},                                      // P9 (admin)
+	{"batches", "recall", "Recall batches and lift recalls"},                               // P10 (owner, admin)
 	{"sales_returns", "override_policy", "Override the return policy (with a reason)"},     // P5 (owner, admin)
 	{"customers", "store_credit", "Adjust customer store credit"},                          // P6, owner only
 }

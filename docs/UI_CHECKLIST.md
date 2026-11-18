@@ -575,3 +575,21 @@ How to check:
 Known problems:
 - Units in quarantine keep the batch module and the product's tracking on until they are released or written off (write-off comes with item 5).
 
+## Industry P3 – Item 5: Write-offs and recalls
+
+Use the pharmacy shop from item 4.
+
+How to check:
+1. Batches & expiry → a batch → **Write off** on a store row: choose From (Stock or Quarantine, with the counts), quantity, reason (Expired is chosen for an expired batch, Recalled for a recalled one). Save: the counts go down and the movement list shows "Written off".
+2. Ask for more than is there: refused, nothing changes. Reason **Other** needs a note.
+3. Sidebar → **Write-offs**: the new `WO-000001` is listed; click it to see the lines.
+4. On a batch, **Recall** with a reason: a red banner shows "Recalled … It cannot be sold". Checkout refuses the product if only that batch has stock. **Release** is no longer offered for its quarantine.
+5. A return of a recalled batch goes to quarantine (item 4).
+6. **Where it went** on a batch lists every sale (with the customer's name and phone when not walk-in), returns and write-offs, with totals.
+7. **Lift recall** with a reason: the batch sells again.
+8. A biller sees batches and write-offs but has no Write off, Recall or Lift recall buttons.
+
+Known problems:
+- A write-off made from a batch has one line; several batches in one write-off are possible through the API only.
+- "Returned to supplier" is a write-off reason only; a supplier return with a debit note comes later.
+

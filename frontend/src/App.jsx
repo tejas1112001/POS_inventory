@@ -49,6 +49,7 @@ import StockAdjustments from './pages/StockAdjustments';
 import StockCounts from './pages/StockCounts';
 import StockCountDetail from './pages/StockCountDetail';
 import Batches from './pages/Batches';
+import WriteOffs from './pages/WriteOffs';
 import ShowcaseSettings from './pages/ShowcaseSettings';
 import Stores from './pages/Stores';
 
@@ -135,6 +136,7 @@ function AppRoutes() {
       <Route path="/stock-counts" element={<ProtectedLayout module="stock_counts" action="view"><StockCounts /></ProtectedLayout>} />
       <Route path="/stock-counts/:id" element={<ProtectedLayout module="stock_counts" action="view"><StockCountDetail /></ProtectedLayout>} />
       <Route path="/batches" element={<ProtectedLayout module="batches" action="view"><Batches /></ProtectedLayout>} />
+      <Route path="/write-offs" element={<ProtectedLayout module="batches" action="view"><WriteOffs /></ProtectedLayout>} />
       <Route path="/settings" element={<ProtectedLayout><Settings /></ProtectedLayout>} />
       <Route path="/billing" element={<ProtectedLayout module="billing" action="view"><Billing /></ProtectedLayout>} />
       <Route path="/stores" element={<ProtectedLayout module="stores" action="view"><Stores /></ProtectedLayout>} />

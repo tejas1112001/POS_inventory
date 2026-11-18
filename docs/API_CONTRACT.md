@@ -468,6 +468,17 @@ Returned units of a tracked product go back to the batches the sale line was sol
 
 Switching the module or a product's tracking off stays refused while units are in quarantine (item 1); release or write them off first.
 
+**Item 5: write-offs and recalls** (tenant migration 00029: DB34 `write_offs`, `write_off_lines` (append-only), counter `write_off`, ledger reason `write_off`). Permissions P9 `batches:write_off` (admin) and P10 `batches:recall` (owner, admin).
+
+| # | Method | Path | Guard | Notes |
+|---|---|---|---|---|
+| A30 | POST | `/api/write-offs` | `batches:write_off`, module; `Idempotency-Key` optional | `{storeId, reason: expired|damaged|recalled|returned_to_supplier|other, note (required for other, ≤500), lines[{batchId, quantity, from: stock|quarantine}]}` (1–200 lines; a batch once per `from`). Posted at once as `WO-000001`; units leave stock or quarantine (ledger reason `write_off`). More than is there → 409 `INSUFFICIENT_STOCK`; untracked product → 400. Audit `write_off.create`. 201 → the write-off |
+| A30 | GET | `/api/write-offs?storeId&batchId&limit&offset` | `batches:view`, module | `{items, total}`, newest first. Item: `{id, reference, storeId, storeName, reason, note, createdBy, createdByName, createdAt, units, lines[{batchId, batchNo, expiry, unknown, variantId, productId, productName, sku, from, quantity}]}` |
+| A30 | GET | `/api/write-offs/{id}` | `batches:view`, module | One write-off; 404 if none |
+| A31 | POST | `/api/batches/{id}/recall` | `batches:recall`, module | `{reason (5–500)}`. Checkout stops selling it at once (a sale in flight finishes first or is refused); release is refused; its stock can be written off or quarantined. The unknown batch, or a batch already recalled → 409 `INVALID_STATE`. Audit `batch.recall`. Returns the batch |
+| A31 | POST | `/api/batches/{id}/lift-recall` | `batches:recall`, module | `{reason}`; not recalled → 409. Audit `batch.lift_recall` |
+| A31 | GET | `/api/batches/{id}/trace` | `batches:view`, module | Where the batch went: `{batch, sales[{saleId, reference, date, status, storeId, storeName, customerId, customerName, customerPhone, quantity}], returns[{returnId, reference, date, storeName, quantity, bucket}], writeOffs[{writeOffId, reference, date, storeName, reason, from, quantity}], sold, returned, writtenOff}`. The walk-in customer is not named; `sold` leaves out void sales |
+
 ---
 
 ## 6. Frontend changes (minimal set, Phase 2)

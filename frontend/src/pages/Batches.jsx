@@ -160,7 +160,14 @@ export default function Batches() {
         </div>
       </SectionCard>
 
-      <BatchDialog batchId={open} canManage={hasPermission('batches', 'manage')} onClose={() => setOpen(null)} onSaved={load} />
+      <BatchDialog
+        batchId={open}
+        canManage={hasPermission('batches', 'manage')}
+        canWriteOff={hasPermission('batches', 'write_off')}
+        canRecall={hasPermission('batches', 'recall')}
+        onClose={() => setOpen(null)}
+        onSaved={load}
+      />
     </div>
   );
 }

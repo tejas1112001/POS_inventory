@@ -59,6 +59,14 @@ func (a *API) Mount(rt *rbac.Router) {
 	rt.Handle(http.MethodPut, "/batches/{id}", req("manage"), a.update)
 	rt.Handle(http.MethodPost, "/batches/{id}/quarantine", req("manage"), a.quarantine) // item 4 (A29)
 	rt.Handle(http.MethodPost, "/batches/{id}/release", req("manage"), a.release)
+	// Item 5 (A30, A31): write-offs, recalls, the trace report.
+	need := func(action string) rbac.Requirement { return rbac.Require("batches", action).InModule(Module) }
+	rt.Handle(http.MethodPost, "/batches/{id}/recall", need("recall"), a.recall)
+	rt.Handle(http.MethodPost, "/batches/{id}/lift-recall", need("recall"), a.liftRecall)
+	rt.Handle(http.MethodGet, "/batches/{id}/trace", req("view"), a.trace)
+	rt.Handle(http.MethodPost, "/write-offs", need("write_off"), a.createWriteOff)
+	rt.Handle(http.MethodGet, "/write-offs", req("view"), a.listWriteOffs)
+	rt.Handle(http.MethodGet, "/write-offs/{id}", req("view"), a.getWriteOff)
 }
 
 func tenant(r *http.Request) tenancy.Tenant {

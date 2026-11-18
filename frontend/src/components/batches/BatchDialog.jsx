@@ -3,11 +3,12 @@ import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { InlineAlert } from '@/components/feedback/InlineAlert';
-import { CheckField, TextField } from '@/components/settings/FormKit';
+import { CheckField, SelectField, TextField } from '@/components/settings/FormKit';
 import { formatDate, formatDateTime } from '@/lib/format';
 import { api } from '@/services/api';
 import { toast } from '../../../shared/toast/store';
 import BatchExpiry from './BatchExpiry';
+import { WRITE_OFF_REASONS } from '@/lib/writeOffs';
 
 const REASONS = {
   opening: 'Opening stock',
@@ -25,23 +26,31 @@ const REASONS = {
   tracking_off: 'Tracking switched off',
   quarantine: 'Quarantined',
   quarantine_release: 'Released from quarantine',
+  write_off: 'Written off',
 };
 
 // BatchDialog shows one batch (industry P3 item 1, A23): its stock per
 // store, its movements, and, for batches:manage, a form to correct its
 // details with a reason (A24).
-export default function BatchDialog({ batchId, canManage, onClose, onSaved }) {
+export default function BatchDialog({ batchId, canManage, canWriteOff, canRecall, onClose, onSaved }) {
   const [b, setB] = useState(null);
   const [error, setError] = useState(null);
   const [form, setForm] = useState(null);
   const [busy, setBusy] = useState(false);
   const [move, setMove] = useState(null); // {kind: quarantine | release, storeId, storeName, max, quantity, reason}
+  // Industry P3 item 5: write off from a store, recall or lift it, see where it went.
+  const [wo, setWo] = useState(null); // {storeId, storeName, qty, quarantined, from, quantity, reason, note}
+  const [rc, setRc] = useState(null); // {lift, reason}
+  const [trace, setTrace] = useState(null);
 
   useEffect(() => {
     if (!batchId) return;
     setB(null);
     setForm(null);
     setMove(null);
+    setWo(null);
+    setRc(null);
+    setTrace(null);
     setError(null);
     api.get(`/api/batches/${batchId}`, { quiet: true }).then(setB).catch(setError);
   }, [batchId]);
@@ -101,6 +110,48 @@ export default function BatchDialog({ batchId, canManage, onClose, onSaved }) {
     }
   };
 
+  const run = async (fn, done) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await fn();
+      toast.success(done);
+      onSaved?.();
+    } catch (err) {
+      setError(err);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // A30: one line, posted at once.
+  const doWriteOff = (e) => {
+    e.preventDefault();
+    run(async () => {
+      await api.post(
+        '/api/write-offs',
+        { storeId: wo.storeId, reason: wo.reason, note: wo.note, lines: [{ batchId: b.id, quantity: Number(wo.quantity), from: wo.from }] },
+        { quiet: true },
+      );
+      setB(await api.get(`/api/batches/${b.id}`, { quiet: true }));
+      setWo(null);
+    }, 'Written off.');
+  };
+
+  // A31: recall, or lift a recall, with a reason.
+  const doRecall = (e) => {
+    e.preventDefault();
+    run(async () => {
+      setB(await api.post(`/api/batches/${b.id}/${rc.lift ? 'lift-recall' : 'recall'}`, { reason: rc.reason }, { quiet: true }));
+      setRc(null);
+    }, rc.lift ? 'Recall lifted.' : 'Batch recalled: it can no longer be sold.');
+  };
+
+  const showTrace = () => {
+    setError(null);
+    api.get(`/api/batches/${b.id}/trace`, { quiet: true }).then(setTrace).catch(setError);
+  };
+
   const f = error?.fields || {};
   const set = (k) => (v) => setForm((cur) => ({ ...cur, [k]: v }));
   return (
@@ -116,7 +167,12 @@ export default function BatchDialog({ batchId, canManage, onClose, onSaved }) {
         </DialogHeader>
         {error && !error.fields && <InlineAlert>{error.message}</InlineAlert>}
         {!b && !error && <Loader2 className="mx-auto size-5 animate-spin" aria-label="Loading" />}
-        {b && !form && !move && (
+        {b?.status === 'recalled' && !form && (
+          <InlineAlert>
+            Recalled{b.recalledAt ? ` on ${formatDateTime(b.recalledAt)}` : ''}: {b.recallReason}. It cannot be sold; write it off or keep it in quarantine.
+          </InlineAlert>
+        )}
+        {b && !form && !move && !wo && !rc && (
           <div className="space-y-4 text-sm">
             <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <div>
@@ -151,7 +207,7 @@ export default function BatchDialog({ batchId, canManage, onClose, onSaved }) {
                   <th scope="col" className="py-1 text-right font-medium">
                     Quarantined
                   </th>
-                  {canManage && (
+                  {(canManage || canWriteOff) && (
                     <th scope="col" className="py-1">
                       <span className="sr-only">Actions</span>
                     </th>
@@ -164,15 +220,23 @@ export default function BatchDialog({ batchId, canManage, onClose, onSaved }) {
                     <td className="py-1">{s.storeName}</td>
                     <td className="py-1 text-right tabular-nums">{s.qty}</td>
                     <td className="py-1 text-right tabular-nums">{s.quarantined}</td>
-                    {canManage && (
+                    {(canManage || canWriteOff) && (
                       <td className="py-1 text-right">
-                        {s.qty > 0 && (
+                        {canWriteOff && (s.qty > 0 || s.quarantined > 0) && (
+                          <Button type="button" variant="ghost" size="sm" className="max-sm:h-11"
+                            onClick={() => setWo({ storeId: s.storeId, storeName: s.storeName, qty: s.qty, quarantined: s.quarantined,
+                              from: s.qty > 0 ? 'stock' : 'quarantine', quantity: '1',
+                              reason: b.status === 'recalled' ? 'recalled' : b.expired ? 'expired' : 'damaged', note: '' })}>
+                            Write off
+                          </Button>
+                        )}
+                        {canManage && s.qty > 0 && (
                           <Button type="button" variant="ghost" size="sm" className="max-sm:h-11"
                             onClick={() => setMove({ kind: 'quarantine', storeId: s.storeId, storeName: s.storeName, max: s.qty, quantity: '1', reason: '' })}>
                             Quarantine
                           </Button>
                         )}
-                        {s.quarantined > 0 && !b.expired && b.status !== 'recalled' && (
+                        {canManage && s.quarantined > 0 && !b.expired && b.status !== 'recalled' && (
                           <Button type="button" variant="ghost" size="sm" className="max-sm:h-11"
                             onClick={() => setMove({ kind: 'release', storeId: s.storeId, storeName: s.storeName, max: s.quarantined, quantity: '1', reason: '' })}>
                             Release
@@ -209,14 +273,95 @@ export default function BatchDialog({ batchId, canManage, onClose, onSaved }) {
                 ))}
               </ul>
             </div>
-            {canManage && !b.unknown && (
-              <DialogFooter>
+            {trace && (
+              <div>
+                <h3 className="mb-1 text-sm font-semibold">Where it went</h3>
+                <p className="mb-1 text-xs text-muted-foreground">
+                  Sold {trace.sold} · returned {trace.returned} · written off {trace.writtenOff}. Walk-in customers are not named.
+                </p>
+                <ul className="divide-y rounded-md border text-xs">
+                  {trace.sales.length + trace.returns.length + trace.writeOffs.length === 0 && <li className="p-2 text-muted-foreground">Not sold, returned or written off.</li>}
+                  {trace.sales.map((s) => (
+                    <li key={`s${s.saleId}`} className="p-2">
+                      Sale {s.reference} · {formatDateTime(s.date)} · {s.storeName} · × {s.quantity}
+                      {s.customerName ? ` · ${s.customerName}${s.customerPhone ? ` (${s.customerPhone})` : ''}` : ''}
+                      {s.status === 'Void' ? ' · voided' : ''}
+                    </li>
+                  ))}
+                  {trace.returns.map((x) => (
+                    <li key={`r${x.returnId}-${x.bucket}`} className="p-2">
+                      Return {x.reference} · {formatDateTime(x.date)} · {x.storeName} · × {x.quantity} · {x.bucket === 'quarantine' ? 'to quarantine' : 'back on sale'}
+                    </li>
+                  ))}
+                  {trace.writeOffs.map((x) => (
+                    <li key={`w${x.writeOffId}-${x.from}`} className="p-2">
+                      Write-off {x.reference} · {formatDateTime(x.date)} · {x.storeName} · × {x.quantity} · {x.reason}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            <DialogFooter className="flex-wrap gap-2">
+              {!b.unknown && (
+                <Button type="button" variant="outline" className="max-sm:h-11" onClick={showTrace}>
+                  Where it went
+                </Button>
+              )}
+              {canRecall && !b.unknown && (
+                <Button type="button" variant={b.status === 'recalled' ? 'outline' : 'destructive'} className="max-sm:h-11"
+                  onClick={() => setRc({ lift: b.status === 'recalled', reason: '' })}>
+                  {b.status === 'recalled' ? 'Lift recall' : 'Recall'}
+                </Button>
+              )}
+              {canManage && !b.unknown && (
                 <Button type="button" variant="outline" className="max-sm:h-11" onClick={startEdit}>
                   Correct details
                 </Button>
-              </DialogFooter>
-            )}
+              )}
+            </DialogFooter>
           </div>
+        )}
+        {b && wo && (
+          <form onSubmit={doWriteOff} className="grid gap-3 sm:grid-cols-2">
+            <p className="text-sm sm:col-span-2">Take units out of {wo.storeName} for good. This cannot be undone.</p>
+            <SelectField id="b-wo-from" label="From" value={wo.from} onChange={(v) => setWo((cur) => ({ ...cur, from: v }))}
+              options={[
+                ...(wo.qty > 0 ? [{ value: 'stock', label: `Stock (${wo.qty})` }] : []),
+                ...(wo.quarantined > 0 ? [{ value: 'quarantine', label: `Quarantine (${wo.quarantined})` }] : []),
+              ]} />
+            <TextField id="b-wo-qty" label="Quantity" inputMode="numeric" value={wo.quantity}
+              onChange={(v) => setWo((cur) => ({ ...cur, quantity: v }))} error={f['lines[0].quantity']} />
+            <SelectField id="b-wo-reason" label="Reason" value={wo.reason} onChange={(v) => setWo((cur) => ({ ...cur, reason: v }))} options={WRITE_OFF_REASONS} />
+            <TextField id="b-wo-note" label={wo.reason === 'other' ? 'Note' : 'Note (optional)'} value={wo.note}
+              onChange={(v) => setWo((cur) => ({ ...cur, note: v }))} error={f.note} maxLength={500} />
+            <DialogFooter className="sm:col-span-2">
+              <Button type="button" variant="outline" className="max-sm:h-11" onClick={() => setWo(null)} disabled={busy}>
+                Cancel
+              </Button>
+              <Button type="submit" variant="destructive" className="max-sm:h-11" disabled={busy}>
+                {busy && <Loader2 className="size-4 animate-spin" aria-hidden="true" />} Write off
+              </Button>
+            </DialogFooter>
+          </form>
+        )}
+        {b && rc && (
+          <form onSubmit={doRecall} className="grid gap-3">
+            <p className="text-sm">
+              {rc.lift
+                ? 'The batch can be sold again. Its quarantined units stay in quarantine until released.'
+                : 'Checkout stops selling this batch at once, in every store. Its stock can then only be written off or kept in quarantine.'}
+            </p>
+            <TextField id="b-rc-reason" label="Reason" value={rc.reason} onChange={(v) => setRc((cur) => ({ ...cur, reason: v }))}
+              error={f.reason} maxLength={500} required />
+            <DialogFooter>
+              <Button type="button" variant="outline" className="max-sm:h-11" onClick={() => setRc(null)} disabled={busy}>
+                Cancel
+              </Button>
+              <Button type="submit" variant={rc.lift ? 'default' : 'destructive'} className="max-sm:h-11" disabled={busy}>
+                {busy && <Loader2 className="size-4 animate-spin" aria-hidden="true" />} {rc.lift ? 'Lift recall' : 'Recall batch'}
+              </Button>
+            </DialogFooter>
+          </form>
         )}
         {b && move && (
           <form onSubmit={doMove} className="grid gap-3 sm:grid-cols-2">
