@@ -288,6 +288,47 @@ func Quarantine(ctx context.Context, tx tenancy.TenantTx, storeID, batchID int64
 	return err
 }
 
+// CountBatches sets a tracked variant's batches in a store to counted
+// quantities (industry P3 item 6): batches not in counted go to 0. The
+// stock row moves by the total difference, so stock = batch sum still
+// holds (§1.4). The caller has locked the inventories row; the batch rows
+// are locked here, in batch order. It returns each batch's quantity before.
+func CountBatches(ctx context.Context, tx tenancy.TenantTx, storeID, variantID int64, counted map[int64]int, reason string, ref Ref, userID int64) (map[int64]int, error) {
+	rs, err := lockBatchRows(ctx, tx, storeID, variantID)
+	if err != nil {
+		return nil, err
+	}
+	before := map[int64]int{}
+	ids := make([]int64, 0, len(rs)+len(counted))
+	for _, r := range rs {
+		before[r.batchID] = r.qty
+		ids = append(ids, r.batchID)
+	}
+	for id := range counted {
+		if _, ok := before[id]; !ok {
+			ids = append(ids, id)
+		}
+	}
+	sort.Slice(ids, func(a, b int) bool { return ids[a] < ids[b] })
+	total := 0
+	for _, id := range ids {
+		d := counted[id] - before[id]
+		if d == 0 {
+			continue
+		}
+		if err := batchStep(ctx, tx, storeID, id, d, reason, ref, userID); err != nil {
+			return nil, err
+		}
+		total += d
+	}
+	if total != 0 {
+		if _, err := moveStock(ctx, tx, storeID, variantID, total, reason, ref, userID); err != nil {
+			return nil, err
+		}
+	}
+	return before, nil
+}
+
 // UnknownBatch returns the variant's unknown batch, creating it.
 func UnknownBatch(ctx context.Context, tx tenancy.TenantTx, variantID, userID int64) (int64, error) {
 	var id int64

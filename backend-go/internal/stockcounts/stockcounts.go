@@ -24,6 +24,7 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/attributes"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/audit"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/auth"
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/batches"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/httpx"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/inventory"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/modules"
@@ -136,10 +137,13 @@ type CountJSON struct {
 	UpdatedAt    time.Time  `json:"updatedAt"`
 	CompletedAt  *time.Time `json:"completedAt"`
 
-	Lines          []LineJSON      `json:"lines,omitempty"`
-	Uncounted      []UncountedJSON `json:"uncounted,omitempty"`
-	UncountedTotal *int            `json:"uncountedTotal,omitempty"`
-	Totals         *Totals         `json:"totals,omitempty"`
+	Lines     []LineJSON      `json:"lines,omitempty"`
+	Uncounted []UncountedJSON `json:"uncounted,omitempty"`
+	// UncountedBatches (drafts): batches completion will set to 0 (industry
+	// P3 item 6).
+	UncountedBatches []UncountedBatchJSON `json:"uncountedBatches,omitempty"`
+	UncountedTotal   *int                 `json:"uncountedTotal,omitempty"`
+	Totals           *Totals              `json:"totals,omitempty"`
 }
 
 // LineJSON is one counted variant. For a draft, CurrentQty and Difference
@@ -161,6 +165,16 @@ type LineJSON struct {
 	MovedSince  int       `json:"movedSince"`
 	Expected    *int      `json:"expected"`
 	Difference  int       `json:"difference"`
+	// The batch counted (industry P3 item 6, A32); null for a line with no
+	// batch. A product with batch lines is counted by batch, and its line
+	// with no batch counts the unknown batch.
+	BatchID *int64  `json:"batchId"`
+	BatchNo *string `json:"batchNo"`
+	Expiry  *string `json:"expiry"`
+	Expired bool    `json:"expired"`
+	ByBatch bool    `json:"byBatch"`
+	// TracksBatches: the product can be counted by batch.
+	TracksBatches bool `json:"tracksBatches"`
 }
 
 // UncountedJSON is a variant in scope that has no line (left unchanged on
@@ -248,15 +262,28 @@ func scopeText(category, brand string) string {
 	return "Whole store"
 }
 
+// qLines: a line of a product counted by batch (bm.on) compares with its
+// batch's stock (the unknown batch for the line with no batch); other lines
+// with the product's stock.
 const qLines = `SELECT l.id, l.variant_id, v.product_id, coalesce(p.name, ''), coalesce(v.sku::text, ''), coalesce(v.item_barcode, ''),
 		v.attributes, p.attributes, p.variant_dims, l.counted_qty, l.counted_at, l.counted_by, coalesce(u.name, ''),
-		coalesce(i.qty, 0),
-		coalesce((SELECT sum(m.delta) FROM stock_movements m WHERE m.store_id = $2 AND m.variant_id = l.variant_id
-			AND m.created_at > l.counted_at AND NOT (m.ref_type IS NOT DISTINCT FROM 'stock_count' AND m.ref_id = $1)), 0),
-		l.expected_at_completion, l.delta
+		CASE WHEN bm.on THEN coalesce((SELECT s.qty FROM batch_stock s WHERE s.store_id = $2 AND s.batch_id = lb.id), 0)
+			ELSE coalesce(i.qty, 0) END,
+		CASE WHEN bm.on THEN coalesce((SELECT sum(m.delta) FROM batch_movements m WHERE m.store_id = $2 AND m.batch_id = lb.id
+				AND m.bucket = 'stock' AND m.created_at > l.counted_at AND NOT (m.ref_type IS NOT DISTINCT FROM 'stock_count' AND m.ref_id = $1)), 0)
+			ELSE coalesce((SELECT sum(m.delta) FROM stock_movements m WHERE m.store_id = $2 AND m.variant_id = l.variant_id
+				AND m.created_at > l.counted_at AND NOT (m.ref_type IS NOT DISTINCT FROM 'stock_count' AND m.ref_id = $1)), 0) END,
+		l.expected_at_completion, l.delta,
+		l.batch_id, b.batch_no::text, to_char(b.expiry_date, 'YYYY-MM-DD'),
+		coalesce(b.expiry_date < (now() AT TIME ZONE (SELECT timezone FROM settings WHERE id = 1))::date, false), bm.on,
+		p.tracks_batches AND EXISTS (SELECT 1 FROM settings WHERE id = 1 AND 'batch_expiry' = ANY(modules))
 	FROM stock_count_lines l
 	JOIN product_variants v ON v.id = l.variant_id
 	JOIN products p ON p.id = v.product_id
+	LEFT JOIN batches b ON b.id = l.batch_id
+	CROSS JOIN LATERAL (SELECT p.tracks_batches AND EXISTS (SELECT 1 FROM settings WHERE id = 1 AND 'batch_expiry' = ANY(modules))
+		AND EXISTS (SELECT 1 FROM stock_count_lines o WHERE o.count_id = l.count_id AND o.variant_id = l.variant_id AND o.batch_id IS NOT NULL) AS on) bm
+	CROSS JOIN LATERAL (SELECT coalesce(l.batch_id, (SELECT ub.id FROM batches ub WHERE ub.variant_id = l.variant_id AND ub.is_unknown)) AS id) lb
 	LEFT JOIN inventories i ON i.store_id = $2 AND i.variant_id = l.variant_id
 	LEFT JOIN users u ON u.id = l.counted_by
 	WHERE l.count_id = $1 AND (cardinality($3::bigint[]) = 0 OR l.variant_id = ANY($3))
@@ -315,7 +342,8 @@ func loadLines(ctx context.Context, tx tenancy.TenantTx, countID, storeID int64,
 			delta          *int
 		)
 		if err := rows.Scan(&l.ID, &l.VariantID, &l.ProductID, &l.ProductName, &l.SKU, &l.Barcode, &vAttrs, &pAttrs, &dims,
-			&l.CountedQty, &l.CountedAt, &by, &byName, &l.CurrentQty, &l.MovedSince, &l.Expected, &delta); err != nil {
+			&l.CountedQty, &l.CountedAt, &by, &byName, &l.CurrentQty, &l.MovedSince, &l.Expected, &delta,
+			&l.BatchID, &l.BatchNo, &l.Expiry, &l.Expired, &l.ByBatch, &l.TracksBatches); err != nil {
 			return nil, err
 		}
 		l.Label = variantLabel(vAttrs, pAttrs, dims)
@@ -393,14 +421,21 @@ func detail(ctx context.Context, tx tenancy.TenantTx, id int64) (CountJSON, erro
 			t.UnitsDown -= l.Difference
 		}
 	}
-	c.Totals = &t
 	if c.Status == StatusDraft {
 		u, total, err := loadUncounted(ctx, tx, c)
 		if err != nil {
 			return c, err
 		}
 		c.Uncounted, c.UncountedTotal = u, &total
+		if c.UncountedBatches, err = loadUncountedBatches(ctx, tx, c.ID, c.StoreID); err != nil {
+			return c, err
+		}
+		for _, b := range c.UncountedBatches {
+			t.Changed++
+			t.UnitsDown += b.CurrentQty
+		}
 	}
+	c.Totals = &t
 	return c, nil
 }
 
@@ -587,6 +622,11 @@ type LineIn struct {
 	Code      *string   `json:"code"`
 	Qty       money.Int `json:"qty"`
 	Add       money.Int `json:"add"`
+	// Industry P3 item 6 (A32): the batch counted, or a batch number and
+	// expiry found on the shelf (the batch is created).
+	BatchID money.Int `json:"batchId"`
+	BatchNo *string   `json:"batchNo"`
+	Expiry  *string   `json:"expiry"`
 }
 
 type updateIn struct {
@@ -594,6 +634,8 @@ type updateIn struct {
 	Note    *string   `json:"note"`
 	Lines   []LineIn  `json:"lines"`
 	Remove  []int64   `json:"remove"`
+	// RemoveLines removes single lines by id (a batch line).
+	RemoveLines []int64 `json:"removeLines"`
 }
 
 // UpdateJSON is the PUT answer: the changed lines only (a scan must stay
@@ -604,6 +646,8 @@ type UpdateJSON struct {
 	LineCount int        `json:"lineCount"`
 	Lines     []LineJSON `json:"lines"`
 	Removed   []int64    `json:"removed"`
+	// RemovedLines are the line ids removed by removeLines.
+	RemovedLines []int64 `json:"removedLines"`
 }
 
 type draft struct {
@@ -650,12 +694,14 @@ const (
 		WHERE v.id = ANY($1) AND v.deleted_at IS NULL AND p.deleted_at IS NULL`
 	qOtherDraft = `SELECT DISTINCT ON (l.variant_id) l.variant_id, c.reference FROM stock_count_lines l JOIN stock_counts c ON c.id = l.count_id
 		WHERE l.variant_id = ANY($1) AND c.store_id = $2 AND c.status = 'Draft' AND c.id <> $3 ORDER BY l.variant_id, c.id`
-	qCurrent = `SELECT variant_id, counted_qty FROM stock_count_lines WHERE count_id = $1 AND variant_id = ANY($2)`
-	qUpsert  = `INSERT INTO stock_count_lines (count_id, variant_id, counted_qty, counted_by)
-		SELECT $1, x.v, x.q, NULLIF($4, 0) FROM unnest($2::bigint[], $3::int[]) AS x(v, q)
-		ON CONFLICT (count_id, variant_id) DO UPDATE SET counted_qty = EXCLUDED.counted_qty, counted_at = now(), counted_by = EXCLUDED.counted_by`
-	qRemove = `DELETE FROM stock_count_lines WHERE count_id = $1 AND variant_id = ANY($2) RETURNING variant_id`
-	qBump   = `UPDATE stock_counts SET version = version + 1, updated_at = now(), note = CASE WHEN $2 THEN NULLIF($3, '') ELSE note END
+	qCurrent = `SELECT variant_id, coalesce(batch_id, 0), counted_qty FROM stock_count_lines WHERE count_id = $1 AND variant_id = ANY($2)`
+	qUpsert  = `INSERT INTO stock_count_lines (count_id, variant_id, batch_id, counted_qty, counted_by)
+		SELECT $1, x.v, NULLIF(x.b, 0), x.q, NULLIF($5, 0) FROM unnest($2::bigint[], $3::bigint[], $4::int[]) AS x(v, b, q)
+		ON CONFLICT (count_id, variant_id, (coalesce(batch_id, 0))) DO UPDATE
+		SET counted_qty = EXCLUDED.counted_qty, counted_at = now(), counted_by = EXCLUDED.counted_by`
+	qRemove      = `DELETE FROM stock_count_lines WHERE count_id = $1 AND variant_id = ANY($2) RETURNING variant_id`
+	qRemoveLines = `DELETE FROM stock_count_lines WHERE count_id = $1 AND id = ANY($2) RETURNING id`
+	qBump        = `UPDATE stock_counts SET version = version + 1, updated_at = now(), note = CASE WHEN $2 THEN NULLIF($3, '') ELSE note END
 		WHERE id = $1 RETURNING version, (SELECT count(*) FROM stock_count_lines WHERE count_id = $1)`
 )
 
@@ -665,6 +711,10 @@ type change struct {
 	variant int64
 	qty     int
 	add     bool
+	// Industry P3 item 6: the batch (0: none), or a new one's number and expiry.
+	batch   int64
+	batchNo string
+	expiry  time.Time
 }
 
 // apply resolves codes, checks scope and other drafts, and writes the
@@ -746,28 +796,35 @@ func apply(ctx context.Context, tx tenancy.TenantTx, d draft, in []change, codes
 	if err := apperr.Fields(f); err != nil {
 		return nil, err
 	}
-	cur := map[int64]int{}
+	if err := resolveCountBatches(ctx, tx, in, uid); err != nil {
+		return nil, err
+	}
+	type lineKey struct{ v, b int64 }
+	cur := map[lineKey]int{}
 	rows, err = tx.Query(ctx, qCurrent, d.id, ids)
 	if err != nil {
 		return nil, err
 	}
 	for rows.Next() {
-		var id int64
+		var k lineKey
 		var q int
-		if err := rows.Scan(&id, &q); err != nil {
+		if err := rows.Scan(&k.v, &k.b, &q); err != nil {
 			rows.Close()
 			return nil, err
 		}
-		cur[id] = q
+		cur[k] = q
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+	var keys []lineKey
+	seenKey := map[lineKey]bool{}
 	for _, c := range in {
+		k := lineKey{c.variant, c.batch}
 		q := c.qty
 		if c.add {
-			q += cur[c.variant]
+			q += cur[k]
 		}
 		switch {
 		case q < 0:
@@ -775,16 +832,26 @@ func apply(ctx context.Context, tx tenancy.TenantTx, d draft, in []change, codes
 		case q > MaxQty:
 			f[c.field] = fmt.Sprintf("At most %d.", MaxQty)
 		}
-		cur[c.variant] = q
+		cur[k] = q
+		if !seenKey[k] {
+			seenKey[k] = true
+			keys = append(keys, k)
+		}
 	}
 	if err := apperr.Fields(f); err != nil {
 		return nil, err
 	}
-	qs := make([]int32, len(ids))
-	for i, id := range ids {
-		qs[i] = int32(cur[id]) //nolint:gosec // G115: at most MaxQty
+	sort.Slice(keys, func(i, j int) bool {
+		if keys[i].v != keys[j].v {
+			return keys[i].v < keys[j].v
+		}
+		return keys[i].b < keys[j].b
+	})
+	vs, bs, qs := make([]int64, len(keys)), make([]int64, len(keys)), make([]int32, len(keys))
+	for i, k := range keys {
+		vs[i], bs[i], qs[i] = k.v, k.b, int32(cur[k]) //nolint:gosec // G115: at most MaxQty
 	}
-	if _, err := tx.Exec(ctx, qUpsert, d.id, ids, qs, uid); err != nil {
+	if _, err := tx.Exec(ctx, qUpsert, d.id, vs, bs, qs, uid); err != nil {
 		return nil, err
 	}
 	return ids, nil
@@ -804,7 +871,7 @@ func (a *API) update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	f := map[string]string{}
-	if len(in.Lines)+len(in.Remove) > MaxLinesPerPut {
+	if len(in.Lines)+len(in.Remove)+len(in.RemoveLines) > MaxLinesPerPut {
 		f["lines"] = fmt.Sprintf("At most %d changes at a time.", MaxLinesPerPut)
 	}
 	note := cleanNote(in.Note, f)
@@ -842,11 +909,42 @@ func (a *API) update(w http.ResponseWriter, r *http.Request) {
 			}
 			c.qty, c.add = int(l.Add.V), true
 		}
+		hasNo := l.BatchNo != nil && strings.TrimSpace(*l.BatchNo) != ""
+		switch {
+		case l.BatchID.Valid && hasNo:
+			f[key+".batchId"] = "Give either batchId or batchNo with expiry."
+		case l.BatchID.Valid && l.BatchID.V <= 0:
+			f[key+".batchId"] = "batchId is invalid."
+		case l.BatchID.Valid:
+			c.batch = l.BatchID.V
+		case hasNo:
+			no, ok := batches.ValidBatchNo(*l.BatchNo)
+			if !ok {
+				f[key+".batchNo"] = "Batch number must be 1 to 40 characters."
+			}
+			c.batchNo = no
+			exp := ""
+			if l.Expiry != nil {
+				exp = *l.Expiry
+			}
+			t, err := batches.ParseExpiry(exp)
+			if err != nil {
+				f[key+".expiry"] = "Expiry: " + err.Error() + "."
+			}
+			c.expiry = t
+		case l.Expiry != nil && strings.TrimSpace(*l.Expiry) != "":
+			f[key+".batchNo"] = "Give the batch number with the expiry."
+		}
 		changes[i] = c
 	}
 	for _, v := range in.Remove {
 		if v <= 0 {
 			f["remove"] = "remove holds variant ids."
+		}
+	}
+	for _, v := range in.RemoveLines {
+		if v <= 0 {
+			f["removeLines"] = "removeLines holds line ids."
 		}
 	}
 	if err := apperr.Fields(f); err != nil {
@@ -880,6 +978,16 @@ func (a *API) update(w http.ResponseWriter, r *http.Request) {
 				return err
 			}
 		}
+		out.RemovedLines = []int64{}
+		if len(in.RemoveLines) > 0 {
+			rows, err := tx.Query(ctx, qRemoveLines, id, in.RemoveLines)
+			if err != nil {
+				return err
+			}
+			if out.RemovedLines, err = pgx.CollectRows(rows, pgx.RowTo[int64]); err != nil {
+				return err
+			}
+		}
 		if err := tx.QueryRow(ctx, qBump, id, note != nil, deref(note)).Scan(&out.Version, &out.LineCount); err != nil {
 			return err
 		}
@@ -904,9 +1012,9 @@ type versionIn struct {
 }
 
 const (
-	qCountedLines = `SELECT variant_id, counted_qty FROM stock_count_lines WHERE count_id = $1 ORDER BY variant_id`
+	qCountedLines = `SELECT id, variant_id, coalesce(batch_id, 0), counted_qty FROM stock_count_lines WHERE count_id = $1 ORDER BY variant_id, id`
 	qSetPosted    = `UPDATE stock_count_lines l SET expected_at_completion = x.e, delta = x.d
-		FROM unnest($2::bigint[], $3::int[], $4::int[]) AS x(v, e, d) WHERE l.count_id = $1 AND l.variant_id = x.v`
+		FROM unnest($2::bigint[], $3::int[], $4::int[]) AS x(id, e, d) WHERE l.count_id = $1 AND l.id = x.id`
 	qFinish = `UPDATE stock_counts SET status = $2, completed_by = CASE WHEN $2 = 'Completed' THEN NULLIF($3, 0) END,
 		completed_at = CASE WHEN $2 = 'Completed' THEN now() END, version = version + 1, updated_at = now() WHERE id = $1`
 )
@@ -937,16 +1045,18 @@ func (a *API) complete(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		var ids []int64
-		counted := map[int64]int{}
+		byVar := map[int64][]countLine{}
 		for rows.Next() {
 			var v int64
-			var q int
-			if err := rows.Scan(&v, &q); err != nil {
+			var l countLine
+			if err := rows.Scan(&l.id, &v, &l.batch, &l.qty); err != nil {
 				rows.Close()
 				return err
 			}
-			ids = append(ids, v)
-			counted[v] = q
+			if _, ok := byVar[v]; !ok {
+				ids = append(ids, v)
+			}
+			byVar[v] = append(byVar[v], l)
 		}
 		rows.Close()
 		if err := rows.Err(); err != nil {
@@ -959,25 +1069,35 @@ func (a *API) complete(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
-		exp, deltas := make([]int32, len(ids)), make([]int32, len(ids))
-		var changed, up, down int
-		for i, v := range ids {
-			delta := counted[v] - have[v]
-			exp[i], deltas[i] = int32(have[v]), int32(delta) //nolint:gosec // G115: quantities are bounded
-			if delta == 0 {
-				continue
+		tr, err := inventory.Tracked(ctx, tx, ids)
+		if err != nil {
+			return err
+		}
+		var lineIDs []int64
+		var exp, deltas []int32
+		var changed, up, down, nlines int
+		for _, v := range ids {
+			lines := byVar[v]
+			nlines += len(lines)
+			byBatch := false
+			for _, l := range lines {
+				byBatch = byBatch || (tr[v] && l.batch != 0)
 			}
-			changed++
-			if delta > 0 {
-				up += delta
-			} else {
-				down -= delta
-			}
-			if _, err := inventory.Move(ctx, tx, d.storeID, v, delta, inventory.ReasonStockCount, inventory.Ref{Type: refType, ID: id}, uid); err != nil {
+			e, df, u, dn, err := postVariant(ctx, tx, d.storeID, v, lines, have[v], byBatch, inventory.Ref{Type: refType, ID: id}, uid)
+			if err != nil {
 				return err
 			}
+			if u+dn > 0 {
+				changed++
+			}
+			up, down = up+u, down+dn
+			for _, l := range lines {
+				lineIDs = append(lineIDs, l.id)
+				exp = append(exp, int32(e[l.id]))        //nolint:gosec // G115: quantities are bounded
+				deltas = append(deltas, int32(df[l.id])) //nolint:gosec // G115: quantities are bounded
+			}
 		}
-		if _, err := tx.Exec(ctx, qSetPosted, id, ids, exp, deltas); err != nil {
+		if _, err := tx.Exec(ctx, qSetPosted, id, lineIDs, exp, deltas); err != nil {
 			return err
 		}
 		if _, err := tx.Exec(ctx, qFinish, id, StatusCompleted, uid); err != nil {
@@ -985,7 +1105,7 @@ func (a *API) complete(w http.ResponseWriter, r *http.Request) {
 		}
 		if err := audit.Write(ctx, tx, audit.Entry{ActorID: uid, Action: "stock_count.complete", Entity: "stock_count",
 			EntityID:  strconv.FormatInt(id, 10),
-			After:     map[string]any{"store_id": d.storeID, "lines": len(ids), "changed": changed, "units_up": up, "units_down": down},
+			After:     map[string]any{"store_id": d.storeID, "lines": nlines, "changed": changed, "units_up": up, "units_down": down},
 			RequestID: httpx.RequestID(ctx), UserAgent: r.UserAgent()}); err != nil {
 			return err
 		}

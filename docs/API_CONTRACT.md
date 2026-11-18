@@ -479,6 +479,16 @@ Switching the module or a product's tracking off stays refused while units are i
 | A31 | POST | `/api/batches/{id}/lift-recall` | `batches:recall`, module | `{reason}`; not recalled → 409. Audit `batch.lift_recall` |
 | A31 | GET | `/api/batches/{id}/trace` | `batches:view`, module | Where the batch went: `{batch, sales[{saleId, reference, date, status, storeId, storeName, customerId, customerName, customerPhone, quantity}], returns[{returnId, reference, date, storeName, quantity, bucket}], writeOffs[{writeOffId, reference, date, storeName, reason, from, quantity}], sold, returned, writtenOff}`. The walk-in customer is not named; `sold` leaves out void sales |
 
+**Item 6: stock counts per batch** (tenant migration 00030: DB35 `stock_count_lines.batch_id`; unique key `(count_id, variant_id, batch or none)`).
+
+A product counted with at least one batch line is counted **by batch**: on completion each of its batches in the store becomes its counted quantity, its line with no batch counts the unknown batch, and batches with no line go to 0. A product counted with no batch line is counted as a whole, as before (a decrease comes out earliest expiry first).
+
+| # | Method | Path | Guard | Notes |
+|---|---|---|---|---|
+| A32 | PUT | `/api/stock-counts/{id}` | as before | `lines[]` accept `batchId` (a batch of that product), or `batchNo` + `expiry` (`YYYY-MM-DD` or `MM/YYYY`) for a batch found on the shelf (created; an existing number with another expiry → 400 `lines[i].expiry`). Batches on an untracked product → 400; module off → 403 `MODULE_OFF`. New `removeLines[]` (line ids; answer `removedLines`). The answer's `lines` hold every line of the changed items |
+| A32 | GET | `/api/stock-counts/{id}` | as before | Lines gain `batchId, batchNo, expiry, expired, byBatch, tracksBatches`; for a product counted by batch, `currentQty`/`movedSince`/`difference` are the batch's. Drafts gain `uncountedBatches[{batchId, batchNo, expiry, unknown, variantId, productName, sku, currentQty}]` (set to 0 on completion; included in `totals`) |
+| A32 | POST | `/api/stock-counts/{id}/complete` | as before | Posts each batch's difference (ledger reason `stock_count` on both ledgers); the product's stock moves by their sum. Each line's `expected`/`difference` is its batch's |
+
 ---
 
 ## 6. Frontend changes (minimal set, Phase 2)

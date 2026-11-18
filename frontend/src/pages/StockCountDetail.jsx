@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { InlineAlert } from '@/components/feedback/InlineAlert';
 import PrintLabelsDialog from '@/components/products/PrintLabelsDialog';
 import CountStatus from '@/components/stock/CountStatus';
+import CountBatchDialog from '@/components/stock/CountBatchDialog';
 import { usePermission } from '@/context/PermissionContext';
 import { useModules } from '@/hooks/useModules';
 import { useScanner } from '@/hooks/useScanner';
@@ -43,6 +44,7 @@ export default function StockCountDetail() {
   const [confirm, setConfirm] = useState('');
   const [showUncounted, setShowUncounted] = useState(false);
   const [labels, setLabels] = useState(false);
+  const [addBatch, setAddBatch] = useState(null); // a line: count one of its batches (industry P3 item 6)
   const fileRef = useRef(null);
 
   const draft = count?.status === 'Draft';
@@ -72,13 +74,20 @@ export default function StockCountDetail() {
     try {
       const r = await api.put(`/api/stock-counts/${id}`, body, { quiet: true });
       setVersion(r.version);
-      setLines((cur) => {
-        const byId = new Map(cur.map((l) => [l.variantId, l]));
-        for (const l of r.lines || []) byId.set(l.variantId, l);
-        for (const v of r.removed || []) byId.delete(v);
-        return [...byId.values()];
-      });
+      // The answer holds every line of the changed items (a product counted
+      // by batch has several), so they replace that item's lines.
+      const touched = new Set((r.lines || []).map((l) => l.variantId));
+      const gone = new Set(r.removed || []);
+      const goneLines = new Set(r.removedLines || []);
+      setLines((cur) => [
+        ...cur.filter((l) => !touched.has(l.variantId) && !gone.has(l.variantId) && !goneLines.has(l.id)),
+        ...(r.lines || []),
+      ]);
       setCount((c) => (c ? { ...c, lineCount: r.lineCount } : c));
+      // Batch changes move what completion sets to 0: refresh the summary.
+      if ((body.lines || []).some((l) => l.batchId || l.batchNo) || body.removeLines?.length) {
+        api.get(`/api/stock-counts/${id}`, { quiet: true }).then((c) => setCount(c)).catch(() => {});
+      }
       return r;
     } catch (err) {
       if (!quietError) setActionError(err);
@@ -104,7 +113,7 @@ export default function StockCountDetail() {
   const setQty = async (line, value) => {
     const n = Math.floor(Number(value));
     if (value === '' || !Number.isFinite(n) || n < 0 || n === line.countedQty) return;
-    await change({ lines: [{ variantId: line.variantId, qty: n }] }).catch(() => {});
+    await change({ lines: [{ variantId: line.variantId, ...(line.batchId ? { batchId: line.batchId } : {}), qty: n }] }).catch(() => {});
   };
 
   const countZero = async (u) => {
@@ -130,6 +139,26 @@ export default function StockCountDetail() {
     } finally {
       setBusy('');
       if (fileRef.current) fileRef.current.value = '';
+    }
+  };
+
+  // Expired batches found on the shelf: one write-off from the result (A30).
+  const expiredFound = !draft && count?.status === 'Completed' ? lines.filter((l) => l.batchId && l.expired && l.countedQty > 0) : [];
+  const canWriteOff = hasModule('batch_expiry') && hasPermission('batches', 'write_off');
+  const writeOffExpired = async () => {
+    setBusy('writeoff');
+    setActionError(null);
+    try {
+      const w = await api.post(
+        '/api/write-offs',
+        { storeId: count.storeId, reason: 'expired', note: `Found in ${count.reference}`, lines: expiredFound.map((l) => ({ batchId: l.batchId, quantity: l.countedQty, from: 'stock' })) },
+        { quiet: true },
+      );
+      toast.success(`Written off as ${w.reference}.`);
+    } catch (err) {
+      setActionError(err);
+    } finally {
+      setBusy('');
     }
   };
 
@@ -302,7 +331,7 @@ export default function StockCountDetail() {
                 </tr>
               )}
               {lines.map((l) => (
-                <tr key={l.variantId}>
+                <tr key={l.id}>
                   <td className="px-3 py-2">
                     <div className="font-medium">{l.productName}</div>
                     <div className="text-xs text-muted-foreground">
@@ -310,6 +339,16 @@ export default function StockCountDetail() {
                       {l.sku}
                       {l.barcode ? ` · ${l.barcode}` : ''}
                     </div>
+                    {(l.batchId || l.byBatch) && (
+                      <div className={cn('text-xs', l.expired ? 'font-medium text-destructive' : 'text-muted-foreground')}>
+                        {l.batchId ? `Batch ${l.batchNo}${l.expiry ? ` · Exp ${l.expiry}` : ''}${l.expired ? ' · expired' : ''}` : 'No batch'}
+                      </div>
+                    )}
+                    {canEdit && l.tracksBatches && (
+                      <button type="button" className="text-xs font-medium text-primary underline-offset-2 hover:underline" onClick={() => setAddBatch(l)}>
+                        Count a batch
+                      </button>
+                    )}
                     {draft && l.movedSince !== 0 && (
                       <div className="text-xs text-amber-700 dark:text-amber-400">Stock changed by {signed(l.movedSince)} since counted</div>
                     )}
@@ -317,7 +356,7 @@ export default function StockCountDetail() {
                   <td className="px-3 py-2">
                     {canEdit ? (
                       <input
-                        key={`${l.variantId}-${l.countedQty}`}
+                        key={`${l.id}-${l.countedQty}`}
                         type="number"
                         min="0"
                         className={inputCls}
@@ -346,7 +385,7 @@ export default function StockCountDetail() {
                         type="button"
                         className="rounded p-1.5 text-muted-foreground hover:bg-accent"
                         aria-label={`Remove ${itemName(l)}`}
-                        onClick={() => change({ remove: [l.variantId] }).catch(() => {})}
+                        onClick={() => change({ removeLines: [l.id] }).catch(() => {})}
                       >
                         <X className="size-4" />
                       </button>
@@ -358,6 +397,24 @@ export default function StockCountDetail() {
           </table>
         </div>
       </SectionCard>
+
+      {draft && count.uncountedBatches?.length > 0 && (
+        <InlineAlert kind="warning">
+          These batches have no line and will be set to 0 when you complete (their products are counted by batch):{' '}
+          {count.uncountedBatches.map((b) => `${b.productName} ${b.unknown ? 'No batch' : b.batchNo} (${b.currentQty})`).join(', ')}.
+        </InlineAlert>
+      )}
+      {expiredFound.length > 0 && canWriteOff && (
+        <InlineAlert kind="warning">
+          {expiredFound.length} expired batch{expiredFound.length === 1 ? ' was' : 'es were'} found on the shelf.{' '}
+          <Button type="button" size="sm" variant="destructive" className="ml-2" disabled={!!busy} onClick={writeOffExpired}>
+            {busy === 'writeoff' && <Loader2 className="size-4 animate-spin" aria-hidden="true" />} Write off expired
+          </Button>
+        </InlineAlert>
+      )}
+      {addBatch && (
+        <CountBatchDialog line={addBatch} storeId={count.storeId} onAdd={(l) => change({ lines: [l] }, { quietError: true })} onClose={() => setAddBatch(null)} />
+      )}
 
       {draft && (count.uncountedTotal ?? 0) > 0 && (
         <SectionCard>
@@ -441,7 +498,15 @@ export default function StockCountDetail() {
       {labels && (
         <PrintLabelsDialog
           title={count.reference}
-          rows={lines.map((l) => ({ id: l.variantId, name: itemName(l), sku: l.sku, itemBarcode: l.barcode || null, copies: l.countedQty }))}
+          rows={lines.map((l) => ({
+            key: l.id,
+            id: l.variantId,
+            name: itemName(l),
+            sku: l.sku,
+            itemBarcode: l.barcode || null,
+            copies: l.countedQty,
+            ...(l.batchId ? { batchId: l.batchId, batchLabel: `Batch ${l.batchNo}` } : {}),
+          }))}
           onClose={() => setLabels(false)}
         />
       )}

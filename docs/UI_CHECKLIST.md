@@ -593,3 +593,20 @@ Known problems:
 - A write-off made from a batch has one line; several batches in one write-off are possible through the API only.
 - "Returned to supplier" is a write-off reason only; a supplier return with a debit note comes later.
 
+## Industry P3 – Item 6: Stock counts per batch
+
+Use a pharmacy product with 10 units of "No batch" stock and batch B1 × 3.
+
+How to check:
+1. Stock counts → New count → scan or type the product: the line has a **Count a batch** link.
+2. **Count a batch** → B1 → 2. Then **Count a batch** → "Found on the shelf: new batch…" → number SHELF1, expiry 03/2028 → 5; again SHELF2 with last month's expiry → 4. Each line shows its batch; SHELF2 shows "expired" in red.
+3. An amber note lists "No batch (10)": it will be set to 0 on completion because the product is now counted by batch. Totals include it.
+4. Typing B1 again with another expiry is refused ("on record with another expiry date").
+5. Complete: Batches & expiry shows B1 2, SHELF1 5, SHELF2 4, no "No batch" stock; the product's stock is 11.
+6. On the completed count an amber note offers **Write off expired**: it creates one write-off (reason Expired) for SHELF2's 4 units.
+7. A count that only scans the product (no batch line) works as before; a decrease is taken from the earliest expiry first.
+8. Products that do not track batches count exactly as before.
+
+Known problems:
+- Scanning adds to the line with no batch; for a product counted by batch that line counts its "No batch" stock.
+
