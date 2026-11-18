@@ -97,7 +97,7 @@ func TestIndustryImport(t *testing.T) {
 	fw := get(t, host, "/api/products/import/template?type=footwear&format=csv", tok)
 	require.NotContains(t, strings.SplitN(fw.Raw, "\n", 2)[0], "size_system", "a clothing shop has no size system attribute")
 	require.True(t, strings.HasPrefix(get(t, host, "/api/products/import/template", tok).Raw, "name,sku,price,cost,barcode"))
-	require.Equal(t, 400, get(t, host, "/api/products/import/template?type=pharmacy", tok).Code)
+	require.Equal(t, 400, get(t, host, "/api/products/import/template?type=bakery", tok).Code)
 
 	// A13: an Excel file; rows with the same article number are one
 	// product; the dry run shows the plan and writes nothing.

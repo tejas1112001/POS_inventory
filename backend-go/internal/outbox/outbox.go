@@ -20,7 +20,8 @@ const (
 	KindTest           = "test"
 	KindCustomer       = "customer"
 	KindPlatformNotice = "platform_notice"
-	KindLowStock       = "low_stock" // the owner's daily low-stock list (S10 item 6)
+	KindLowStock       = "low_stock"     // the owner's daily low-stock list (S10 item 6)
+	KindExpiryDigest   = "expiry_digest" // the owner's daily expiry email (industry P3 item 7)
 )
 
 // Sender policies.

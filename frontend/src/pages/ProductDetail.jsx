@@ -12,6 +12,7 @@ import { ProductImage } from '@/components/shared/product-image';
 import { variantLabel } from '@/components/pos/stock';
 import EditProductSheet from '@/components/products/EditProductSheet';
 import AttributesCard from '@/components/products/AttributesCard';
+import BatchesCard from '@/components/products/BatchesCard';
 import PrintLabelsDialog from '@/components/products/PrintLabelsDialog';
 import { useModules } from '@/hooks/useModules';
 import { formatCurrency, formatNumber } from '@/lib/format';
@@ -208,6 +209,10 @@ export default function ProductDetail() {
 
       {hasModule('product_attributes') && hasPermission('attributes', 'view') && (
         <AttributesCard product={product} canEdit={hasPermission('products', 'edit')} onSaved={load} />
+      )}
+
+      {hasModule('batch_expiry') && hasPermission('batches', 'view') && (
+        <BatchesCard product={product} canManage={hasPermission('batches', 'manage') && hasPermission('products', 'edit')} onSaved={load} />
       )}
 
       <EditProductSheet product={editing ? product : null} onClose={() => setEditing(false)} onSaved={load} />

@@ -54,6 +54,9 @@ var templateColumns = map[string][]string{
 		"category", "brand", "tax_type", "tax_rate", "hsn_code", "opening_qty", "quantity_alert"},
 	"footwear": {"article_no", "name", "department", "size_system", "size", "colour", "sku", "barcode", "price", "cost",
 		"category", "brand", "tax_type", "tax_rate", "hsn_code", "opening_qty", "quantity_alert"},
+	// Industry P3 item 8 (A35): one row per batch.
+	templatePharmacy: {"name", "sku", "barcode", "category", "brand", "hsn_code", "tax_type", "tax_rate", "price", "cost",
+		"batch_no", "expiry", "mfg_date", "mrp", "store", "opening_qty", "quantity_alert"},
 }
 
 var templateExample = map[string]map[string]string{
@@ -65,6 +68,9 @@ var templateExample = map[string]map[string]string{
 	"footwear": {"article_no": "RUN-01", "name": "Running shoe", "department": "Men", "size_system": "UK", "size": "8", "colour": "Black",
 		"sku": "RUN-01-8-BLACK", "price": "2999", "cost": "1500", "tax_type": "Inclusive", "tax_rate": "12", "hsn_code": "6404",
 		"opening_qty": "6", "quantity_alert": "1"},
+	templatePharmacy: {"name": "Paracetamol 500mg (10 tablets)", "sku": "PARA-500", "barcode": "8901234567891", "hsn_code": "3004",
+		"tax_type": "Inclusive", "tax_rate": "12", "price": "30", "cost": "18", "batch_no": "PCM2401", "expiry": "03/2027",
+		"mfg_date": "04/2024", "mrp": "32", "store": "main", "opening_qty": "50", "quantity_alert": "10"},
 }
 
 var columnHelp = map[string]string{
@@ -85,10 +91,15 @@ var columnHelp = map[string]string{
 	"opening_qty":    "Stock you have now, a whole number. Optional.",
 	"quantity_alert": "Low-stock level, a whole number. Optional.",
 	"status":         "Active or Inactive. Optional (Active).",
+	"batch_no":       "Batch (lot) number printed on the pack, up to 40 characters. Rows with the same SKU are batches of one product.",
+	"expiry":         "Expiry date: YYYY-MM-DD, or MM/YYYY as printed on the pack (the last day of that month). Expired rows are not imported.",
+	"mfg_date":       "Manufacturing date: YYYY-MM-DD or MM/YYYY. Optional.",
+	"mrp":            "Maximum retail price printed on this batch. Optional.",
 }
 
 // codeColumns hold codes that Excel turns into numbers ("8.90123E+12").
-var codeColumns = map[string]bool{"sku": true, "barcode": true, "article_no": true, "hsn_code": true}
+var codeColumns = map[string]bool{"sku": true, "barcode": true, "article_no": true, "hsn_code": true,
+	"batch_no": true, "expiry": true, "mfg_date": true}
 
 var sciNotation = regexp.MustCompile(`^[+-]?[0-9]+(\.[0-9]+)?[eE][+-]?[0-9]+$`)
 
@@ -106,6 +117,7 @@ type importRow struct {
 	hasTax                                            bool
 	qty, alert                                        int
 	categoryID, subCategoryID, brandID, unitID, store int64
+	b                                                 batchFields // pharmacy template
 }
 
 // PreviewStock is a variant's opening stock in one store.
@@ -123,6 +135,7 @@ type PreviewVariant struct {
 	Label      string          `json:"label,omitempty"`
 	Attributes map[string]any  `json:"attributes"`
 	Stock      []PreviewStock  `json:"stock"`
+	Batches    []PreviewBatch  `json:"batches,omitempty"` // pharmacy template
 }
 
 // PreviewProduct is one product the import would create (A13 dry run).
@@ -140,6 +153,7 @@ type importResult struct {
 	Created  int              `json:"created"`
 	Variants int              `json:"variants"`
 	Errors   []RowError       `json:"errors"`
+	Warnings []RowError       `json:"warnings"` // pharmacy template: expired and near-expiry rows
 	DryRun   bool             `json:"dryRun,omitempty"`
 	Preview  []PreviewProduct `json:"preview,omitempty"`
 }
@@ -155,7 +169,7 @@ func (a *API) importTemplate(w http.ResponseWriter, r *http.Request) {
 	}
 	cols, ok := templateColumns[typ]
 	if !ok {
-		httpx.WriteError(w, r, apperr.Invalid("type", "type is retail, clothing or footwear"))
+		httpx.WriteError(w, r, apperr.Invalid("type", "type is retail, clothing, footwear or pharmacy"))
 		return
 	}
 	format := r.URL.Query().Get("format")
@@ -167,7 +181,7 @@ func (a *API) importTemplate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defs := attributes.Defs{}
-	if typ != templateRetail {
+	if typ != templateRetail && typ != templatePharmacy {
 		err := a.ro(r.Context(), tenant(r), func(tx tenancy.TenantTx) error {
 			var err error
 			defs, err = attributes.Load(r.Context(), tx)
@@ -219,7 +233,7 @@ func (a *API) importTemplate(w http.ResponseWriter, r *http.Request) {
 // attributeColumn reports whether a template column is an attribute (not
 // one of the fixed product columns).
 func attributeColumn(c string) (string, bool) {
-	if c == "article_no" {
+	if c == "article_no" || isPharmacyColumn(c) {
 		return "", false
 	}
 	for _, f := range importColumns {
@@ -463,12 +477,18 @@ func (a *API) runImport(ctx context.Context, t tenancy.Tenant, uid int64, raw []
 		return importResult{}, terrs, records, nil
 	}
 	var (
-		res     importResult
-		rowErrs []RowError
+		res      importResult
+		rowErrs  []RowError
+		warnings []RowError
 	)
 	addErr := func(row int, field, msg string) {
 		if len(rowErrs) < maxImportErrors {
 			rowErrs = append(rowErrs, RowError{Row: row, Field: field, Message: msg})
+		}
+	}
+	warn := func(row int, field, msg string) {
+		if len(warnings) < maxImportErrors {
+			warnings = append(warnings, RowError{Row: row, Field: field, Message: msg})
 		}
 	}
 	err := a.rw(ctx, t, func(tx tenancy.TenantTx) error {
@@ -478,6 +498,9 @@ func (a *API) runImport(ctx context.Context, t tenancy.Tenant, uid int64, raw []
 		}
 		known := map[string]bool{"article_no": true}
 		for _, c := range importColumns {
+			known[c] = true
+		}
+		for _, c := range pharmacyColumns {
 			known[c] = true
 		}
 		for k := range defs {
@@ -503,6 +526,14 @@ func (a *API) runImport(ctx context.Context, t tenancy.Tenant, uid int64, raw []
 			}
 		}
 		sort.SliceStable(attrCols, func(i, j int) bool { return defs[attrCols[i]].Sort < defs[attrCols[j]].Sort })
+		ph, perrs, err := pharmacyFile(ctx, tx, header, industry)
+		if err != nil {
+			return err
+		}
+		if len(perrs) > 0 {
+			rowErrs = perrs
+			return nil
+		}
 
 		lookups, err := loadLookups(ctx, tx)
 		if err != nil {
@@ -510,6 +541,7 @@ func (a *API) runImport(ctx context.Context, t tenancy.Tenant, uid int64, raw []
 		}
 		rows := make([]importRow, 0, len(parsed))
 		seenSKU, seenBarcode := map[string]int{}, map[string]int{}
+		seenBarcodeSKU := map[string]string{} // pharmacy: a SKU's batches share its barcode
 		for _, v := range parsed {
 			line, _ := strconv.Atoi(v["_line"])
 			ir := importRow{line: line, vals: v}
@@ -532,12 +564,17 @@ func (a *API) runImport(ctx context.Context, t tenancy.Tenant, uid int64, raw []
 			case sku == "" || len(sku) > 64:
 				addErr(line, "sku", "sku is required (max 64 characters)")
 			default:
-				if prev, dup := seenSKU[strings.ToLower(sku)]; dup {
+				prev, dup := seenSKU[strings.ToLower(sku)]
+				switch {
+				case dup && ph.file: // another batch of the same product
+				case dup:
 					addErr(line, "sku", fmt.Sprintf("sku repeats row %d", prev))
-				} else if lookups.skus[strings.ToLower(sku)] {
+				case lookups.skus[strings.ToLower(sku)]:
 					addErr(line, "sku", "a product with this SKU already exists")
 				}
-				seenSKU[strings.ToLower(sku)] = line
+				if !dup || !ph.file {
+					seenSKU[strings.ToLower(sku)] = line
+				}
 			}
 			if b := v["barcode"]; b != "" && !sci["barcode"] {
 				switch {
@@ -545,10 +582,10 @@ func (a *API) runImport(ctx context.Context, t tenancy.Tenant, uid int64, raw []
 					addErr(line, "barcode", "barcode may use letters, digits and . _ / + - (max 64)")
 				case lookups.barcodes[b]:
 					addErr(line, "barcode", "a product with this barcode already exists")
-				case seenBarcode[b] > 0:
+				case seenBarcode[b] > 0 && (!ph.file || seenBarcodeSKU[b] != strings.ToLower(sku)):
 					addErr(line, "barcode", fmt.Sprintf("barcode repeats row %d", seenBarcode[b]))
 				}
-				seenBarcode[b] = line
+				seenBarcode[b], seenBarcodeSKU[b] = line, strings.ToLower(sku)
 			}
 			ir.price, err = decimal.NewFromString(v["price"])
 			if err != nil || ir.price.IsNegative() || ir.price.GreaterThan(maxPrice) {
@@ -614,10 +651,13 @@ func (a *API) runImport(ctx context.Context, t tenancy.Tenant, uid int64, raw []
 					addErr(line, "store", "unknown store (use the store slug)")
 				}
 			case ir.qty == 0 && ir.alert == 0:
-			case industry && lookups.firstStore > 0:
-				ir.store = lookups.firstStore // clothing and footwear: the first store
+			case (industry || ph.file) && lookups.firstStore > 0:
+				ir.store = lookups.firstStore // clothing, footwear and pharmacy: the first store
 			default:
 				addErr(line, "store", "store is required with opening_qty or quantity_alert")
+			}
+			if ph.file {
+				checkBatchRow(&ir, ph, addErr, warn)
 			}
 			rows = append(rows, ir)
 		}
@@ -631,6 +671,9 @@ func (a *API) runImport(ctx context.Context, t tenancy.Tenant, uid int64, raw []
 			if art := ir.vals["article_no"]; art != "" {
 				k = "a:" + strings.ToLower(art)
 			}
+			if ph.file { // pharmacy: rows with the same SKU are batches of one product
+				k = "s:" + strings.ToLower(ir.vals["sku"])
+			}
 			g, ok := groups[k]
 			if !ok {
 				g = &group{article: ir.vals["article_no"]}
@@ -640,7 +683,11 @@ func (a *API) runImport(ctx context.Context, t tenancy.Tenant, uid int64, raw []
 			g.rows = append(g.rows, ir)
 		}
 		for _, k := range order {
-			checkGroup(groups[k], defs, attrCols, addErr)
+			if ph.file {
+				checkBatchGroup(groups[k], addErr)
+			} else {
+				checkGroup(groups[k], defs, attrCols, addErr)
+			}
 		}
 		if len(rowErrs) > 0 {
 			return nil
@@ -649,11 +696,12 @@ func (a *API) runImport(ctx context.Context, t tenancy.Tenant, uid int64, raw []
 			return err
 		}
 		storeNames := lookups.storeNames
+		var tracked []int64 // other templates with the module on (design §0)
 		for _, k := range order {
 			g := groups[k]
 			first := g.rows[0]
 			c := clean{name: first.vals["name"], status: "Active", productType: "single"}
-			if len(g.rows) > 1 || len(g.checked.Dims) > 0 {
+			if !ph.file && (len(g.rows) > 1 || len(g.checked.Dims) > 0) {
 				c.productType = "variable"
 			}
 			if first.vals["status"] == "Inactive" {
@@ -685,7 +733,11 @@ func (a *API) runImport(ctx context.Context, t tenancy.Tenant, uid int64, raw []
 			}
 			pp := PreviewProduct{Row: first.line, Action: "create", Name: c.name, ArticleNo: g.article,
 				Attributes: g.checked.Attributes, VariantDims: g.checked.Dims}
-			for i, ir := range g.rows {
+			variantRows := g.rows
+			if ph.file {
+				variantRows = g.rows[:1] // one variant; the rows are its batches
+			}
+			for i, ir := range variantRows {
 				cv := cleanVariant{sku: ir.vals["sku"], price: ir.price, cost: ir.cost, attributes: []byte("{}")}
 				if len(g.checked.Dims) > 0 {
 					cv.attrMap = g.checked.Variants[i]
@@ -705,20 +757,35 @@ func (a *API) runImport(ctx context.Context, t tenancy.Tenant, uid int64, raw []
 					cv.inventories = []cleanInventory{{storeID: ir.store, qty: ir.qty, alert: ir.alert}}
 					pv.Stock = append(pv.Stock, PreviewStock{Store: storeNames[ir.store], Qty: ir.qty})
 				}
+				if ph.file {
+					cv.inventories, pv.Stock = batchStores(g, storeNames)
+				}
 				c.variants = append(c.variants, cv)
 				pp.Variants = append(pp.Variants, pv)
 			}
-			if _, err := createProductWith(ctx, tx, c, nil, uid, inventory.ReasonImport, "product.import_create"); err != nil {
+			pid, err := createProductWith(ctx, tx, c, nil, uid, inventory.ReasonImport, "product.import_create")
+			if err != nil {
 				return err
 			}
+			switch {
+			case ph.file:
+				if pp.Variants[0].Batches, err = importBatches(ctx, tx, pid, g, uid, storeNames); err != nil {
+					return err
+				}
+			case ph.moduleOn:
+				tracked = append(tracked, pid)
+			}
 			res.Created++
-			res.Variants += len(g.rows)
+			res.Variants += len(variantRows)
 			if dry {
 				res.Preview = append(res.Preview, pp)
 			}
 		}
+		if err := startImportTracking(ctx, tx, tracked, uid); err != nil {
+			return err
+		}
 		if err := audit.Write(ctx, tx, audit.Entry{ActorID: uid, Action: "products.import", Entity: "product",
-			After: map[string]any{"created": res.Created, "variants": res.Variants, "dryRun": dry}}); err != nil {
+			After: map[string]any{"created": res.Created, "variants": res.Variants, "dryRun": dry, "tracksBatches": ph.moduleOn}}); err != nil {
 			return err
 		}
 		if dry {
@@ -735,6 +802,8 @@ func (a *API) runImport(ctx context.Context, t tenancy.Tenant, uid int64, raw []
 	}
 	sort.SliceStable(rowErrs, func(i, j int) bool { return rowErrs[i].Row < rowErrs[j].Row })
 	res.Errors = []RowError{}
+	sort.SliceStable(warnings, func(i, j int) bool { return warnings[i].Row < warnings[j].Row })
+	res.Warnings = append([]RowError{}, warnings...)
 	if !dry {
 		res.Preview = nil
 	}

@@ -1,6 +1,30 @@
-# Industry Phase 1 build status
+# Industry Phase 3 (pharmacy) build status
 
-Branch `industry/phase1` (pushed to origin; not merged). Design: `docs/INDUSTRY_PHASE1_DESIGN.md`.
+Branch `industry/phase3` (from main `2ac28f2`), local only: no push or merge without the owner's OK. Design: `docs/INDUSTRY_PHASE3_PHARMACY_DESIGN.md`, approved 2026-11-18 (all of §14; Q13 refuse, Q14 last, Q15 yes, Q16 0, Q17 later). Last updated: 2026-11-18.
+
+| Item | What | State |
+|---|---|---|
+| 1 | Batches and expiry: module, batch records, stock per batch, switching, reconciliation | Built (tenant migration 00025, platform 00015, A23–A25, P7/P8). Done; owner OK on the copy-run report 2026-11-18 |
+| 2 | Receiving with batch and expiry | Done (tenant migration 00026: DB30 + DB36 settings; A26; labels print batch/expiry); committed and deployed |
+| 3 | Selling by batch (FEFO, chosen batch, unknown last with warning, void per batch, edit refused) | Done (tenant migration 00027: DB31; A27); committed and deployed |
+| 4 | Returns per batch, quarantine (A28, A29) | Done (tenant migration 00028: DB32, DB33); committed and deployed |
+| 5 | Write-offs, recall, trace (A30, A31; P9, P10) | Done (tenant migration 00029: DB34); committed and deployed |
+| 6 | Stock counts per batch (A32) | Done (tenant migration 00030: DB35); committed and deployed |
+| 7 | Expiry report, dashboard tile, batch settings, daily digest (A33, A34) | Done (tenant migration 00031: outbox kind); committed and deployed |
+| 8 | Pharmacy import template (A35) | Done (no migration); committed and deployed |
+
+## Phase 3 notes
+- Item 1: every stock change already goes through `inventory.Move`/`Set`/`Apply`; they now keep tracked products' batches in step (increase → unknown batch, decrease → earliest expiry first, unknown last). `ApplyBatched` takes named batches for items 2–8.
+- Item 7: report exports are Excel and PDF like the other reports (the design said CSV and Excel).
+- Item 8: before this item, products imported into a shop with the module on did not track batches (the import skipped the item 1 default). Imports now turn tracking on in such shops: pharmacy rows go into their batches, other templates' opening stock into the unknown batch. Retail shops are unchanged.
+- Item 8: expired rows still create the product (catalog), but their batch and stock are not imported.
+- Copy run: the dev database has no shops, so the copy shows only that the migrations apply (platform 15, tenants 25). Switch-on, reconciliation and totals come from a scratch two-store pharmacy shop in `TestBatchTrackingSwitchAndReconcile`.
+
+---
+
+# Industry Phase 1 build status (merged)
+
+Branch `industry/phase1`, merged into `main` on 2026-11-18 (PR #20, merge commit `2ac28f2`; CI green on main). Design: `docs/INDUSTRY_PHASE1_DESIGN.md`.
 How to check each item: `docs/UI_CHECKLIST.md`. Last updated: 2026-11-18.
 
 | Item | What | State |
@@ -20,12 +44,12 @@ How to check each item: `docs/UI_CHECKLIST.md`. Last updated: 2026-11-18.
 - Item 9, DB20: `sales.exchange_return_id` has no foreign key (a key would make a cycle with `sale_returns.sale_id`, which tenant export/restore refuses). Accepted by the owner on 2026-11-18. The column is UNIQUE (that is its index), and `linkExchange` links only a return of the same store and customer, never twice.
 - Pushing: from 2026-11-18 commits stay local; push only when the owner asks.
 - Test database: `max_connections` raised to 200 in `internal/testdb` (the isolation suite ran out of connections at the default 100 once items 4 and 5 added test shops). Test setup only.
-- Dev stack: running; platform migrations at 14, tenant migrations at 24. The dev database has no shops (create one in the console to check in the browser).
-- govulncheck: 1 Go standard library finding (GO-2026-6859); the same on `main`, not caused by this work.
+- Dev stack: running; platform migrations at 15, tenant migrations at 31 (Phase 3 items 1-8 deployed). The dev database has no shops (create one in the console to check in the browser).
+- govulncheck: clean after the Go 1.27.4 bump (GO-2026-6859 fixed).
 - Temporary worktree `D:/pos_baseline` removed.
 
 ## Next step
-Phase 1: all ten items built; owner review of the checklist, then merge when approved. `TestLimitWaitsDoNotUseAttempts` flake fixed.
+Phase 1: all ten items built and merged (PR #20). Go is now 1.27.4 (GO-2026-6859). `TestLimitWaitsDoNotUseAttempts` flake fixed.
 
 Phase 3 (pharmacy): design note `docs/INDUSTRY_PHASE3_PHARMACY_DESIGN.md` drafted 2026-11-18 with the owner's answers Q8–Q12. Waiting for approval of DB25–DB37, P7–P10, A23–A35, E3 and Q13–Q17 before any code.
 

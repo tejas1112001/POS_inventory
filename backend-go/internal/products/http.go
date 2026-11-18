@@ -294,6 +294,9 @@ func (a *API) create(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
+		if err := trackingFor(r.Context(), tx, principal(r), id, in.TracksBatches, true, r.UserAgent()); err != nil {
+			return err
+		}
 		out, _, err = loadOne(r.Context(), tx, id, loadOpts{})
 		return err
 	})
@@ -361,6 +364,9 @@ func (a *API) update(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if err := updateProduct(r.Context(), tx, id, c, img, uid); err != nil {
+			return err
+		}
+		if err := trackingFor(r.Context(), tx, principal(r), id, in.TracksBatches, false, r.UserAgent()); err != nil {
 			return err
 		}
 		var err error

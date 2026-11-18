@@ -498,3 +498,143 @@ Known problems:
 - Browser print margins depend on the printer driver; some drivers add their own margin on thermal rolls.
 - Names in Devanagari or other complex scripts print well on screen and thermal (browser), but not in the PDF (as before).
 
+## Industry P3 – Item 1: Batches and expiry
+
+Use a shop with two stores. Have product A with stock in both stores (e.g. 10 and 4) and product B with stock in one.
+
+How to check:
+1. Settings → Business type → **Pharmacy** (or tick **Batches and expiry**) → Save. Sidebar → Inventory shows **Batches & expiry**; the list is empty ("Switch on … on a product to start"). Existing products are unchanged and sell as before.
+2. Products → A → the **Batches and expiry** card says the product does not track batches. Switch **Track batches and expiry** on: the toast says current stock is listed as "No batch"; the card shows No batch 14, Sellable 14, Expired 0.
+3. Batches & expiry: one row for A, batch "No batch", In stock 14. Open it: stock 10 / 4 per store; movements "Tracking switched on" +10 and +4.
+4. Sell 2 of A in the first store and add 3 with an adjustment: the batch shows 15; its movements list "Sale #…" −2 and "Adjustment" +3. The Stock page and the batch total always agree.
+5. Add a new product C with opening stock 7: its card shows tracking on and No batch 7 (new products track by default).
+6. Switch A off: its card says it does not track batches; Batches & expiry no longer lists it (tick **Show batches with no stock** to see its batch with 0). Sell 1 of A: works as before. Switch it on again: No batch = the stock then on hand.
+7. Settings → untick **Batches and expiry** → Save: the menu item disappears, the batch page says no access, products sell as before. Tick it again: A and C show their current stock under No batch.
+8. Filters: Status **Expired** / **No batch**, Expiry **in 30 days**, Store. (Dated batches arrive with receiving, item 2.)
+9. **Correct details** (Manage batches; dated batches only, not "No batch"): a reason under 5 characters is refused; MM/YYYY becomes the month's last day; a date more than 10 years ahead asks to tick "This expiry date is right"; a duplicate batch number is refused. The audit log shows "batch.edit".
+10. Roles: Admin has "View batches" and "Manage batches"; a Biller of a new shop has View only (sees the page, no switch, no Correct details).
+
+Known problems:
+- Until item 2 (receiving) and item 6 (counts by batch), all stock of a tracked product sits in "No batch"; dated batches cannot be created from the screen yet, so step 9 needs item 2.
+- The product card totals cover every store; the batch page can be filtered by store.
+- Switching tracking off is refused while units are in quarantine (quarantine arrives with item 4).
+
+## Industry P3 – Item 2: Receiving with batch and expiry
+
+Use a pharmacy shop (Batches and expiry on) with a supplier, product A that tracks batches and product B that does not (switch it off on its page).
+
+How to check:
+1. Purchases → new purchase: 100 of A and 5 of B, status Ordered → open it → **Receive goods**. A shows batch rows (Batch no., Expiry, MRP, Qty) and **Another batch**; B shows the usual box.
+2. Enter A as batch B1 expiring 03/2030 × 60 and B2 expiring in 20 days × 10; B 5 → **Receive**. A yellow box lists B2 ("expires … (20 days)") → **Receive them anyway**. The receipt lists "B1 exp 2030-03-31 × 60; B2 … × 10".
+3. Batches & expiry: B1 and B2 with their stock; B2 shows "20 days left" in amber. The audit log entry "purchase.receive" lists B2 as accepted.
+4. Receive again with batch B1 but expiry 02/2030: refused ("already recorded … another expiry date"). With 03/2030: accepted, B1 grows.
+5. An expiry in the past: "This batch has expired". A date more than 10 years ahead: refused until **The expiry dates are right** is ticked.
+6. Batch quantities that do not add up are impossible on screen (the line is their sum); leave the batch number empty: refused.
+7. **Status → Received** on a purchase with A still outstanding: refused ("Receive the goods line by line…"). A purchase of B only can still be created as Received.
+8. Scan A's barcode in the receive window: the last batch row's quantity goes up by one.
+9. After the receipt, **Print labels**: one row per batch ("Batch B1 · Exp 2030-03-31"); the PDF shows "B B1 EXP 03/2030" on each label.
+10. Settings → untick Batches and expiry: Receive goods shows plain boxes again for A and receives without batches.
+
+Known problems:
+- Batch number and expiry are typed; reading them from 2D codes on packs is later (Q17).
+- The near-expiry window (90 days) can be changed once item 7 adds Settings → Batches.
+- A label shows the batch only on layouts that print the option or price line (all three built-in layouts do).
+
+## Industry P3 – Item 3: Selling by batch
+
+Use the pharmacy shop from item 2: product A with batches EARLY (expires in 100 days) × 3, MID (200 days) × 4, and 2 units with no batch.
+
+How to check:
+1. Checkout → add 5 of A: under the line "Batch EARLY · Exp … × 3" and "Batch MID · Exp … × 2" appear before payment. Pay: the receipt shows the same batches with MRP.
+2. **Change batch** on a line: the list shows only sellable batches with their stock here; put 1 on MID → **Use these batches**: the line shows MID "(chosen)" and the rest earliest first. Any cashier can do this.
+3. Batches & expiry → MID → **Correct details** (rename it). Reopen the earlier receipt: it still shows the old number.
+4. Sell until only the "No batch" units are left: the line says "No batch recorded: check the pack" in amber; the sale goes through.
+5. Ask for more than the sellable batches hold: a red message under the total ("Not enough sellable stock … can be sold") and **PAY** is disabled.
+6. Make a batch expired (correct its expiry to yesterday, ticking the confirmation if asked): it is no longer offered or sold. An expiry of today still sells.
+7. Orders → open a sale with A → **Edit**: refused ("Return or void the sale instead"). **Void** it: Batches & expiry shows the units back in the same batches.
+8. A product that does not track batches sells exactly as before.
+
+Known problems:
+- "Minimum days to sell" (default 0) is set in Settings → Batches with item 7.
+- The batch shown before payment can change if another till sells the same batch first; the sale then uses what is left, earliest first.
+
+## Industry P3 – Item 4: Returns per batch and quarantine
+
+Use the pharmacy shop from item 3: product A with batches EARLY and MID, and a sale of 5 (3 EARLY, 2 MID).
+
+How to check:
+1. Returns → New return → choose the sale: product A shows a **Condition** column even if the return policy has conditions off, and "Back to batch EARLY, MID". Saving without a condition is refused.
+2. Return 3 as **Resellable**: the return detail shows "Batch MID × 2 · back on sale" and "Batch EARLY × 1 · back on sale". Batches & expiry shows the units back.
+3. Make EARLY expired (correct its expiry to yesterday). Return the last 2 as Resellable: the detail shows "Batch EARLY × 2 · quarantine" in amber; product stock does not go up; the batch shows 2 under Quarantined.
+4. Sell 1 more and return it as **Damaged**: it goes to MID's quarantine.
+5. Return without a sale (needs the price override permission): a product that tracks batches shows Condition and a **Batch** list; "Not known (quarantine)" puts the units in quarantine under "No batch".
+6. Batches & expiry → MID → **Quarantine** at a store: quantity and reason (5+ characters); stock goes down, Quarantined goes up, and the movement list shows "Quarantined". Checkout cannot sell those units.
+7. **Release** puts them back. On an expired or recalled batch the Release button is not shown, and the server refuses it.
+8. Exchanges: the returned goods follow the same rules; a product that does not track batches returns exactly as before.
+
+Known problems:
+- Units in quarantine keep the batch module and the product's tracking on until they are released or written off (write-off comes with item 5).
+
+## Industry P3 – Item 5: Write-offs and recalls
+
+Use the pharmacy shop from item 4.
+
+How to check:
+1. Batches & expiry → a batch → **Write off** on a store row: choose From (Stock or Quarantine, with the counts), quantity, reason (Expired is chosen for an expired batch, Recalled for a recalled one). Save: the counts go down and the movement list shows "Written off".
+2. Ask for more than is there: refused, nothing changes. Reason **Other** needs a note.
+3. Sidebar → **Write-offs**: the new `WO-000001` is listed; click it to see the lines.
+4. On a batch, **Recall** with a reason: a red banner shows "Recalled … It cannot be sold". Checkout refuses the product if only that batch has stock. **Release** is no longer offered for its quarantine.
+5. A return of a recalled batch goes to quarantine (item 4).
+6. **Where it went** on a batch lists every sale (with the customer's name and phone when not walk-in), returns and write-offs, with totals.
+7. **Lift recall** with a reason: the batch sells again.
+8. A biller sees batches and write-offs but has no Write off, Recall or Lift recall buttons.
+
+Known problems:
+- A write-off made from a batch has one line; several batches in one write-off are possible through the API only.
+- "Returned to supplier" is a write-off reason only; a supplier return with a debit note comes later.
+
+## Industry P3 – Item 6: Stock counts per batch
+
+Use a pharmacy product with 10 units of "No batch" stock and batch B1 × 3.
+
+How to check:
+1. Stock counts → New count → scan or type the product: the line has a **Count a batch** link.
+2. **Count a batch** → B1 → 2. Then **Count a batch** → "Found on the shelf: new batch…" → number SHELF1, expiry 03/2028 → 5; again SHELF2 with last month's expiry → 4. Each line shows its batch; SHELF2 shows "expired" in red.
+3. An amber note lists "No batch (10)": it will be set to 0 on completion because the product is now counted by batch. Totals include it.
+4. Typing B1 again with another expiry is refused ("on record with another expiry date").
+5. Complete: Batches & expiry shows B1 2, SHELF1 5, SHELF2 4, no "No batch" stock; the product's stock is 11.
+6. On the completed count an amber note offers **Write off expired**: it creates one write-off (reason Expired) for SHELF2's 4 units.
+7. A count that only scans the product (no batch line) works as before; a decrease is taken from the earliest expiry first.
+8. Products that do not track batches count exactly as before.
+
+Known problems:
+- Scanning adds to the line with no batch; for a product counted by batch that line counts its "No batch" stock.
+
+## Industry P3 – Item 7: Expiry report, dashboard, settings, digest
+
+Use a pharmacy shop with an expired batch, one expiring within 90 days, one quarantined unit and one recalled batch.
+
+How to check:
+1. Reports → **Expiry** tab (shown only with Batches & expiry on): four boxes (Expired on hand, Expiring within 90 days, Quarantined, Recalled with stock) with units, batches, cost and MRP value. The table lists recalled first, then expired, expiring and quarantined.
+2. Select a box: only that section shows; select it again to show all. Change the store and the window (30/60/90/180 days).
+3. Select a batch number: the batch dialog opens (write off, recall, quarantine as allowed). After a write-off the report refreshes.
+4. Excel and PDF download the same rows.
+5. Dashboard: cards for expired, expiring soon, recalled and quarantined units (and "No batch" units); each opens the report filtered to that section ("No batch" opens Batches filtered to the unknown batch).
+6. Settings → **Batches**: near-expiry days (1–730), minimum days left to sell (0–365), daily expiry email (off by default). Out-of-range values show an error under the field.
+7. With the daily email on, the owner gets one email a day after 08:00 shop time, only when something is expired, expiring, quarantined or recalled.
+8. A retail shop (module off) shows no Expiry tab, no batch cards and no Batches settings tab.
+
+Known problems:
+- Exports are Excel and PDF like the other reports; the design said CSV and Excel.
+
+## Industry P3 – Item 8: Pharmacy import template
+
+How to check:
+1. Products → Import: the Template list has **Pharmacy** only when Batches & expiry is on. Download the Excel template: a Products sheet with the batch columns and a Help sheet.
+2. Fill three rows for one SKU (batches P1 and P2 in the main store, P1 again in a second store using its slug), one row with an expiry last month, and one with an expiry next month. Use `MM/YYYY` for some expiries.
+3. **Check file**: one product per SKU; open it to see each batch row with its store and quantity. The expired row is struck through and marked "expired, not imported". An amber box lists the expired row and the near-expiry row.
+4. Change one row's price or name for the same SKU, or give a batch two expiries: Check file lists the row errors and nothing is saved.
+5. **Import**: Batches & expiry shows the batches with their expiry, MRP and stock per store; the product's stock in each store is the sum of its batches; the expired batch is not there.
+6. In a pharmacy shop the General template still works; its products track batches and the opening stock shows as "No batch".
+7. In a retail shop (module off) the Pharmacy template is not offered and imports work as before.
+

@@ -121,6 +121,7 @@ const (
 	JobBillingReconcile   = "billing_reconcile"
 	JobNightlyExports     = "nightly_exports"
 	JobLowStockEmail      = "low_stock_email"
+	JobExpiryDigest       = "expiry_digest"
 )
 
 // ---------------------------------------------------------------- workers
@@ -267,6 +268,12 @@ func (k *maintenanceWorker) Work(ctx context.Context, job *river.Job[maintenance
 			k.w.cfg.Log.InfoContext(ctx, "low-stock emails queued", slog.Int("emails", n))
 			_ = k.w.EnqueueMail(ctx, nil, false)
 		}
+	case JobExpiryDigest:
+		var n int
+		if n, err = m.ExpiryDigests(ctx, time.Now()); n > 0 {
+			k.w.cfg.Log.InfoContext(ctx, "expiry emails queued", slog.Int("emails", n))
+			_ = k.w.EnqueueMail(ctx, nil, false)
+		}
 	default:
 		return nil
 	}
@@ -374,6 +381,7 @@ func New(cfg Config) (*Worker, error) {
 			periodic(JobExportSweep, river.PeriodicInterval(cfg.ExportSweepInterval), true),
 			periodic(JobNightlyExports, dailyAt{hour: 19, minute: 30}, false),   // 01:00 in India
 			periodic(JobLowStockEmail, river.PeriodicInterval(time.Hour), true), // from 08:00 shop time, once a day
+			periodic(JobExpiryDigest, river.PeriodicInterval(time.Hour), false), // likewise, when turned on
 		}
 	}
 	client, err := river.NewClient(riverpgxv5.New(cfg.Pool), rc)

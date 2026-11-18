@@ -188,7 +188,13 @@ export default function PurchaseDetail() {
                     {r.receivedBy?.name ? ` · ${r.receivedBy.name}` : ''}
                   </p>
                   <p className="text-muted-foreground">
-                    {r.lines.map((l) => `${l.quantity} × ${l.productName}${l.sku ? ` (${l.sku})` : ''}`).join(', ')}
+                    {r.lines
+                      .map(
+                        (l) =>
+                          `${l.quantity} × ${l.productName}${l.sku ? ` (${l.sku})` : ''}` +
+                          ((l.batches || []).length ? ` [${l.batches.map((b) => `${b.batchNo} exp ${b.expiry} × ${b.quantity}`).join('; ')}]` : '')
+                      )
+                      .join(', ')}
                   </p>
                   {r.note && <p className="text-muted-foreground">{r.note}</p>}
                 </div>
@@ -217,7 +223,20 @@ export default function PurchaseDetail() {
       {labels && (
         <PrintLabelsDialog
           title={`${p.reference} · ${labels.reference}`}
-          rows={labels.lines.map((l) => ({ id: l.variantId, name: l.productName, sku: l.sku, itemBarcode: barcodeOf(l.purchaseItemId), copies: l.quantity }))}
+          rows={labels.lines.flatMap((l) =>
+            (l.batches || []).length
+              ? l.batches.map((b) => ({
+                  id: l.variantId,
+                  key: `${l.variantId}-${b.batchId}`,
+                  batchId: b.batchId,
+                  batchLabel: `Batch ${b.batchNo} · Exp ${b.expiry}`,
+                  name: l.productName,
+                  sku: l.sku,
+                  itemBarcode: barcodeOf(l.purchaseItemId),
+                  copies: b.quantity,
+                }))
+              : [{ id: l.variantId, name: l.productName, sku: l.sku, itemBarcode: barcodeOf(l.purchaseItemId), copies: l.quantity }]
+          )}
           canGenerate={hasPermission('products', 'edit')}
           onClose={() => setLabels(null)}
           onChanged={load}

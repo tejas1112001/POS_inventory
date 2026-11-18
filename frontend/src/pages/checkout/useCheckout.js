@@ -15,7 +15,14 @@ export const parseAmount = (v) => {
 // cartBody is what both the price check and the sale send.
 export function cartBody(lines, { storeId, customerId, discount }) {
   return {
-    orderItems: lines.map((l) => ({ productId: l.productId, variantId: l.variantId, quantity: l.quantity, unitPrice: l.unitPrice })),
+    orderItems: lines.map((l) => ({
+      productId: l.productId,
+      variantId: l.variantId,
+      quantity: l.quantity,
+      unitPrice: l.unitPrice,
+      // Batches the cashier chose (industry P3 item 3); dropped once they no longer fit the quantity.
+      ...(l.batches?.length && l.batches.reduce((n, b) => n + b.quantity, 0) <= l.quantity ? { batches: l.batches } : {}),
+    })),
     storeId: Number(storeId),
     ...(customerId ? { customerId: Number(customerId) } : {}),
     discount,
@@ -181,6 +188,7 @@ export default function useCheckout({ defaultCustomerId }) {
   );
 
   const removeLine = useCallback((key) => setLines((prev) => prev.filter((l) => l.key !== key)), []);
+  const setLineBatches = useCallback((key, batches) => setLines((prev) => prev.map((l) => (l.key === key ? { ...l, batches } : l))), []);
 
   // addVariant puts one unit in the cart (or one more). Returns the line key.
   const addVariant = useCallback(
@@ -401,6 +409,7 @@ export default function useCheckout({ defaultCustomerId }) {
     changeQuantity,
     setQuantity,
     removeLine,
+    setLineBatches,
     clearCart,
     restoreCart,
     discountText,

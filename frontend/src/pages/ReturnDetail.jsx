@@ -121,6 +121,12 @@ export default function ReturnDetail() {
                           {i.restocked ? ' · back in stock' : ' · not restocked'}
                         </span>
                       )}
+                      {(i.batches || []).map((b) => (
+                        <span key={`${b.batchId}-${b.bucket}`} className={`block text-xs ${b.bucket === 'quarantine' ? 'text-warning-fg' : 'text-muted-foreground'}`}>
+                          {b.unknown ? 'No batch' : `Batch ${b.batchNo}`}
+                          {b.expiry ? ` · Exp ${b.expiry}` : ''} × {b.quantity} · {b.bucket === 'quarantine' ? 'quarantine' : 'back on sale'}
+                        </span>
+                      ))}
                     </td>
                     <td className="hidden px-3 py-2 md:table-cell">{i.reason || '—'}</td>
                     <td className="px-3 py-2 text-right tabular-nums">{i.quantity}</td>

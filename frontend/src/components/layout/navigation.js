@@ -4,6 +4,8 @@
 import {
   BarChart3,
   Boxes,
+  CalendarClock,
+  Trash2,
   ClipboardCheck,
   CreditCard,
   FileText,
@@ -27,7 +29,7 @@ import {
   Store,
 } from 'lucide-react';
 
-export const REPORT_PATHS = ['/reports', '/sales-report', '/purchase-report', '/customer-report', '/customer-due-report'];
+export const REPORT_PATHS = ['/reports', '/sales-report', '/purchase-report', '/customer-report', '/customer-due-report', '/reports/expiry'];
 
 export const NAV = [
   { title: 'Overview', items: [{ label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard, perm: ['dashboard', 'view'] }] },
@@ -47,6 +49,8 @@ export const NAV = [
       { label: 'Stock', path: '/inventory', icon: Boxes, perm: ['inventory', 'view'] },
       { label: 'Adjustments & history', path: '/stock-adjustments', icon: SlidersHorizontal, perm: ['stock_adjustments', 'view'] },
       { label: 'Stock counts', path: '/stock-counts', icon: ClipboardCheck, perm: ['stock_counts', 'view'], module: 'stock_counts' },
+      { label: 'Batches & expiry', path: '/batches', icon: CalendarClock, perm: ['batches', 'view'], module: 'batch_expiry' },
+      { label: 'Write-offs', path: '/write-offs', icon: Trash2, perm: ['batches', 'view'], module: 'batch_expiry' },
       { label: 'Purchases', path: '/purchases', icon: Truck, perm: ['purchases', 'view'], also: ['/add-purchase'] },
     ],
   },
@@ -114,6 +118,9 @@ export const TITLES = {
   '/inventory': 'Stock',
   '/stock-adjustments': 'Adjustments & history',
   '/stock-counts': 'Stock counts',
+  '/batches': 'Batches & expiry',
+  '/write-offs': 'Write-offs',
+  '/reports/expiry': 'Reports',
   '/purchases': 'Purchases',
   '/add-purchase': 'New purchase',
   '/categories': 'Categories',

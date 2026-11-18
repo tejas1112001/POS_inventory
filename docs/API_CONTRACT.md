@@ -415,6 +415,101 @@ Phase 1 modules: `product_attributes`, `barcode_labels`, `stock_counts`. Presets
 
 Platform console: `POST /api/platform/tenants` takes `businessType` (default `retail`, validated); tenant views include `businessType`; `GET /api/platform/tenants?businessType=` filters; override keys gain `product_attributes`, `barcode_labels`, `stock_counts` (flag; `false` turns the module off for that shop).
 
+### 5.6 Industry Phase 3: pharmacy (`docs/INDUSTRY_PHASE3_PHARMACY_DESIGN.md`)
+
+Additive only: old requests and responses stay valid. Numbers follow the design note §14. Written as each item is built.
+
+**Item 1: batches and expiry** (migrations tenant 00025, platform 00015). Module `batch_expiry` ("Batches and expiry"): entitled in every plan (E3), recommended for pharmacy (the pharmacy preset is now `barcode_labels`, `stock_counts`, `batch_expiry`); console override key `batch_expiry` (flag). Permissions `batches:view` (P7; admin, and billers of new shops) and `batches:manage` (P8; admin).
+
+A product **tracks batches** when `products.tracks_batches` is true and the module is on. For those products, store by store, `inventories.qty` = sum of `batch_stock.qty`; every stock change writes the batch rows and one `batch_movements` row each (append-only, in tenant exports). Until items 2–8 name batches, an increase goes to the variant's unknown batch (`batchNo` `UNBATCHED`, no expiry) and a decrease comes out earliest expiry first, the unknown batch last (Q14). "Expired" = expiry before today in the shop's time zone; never stored. The nightly `stock.ledger_mismatch` audit also reports `kind: batch_total` (stock ≠ batch sum) and `kind: batch_ledger` (batch stock ≠ its movements, with `batch_id`).
+
+| # | Method | Path | Guard | Notes |
+|---|---|---|---|---|
+| A23 | GET | `/api/batches?productId&variantId&storeId&status&expiringWithinDays&includeEmpty` | `batches:view`, module | `{items[], limit: 500}` earliest expiry first (no expiry last). `status`: `available` (not recalled, not expired) \| `recalled` \| `expired` \| `unknown`; other values → 400. `expiringWithinDays=n`: expiry ≤ today + n (expired included). Without `includeEmpty=true` only batches with stock (in `storeId` if given). Item: `{id, variantId, productId, productName, sku, batchNo, expiry, mfgDate, mrp, cost, unknown, status, expired, daysToExpiry, recalledAt, recallReason, stock[{storeId, storeName, qty, quarantined}], totalQty, totalQuarantined, createdAt, updatedAt}` |
+| A23 | GET | `/api/batches/{id}` | `batches:view`, module | The item above plus `movements[{id, storeId, storeName, bucket, delta, qtyAfter, reason, refType, refId, userName, createdAt}]` (newest 200). Another shop's id → 404 |
+| A24 | PUT | `/api/batches/{id}` | `batches:manage`, module | `{batchNo?, expiry?, mfgDate?, mrp?, cost?, reason (5–500), confirmFarExpiry?}`; only fields sent change; `mrp`/`cost` null clears. `expiry` `YYYY-MM-DD` or `MM/YYYY` (= last day of the month); more than 10 years ahead → 400 `fields.expiry` unless `confirmFarExpiry: true`. `mfgDate` after expiry → 400. `batchNo` `UNBATCHED` (any case) → 400; another batch of the variant with that number → 409 `CONFLICT`. The unknown batch → 409 `INVALID_STATE`. Audit `batch.edit` (before, after + reason). Returns the A23 detail |
+| A25 | POST, PUT | `/api/products`, `/api/products/{id}` | as before | Body gains `tracksBatches` (bool, optional). Module off: sending it → 403 `MODULE_OFF`; leaving it out works as before. Module on: a new product tracks batches by default; an edit without the field keeps the product as it is. Any other value than that default needs `batches:manage` (403 `FORBIDDEN`). Switching on puts the stock then on hand into the unknown batch in each store; switching off closes the batch stock (batches and history stay) and is refused with 409 `INVALID_STATE` while units are quarantined. Audit `product.batch_tracking` |
+| A25 | GET | product responses | as before | Gain `tracksBatches` and `batchStock` (`null` when not tracked; else `{sellable, unbatched, quarantined, expired, nearestExpiry}` across stores) |
+| — | PUT | `/api/settings/business` | as before | Turning `batch_expiry` on starts tracking for every product that has it switched on (stock into the unknown batch); turning it off closes their batch stock. Refused (409) while units are quarantined |
+
+**Item 2: receiving with batch and expiry** (tenant migration 00026: DB30 `purchase_receipt_batches`; DB36 settings `near_expiry_days` 90, `min_days_to_sell` 0, `expiry_digest` false, used from here on and editable with item 7).
+
+| # | Method | Path | Guard | Notes |
+|---|---|---|---|---|
+| A26 | POST | `/api/purchases/{id}/receipts` | as before (A16) | Lines gain `batches[{batchNo (1–40), expiry (YYYY-MM-DD or MM/YYYY), mfgDate?, mrp?, quantity}]`; body gains `acceptNearExpiry`, `confirmFarExpiry`. A line of a tracked product needs batches adding up to its `quantity` (400 `lines[i].batches`); an untracked line with batches → 400, or 403 `MODULE_OFF` with the module off. Expiry before today → 400 `lines[i].batches[j].expiry` "This batch has expired"; more than 10 years ahead → 400 unless `confirmFarExpiry`. Expiry within `near_expiry_days` → 409 `NEAR_EXPIRY` with `details{batches[{line, batchNo, expiry, daysLeft, quantity}], nearExpiryDays}` and nothing saved; resent with `acceptNearExpiry: true` it is saved and the audit `purchase.receive` lists them under `nearExpiryAccepted`. A batch number already recorded for the product (any case) is reused when the expiry matches (MRP and cost fill in only if empty), otherwise 400 "already recorded … with another expiry date"; `UNBATCHED` → 400. A new batch's cost defaults to the line's unit price. Receipt lines gain `batches[{batchId, batchNo, expiry, mrp, quantity, nearExpiryAccepted}]` (empty for untracked lines), also in `GET /api/purchases/{id}/receipts` |
+| A26 | PUT, POST | `/api/purchases/{id}` (status Received), `/api/purchases` (created as Received) | as before | Refused with 409 `INVALID_STATE` while an outstanding line is a tracked product ("Receive the goods line by line and enter batch and expiry"). Untracked purchases as before |
+| — | GET | purchase responses | as before | `items[]` gain `tracksBatches` (the product tracks batches and the module is on) |
+| — | POST | `/api/labels/pdf` | as before | `items[]` accept `batchId` (a batch of that variant, else 404; module off → 403 `MODULE_OFF`): the label's variant/price line adds "B <no> EXP <MM/YYYY>" |
+
+**Item 3: selling by batch** (tenant migration 00027: DB31 `order_item_batches`, with the batch number, expiry and MRP copied at sale time).
+
+A line of a tracked product is filled from the store's **sellable** batches: status `available`, not expired (expiry before today in the shop's time zone), and at least `min_days_to_sell` days before expiry (default 0). Order: earliest expiry, then oldest batch; the unknown batch last, with a warning (Q14). Expired, recalled and too-close batches are never sold.
+
+| # | Method | Path | Guard | Notes |
+|---|---|---|---|---|
+| A27 | POST | `/api/sales`, `/api/sales/quote`, `/api/sales/exchange` (new goods) | as before | `orderItems[]` accept `batches[{batchId, quantity}]` chosen by the cashier (no extra permission, Q12; recorded as `chosen`); the rest of the line is filled as above. Errors: a batch of another product, or batches adding up to more than the line → 400 `orderItems[i].batches`; a chosen batch expired, recalled or too close → 409 `BATCH_NOT_SELLABLE` `details{index, variantId, batchId, batchNo, expiry, reason}`; a chosen batch short, or sellable batches not covering the line (even if the plain stock would) → 409 `INSUFFICIENT_STOCK` (`details.items[].unsellable[{batchId, batchNo, expiry, quantity, reason}]`). Batches on an untracked line → 400, or 403 `MODULE_OFF` with the module off |
+| A27 | POST | `/api/sales/quote` | as before | `lines[]` gain `batches[]` (what the sale would take now) and `warnings[]`; the quote gains `batchProblem{code, message, details}` (the 409 the sale would get now) or `null` |
+| A27 | GET | sale responses | as before | `items[]` gain `batches[{batchId, batchNo, expiry, mrp, quantity, chosen, unknown}]` (sale-time details; empty for untracked lines) and `warnings[]` ("No batch or expiry recorded for this stock. Check the pack.") |
+| — | PUT | `/api/sales/{id}` | as before | Refused with 409 `INVALID_STATE` ("Return or void the sale instead") when the sale has, or would get, tracked lines (Q13) |
+| — | DELETE | `/api/sales/{id}` (void) | as before | Each unit goes back to the batch it was sold from |
+| — | GET | `/api/sales/{id}/receipt` (PDF), screen receipt | as before | Each tracked line shows "Batch B1 · Exp 03/2027 · MRP 45.00" (sale-time details; "No batch" for the unknown batch; "× n" when split) |
+
+**Item 4: returns per batch and quarantine** (tenant migration 00028: DB32 `return_item_batches`; DB33 ledger reasons `quarantine`, `quarantine_release`).
+
+Returned units of a tracked product go back to the batches the sale line was sold from, latest expiry first, never more than was sold from each (sale lines from before tracking: the unknown batch). Resellable units of a batch that can still be sold go to its stock; damaged or defective units, and units of an expired or recalled batch, go to its **quarantine**: counted, outside `inventories.qty`, never sold.
+
+| # | Method | Path | Guard | Notes |
+|---|---|---|---|---|
+| A28 | POST | `/api/sales/returns`, `/api/sales/exchanges` (returned goods) | as before | For tracked products `condition` is required whatever the return policy (400 `returnItems[i].condition` / `returnLines[i].condition`). Lines of a return without a sale accept `batchId` (a batch of that variant, else 400; module off → 403 `MODULE_OFF`; untracked → 400); without it the units go to quarantine under the unknown batch. `batchId` on a return against a sale → 400 |
+| A28 | GET | return responses | as before | `items[]` gain `batches[{batchId, batchNo, expiry, quantity, bucket: stock|quarantine, unknown}]` (empty for untracked lines); `restocked` is true when any unit went back on sale |
+| A29 | POST | `/api/batches/{id}/quarantine` | `batches:manage`, module | `{storeId, quantity, reason (5–500)}`: units found damaged leave sale for quarantine. More than the batch has → 409 `INSUFFICIENT_STOCK`. Audit `batch.quarantine`. Returns the batch (A23 detail) |
+| A29 | POST | `/api/batches/{id}/release` | `batches:manage`, module | Same body: back on sale. Expired or recalled batch → 409 `BATCH_NOT_SELLABLE` (`details.reason`); more than in quarantine → 409 `INSUFFICIENT_STOCK`. Audit `batch.release` |
+| — | — | stock reconciliation | — | Gains kind `batch_quarantine`: a batch's quarantine = the sum of its quarantine movements |
+
+Switching the module or a product's tracking off stays refused while units are in quarantine (item 1); release or write them off first.
+
+**Item 5: write-offs and recalls** (tenant migration 00029: DB34 `write_offs`, `write_off_lines` (append-only), counter `write_off`, ledger reason `write_off`). Permissions P9 `batches:write_off` (admin) and P10 `batches:recall` (owner, admin).
+
+| # | Method | Path | Guard | Notes |
+|---|---|---|---|---|
+| A30 | POST | `/api/write-offs` | `batches:write_off`, module; `Idempotency-Key` optional | `{storeId, reason: expired|damaged|recalled|returned_to_supplier|other, note (required for other, ≤500), lines[{batchId, quantity, from: stock|quarantine}]}` (1–200 lines; a batch once per `from`). Posted at once as `WO-000001`; units leave stock or quarantine (ledger reason `write_off`). More than is there → 409 `INSUFFICIENT_STOCK`; untracked product → 400. Audit `write_off.create`. 201 → the write-off |
+| A30 | GET | `/api/write-offs?storeId&batchId&limit&offset` | `batches:view`, module | `{items, total}`, newest first. Item: `{id, reference, storeId, storeName, reason, note, createdBy, createdByName, createdAt, units, lines[{batchId, batchNo, expiry, unknown, variantId, productId, productName, sku, from, quantity}]}` |
+| A30 | GET | `/api/write-offs/{id}` | `batches:view`, module | One write-off; 404 if none |
+| A31 | POST | `/api/batches/{id}/recall` | `batches:recall`, module | `{reason (5–500)}`. Checkout stops selling it at once (a sale in flight finishes first or is refused); release is refused; its stock can be written off or quarantined. The unknown batch, or a batch already recalled → 409 `INVALID_STATE`. Audit `batch.recall`. Returns the batch |
+| A31 | POST | `/api/batches/{id}/lift-recall` | `batches:recall`, module | `{reason}`; not recalled → 409. Audit `batch.lift_recall` |
+| A31 | GET | `/api/batches/{id}/trace` | `batches:view`, module | Where the batch went: `{batch, sales[{saleId, reference, date, status, storeId, storeName, customerId, customerName, customerPhone, quantity}], returns[{returnId, reference, date, storeName, quantity, bucket}], writeOffs[{writeOffId, reference, date, storeName, reason, from, quantity}], sold, returned, writtenOff}`. The walk-in customer is not named; `sold` leaves out void sales |
+
+**Item 6: stock counts per batch** (tenant migration 00030: DB35 `stock_count_lines.batch_id`; unique key `(count_id, variant_id, batch or none)`).
+
+A product counted with at least one batch line is counted **by batch**: on completion each of its batches in the store becomes its counted quantity, its line with no batch counts the unknown batch, and batches with no line go to 0. A product counted with no batch line is counted as a whole, as before (a decrease comes out earliest expiry first).
+
+| # | Method | Path | Guard | Notes |
+|---|---|---|---|---|
+| A32 | PUT | `/api/stock-counts/{id}` | as before | `lines[]` accept `batchId` (a batch of that product), or `batchNo` + `expiry` (`YYYY-MM-DD` or `MM/YYYY`) for a batch found on the shelf (created; an existing number with another expiry → 400 `lines[i].expiry`). Batches on an untracked product → 400; module off → 403 `MODULE_OFF`. New `removeLines[]` (line ids; answer `removedLines`). The answer's `lines` hold every line of the changed items |
+| A32 | GET | `/api/stock-counts/{id}` | as before | Lines gain `batchId, batchNo, expiry, expired, byBatch, tracksBatches`; for a product counted by batch, `currentQty`/`movedSince`/`difference` are the batch's. Drafts gain `uncountedBatches[{batchId, batchNo, expiry, unknown, variantId, productName, sku, currentQty}]` (set to 0 on completion; included in `totals`) |
+| A32 | POST | `/api/stock-counts/{id}/complete` | as before | Posts each batch's difference (ledger reason `stock_count` on both ledgers); the product's stock moves by their sum. Each line's `expected`/`difference` is its batch's |
+
+**Item 7: expiry report, dashboard, settings, digest** (tenant migration 00031: outbox kind `expiry_digest`; the DB36 settings came with 00026).
+
+Sections, per batch and store: `recalled` (a recalled batch, sellable and quarantined units), `expired` (expiry before today in the shop's time zone, sellable units), `expiring` (today to today + window, sellable units), `quarantined` (quarantined units of a batch that is not recalled). Values: cost (the batch's, else the variant's) and MRP (the batch's; none counts as 0), rounded to 2 places.
+
+| # | Method | Path | Guard | Notes |
+|---|---|---|---|---|
+| A33 | GET | `/api/reports/expiry?storeId&windowDays&section` | `reports:view`, module | `windowDays` 1–730 (default the shop's near-expiry days). Answer `{today, windowDays, storeId, summary{recalled,expired,expiring,quarantined: {batches, units, costValue, mrpValue}}, items[{section, batchId, batchNo, unknown, expiry, daysToExpiry, variantId, productId, productName, sku, storeId, storeName, quantity, costValue, mrpValue}]}`; summary totals equal the rows; at most 50,000 rows |
+| A33 | GET | `/api/reports/expiry/export?format=xlsx\|pdf` | `reports:export`, module | Same filters; audited like the other exports |
+| A33 | GET | `/api/dashboard` | as before | New `batches` (null unless the module is on and the user has `batches:view`): `{windowDays, expired, expiring, quarantined, recalled, unbatched}` in units, for the dashboard's store filter |
+| A34 | GET | `/api/settings/batches` | `settings:view` | `{nearExpiryDays, minDaysToSell, expiryDigest}`; works with the module off |
+| A34 | PUT | `/api/settings/batches` | `settings:edit` | Any of the three; `nearExpiryDays` 1–730, `minDaysToSell` 0–365 (400 with `fields`). Audit `settings.batches` |
+
+Daily digest: with `expiryDigest` on and the module on, the hourly job queues one email per active owner from 08:00 shop time, once a day (outbox key `expiry_digest:<day>:<user>`), only when the report has rows. It goes through the mail outbox and its daily limits.
+
+**Item 8: pharmacy import template** (no migration).
+
+| # | Method | Path | Guard | Notes |
+|---|---|---|---|---|
+| A35 | GET | `/api/products/import/template?type=pharmacy&format=csv\|xlsx` | `products:import` | Columns `name, sku, barcode, category, brand, hsn_code, tax_type, tax_rate, price, cost, batch_no, expiry, mfg_date, mrp, store, opening_qty, quantity_alert`; the Help sheet explains each. Batch and date columns are formatted as text in the .xlsx |
+| A35 | POST | `/api/products/import[?dryRun=true]` | as before | A file with `batch_no` or `expiry` columns is a pharmacy file (module off → 403 `MODULE_OFF`; with `article_no` or attribute columns → 400). One row per batch: rows with the same SKU are batches of one single product, and must agree on name, price, cost, tax, barcode and the other product columns. `expiry` is required (`YYYY-MM-DD`, `MM/YYYY` = the month's last day, or an Excel date); `mfg_date` optional (`MM/YYYY` = the first day), before the expiry and not in the future; `mrp` ≥ 0. A batch number has one expiry and appears once per store. An empty `store` is the first store. Expired rows are warnings: the product is created but that row's stock and batch are not imported. Rows expiring within the near-expiry days are imported and listed as warnings. The answer gains `warnings[{row, field, message}]` (all templates; empty when none), and in a dry run each pharmacy variant gains `batches[{row, batchNo, expiry, store, qty, skipped}]`. Products track batches; the stock goes into the named batches (ledger reason `import`). With the module on, products from the other templates also track batches, their opening stock in the unknown batch (design §0) |
+
 ---
 
 ## 6. Frontend changes (minimal set, Phase 2)

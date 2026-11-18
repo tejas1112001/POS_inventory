@@ -1,0 +1,15 @@
+Hello {{.Name}},
+
+Stock to act on at {{.BusinessName}} ({{.Date}}):
+- Expired on the shelf: {{.Expired}} units
+- Expiring within {{.WindowDays}} days: {{.Expiring}} units
+- Quarantined: {{.Quarantined}} units
+- Recalled: {{.Recalled}} units
+
+{{range .Items}}- [{{.Section}}] {{.Name}}, batch {{.Batch}}{{if .Expiry}} (exp {{.Expiry}}){{end}}, {{.Store}}: {{.Qty}}
+{{end}}{{if .More}}… and {{.More}} more.
+{{end}}{{if .Link}}
+See the expiry report: {{.Link}}
+{{end}}
+-- 
+{{.Footnote}}

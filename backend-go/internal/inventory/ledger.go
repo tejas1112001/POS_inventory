@@ -25,6 +25,12 @@ const (
 	ReasonProductEdit = "product_edit"
 	ReasonImport      = "import"
 	ReasonStockCount  = "stock_count" // industry P1 item 7
+	// Industry P3 item 4 (DB33): units moved between sellable stock and a
+	// batch's quarantine.
+	ReasonQuarantine        = "quarantine"
+	ReasonQuarantineRelease = "quarantine_release"
+	// ReasonWriteOff: units of batches leaving the shop for good (item 5).
+	ReasonWriteOff = "write_off"
 )
 
 // ErrInsufficient means a decrement would take stock below zero.
@@ -60,6 +66,16 @@ const (
 // nothing. Callers that move several items lock them in variant order first
 // (see LockRows) so concurrent sales cannot deadlock.
 func Move(ctx context.Context, tx tenancy.TenantTx, storeID, variantID int64, delta int, reason string, ref Ref, userID int64) (int, error) {
+	after, err := moveStock(ctx, tx, storeID, variantID, delta, reason, ref, userID)
+	if err != nil || delta == 0 {
+		return after, err
+	}
+	k := Key{Store: storeID, Variant: variantID}
+	return after, follow(ctx, tx, []Key{k}, map[Key]int{k: delta}, nil, reason, ref, userID)
+}
+
+// moveStock is Move without the batches.
+func moveStock(ctx context.Context, tx tenancy.TenantTx, storeID, variantID int64, delta int, reason string, ref Ref, userID int64) (int, error) {
 	if delta == 0 {
 		var q int
 		err := tx.QueryRow(ctx, `SELECT coalesce((SELECT qty FROM inventories WHERE store_id = $1 AND variant_id = $2), 0)`, storeID, variantID).Scan(&q)
@@ -101,6 +117,10 @@ func Set(ctx context.Context, tx tenancy.TenantTx, storeID, variantID int64, qty
 		if _, err := tx.Exec(ctx, qLedger, storeID, variantID, delta, qty, reason, ref.Type, ref.ID, userID); err != nil {
 			return 0, err
 		}
+		k := Key{Store: storeID, Variant: variantID}
+		if err := follow(ctx, tx, []Key{k}, map[Key]int{k: delta}, nil, reason, ref, userID); err != nil {
+			return 0, err
+		}
 	}
 	return id, nil
 }
@@ -140,11 +160,65 @@ func LockRows(ctx context.Context, tx tenancy.TenantTx, storeID int64, variantID
 type Mismatch struct {
 	StoreID, VariantID int64
 	Qty, LedgerSum     int
+	// Industry P3 item 1: "" for the stock ledger; "batch_total" when a
+	// tracked product's stock differs from its batches' sum (LedgerSum is
+	// the batch sum); "batch_ledger" when a batch's stock differs from its
+	// movements (BatchID set).
+	Kind    string
+	BatchID int64
 }
 
 // Reconcile compares every inventory row with the sum of its movements
-// (the nightly S1 check; the job itself arrives with the worker step).
+// (the nightly S1 check), and tracked products' batches with their stock
+// and their own ledger (industry P3 §1.4).
 func Reconcile(ctx context.Context, tx tenancy.TenantTx) ([]Mismatch, error) {
+	out, err := reconcileStock(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
+	b, err := reconcileBatches(ctx, tx)
+	return append(out, b...), err
+}
+
+// reconcileBatches: for tracked products (module on), stock = batch sum;
+// for every batch row, stock = sum of its movements (stock bucket), and
+// quarantine = sum of its quarantine movements.
+func reconcileBatches(ctx context.Context, tx tenancy.TenantTx) ([]Mismatch, error) {
+	rows, err := tx.Query(ctx, `SELECT i.store_id, i.variant_id, i.qty, coalesce(bs.total, 0), 'batch_total', 0::bigint
+		FROM inventories i
+		JOIN product_variants v ON v.id = i.variant_id
+		JOIN products p ON p.id = v.product_id AND p.tracks_batches
+		LEFT JOIN (SELECT s.store_id, b.variant_id, sum(s.qty)::int AS total FROM batch_stock s JOIN batches b ON b.id = s.batch_id
+		           GROUP BY s.store_id, b.variant_id) bs ON bs.store_id = i.store_id AND bs.variant_id = i.variant_id
+		WHERE EXISTS (SELECT 1 FROM settings WHERE id = 1 AND 'batch_expiry' = ANY(modules)) AND i.qty <> coalesce(bs.total, 0)
+		UNION ALL
+		SELECT s.store_id, b.variant_id, s.qty, coalesce(m.total, 0), 'batch_ledger', s.batch_id
+		FROM batch_stock s JOIN batches b ON b.id = s.batch_id
+		LEFT JOIN (SELECT store_id, batch_id, sum(delta)::int AS total FROM batch_movements WHERE bucket = 'stock'
+		           GROUP BY store_id, batch_id) m ON m.store_id = s.store_id AND m.batch_id = s.batch_id
+		WHERE s.qty <> coalesce(m.total, 0)
+		UNION ALL
+		SELECT s.store_id, b.variant_id, s.quarantined_qty, coalesce(m.total, 0), 'batch_quarantine', s.batch_id
+		FROM batch_stock s JOIN batches b ON b.id = s.batch_id
+		LEFT JOIN (SELECT store_id, batch_id, sum(delta)::int AS total FROM batch_movements WHERE bucket = 'quarantine'
+		           GROUP BY store_id, batch_id) m ON m.store_id = s.store_id AND m.batch_id = s.batch_id
+		WHERE s.quarantined_qty <> coalesce(m.total, 0)`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Mismatch
+	for rows.Next() {
+		var m Mismatch
+		if err := rows.Scan(&m.StoreID, &m.VariantID, &m.Qty, &m.LedgerSum, &m.Kind, &m.BatchID); err != nil {
+			return nil, err
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+
+func reconcileStock(ctx context.Context, tx tenancy.TenantTx) ([]Mismatch, error) {
 	rows, err := tx.Query(ctx, `SELECT coalesce(i.store_id, m.store_id), coalesce(i.variant_id, m.variant_id),
 			coalesce(i.qty, 0), coalesce(m.total, 0)
 		FROM inventories i

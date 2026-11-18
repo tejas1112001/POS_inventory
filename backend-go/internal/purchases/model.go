@@ -31,23 +31,26 @@ type SupplierRef struct {
 
 // ItemJSON is one purchase line. unitPrice is the old field name.
 type ItemJSON struct {
-	ID          int64           `json:"id"`
-	PurchaseID  int64           `json:"purchase_id"`
-	ProductID   int64           `json:"product_id"`
-	VariantID   int64           `json:"variant_id"`
-	StoreID     int64           `json:"store_id"`
-	ProductName string          `json:"product_name"`
-	SKU         *string         `json:"sku"`
-	Quantity    int             `json:"quantity"`
-	ReceivedQty int             `json:"received_qty"` // industry P1 item 8
-	Barcode     *string         `json:"barcode"`      // the variant's current barcode (scanning while receiving)
-	UnitPrice   decimal.Decimal `json:"unitPrice"`
-	UnitPriceS  decimal.Decimal `json:"unit_price"`
-	Discount    decimal.Decimal `json:"discount"`
-	Subtotal    decimal.Decimal `json:"subtotal"`
-	CreatedAt   time.Time       `json:"createdAt"`
-	Product     NameRef         `json:"product"`
-	Store       *NameRef        `json:"store"`
+	ID          int64   `json:"id"`
+	PurchaseID  int64   `json:"purchase_id"`
+	ProductID   int64   `json:"product_id"`
+	VariantID   int64   `json:"variant_id"`
+	StoreID     int64   `json:"store_id"`
+	ProductName string  `json:"product_name"`
+	SKU         *string `json:"sku"`
+	Quantity    int     `json:"quantity"`
+	ReceivedQty int     `json:"received_qty"` // industry P1 item 8
+	// TracksBatches: receiving this line needs batch and expiry (industry
+	// P3 item 2; the product's flag and the module).
+	TracksBatches bool            `json:"tracksBatches"`
+	Barcode       *string         `json:"barcode"` // the variant's current barcode (scanning while receiving)
+	UnitPrice     decimal.Decimal `json:"unitPrice"`
+	UnitPriceS    decimal.Decimal `json:"unit_price"`
+	Discount      decimal.Decimal `json:"discount"`
+	Subtotal      decimal.Decimal `json:"subtotal"`
+	CreatedAt     time.Time       `json:"createdAt"`
+	Product       NameRef         `json:"product"`
+	Store         *NameRef        `json:"store"`
 }
 
 // PurchaseJSON keeps the old field names and adds paymentStatus and the
@@ -85,9 +88,11 @@ const (
 		FROM purchases p LEFT JOIN suppliers s ON s.id = p.supplier_id
 		WHERE p.id = ANY($1)`
 	qLoadItems = `SELECT i.id, i.purchase_id, i.product_id, i.variant_id, i.store_id, i.product_name, i.sku, i.quantity,
-			i.unit_price, i.discount, i.subtotal, i.created_at, st.name, i.received_qty, v.item_barcode
+			i.unit_price, i.discount, i.subtotal, i.created_at, st.name, i.received_qty, v.item_barcode,
+			coalesce(pr.tracks_batches, false) AND EXISTS (SELECT 1 FROM settings WHERE id = 1 AND 'batch_expiry' = ANY(modules))
 		FROM purchase_items i LEFT JOIN stores st ON st.id = i.store_id
 		LEFT JOIN product_variants v ON v.id = i.variant_id
+		LEFT JOIN products pr ON pr.id = i.product_id
 		WHERE i.purchase_id = ANY($1) ORDER BY i.purchase_id, i.id`
 )
 
@@ -131,7 +136,7 @@ func load(ctx context.Context, tx tenancy.TenantTx, ids []int64) ([]PurchaseJSON
 		var it ItemJSON
 		var store *string
 		if err := rows.Scan(&it.ID, &it.PurchaseID, &it.ProductID, &it.VariantID, &it.StoreID, &it.ProductName, &it.SKU,
-			&it.Quantity, &it.UnitPrice, &it.Discount, &it.Subtotal, &it.CreatedAt, &store, &it.ReceivedQty, &it.Barcode); err != nil {
+			&it.Quantity, &it.UnitPrice, &it.Discount, &it.Subtotal, &it.CreatedAt, &store, &it.ReceivedQty, &it.Barcode, &it.TracksBatches); err != nil {
 			rows.Close()
 			return nil, err
 		}

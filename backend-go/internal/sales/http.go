@@ -405,6 +405,12 @@ func (a *API) insertSale(r *http.Request, tx tenancy.TenantTx, p auth.Principal,
 			return 0, 0, "", err
 		}
 	}
+	// Industry P3 item 3: tracked lines are filled from batches, earliest
+	// expiry first; the batch rows are locked after the stock rows.
+	sb, err := allocateBatches(ctx, tx, c.storeID, pr, true)
+	if err != nil {
+		return 0, 0, "", err
+	}
 	ref, err := nextReference(ctx, tx, s.prefix)
 	if err != nil {
 		return 0, 0, "", err
@@ -453,10 +459,14 @@ func (a *API) insertSale(r *http.Request, tx tenancy.TenantTx, p auth.Principal,
 	if err := spendCredit(ctx, tx, s, cust, id, p.UserID, creditPayments(st.rows)); err != nil {
 		return 0, 0, "", err
 	}
-	if err := insertItems(ctx, tx, id, pr); err != nil {
+	itemIDs, err := insertItems(ctx, tx, id, pr)
+	if err != nil {
 		return 0, 0, "", err
 	}
-	if err := inventory.Apply(ctx, tx, keys, deltas, inventory.ReasonSale, inventory.Ref{Type: "sale", ID: id}, p.UserID); err != nil {
+	if err := insertSoldBatches(ctx, tx, itemIDs, sb); err != nil {
+		return 0, 0, "", err
+	}
+	if err := inventory.ApplyBatched(ctx, tx, keys, deltas, sb.alloc, inventory.ReasonSale, inventory.Ref{Type: "sale", ID: id}, p.UserID); err != nil {
 		return 0, 0, "", err
 	}
 	receiptID, err := receipts.Create(ctx, tx, id, 1)
@@ -659,6 +669,9 @@ func (a *API) update(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
+		if err := refuseIfBatched(ctx, tx, id, items, pr); err != nil {
+			return err
+		}
 		for _, l := range pr.lines {
 			deltas[inventory.Key{Store: c.storeID, Variant: l.v.id}] -= int(l.qty)
 		}
@@ -668,7 +681,7 @@ func (a *API) update(w http.ResponseWriter, r *http.Request) {
 		if _, err := tx.Exec(ctx, `DELETE FROM order_items WHERE sale_id = $1`, id); err != nil {
 			return err
 		}
-		if err := insertItems(ctx, tx, id, pr); err != nil {
+		if _, err := insertItems(ctx, tx, id, pr); err != nil {
 			return err
 		}
 		status := c.status
@@ -816,7 +829,16 @@ func (a *API) void(w http.ResponseWriter, r *http.Request) {
 				deltas[inventory.Key{Store: old.storeID, Variant: *o.variantID}] += o.qty
 			}
 		}
-		if err := inventory.LockAndApply(ctx, tx, deltas, nil, inventory.ReasonSaleVoid, inventory.Ref{Type: "sale", ID: id}, p.UserID); err != nil {
+		// Industry P3 item 3: each unit goes back to the batch it came from.
+		alloc, err := voidBatches(ctx, tx, id, old.storeID)
+		if err != nil {
+			return err
+		}
+		keys, _, err := inventory.Lock(ctx, tx, deltas, nil)
+		if err != nil {
+			return err
+		}
+		if err := inventory.ApplyBatched(ctx, tx, keys, deltas, alloc, inventory.ReasonSaleVoid, inventory.Ref{Type: "sale", ID: id}, p.UserID); err != nil {
 			return err
 		}
 		var version int

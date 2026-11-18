@@ -129,7 +129,11 @@ func (m *Maintenance) ReconcileLedgers(ctx context.Context) (int, error) {
 		m.Log.WarnContext(ctx, "stock ledger mismatch", slog.String("tenant_id", t.ID), slog.Int("rows", len(found)))
 		items := make([]map[string]any, 0, min(len(found), maxReported))
 		for _, f := range found[:min(len(found), maxReported)] {
-			items = append(items, map[string]any{"store_id": f.StoreID, "variant_id": f.VariantID, "qty": f.Qty, "ledger_sum": f.LedgerSum})
+			it := map[string]any{"store_id": f.StoreID, "variant_id": f.VariantID, "qty": f.Qty, "ledger_sum": f.LedgerSum}
+			if f.Kind != "" { // industry P3: batch checks
+				it["kind"], it["batch_id"] = f.Kind, f.BatchID
+			}
+			items = append(items, it)
 		}
 		return m.Jobs.InTenantTx(ctx, t, tenancy.TxOptions{Access: tenancy.ReadWrite}, func(tx tenancy.TenantTx) error {
 			return audit.Write(ctx, tx, audit.Entry{ActorType: audit.ActorSystem, Action: "stock.ledger_mismatch",

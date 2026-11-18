@@ -33,7 +33,7 @@ var BusinessTypes = []BusinessType{
 	{Retail, "Retail", "General store: products with optional free-form variants."},
 	{Clothing, "Clothing", "Sizes and colours, size-colour matrix, barcode labels, stock counts."},
 	{Footwear, "Footwear", "Size systems (UK / US / EU / India), sizes and colours, labels, stock counts."},
-	{Pharmacy, "Pharmacy", "Barcode labels and stock counts. Batches and expiry arrive in Phase 3."},
+	{Pharmacy, "Pharmacy", "Batches and expiry (earliest expiry first), barcode labels and stock counts."},
 }
 
 // BusinessType describes one preset.
@@ -58,6 +58,9 @@ const (
 	ProductAttributes = "product_attributes"
 	BarcodeLabels     = "barcode_labels"
 	StockCounts       = "stock_counts"
+	// BatchExpiry is industry Phase 3 (docs/INDUSTRY_PHASE3_PHARMACY_DESIGN.md
+	// item 1). inventory.ModuleBatches repeats the key.
+	BatchExpiry = "batch_expiry"
 )
 
 // Module is one switchable capability.
@@ -101,6 +104,14 @@ var Registry = []Module{
 		Perms:          []string{"stock_counts:view", "stock_counts:create", "stock_counts:complete"},
 		RecommendedFor: []string{Clothing, Footwear, Pharmacy},
 		Routes:         []string{"/api/stock-counts"},
+	},
+	{
+		Key: BatchExpiry, Label: "Batches and expiry",
+		Description:    "Keep stock per batch with its expiry date, sell the earliest expiry first and stop expired stock being sold.",
+		Feature:        BatchExpiry,
+		Perms:          []string{"batches:view", "batches:manage"},
+		RecommendedFor: []string{Pharmacy},
+		Routes:         []string{"/api/batches"},
 	},
 }
 

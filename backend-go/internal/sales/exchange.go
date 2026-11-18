@@ -133,6 +133,10 @@ func (a *API) exchange(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
+		pol.markRestocked(pr.rows)
+		if err := planReturnBatches(ctx, tx, pol, &pr, cr, "returnLines", p.UserID); err != nil {
+			return err
+		}
 		// The new sale: the same customer and store as the returned sale.
 		payments := in.Payments
 		if payments == nil {
@@ -183,7 +187,6 @@ func (a *API) exchange(w http.ResponseWriter, r *http.Request) {
 		// Stock: the returned goods come in (restocked lines only), the new
 		// goods go out. Every row either touches is locked once, in order;
 		// the shortage check uses the net change.
-		pol.markRestocked(pr.rows)
 		retDeltas := returnDeltas(pr)
 		saleDeltas := map[inventory.Key]int{}
 		for _, l := range prc.lines {
@@ -195,6 +198,11 @@ func (a *API) exchange(w http.ResponseWriter, r *http.Request) {
 		}
 		for k, d := range saleDeltas {
 			lockDeltas[k] += d
+		}
+		for _, k := range quarantineKeys(pr) {
+			if _, ok := lockDeltas[k]; !ok {
+				lockDeltas[k] = 1 // quarantined units: the stock row is locked, not changed
+			}
 		}
 		for k, d := range lockDeltas {
 			if d == 0 {

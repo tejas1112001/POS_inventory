@@ -171,6 +171,14 @@ function ReceiptBody({ sale, store, settings, businessName, taxLabel, logoUrl, n
                   {attrs && ` (${attrs})`}
                   {i.sku && <span className="rc-sku">SKU {i.sku}</span>}
                   {i.hsn_code && <span className="rc-sku">HSN {i.hsn_code}</span>}
+                  {(i.batches || []).map((b) => (
+                    <span key={b.batchId} className="rc-sku">
+                      {b.unknown ? 'No batch' : `Batch ${b.batchNo}`}
+                      {b.expiry ? ` · Exp ${b.expiry.slice(5, 7)}/${b.expiry.slice(0, 4)}` : ''}
+                      {b.mrp != null ? ` · MRP ${Number(b.mrp).toFixed(2)}` : ''}
+                      {i.batches.length > 1 ? ` × ${b.quantity}` : ''}
+                    </span>
+                  ))}
                 </td>
                 <td className="rc-qty">{i.quantity}</td>
                 <td>{formatCurrency(i.unit_price)}</td>

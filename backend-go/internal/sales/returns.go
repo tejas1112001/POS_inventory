@@ -53,6 +53,9 @@ type returnItemIn struct {
 	UnitPrice   money.Dec `json:"unitPrice"`
 	Reason      *string   `json:"reason"`
 	Condition   *string   `json:"condition"` // industry P1 item 9: resellable, damaged, defective
+	// BatchID names the batch of a return without a sale (industry P3
+	// item 4, A28); a linked return goes back to the batches it was sold from.
+	BatchID money.Int `json:"batchId"`
 
 	// Accepted and ignored: the server computes line amounts.
 	Total    json.RawMessage `json:"total"`
@@ -90,6 +93,7 @@ type returnLine struct {
 	price                             decimal.Decimal
 	priceSet                          bool
 	reason, condition                 string
+	batchID                           int64 // industry P3 item 4
 }
 
 type cleanReturn struct {
@@ -160,6 +164,12 @@ func validateReturn(in returnIn) (cleanReturn, error) {
 			if len([]rune(l.reason)) > maxReasonLen {
 				f[k+".reason"] = fmt.Sprintf("At most %d characters.", maxReasonLen)
 			}
+		}
+		if it.BatchID.Valid {
+			if it.BatchID.V <= 0 {
+				f[k+".batchId"] = "Not a batch."
+			}
+			l.batchID = it.BatchID.V
 		}
 		if it.Condition != nil {
 			l.condition = strings.TrimSpace(*it.Condition)
@@ -262,6 +272,9 @@ type returnRow struct {
 	cgst, sgst, igst              *decimal.Decimal
 	reason, condition             string
 	restocked                     bool
+	line                          int        // index of the body line
+	tracked                       bool       // industry P3 item 4
+	batches                       []rowBatch // where a tracked row's units go
 }
 
 // ReturnExcess is one entry of the RETURN_EXCEEDS_SOLD details.
@@ -353,7 +366,7 @@ func matchSold(c cleanReturn, sold []soldLine, currency string) ([]returnRow, er
 				cgst:     refundSharePtr(s.cgst, s.qty, s.returned, take, currency),
 				sgst:     refundSharePtr(s.sgst, s.qty, s.returned, take, currency),
 				igst:     refundSharePtr(s.igst, s.qty, s.returned, take, currency),
-				reason:   l.reason, condition: l.condition})
+				reason:   l.reason, condition: l.condition, line: i})
 			s.returned += take
 			if left -= take; left == 0 {
 				break
@@ -470,7 +483,7 @@ func unlinkedRows(ctx context.Context, tx tenancy.TenantTx, c cleanReturn, curre
 		}
 		pid, sku := v.productID, v.sku
 		out = append(out, returnRow{productID: &pid, variantID: ids[i], name: v.name, sku: &sku, qty: l.qty, unit: l.price,
-			subtotal: money.Round(l.price.Mul(decimal.NewFromInt(l.qty)), currency), reason: l.reason, condition: l.condition})
+			subtotal: money.Round(l.price.Mul(decimal.NewFromInt(l.qty)), currency), reason: l.reason, condition: l.condition, line: i})
 	}
 	return out, f.err()
 }
@@ -524,7 +537,8 @@ const (
 		RETURNING id`
 	qInsertReturnItem = `INSERT INTO return_items (sale_return_id, order_item_id, product_id, variant_id, product_name, sku, quantity,
 			unit_price, discount, tax_amount, cgst, sgst, igst, subtotal, reason, condition, restocked)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NULLIF($15, ''), NULLIF($16, ''), $17)`
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NULLIF($15, ''), NULLIF($16, ''), $17)
+		RETURNING id`
 )
 
 // preparedReturn is a return worked out under the sale's row lock, before
@@ -612,10 +626,20 @@ func (pol ReturnPolicy) markRestocked(rows []returnRow) {
 	}
 }
 
-// returnDeltas are the stock movements of the restocked rows.
+// returnDeltas are the stock movements of the restocked rows. A tracked
+// row moves only its units going back to sellable stock (quarantine is
+// outside inventories.qty).
 func returnDeltas(pr preparedReturn) map[inventory.Key]int {
 	d := map[inventory.Key]int{}
 	for _, x := range pr.rows {
+		if x.tracked {
+			for _, b := range x.batches {
+				if b.bucket == bucketStock {
+					d[inventory.Key{Store: pr.storeID, Variant: x.variantID}] += b.qty
+				}
+			}
+			continue
+		}
 		if x.restocked {
 			d[inventory.Key{Store: pr.storeID, Variant: x.variantID}] += int(x.qty)
 		}
@@ -652,12 +676,20 @@ func writeReturn(ctx context.Context, tx tenancy.TenantTx, p auth.Principal, c c
 		}
 	}
 	for _, x := range pr.rows {
-		if _, err := tx.Exec(ctx, qInsertReturnItem, id, x.orderItemID, x.productID, x.variantID, x.name, x.sku, x.qty,
-			x.unit, x.discount, x.tax, x.cgst, x.sgst, x.igst, x.subtotal, x.reason, x.condition, x.restocked); err != nil {
+		var itemID int64
+		if err := tx.QueryRow(ctx, qInsertReturnItem, id, x.orderItemID, x.productID, x.variantID, x.name, x.sku, x.qty,
+			x.unit, x.discount, x.tax, x.cgst, x.sgst, x.igst, x.subtotal, x.reason, x.condition, x.restocked).Scan(&itemID); err != nil {
+			return 0, "", err
+		}
+		if err := writeReturnBatches(ctx, tx, itemID, x); err != nil {
 			return 0, "", err
 		}
 	}
-	if err := inventory.Apply(ctx, tx, keys, deltas, inventory.ReasonReturn, inventory.Ref{Type: "sale_return", ID: id}, p.UserID); err != nil {
+	sref := inventory.Ref{Type: "sale_return", ID: id}
+	if err := inventory.ApplyBatched(ctx, tx, keys, deltas, returnAlloc(pr), inventory.ReasonReturn, sref, p.UserID); err != nil {
+		return 0, "", err
+	}
+	if err := quarantineReturned(ctx, tx, pr, sref, p.UserID); err != nil {
 		return 0, "", err
 	}
 	return id, ref, nil
@@ -739,8 +771,11 @@ func (a *API) createReturn(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		pol.markRestocked(pr.rows)
+		if err := planReturnBatches(ctx, tx, pol, &pr, c, "returnItems", p.UserID); err != nil {
+			return err
+		}
 		deltas := returnDeltas(pr)
-		keys, _, err := inventory.Lock(ctx, tx, deltas, nil)
+		keys, _, err := inventory.Lock(ctx, tx, returnLocks(pr, deltas), nil)
 		if err != nil {
 			return err
 		}

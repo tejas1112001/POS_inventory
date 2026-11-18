@@ -14,11 +14,11 @@ import (
 // export, so a migration that adds a table must decide which list it joins.
 var (
 	Tables = []string{
-		"attribute_defs", "audit_log", "brands", "categories", "customer_credit_entries", "customer_payment_allocations", "customer_payments", "customers", "doc_counters", "email_outbox", "files", "inventories",
-		"order_items", "permissions", "product_variants", "products", "purchase_items", "purchase_receipt_items", "purchase_receipts", "purchases", "receipts",
-		"return_items", "role_permissions", "roles", "sale_payments", "sale_returns", "sales", "settings", "stock_adjustments",
+		"attribute_defs", "audit_log", "batch_movements", "batch_stock", "batches", "brands", "categories", "customer_credit_entries", "customer_payment_allocations", "customer_payments", "customers", "doc_counters", "email_outbox", "files", "inventories",
+		"order_item_batches", "order_items", "permissions", "product_variants", "products", "purchase_items", "purchase_receipt_batches", "purchase_receipt_items", "purchase_receipts", "purchases", "receipts",
+		"return_item_batches", "return_items", "role_permissions", "roles", "sale_payments", "sale_returns", "sales", "settings", "stock_adjustments",
 		"stock_count_lines", "stock_counts", "stock_movements", "store_products", "stores", "sub_categories", "suppliers", "tenant_email_settings", "units",
-		"users", "warehouses",
+		"users", "warehouses", "write_off_lines", "write_offs",
 	}
 	Excluded = map[string]string{
 		"refresh_tokens":   "live sessions",

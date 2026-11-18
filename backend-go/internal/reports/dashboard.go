@@ -66,6 +66,9 @@ type Dashboard struct {
 	SummaryCards      SummaryCards     `json:"summaryCards"`
 	Filters           DashboardFilters `json:"filters"`
 	Extra             DashboardExtra   `json:"extra"`
+	// Batches: the pharmacy tile (industry P3 item 7, A33), with the
+	// batch_expiry module on and batches:view; null otherwise.
+	Batches *DashboardBatches `json:"batches"`
 }
 
 // PeriodFigures are one period's sales figures (UI S7).
@@ -200,8 +203,8 @@ func (a *API) dashboard(w http.ResponseWriter, r *http.Request) {
 	store := queryID(r, "storeId")
 	// The answer depends on the tenant, whose sales are counted, the
 	// filters, and the permissions that add or hide counts.
-	key := fmt.Sprintf("%s|%d|%d|%s|%s|%t%t%t%t", tenant(r).ID, scope, store, r.URL.Query().Get("startDate"), r.URL.Query().Get("endDate"),
-		p.Has("sales:view_all"), p.Has("inventory:view"), p.Has("purchases:view"), p.Has("reports:view"))
+	key := fmt.Sprintf("%s|%d|%d|%s|%s|%t%t%t%t%t", tenant(r).ID, scope, store, r.URL.Query().Get("startDate"), r.URL.Query().Get("endDate"),
+		p.Has("sales:view_all"), p.Has("inventory:view"), p.Has("purchases:view"), p.Has("reports:view"), p.Has("batches:view"))
 	if a.d.DashboardTTL > 0 {
 		if cached, ok := a.dashC.Get(key); ok {
 			w.Header().Set("Cache-Control", "no-store")
@@ -246,6 +249,11 @@ func (a *API) dashboard(w http.ResponseWriter, r *http.Request) {
 		}
 		if out.SalesDistribution, err = topProducts(ctx, tx, args); err != nil {
 			return err
+		}
+		if p.Has("batches:view") {
+			if out.Batches, err = dashBatches(ctx, tx, store); err != nil {
+				return err
+			}
 		}
 		return extras(ctx, tx, p, &out, scope, store, from, to, loc)
 	})

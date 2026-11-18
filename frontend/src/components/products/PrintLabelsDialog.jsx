@@ -39,7 +39,7 @@ function savedLayout() {
 export default function PrintLabelsDialog({ product, rows, title, canGenerate, onClose, onChanged }) {
   const variants = rows || product.ProductVariants || [];
   const [copies, setCopies] = useState(() =>
-    Object.fromEntries(variants.map((v) => [v.id, rows ? Math.min(500, Math.max(0, v.copies ?? 1)) : 1]))
+    Object.fromEntries(variants.map((v) => [v.key ?? v.id, rows ? Math.min(500, Math.max(0, v.copies ?? 1)) : 1]))
   );
   const [layouts, setLayouts] = useState(BUILTIN);
   const [layoutId, setLayoutId] = useState(() => savedLayout() || BUILTIN[0].id);
@@ -72,7 +72,8 @@ export default function PrintLabelsDialog({ product, rows, title, canGenerate, o
       toast.error(rows ? `Nothing in this list has the code ${code}.` : `No option of ${product.name} has the code ${code}.`);
       return;
     }
-    setCopies((cur) => ({ ...cur, [hit.variant.id]: Math.min((Number(cur[hit.variant.id]) || 0) + 1, 500) }));
+    const hk = hit.variant.key ?? hit.variant.id;
+    setCopies((cur) => ({ ...cur, [hk]: Math.min((Number(cur[hk]) || 0) + 1, 500) }));
   });
 
   const setCopy = (id, value) => {
@@ -103,7 +104,10 @@ export default function PrintLabelsDialog({ product, rows, title, canGenerate, o
       /* private mode */
     }
     try {
-      const items = variants.filter((v) => Number(copies[v.id]) > 0).map((v) => ({ variantId: v.id, copies: Number(copies[v.id]) }));
+      // Rows may carry a batch (industry P3 item 2): its number and expiry print on the label.
+      const items = variants
+        .filter((v) => Number(copies[v.key ?? v.id]) > 0)
+        .map((v) => ({ variantId: v.id, copies: Number(copies[v.key ?? v.id]), ...(v.batchId ? { batchId: v.batchId } : {}) }));
       await api.openBlob('/api/labels/pdf', { method: 'POST', body: { layoutId, items }, quiet: true });
     } catch (err) {
       setError(err);
@@ -141,10 +145,13 @@ export default function PrintLabelsDialog({ product, rows, title, canGenerate, o
             </thead>
             <tbody className="divide-y">
               {variants.map((v) => (
-                <tr key={v.id}>
+                <tr key={v.key ?? v.id}>
                   <td className="py-1.5 pr-3">
                     <div className="font-medium">{optionName(v)}</div>
-                    <div className="text-xs text-muted-foreground">{v.sku}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {v.sku}
+                      {v.batchLabel ? ` · ${v.batchLabel}` : ''}
+                    </div>
                   </td>
                   <td className="py-1.5 pr-3 font-mono text-xs">{v.itemBarcode || <span className="font-sans text-muted-foreground">None: prints the SKU</span>}</td>
                   <td className="py-1.5 pr-3 text-right tabular-nums">{v.price == null ? '—' : formatCurrency(v.price)}</td>
@@ -154,8 +161,8 @@ export default function PrintLabelsDialog({ product, rows, title, canGenerate, o
                       min="0"
                       max="500"
                       className={inputCls}
-                      value={copies[v.id]}
-                      onChange={(e) => setCopy(v.id, e.target.value)}
+                      value={copies[v.key ?? v.id]}
+                      onChange={(e) => setCopy(v.key ?? v.id, e.target.value)}
                       aria-label={`Copies of ${optionName(v)}`}
                     />
                   </td>

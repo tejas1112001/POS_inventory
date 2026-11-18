@@ -29,7 +29,7 @@ func TestRecommendedPresets(t *testing.T) {
 	require.Empty(t, Recommended(Retail))
 	require.Equal(t, []string{ProductAttributes, BarcodeLabels, StockCounts}, Recommended(Clothing))
 	require.Equal(t, []string{ProductAttributes, BarcodeLabels, StockCounts}, Recommended(Footwear))
-	require.Equal(t, []string{BarcodeLabels, StockCounts}, Recommended(Pharmacy))
+	require.Equal(t, []string{BarcodeLabels, StockCounts, BatchExpiry}, Recommended(Pharmacy)) // industry P3
 	require.Empty(t, Recommended("bakery"))
 	require.False(t, ValidType("bakery"))
 	require.False(t, ValidType(""))
