@@ -24,6 +24,7 @@ const MaxLabels = 2000
 // Label is one printed label.
 type Label struct {
 	Name, Variant, Price, SKU, Code string
+	Batch                           string // industry P3 item 2: "B <no> EXP <MM/YYYY>", printed on the variant/price line
 }
 
 // Labels are drawn with gofpdf directly (the library maroto wraps): label
@@ -121,7 +122,7 @@ func (b band) text(lay Layout, l Label) string {
 	case "name":
 		return l.Name
 	case "line":
-		return join(pick(FieldVariant, l.Variant), pick(FieldPrice, l.Price))
+		return join(pick(FieldVariant, l.Variant), pick(FieldPrice, l.Price), l.Batch)
 	case "under":
 		sku := pick(FieldSKU, l.SKU)
 		if lay.Has(FieldBarcode) && sku == l.Code {

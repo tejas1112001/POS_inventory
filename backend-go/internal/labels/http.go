@@ -378,6 +378,9 @@ func (a *API) putLayouts(w http.ResponseWriter, r *http.Request) {
 type pdfItem struct {
 	VariantID int64 `json:"variantId"`
 	Copies    int   `json:"copies"`
+	// BatchID prints the batch number and expiry on the label (industry P3
+	// item 2; batch_expiry module).
+	BatchID int64 `json:"batchId"`
 }
 
 type pdfIn struct {
@@ -455,10 +458,17 @@ func (a *API) pdf(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				return err
 			}
+			batchText, err := labelBatches(r.Context(), tx, in.Items)
+			if err != nil {
+				return err
+			}
 			for _, it := range in.Items {
 				l, ok := byID[it.VariantID]
 				if !ok {
 					return apperr.NotFound()
+				}
+				if it.BatchID > 0 {
+					l.Batch = batchText[it.BatchID]
 				}
 				for range it.Copies {
 					items = append(items, l)
@@ -478,6 +488,55 @@ func (a *API) pdf(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Length", strconv.Itoa(len(pdf)))
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(pdf)
+}
+
+// labelBatches returns "B <no> EXP <MM/YYYY>" for the items' batches; a
+// batch of another variant is not found, and batches need the module.
+func labelBatches(ctx context.Context, tx tenancy.TenantTx, items []pdfItem) (map[int64]string, error) {
+	var ids []int64
+	for _, it := range items {
+		if it.BatchID > 0 {
+			ids = append(ids, it.BatchID)
+		}
+	}
+	out := map[int64]string{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	var on bool
+	if err := tx.QueryRow(ctx, `SELECT 'batch_expiry' = ANY(modules) FROM settings WHERE id = 1`).Scan(&on); err != nil {
+		return nil, err
+	}
+	if !on {
+		return nil, modules.ErrOff(modules.BatchExpiry)
+	}
+	rows, err := tx.Query(ctx, `SELECT id, variant_id, batch_no::text, coalesce(to_char(expiry_date, 'MM/YYYY'), '') FROM batches WHERE id = ANY($1)`, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	variant := map[int64]int64{}
+	for rows.Next() {
+		var id, vid int64
+		var no, exp string
+		if err := rows.Scan(&id, &vid, &no, &exp); err != nil {
+			return nil, err
+		}
+		variant[id] = vid
+		out[id] = "B " + no
+		if exp != "" {
+			out[id] += " EXP " + exp
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for _, it := range items {
+		if it.BatchID > 0 && variant[it.BatchID] != it.VariantID {
+			return nil, apperr.NotFound()
+		}
+	}
+	return out, nil
 }
 
 // labelData loads the label text for live variants.

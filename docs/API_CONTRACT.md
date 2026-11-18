@@ -432,6 +432,15 @@ A product **tracks batches** when `products.tracks_batches` is true and the modu
 | A25 | GET | product responses | as before | Gain `tracksBatches` and `batchStock` (`null` when not tracked; else `{sellable, unbatched, quarantined, expired, nearestExpiry}` across stores) |
 | — | PUT | `/api/settings/business` | as before | Turning `batch_expiry` on starts tracking for every product that has it switched on (stock into the unknown batch); turning it off closes their batch stock. Refused (409) while units are quarantined |
 
+**Item 2: receiving with batch and expiry** (tenant migration 00026: DB30 `purchase_receipt_batches`; DB36 settings `near_expiry_days` 90, `min_days_to_sell` 0, `expiry_digest` false, used from here on and editable with item 7).
+
+| # | Method | Path | Guard | Notes |
+|---|---|---|---|---|
+| A26 | POST | `/api/purchases/{id}/receipts` | as before (A16) | Lines gain `batches[{batchNo (1–40), expiry (YYYY-MM-DD or MM/YYYY), mfgDate?, mrp?, quantity}]`; body gains `acceptNearExpiry`, `confirmFarExpiry`. A line of a tracked product needs batches adding up to its `quantity` (400 `lines[i].batches`); an untracked line with batches → 400, or 403 `MODULE_OFF` with the module off. Expiry before today → 400 `lines[i].batches[j].expiry` "This batch has expired"; more than 10 years ahead → 400 unless `confirmFarExpiry`. Expiry within `near_expiry_days` → 409 `NEAR_EXPIRY` with `details{batches[{line, batchNo, expiry, daysLeft, quantity}], nearExpiryDays}` and nothing saved; resent with `acceptNearExpiry: true` it is saved and the audit `purchase.receive` lists them under `nearExpiryAccepted`. A batch number already recorded for the product (any case) is reused when the expiry matches (MRP and cost fill in only if empty), otherwise 400 "already recorded … with another expiry date"; `UNBATCHED` → 400. A new batch's cost defaults to the line's unit price. Receipt lines gain `batches[{batchId, batchNo, expiry, mrp, quantity, nearExpiryAccepted}]` (empty for untracked lines), also in `GET /api/purchases/{id}/receipts` |
+| A26 | PUT, POST | `/api/purchases/{id}` (status Received), `/api/purchases` (created as Received) | as before | Refused with 409 `INVALID_STATE` while an outstanding line is a tracked product ("Receive the goods line by line and enter batch and expiry"). Untracked purchases as before |
+| — | GET | purchase responses | as before | `items[]` gain `tracksBatches` (the product tracks batches and the module is on) |
+| — | POST | `/api/labels/pdf` | as before | `items[]` accept `batchId` (a batch of that variant, else 404; module off → 403 `MODULE_OFF`): the label's variant/price line adds "B <no> EXP <MM/YYYY>" |
+
 ---
 
 ## 6. Frontend changes (minimal set, Phase 2)

@@ -4,8 +4,9 @@ Branch `industry/phase3` (from main `2ac28f2`), local only: no push or merge wit
 
 | Item | What | State |
 |---|---|---|
-| 1 | Batches and expiry: module, batch records, stock per batch, switching, reconciliation | Built (tenant migration 00025, platform 00015, A23–A25, P7/P8). **Stopped for the owner's OK on the copy-run report** (design §10) |
-| 2–8 | Receiving, selling, returns/quarantine, write-offs/recalls, counts, reports, import | Not started; one by one after the OK |
+| 1 | Batches and expiry: module, batch records, stock per batch, switching, reconciliation | Built (tenant migration 00025, platform 00015, A23–A25, P7/P8). Done; owner OK on the copy-run report 2026-11-18 |
+| 2 | Receiving with batch and expiry | Done (tenant migration 00026: DB30 + DB36 settings; A26; labels print batch/expiry); committed and deployed |
+| 3–8 | Selling, returns/quarantine, write-offs/recalls, counts, reports, import | In progress, one by one (owner OK 2026-11-18: "yes do all") |
 
 ## Phase 3 notes
 - Item 1: every stock change already goes through `inventory.Move`/`Set`/`Apply`; they now keep tracked products' batches in step (increase → unknown batch, decrease → earliest expiry first, unknown last). `ApplyBatched` takes named batches for items 2–8.
@@ -35,7 +36,7 @@ How to check each item: `docs/UI_CHECKLIST.md`. Last updated: 2026-11-18.
 - Item 9, DB20: `sales.exchange_return_id` has no foreign key (a key would make a cycle with `sale_returns.sale_id`, which tenant export/restore refuses). Accepted by the owner on 2026-11-18. The column is UNIQUE (that is its index), and `linkExchange` links only a return of the same store and customer, never twice.
 - Pushing: from 2026-11-18 commits stay local; push only when the owner asks.
 - Test database: `max_connections` raised to 200 in `internal/testdb` (the isolation suite ran out of connections at the default 100 once items 4 and 5 added test shops). Test setup only.
-- Dev stack: running; platform migrations at 15, tenant migrations at 25 (Phase 3 item 1 deployed). The dev database has no shops. The dev database has no shops (create one in the console to check in the browser).
+- Dev stack: running; platform migrations at 15, tenant migrations at 26 (Phase 3 items 1-2 deployed). The dev database has no shops. The dev database has no shops (create one in the console to check in the browser).
 - govulncheck: clean after the Go 1.27.4 bump (GO-2026-6859 fixed).
 - Temporary worktree `D:/pos_baseline` removed.
 

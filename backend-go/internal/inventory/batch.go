@@ -80,6 +80,12 @@ const (
 	qUnknownGet = `SELECT id FROM batches WHERE variant_id = $1 AND is_unknown`
 )
 
+// Tracked returns which of the variants track batches now (the product's
+// flag and the module).
+func Tracked(ctx context.Context, tx tenancy.TenantTx, variants []int64) (map[int64]bool, error) {
+	return tracked(ctx, tx, variants)
+}
+
 // tracked returns which of the variants track batches now.
 func tracked(ctx context.Context, tx tenancy.TenantTx, variants []int64) (map[int64]bool, error) {
 	out := map[int64]bool{}

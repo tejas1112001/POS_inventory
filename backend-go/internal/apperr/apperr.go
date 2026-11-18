@@ -83,7 +83,9 @@ const (
 	CodeInternal           = "INTERNAL"
 	CodeUnavailable        = "UNAVAILABLE"
 	CodeMisdirected        = "MISDIRECTED_REQUEST"
-	CodeModuleOff          = "MODULE_OFF" // industry P1 item 1: module not entitled or not switched on
+	CodeModuleOff          = "MODULE_OFF"         // industry P1 item 1: module not entitled or not switched on
+	CodeNearExpiry         = "NEAR_EXPIRY"        // industry P3 item 2: receiving a batch close to expiry needs a confirmation
+	CodeBatchNotSellable   = "BATCH_NOT_SELLABLE" // industry P3 item 3: expired, recalled or too close to expiry
 )
 
 // Validation reports field errors.

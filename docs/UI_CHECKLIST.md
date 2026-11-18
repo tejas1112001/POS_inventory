@@ -518,3 +518,25 @@ Known problems:
 - Until item 2 (receiving) and item 6 (counts by batch), all stock of a tracked product sits in "No batch"; dated batches cannot be created from the screen yet, so step 9 needs item 2.
 - The product card totals cover every store; the batch page can be filtered by store.
 - Switching tracking off is refused while units are in quarantine (quarantine arrives with item 4).
+
+## Industry P3 – Item 2: Receiving with batch and expiry
+
+Use a pharmacy shop (Batches and expiry on) with a supplier, product A that tracks batches and product B that does not (switch it off on its page).
+
+How to check:
+1. Purchases → new purchase: 100 of A and 5 of B, status Ordered → open it → **Receive goods**. A shows batch rows (Batch no., Expiry, MRP, Qty) and **Another batch**; B shows the usual box.
+2. Enter A as batch B1 expiring 03/2030 × 60 and B2 expiring in 20 days × 10; B 5 → **Receive**. A yellow box lists B2 ("expires … (20 days)") → **Receive them anyway**. The receipt lists "B1 exp 2030-03-31 × 60; B2 … × 10".
+3. Batches & expiry: B1 and B2 with their stock; B2 shows "20 days left" in amber. The audit log entry "purchase.receive" lists B2 as accepted.
+4. Receive again with batch B1 but expiry 02/2030: refused ("already recorded … another expiry date"). With 03/2030: accepted, B1 grows.
+5. An expiry in the past: "This batch has expired". A date more than 10 years ahead: refused until **The expiry dates are right** is ticked.
+6. Batch quantities that do not add up are impossible on screen (the line is their sum); leave the batch number empty: refused.
+7. **Status → Received** on a purchase with A still outstanding: refused ("Receive the goods line by line…"). A purchase of B only can still be created as Received.
+8. Scan A's barcode in the receive window: the last batch row's quantity goes up by one.
+9. After the receipt, **Print labels**: one row per batch ("Batch B1 · Exp 2030-03-31"); the PDF shows "B B1 EXP 03/2030" on each label.
+10. Settings → untick Batches and expiry: Receive goods shows plain boxes again for A and receives without batches.
+
+Known problems:
+- Batch number and expiry are typed; reading them from 2D codes on packs is later (Q17).
+- The near-expiry window (90 days) can be changed once item 7 adds Settings → Batches.
+- A label shows the batch only on layouts that print the option or price line (all three built-in layouts do).
+

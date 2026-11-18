@@ -567,7 +567,7 @@ func (a *API) create(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		if c.status == statusReceived {
-			rc, err := receive(ctx, tx, id, p.UserID, nil, "")
+			rc, err := receive(ctx, tx, id, p.UserID, nil, "", receiveOpts{})
 			if err != nil {
 				return err
 			}
@@ -701,7 +701,7 @@ func (a *API) update(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		if receiving {
-			rc, err := receive(ctx, tx, id, p.UserID, nil, "")
+			rc, err := receive(ctx, tx, id, p.UserID, nil, "", receiveOpts{})
 			if err != nil {
 				return err
 			}
