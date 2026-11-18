@@ -27,6 +27,7 @@ import PaymentSheet from './PaymentSheet';
 import SaleDone from './SaleDone';
 import CustomerPicker from './CustomerPicker';
 import ShortcutsHelp from './ShortcutsHelp';
+import BatchPicker from './BatchPicker';
 
 const FAV_KEY = 'pos.favourites';
 
@@ -76,6 +77,7 @@ export default function Checkout() {
   const [selected, setSelected] = useState(null);
   const [flash, setFlash] = useState(null);
   const [editingQty, setEditingQty] = useState(null);
+  const [picking, setPicking] = useState(null); // a cart line (industry P3 item 3)
   const [payOpen, setPayOpen] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
   const [pickCustomer, setPickCustomer] = useState(false);
@@ -403,6 +405,27 @@ export default function Checkout() {
                         <p className="text-xs text-slate-600 tabular-nums dark:text-slate-300">
                           {formatCurrency(l.price)} each{ql && Number(ql.taxRate) > 0 ? ` · tax ${Number(ql.taxRate)}%` : ''}
                         </p>
+                        {ql?.batches?.length > 0 && (
+                          <div className="mt-0.5 text-xs text-slate-600 dark:text-slate-300">
+                            {ql.batches.map((b) => (
+                              <p key={b.batchId} className={b.unknown ? 'font-medium text-warning-fg' : ''}>
+                                {b.unknown ? 'No batch recorded: check the pack' : `Batch ${b.batchNo} · Exp ${b.expiry}`}
+                                {ql.batches.length > 1 ? ` × ${b.quantity}` : ''}
+                                {b.chosen ? ' (chosen)' : ''}
+                              </p>
+                            ))}
+                            <button
+                              type="button"
+                              className="font-medium text-primary underline-offset-2 hover:underline"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setPicking(l);
+                              }}
+                            >
+                              Change batch
+                            </button>
+                          </div>
+                        )}
                         {l.maxQty <= 0 ? (
                           <p className="mt-0.5 text-xs font-medium text-danger-fg">Not in stock at this store</p>
                         ) : (
@@ -490,6 +513,11 @@ export default function Checkout() {
           </span>
           <span className={cn('text-xl font-bold tabular-nums text-navy', !q && 'text-muted-foreground')}>{formatCurrency(total)}</span>
         </div>
+        {q?.batchProblem && (
+          <InlineAlert className="text-xs">
+            {q.batchProblem.message}
+          </InlineAlert>
+        )}
         {quoteProblem && (
           <InlineAlert className="text-xs">
             <span>{quoteProblem.code === 'NETWORK' ? 'The total could not be checked (no connection).' : quoteProblem.message}</span>{' '}
@@ -498,7 +526,7 @@ export default function Checkout() {
             </button>
           </InlineAlert>
         )}
-        <Button className="h-12 w-full text-base font-bold" disabled={!lines.length || !c.quoteReady} onClick={openPay}>
+        <Button className="h-12 w-full text-base font-bold" disabled={!lines.length || !c.quoteReady || !!q?.batchProblem} onClick={openPay}>
           <Banknote className="size-5" aria-hidden="true" /> PAY {formatCurrency(total)}
           <span className="hidden text-xs font-normal lg:inline">F10</span>
         </Button>
@@ -648,6 +676,17 @@ export default function Checkout() {
         onNewSale={newSale}
       />
       {receiptFor && <Receipt isOpen sale={receiptFor.sale} store={store} autoPrint={receiptFor.print} onClose={() => setReceiptFor(null)} />}
+      {picking && (
+        <BatchPicker
+          line={picking}
+          storeId={c.storeId}
+          onClose={() => setPicking(null)}
+          onPick={(picks) => {
+            c.setLineBatches(picking.key, picks);
+            setPicking(null);
+          }}
+        />
+      )}
       <PriceChangedDialog
         changes={c.changedPrices}
         nameOf={(ch) => {

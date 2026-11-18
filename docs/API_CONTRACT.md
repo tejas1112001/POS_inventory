@@ -441,6 +441,19 @@ A product **tracks batches** when `products.tracks_batches` is true and the modu
 | — | GET | purchase responses | as before | `items[]` gain `tracksBatches` (the product tracks batches and the module is on) |
 | — | POST | `/api/labels/pdf` | as before | `items[]` accept `batchId` (a batch of that variant, else 404; module off → 403 `MODULE_OFF`): the label's variant/price line adds "B <no> EXP <MM/YYYY>" |
 
+**Item 3: selling by batch** (tenant migration 00027: DB31 `order_item_batches`, with the batch number, expiry and MRP copied at sale time).
+
+A line of a tracked product is filled from the store's **sellable** batches: status `available`, not expired (expiry before today in the shop's time zone), and at least `min_days_to_sell` days before expiry (default 0). Order: earliest expiry, then oldest batch; the unknown batch last, with a warning (Q14). Expired, recalled and too-close batches are never sold.
+
+| # | Method | Path | Guard | Notes |
+|---|---|---|---|---|
+| A27 | POST | `/api/sales`, `/api/sales/quote`, `/api/sales/exchange` (new goods) | as before | `orderItems[]` accept `batches[{batchId, quantity}]` chosen by the cashier (no extra permission, Q12; recorded as `chosen`); the rest of the line is filled as above. Errors: a batch of another product, or batches adding up to more than the line → 400 `orderItems[i].batches`; a chosen batch expired, recalled or too close → 409 `BATCH_NOT_SELLABLE` `details{index, variantId, batchId, batchNo, expiry, reason}`; a chosen batch short, or sellable batches not covering the line (even if the plain stock would) → 409 `INSUFFICIENT_STOCK` (`details.items[].unsellable[{batchId, batchNo, expiry, quantity, reason}]`). Batches on an untracked line → 400, or 403 `MODULE_OFF` with the module off |
+| A27 | POST | `/api/sales/quote` | as before | `lines[]` gain `batches[]` (what the sale would take now) and `warnings[]`; the quote gains `batchProblem{code, message, details}` (the 409 the sale would get now) or `null` |
+| A27 | GET | sale responses | as before | `items[]` gain `batches[{batchId, batchNo, expiry, mrp, quantity, chosen, unknown}]` (sale-time details; empty for untracked lines) and `warnings[]` ("No batch or expiry recorded for this stock. Check the pack.") |
+| — | PUT | `/api/sales/{id}` | as before | Refused with 409 `INVALID_STATE` ("Return or void the sale instead") when the sale has, or would get, tracked lines (Q13) |
+| — | DELETE | `/api/sales/{id}` (void) | as before | Each unit goes back to the batch it was sold from |
+| — | GET | `/api/sales/{id}/receipt` (PDF), screen receipt | as before | Each tracked line shows "Batch B1 · Exp 03/2027 · MRP 45.00" (sale-time details; "No batch" for the unknown batch; "× n" when split) |
+
 ---
 
 ## 6. Frontend changes (minimal set, Phase 2)

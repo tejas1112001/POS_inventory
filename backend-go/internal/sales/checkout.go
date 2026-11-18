@@ -14,6 +14,7 @@ import (
 
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/apperr"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/auth"
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/batches"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/money"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/pricing"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/tenancy"
@@ -33,6 +34,9 @@ type itemIn struct {
 	Quantity  money.Int `json:"quantity"`
 	UnitPrice money.Dec `json:"unitPrice"`
 	Discount  money.Dec `json:"discount"`
+	// Batches the cashier chose (industry P3 item 3, A27, Q12); the rest
+	// of the line is filled earliest expiry first.
+	Batches []batchPickIn `json:"batches"`
 
 	// Accepted and ignored: the server computes line totals (C-04).
 	Total    json.RawMessage `json:"total"`
@@ -89,7 +93,17 @@ type line struct {
 	qty                  int64
 	price                decimal.Decimal
 	priceSet             bool
+	picks                []batches.Pick // industry P3 item 3
 }
+
+// batchPickIn is a batch the cashier chose for a line (A27).
+type batchPickIn struct {
+	BatchID  money.Int `json:"batchId"`
+	Quantity money.Int `json:"quantity"`
+}
+
+// maxPicks bounds the batches named on one line.
+const maxPicks = 50
 
 type cleanSale struct {
 	lines              []line
@@ -161,6 +175,19 @@ func validate(in saleIn) (cleanSale, error) {
 		}
 		if it.Discount.Valid && !it.Discount.D.IsZero() {
 			f[k+".discount"] = "Line discounts are not supported; use the sale discount."
+		}
+		if len(it.Batches) > maxPicks {
+			f[k+".batches"] = fmt.Sprintf("At most %d batches per line.", maxPicks)
+		}
+		for j, b := range it.Batches {
+			bk := fmt.Sprintf("%s.batches[%d]", k, j)
+			if !b.BatchID.Valid || b.BatchID.V <= 0 {
+				f[bk+".batchId"] = "batchId is required."
+			}
+			if !b.Quantity.Valid || b.Quantity.V <= 0 || b.Quantity.V > maxQty {
+				f[bk+".quantity"] = "Quantity must be a whole number above 0."
+			}
+			l.picks = append(l.picks, batches.Pick{BatchID: b.BatchID.V, Qty: int(b.Quantity.V)})
 		}
 		c.lines = append(c.lines, l)
 	}
@@ -545,23 +572,26 @@ const qInsertItem = `INSERT INTO order_items (sale_id, product_id, variant_id, p
 		          THEN (p.attributes ->> 'size_system') || ' ' ELSE '' END || (v.attributes ->> d.k), ' / ' ORDER BY d.ord)
 		   FROM product_variants v JOIN products p ON p.id = v.product_id
 		   CROSS JOIN LATERAL unnest(p.variant_dims) WITH ORDINALITY AS d(k, ord)
-		  WHERE v.id = $3 AND coalesce(v.attributes ->> d.k, '') <> ''))`
+		  WHERE v.id = $3 AND coalesce(v.attributes ->> d.k, '') <> ''))
+	RETURNING id`
 
-// insertItems writes the order lines in one batch (one round trip).
-func insertItems(ctx context.Context, tx tenancy.TenantTx, saleID int64, p priced) error {
+// insertItems writes the order lines in one batch (one round trip) and
+// returns their IDs in line order.
+func insertItems(ctx context.Context, tx tenancy.TenantTx, saleID int64, p priced) ([]int64, error) {
 	b := &pgx.Batch{}
 	for _, l := range p.lines {
 		b.Queue(qInsertItem, saleID, l.v.productID, l.v.id, l.v.productName, l.v.sku, l.qty, l.unit,
 			l.catalog, l.q.Discount, l.taxType, l.taxRate, l.q.Tax, l.q.CGST, l.q.SGST, l.q.IGST, l.q.Total)
 	}
 	br := tx.SendBatch(ctx, b)
-	for range p.lines {
-		if _, err := br.Exec(); err != nil {
+	ids := make([]int64, len(p.lines))
+	for i := range p.lines {
+		if err := br.QueryRow().Scan(&ids[i]); err != nil {
 			_ = br.Close()
-			return err
+			return nil, err
 		}
 	}
-	return br.Close()
+	return ids, br.Close()
 }
 
 func skuMap(p priced) map[int64]string {

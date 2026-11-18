@@ -151,6 +151,9 @@ func RenderPDF(v View, logo []byte) ([]byte, error) {
 		if l.HSN != "" {
 			name += " · HSN " + l.HSN
 		}
+		if l.Batch != "" {
+			name += " · " + l.Batch
+		}
 		disc := ""
 		if l.HasDiscount {
 			disc = l.Discount

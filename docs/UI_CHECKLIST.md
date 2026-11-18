@@ -540,3 +540,21 @@ Known problems:
 - The near-expiry window (90 days) can be changed once item 7 adds Settings → Batches.
 - A label shows the batch only on layouts that print the option or price line (all three built-in layouts do).
 
+## Industry P3 – Item 3: Selling by batch
+
+Use the pharmacy shop from item 2: product A with batches EARLY (expires in 100 days) × 3, MID (200 days) × 4, and 2 units with no batch.
+
+How to check:
+1. Checkout → add 5 of A: under the line "Batch EARLY · Exp … × 3" and "Batch MID · Exp … × 2" appear before payment. Pay: the receipt shows the same batches with MRP.
+2. **Change batch** on a line: the list shows only sellable batches with their stock here; put 1 on MID → **Use these batches**: the line shows MID "(chosen)" and the rest earliest first. Any cashier can do this.
+3. Batches & expiry → MID → **Correct details** (rename it). Reopen the earlier receipt: it still shows the old number.
+4. Sell until only the "No batch" units are left: the line says "No batch recorded: check the pack" in amber; the sale goes through.
+5. Ask for more than the sellable batches hold: a red message under the total ("Not enough sellable stock … can be sold") and **PAY** is disabled.
+6. Make a batch expired (correct its expiry to yesterday, ticking the confirmation if asked): it is no longer offered or sold. An expiry of today still sells.
+7. Orders → open a sale with A → **Edit**: refused ("Return or void the sale instead"). **Void** it: Batches & expiry shows the units back in the same batches.
+8. A product that does not track batches sells exactly as before.
+
+Known problems:
+- "Minimum days to sell" (default 0) is set in Settings → Batches with item 7.
+- The batch shown before payment can change if another till sells the same batch first; the sale then uses what is left, earliest first.
+

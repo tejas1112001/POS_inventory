@@ -29,6 +29,7 @@ var (
 // Line is one item, already formatted.
 type Line struct {
 	Name, Attributes, SKU, HSN                     string
+	Batch                                          string // industry P3 item 3: "Batch B1 · Exp 03/2027 · MRP 45.00"
 	Qty                                            int
 	UnitPrice, Discount, TaxRate, TaxAmount, Total string
 	HasDiscount                                    bool
@@ -109,7 +110,12 @@ const (
 		JOIN users u ON u.id = s.user_id
 		WHERE s.id = $1`
 	qItems = `SELECT i.product_name, i.sku, i.quantity, i.unit_price, i.discount, i.tax_rate, i.tax_amount,
-			i.cgst, i.sgst, i.igst, i.subtotal, v.attributes, i.variant_label, i.hsn_code
+			i.cgst, i.sgst, i.igst, i.subtotal, v.attributes, i.variant_label, i.hsn_code,
+			(SELECT string_agg(x.t || CASE WHEN x.n > 1 THEN ' × ' || x.quantity ELSE '' END, '; ' ORDER BY x.e NULLS LAST, x.b)
+			 FROM (SELECT CASE WHEN ob.is_unknown THEN 'No batch' ELSE 'Batch ' || ob.batch_no END
+					|| coalesce(' · Exp ' || to_char(ob.expiry_date, 'MM/YYYY'), '') || coalesce(' · MRP ' || to_char(ob.mrp, 'FM9999999990.00'), '') AS t,
+					ob.quantity, ob.expiry_date AS e, ob.batch_id AS b, count(*) OVER () AS n
+				FROM order_item_batches ob WHERE ob.order_item_id = i.id) x)
 		FROM order_items i LEFT JOIN product_variants v ON v.id = i.variant_id
 		WHERE i.sale_id = $1 ORDER BY i.id`
 	qLogo = `SELECT storage_key FROM files WHERE id = $1`
@@ -282,9 +288,9 @@ func Load(ctx context.Context, tx tenancy.TenantTx, receiptID int64) (View, erro
 			unit, ldisc, rate, ltax, ltotal decimal.Decimal
 			cgst, sgst, igst                *decimal.Decimal
 			attrs                           []byte
-			label, hsn                      *string
+			label, hsn, batch               *string
 		)
-		if err := rows.Scan(&name, &sku, &qty, &unit, &ldisc, &rate, &ltax, &cgst, &sgst, &igst, &ltotal, &attrs, &label, &hsn); err != nil {
+		if err := rows.Scan(&name, &sku, &qty, &unit, &ldisc, &rate, &ltax, &cgst, &sgst, &igst, &ltotal, &attrs, &label, &hsn, &batch); err != nil {
 			return v, err
 		}
 		// The sale-time label ("M / Blue", industry P1 item 4) wins over
@@ -293,7 +299,7 @@ func Load(ctx context.Context, tx tenancy.TenantTx, receiptID int64) (View, erro
 		if label != nil && *label != "" {
 			attrText = *label
 		}
-		v.Lines = append(v.Lines, Line{Name: name, Attributes: attrText, SKU: deref(sku), HSN: deref(hsn), Qty: qty,
+		v.Lines = append(v.Lines, Line{Name: name, Attributes: attrText, SKU: deref(sku), HSN: deref(hsn), Batch: deref(batch), Qty: qty,
 			UnitPrice: f.Money(unit), Discount: f.Money(ldisc), HasDiscount: ldisc.IsPositive(),
 			TaxRate: f.Percent(rate), TaxAmount: f.Money(ltax), Total: f.Money(ltotal)})
 		if !rate.IsPositive() {

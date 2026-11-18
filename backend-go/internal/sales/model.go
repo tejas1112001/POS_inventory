@@ -8,6 +8,7 @@ import (
 
 	"github.com/shopspring/decimal"
 
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/batches"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/tenancy"
 )
 
@@ -57,6 +58,21 @@ type ItemJSON struct {
 	// HSN is the product's HSN code at sale time (industry P1 item 10;
 	// null on older sales).
 	HSN *string `json:"hsn_code"`
+	// Batches the line was sold from, with the details at sale time, and
+	// its warnings (industry P3 item 3, A27). Empty for untracked lines.
+	Batches  []ItemBatchJSON `json:"batches"`
+	Warnings []string        `json:"warnings"`
+}
+
+// ItemBatchJSON is one batch of a sale line (A27).
+type ItemBatchJSON struct {
+	BatchID  int64            `json:"batchId"`
+	BatchNo  string           `json:"batchNo"`
+	Expiry   *string          `json:"expiry"`
+	MRP      *decimal.Decimal `json:"mrp"`
+	Quantity int              `json:"quantity"`
+	Chosen   bool             `json:"chosen"`
+	Unknown  bool             `json:"unknown"`
 }
 
 // SaleJSON keeps the old field names (snake_case columns, camelCase
@@ -128,7 +144,10 @@ const (
 	qLoadItems = `SELECT i.id, i.sale_id, i.product_id, i.variant_id, i.product_name, i.sku, i.quantity, i.unit_price,
 			i.catalog_price, i.discount, i.tax_type, i.tax_rate, i.tax_amount, i.cgst, i.sgst, i.igst, i.subtotal,
 			i.created_at, v.attributes,
-			coalesce((SELECT sum(r.quantity) FROM return_items r WHERE r.order_item_id = i.id), 0), i.variant_label, i.hsn_code
+			coalesce((SELECT sum(r.quantity) FROM return_items r WHERE r.order_item_id = i.id), 0), i.variant_label, i.hsn_code,
+			coalesce((SELECT jsonb_agg(jsonb_build_object('batchId', ob.batch_id, 'batchNo', ob.batch_no, 'expiry', to_char(ob.expiry_date, 'YYYY-MM-DD'),
+				'mrp', ob.mrp, 'quantity', ob.quantity, 'chosen', ob.chosen, 'unknown', ob.is_unknown) ORDER BY ob.expiry_date NULLS LAST, ob.batch_id)
+				FROM order_item_batches ob WHERE ob.order_item_id = i.id), '[]'::jsonb)
 		FROM order_items i LEFT JOIN product_variants v ON v.id = i.variant_id
 		WHERE i.sale_id = ANY($1) ORDER BY i.sale_id, i.id`
 )
@@ -176,9 +195,16 @@ func load(ctx context.Context, tx tenancy.TenantTx, ids []int64) ([]SaleJSON, er
 		var attrs []byte
 		if err := rows.Scan(&it.ID, &it.SaleID, &it.ProductID, &it.VariantID, &it.ProductName, &it.SKU, &it.Quantity, &it.UnitPrice,
 			&it.CatalogPrice, &it.Discount, &it.TaxType, &it.TaxRate, &it.TaxAmount, &it.CGST, &it.SGST, &it.IGST, &it.Subtotal,
-			&it.CreatedAt, &attrs, &it.ReturnedQty, &it.VariantLabel, &it.HSN); err != nil {
+			&it.CreatedAt, &attrs, &it.ReturnedQty, &it.VariantLabel, &it.HSN, &it.Batches); err != nil {
 			rows.Close()
 			return nil, err
+		}
+		it.Warnings = []string{}
+		for _, b := range it.Batches {
+			if b.Unknown {
+				it.Warnings = append(it.Warnings, batches.UnbatchedWarning)
+				break
+			}
 		}
 		it.Name, it.Product = it.ProductName, NameRef{Name: it.ProductName}
 		it.Qty, it.UnitPriceC, it.Price = it.Quantity, it.UnitPrice, it.UnitPrice
