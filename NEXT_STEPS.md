@@ -29,5 +29,5 @@ Each needs the owner's go-ahead or answers from outside. Source: design §9.
 
 ## 4. Housekeeping
 
-- [ ] **Dependabot:** 13 branches are open on GitHub. Review, merge or close them.
-- [ ] **Old remote branches:** `go-backend/phase2`, `landing_dev` and `landing_main`. Keep them or delete them.
+- [x] **Dependabot and `go-backend/phase2`:** branches deleted on 2026-11-18. Dependabot opens fresh pull requests on its next run; merge them after a full test run.
+- [ ] **Landing branches:** `landing_dev` holds the unmerged marketing site; `landing_main` only the empty skeleton. Decide whether to merge or keep them.
