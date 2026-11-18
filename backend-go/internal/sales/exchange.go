@@ -9,6 +9,7 @@ package sales
 // credit, as the policy allows. Each stock movement happens exactly once.
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strconv"
@@ -226,7 +227,7 @@ func (a *API) exchange(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		receiptID = rid
-		if _, err := tx.Exec(ctx, `UPDATE sales SET exchange_return_id = $2 WHERE id = $1`, saleID, retID); err != nil {
+		if err := linkExchange(ctx, tx, saleID, retID); err != nil {
 			return err
 		}
 		after := map[string]any{"return": retRef, "sale": saleRef, "return_value": pr.total, "applied_to_due": pr.applied,
@@ -294,4 +295,26 @@ func renameSaleFields(err error) error {
 		f[k] = v
 	}
 	return f.err()
+}
+
+// qLinkExchange links an exchange sale to its return. sales.exchange_return_id
+// has no foreign key (DB20: sale_returns already references sales and tenant
+// exports need the keys without a cycle), so the code checks what a key would:
+// the return exists, is from the same shop and customer as the sale, and no
+// other sale is linked to it (the column is also UNIQUE).
+const qLinkExchange = `UPDATE sales s SET exchange_return_id = r.id
+	FROM sale_returns r
+	WHERE s.id = $1 AND r.id = $2 AND r.store_id = s.store_id AND r.customer_id = s.customer_id
+		AND s.exchange_return_id IS NULL
+		AND NOT EXISTS (SELECT 1 FROM sales o WHERE o.exchange_return_id = r.id)`
+
+func linkExchange(ctx context.Context, tx tenancy.TenantTx, saleID, returnID int64) error {
+	tag, err := tx.Exec(ctx, qLinkExchange, saleID, returnID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() != 1 {
+		return apperr.Conflict(apperr.CodeInvalidState, "The exchange's return must be from the same store and customer as its sale.")
+	}
+	return nil
 }

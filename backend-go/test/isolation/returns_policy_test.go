@@ -323,6 +323,18 @@ func TestExchange(t *testing.T) {
 	require.Equal(t, 4, stockOf(t, l, store, ns2.vid))
 	require.Empty(t, reconcile(t, l))
 
+	// DB20 has no foreign key: the link is UNIQUE (indexed) and the code
+	// links only a return of the same store and customer (linkExchange).
+	var idx int
+	require.NoError(t, admin(t).QueryRow(context.Background(), `SELECT count(*) FROM pg_indexes WHERE schemaname = $1
+		AND tablename = 'sales' AND indexdef LIKE '%UNIQUE%(exchange_return_id)%'`, schema(l)).Scan(&idx))
+	require.Equal(t, 1, idx, "exchange_return_id is indexed")
+	var bad int
+	require.NoError(t, admin(t).QueryRow(context.Background(), `SELECT count(*) FROM `+schema(l)+`.sales s
+		LEFT JOIN `+schema(l)+`.sale_returns r ON r.id = s.exchange_return_id
+		WHERE s.exchange_return_id IS NOT NULL AND (r.id IS NULL OR r.store_id <> s.store_id OR r.customer_id <> s.customer_id)`).Scan(&bad))
+	require.Zero(t, bad, "every exchange sale links a return of its own store and customer")
+
 	// Nothing left to return; the exchange sale cannot be voided.
 	none := post("/api/sales/exchanges", xbody(1, 1, nil), nil)
 	require.Equal(t, 409, none.Code, none.Raw)

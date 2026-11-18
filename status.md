@@ -17,13 +17,15 @@ How to check each item: `docs/UI_CHECKLIST.md`. Last updated: 2026-11-18.
 | 10 (j) | Thermal receipt, HSN on lines | Done (migration 00023, settings receiptPaper, HSN snapshot on sale lines, receipts and PDF, thermal CSS); committed and deployed |
 
 ## Notes
+- Item 9, DB20: `sales.exchange_return_id` has no foreign key (a key would make a cycle with `sale_returns.sale_id`, which tenant export/restore refuses). Accepted by the owner on 2026-11-18. The column is UNIQUE (that is its index), and `linkExchange` links only a return of the same store and customer, never twice.
+- Pushing: from 2026-11-18 commits stay local; push only when the owner asks.
 - Test database: `max_connections` raised to 200 in `internal/testdb` (the isolation suite ran out of connections at the default 100 once items 4 and 5 added test shops). Test setup only.
 - Dev stack: running; platform migrations at 14, tenant migrations at 24. The dev database has no shops (create one in the console to check in the browser).
 - govulncheck: 1 Go standard library finding (GO-2026-6859); the same on `main`, not caused by this work.
 - Temporary worktree `D:/pos_baseline` removed.
 
 ## Next step
-All ten items are built. Left: owner review of the checklist in the browser, then merge when approved. Known flake: `TestLimitWaitsDoNotUseAttempts` (email quota timing) fails now and then in full runs and passes alone.
+All ten items are built. Left: owner review of the checklist in the browser, then merge when approved. `TestLimitWaitsDoNotUseAttempts` flake fixed (lost wake-up in the test and a connection leak in its polling).
 
 ## Decisions to confirm
 - Item 7: every stock-count route is in the `stock_counts` module (the item 1 route registry), so with the module off the count pages are hidden rather than read-only. Their stock movements stay in the stock history. Design §1 says completed counts stay readable; making the two GET routes readable while the module is off needs a small change to the item 1 route check.
