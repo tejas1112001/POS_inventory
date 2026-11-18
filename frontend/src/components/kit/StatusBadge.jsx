@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils';
 const TONE = {
   Active: 'success', Inactive: 'muted',
   Paid: 'success', Partial: 'warning', Unpaid: 'danger', Overdue: 'danger',
-  Completed: 'success', Pending: 'warning', Void: 'muted', Received: 'success', Ordered: 'info', Cancelled: 'muted',
+  Completed: 'success', Pending: 'warning', Void: 'muted', Received: 'success', 'Partially received': 'warning', Ordered: 'info', Cancelled: 'muted',
   'In Stock': 'success', 'Low Stock': 'warning', 'Out of Stock': 'danger',
 };
 const CLS = {

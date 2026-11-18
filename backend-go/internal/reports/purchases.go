@@ -43,6 +43,7 @@ type PurchaseRow struct {
 	Product        PurchaseProduct `json:"product"`
 	Category       string          `json:"category"`
 	PurchaseQty    int             `json:"purchaseQty"`
+	ReceivedQty    int             `json:"receivedQty"` // industry P1 item 8
 	PurchaseAmount decimal.Decimal `json:"purchaseAmount"`
 	StockQty       int             `json:"stockQty"`
 	PurchaseID     int64           `json:"purchaseId"`
@@ -66,7 +67,7 @@ const (
 	qPurchaseCount = `SELECT count(*) FROM purchase_items i JOIN purchases p ON p.id = i.purchase_id` + qPurchaseWhere
 	qPurchaseRows  = `SELECT i.id, i.purchase_id, p.reference, p.date, p.status, p.supplier_id, sup.name, i.store_id, st.name,
 			i.product_id, i.variant_id, i.product_name, i.sku, pr.image_file_id, coalesce(cat.name, 'Uncategorized'),
-			i.quantity, i.unit_price, i.discount, i.subtotal, coalesce(inv.qty, 0)
+			i.quantity, i.unit_price, i.discount, i.subtotal, coalesce(inv.qty, 0), i.received_qty
 		FROM purchase_items i
 		JOIN purchases p ON p.id = i.purchase_id
 		LEFT JOIN suppliers sup ON sup.id = p.supplier_id
@@ -119,7 +120,7 @@ func PurchaseRows(ctx context.Context, tx tenancy.TenantTx, f PurchaseFilter, li
 		)
 		if err := rows.Scan(&itemID, &x.PurchaseID, &x.Reference, &x.Date, &x.Status, &supID, &supName, &stID, &stName,
 			&x.Product.ID, &x.VariantID, &x.Product.Name, &x.ItemSKU, &img, &x.Category, &x.PurchaseQty, &x.UnitPrice,
-			&x.Discount, &x.PurchaseAmount, &x.StockQty); err != nil {
+			&x.Discount, &x.PurchaseAmount, &x.StockQty, &x.ReceivedQty); err != nil {
 			return nil, 0, err
 		}
 		x.ID = fmt.Sprintf("%d-%d", x.PurchaseID, itemID)

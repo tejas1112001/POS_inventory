@@ -148,7 +148,7 @@ const (
 		JOIN products p ON p.id = v.product_id AND p.deleted_at IS NULL
 		JOIN stores st ON st.id = i.store_id AND st.deleted_at IS NULL AND st.status = 'Active'
 		WHERE ($1 = 0 OR i.store_id = $1)`
-	qDashPurchases = `SELECT count(*) FROM purchases WHERE status IN ('Ordered','Pending')`
+	qDashPurchases = `SELECT count(*) FROM purchases WHERE status IN ('Ordered','Pending','Partially received')`
 	qDashDues      = `SELECT count(DISTINCT s.customer_id) FROM sales s WHERE s.status <> 'Void' AND s.due > 0 AND ($1 = 0 OR s.store_id = $1)`
 	qDashCounts    = `SELECT (SELECT count(*) FROM customers WHERE deleted_at IS NULL),
 		(SELECT count(*) FROM products WHERE deleted_at IS NULL)`

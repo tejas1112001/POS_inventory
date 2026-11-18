@@ -450,6 +450,24 @@ Known problems:
 - "Not counted yet" lists up to 200 items (those with most stock); the total is always shown.
 - Two people can scan into the same count at once; a typed number replaces whatever was there.
 
+## Industry P1 – Item 8: Receive purchases in parts
+
+Have a purchase with status Ordered and two lines (for example 100 shirts and 5 caps), and a USB barcode scanner if possible.
+
+How to check:
+1. Open the purchase → **Receive goods**. Each line shows Ordered and Still to come.
+2. Type 60 for the shirts (or scan a shirt's barcode or SKU: each scan adds one) → **Receive 60 units**. A GRN number appears; the status is **Partially received**; the Received column shows 60 / 0; stock went up by 60.
+3. If labels are on, the label window opens with 60 shirt labels; print or close it. Each entry under **Goods received** also has **Print labels**.
+4. Open **Receive goods** again: the shirts show 40 still to come. Type 41 → refused ("At most 40 still to receive"). Scan a code that is not on the purchase → beep and a message.
+5. **Cancel** is gone for this purchase; payments and the note still work.
+6. **Everything arrived** → Receive: the status becomes **Received**, with the date. Goods received lists both GRNs.
+7. Another purchase: **Receive everything** (the old one-click way) still works and makes one GRN.
+8. Purchases list → status filter **Partially received**; Reports → Purchases shows each line's received quantity; the Dashboard counts partly received purchases as open.
+9. As a user without "approve purchases": no Receive buttons and no Goods received list.
+
+Known problems:
+- A partly received purchase that will never be completed cannot be closed; correct stock with a stock adjustment (as designed).
+
 ## Industry P1 – Item 10: Thermal receipt and HSN on lines
 
 Have a product with an HSN code (Products → edit → HSN, e.g. 0902) and one without.

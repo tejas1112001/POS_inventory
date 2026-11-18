@@ -12,7 +12,7 @@ How to check each item: `docs/UI_CHECKLIST.md`. Last updated: 2026-11-17.
 | 5 (e) | Barcode generation and label PDF | Done, committed, deployed to the dev stack (tenant migration 00020). The scan check on a real scanner and phone is for the owner (checklist step 1) |
 | 6 (f) | Import templates | Done, committed, deployed to the dev stack (no migration) |
 | 7 (g) | Stock counts | Done, committed, deployed to the dev stack (tenant migration 00021) |
-| 8 (h) | Partial purchase receiving | Groundwork committed and pushed (migration 00022, backfill + report, export tables). Left: receiving endpoint A16, A17 old path, purchase screen, isolation tests, docs |
+| 8 (h) | Partial purchase receiving | Done (migration 00022 + backfill, A16 receipts endpoint, A17 old path, Receive goods screen with scanning and labels, report/dashboard); committed and deployed |
 | 9 (i) | Returns policy, exchanges, store credit | Not started (L; next session) |
 | 10 (j) | Thermal receipt, HSN on lines | Done (migration 00023, settings receiptPaper, HSN snapshot on sale lines, receipts and PDF, thermal CSS); committed and deployed |
 
