@@ -65,6 +65,17 @@ func TestReceiptEmail(t *testing.T) {
 	require.Contains(t, pr.Text, "Paid:    UPI: ₹300.00 (txn 4411)")
 	require.Contains(t, pr.Text, "Balance due: ₹1,059.93 by 19 Nov 2026")
 	require.Contains(t, pr.HTML, "<strong>₹1,059.93</strong> by 19 Nov 2026")
+	require.NotContains(t, pr.Text, "not verified", "no legend without a recorded payment")
+	checkSafe(t, pr)
+
+	// Recorded payments (industry P1 item 2): the legend under them.
+	part.Payments = []string{"Cash: ₹500.00", "UPI (recorded): ₹300.00 (txn 4411)"}
+	part.PaymentsNote = "Payments are recorded by the cashier and are not verified by a bank or payment provider."
+	pr, err = RenderReceipt(part)
+	require.NoError(t, err)
+	require.Contains(t, pr.Text, "UPI (recorded): ₹300.00 (txn 4411)")
+	require.Contains(t, pr.Text, part.PaymentsNote)
+	require.Contains(t, pr.HTML, part.PaymentsNote)
 	checkSafe(t, pr)
 
 	d.BusinessName, d.CustomerName, d.StoreName = hostile, hostile, hostile

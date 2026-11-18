@@ -89,6 +89,8 @@ type Receipt struct {
 	// its due date (empty when fully paid).
 	Payments     []string
 	Due, DueDate string
+	// PaymentsNote: payments are recorded, not verified (industry P1 item 2).
+	PaymentsNote string
 }
 
 type receiptView struct {
@@ -106,6 +108,7 @@ func RenderReceipt(d Receipt) (Rendered, error) {
 	d.StoreName, d.StoreAddress, d.StorePhone = oneLine(d.StoreName, 120), oneLine(d.StoreAddress, 300), oneLine(d.StorePhone, 40)
 	d.Header, d.Footer = lines(d.Header), lines(d.Footer)
 	d.Payments = lines(d.Payments)
+	d.PaymentsNote = oneLine(d.PaymentsNote, 200)
 	d.Due, d.DueDate = oneLine(d.Due, 60), oneLine(d.DueDate, 60)
 	subj := "Your receipt from " + d.BusinessName + " (" + d.Reference + ")"
 	if d.Void {

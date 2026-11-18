@@ -15,6 +15,7 @@ import (
 	"github.com/shopspring/decimal"
 
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/apperr"
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/attributes"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/audit"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/auth"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/files"
@@ -35,10 +36,14 @@ type Deps struct {
 }
 
 // API holds the handlers.
-type API struct{ d Deps }
+type API struct {
+	d Deps
+	// reports are failed imports' error reports (A14), one per user.
+	reports *tenancy.TTLCache[string, importReport]
+}
 
 // New creates the API.
-func New(d Deps) *API { return &API{d: d} }
+func New(d Deps) *API { return &API{d: d, reports: tenancy.NewTTLCache[string, importReport]()} }
 
 func tenant(r *http.Request) tenancy.Tenant {
 	t, _ := tenancy.TenantFrom(r.Context())
@@ -79,7 +84,7 @@ func escapeLike(s string) string {
 
 const (
 	qProductFilter = ` FROM products p WHERE p.deleted_at IS NULL
-		AND ($1 = '' OR p.name ILIKE $1 OR EXISTS (SELECT 1 FROM product_variants v WHERE v.product_id = p.id
+		AND ($1 = '' OR p.name ILIKE $1 OR p.article_no ILIKE $1 OR EXISTS (SELECT 1 FROM product_variants v WHERE v.product_id = p.id
 		     AND v.deleted_at IS NULL AND (v.sku ILIKE $1 OR v.item_barcode ILIKE $1)))
 		AND ($2 = 0 OR p.category_id = $2) AND ($3 = 0 OR p.brand_id = $3) AND ($4 = '' OR p.status = $4)`
 	qProductCount = `SELECT count(*)` + qProductFilter
@@ -149,6 +154,8 @@ type posProduct struct {
 type posVariant struct {
 	ID          int64           `json:"id"`
 	SKU         string          `json:"sku"`
+	ItemBarcode *string         `json:"itemBarcode"`     // industry P1 item 3: scans match locally
+	Label       string          `json:"label,omitempty"` // industry P1 item 4: "M / Blue"
 	Price       decimal.Decimal `json:"price"`
 	Attributes  map[string]any  `json:"attributes"`
 	Inventories []posStock      `json:"Inventories"`
@@ -169,7 +176,7 @@ func slimPOS(list []ProductJSON) []posProduct {
 			for k, x := range v.Inventories {
 				inv[k] = posStock{Qty: x.Qty, QuantityAlert: x.QuantityAlert, StoreID: x.StoreID}
 			}
-			vs[j] = posVariant{ID: v.ID, SKU: v.SKU, Price: v.Price, Attributes: v.Attributes, Inventories: inv}
+			vs[j] = posVariant{ID: v.ID, SKU: v.SKU, ItemBarcode: v.ItemBarcode, Label: v.Label, Price: v.Price, Attributes: v.Attributes, Inventories: inv}
 		}
 		out[i] = posProduct{ID: p.ID, Name: p.Name, Image: p.Image, Category: p.Category, Price: p.Price, Qty: p.Qty,
 			Tax: p.Tax, TaxType: p.TaxType, IsLocked: p.IsLocked, LockedAt: p.LockedAt, LockedBy: p.LockedBy, ProductVariants: vs}
@@ -208,25 +215,34 @@ func (a *API) pos(w http.ResponseWriter, r *http.Request) {
 }
 
 // barcode finds the product of a barcode or SKU (both unique per tenant).
+// barcodeJSON is the product of a scanned code plus the variant it matched
+// (industry P1 A5), so a scan adds that exact variant.
+type barcodeJSON struct {
+	ProductJSON
+	VariantID int64 `json:"variantId"`
+}
+
 func (a *API) barcode(w http.ResponseWriter, r *http.Request) {
 	code := strings.TrimSpace(chi.URLParam(r, "barcode"))
 	storeID, _ := queryInt(r, "storeId")
 	var (
-		out   ProductJSON
+		out   barcodeJSON
 		found bool
 	)
 	err := a.ro(r.Context(), tenant(r), func(tx tenancy.TenantTx) error {
 		var pid int64
-		err := tx.QueryRow(r.Context(), `SELECT v.product_id FROM product_variants v JOIN products p ON p.id = v.product_id
+		// An exact barcode wins over a SKU (coalesce: a NULL barcode would
+		// otherwise sort first under DESC).
+		err := tx.QueryRow(r.Context(), `SELECT v.product_id, v.id FROM product_variants v JOIN products p ON p.id = v.product_id
 			WHERE v.deleted_at IS NULL AND p.deleted_at IS NULL AND p.status = 'Active' AND (v.item_barcode = $1 OR v.sku = $1::citext)
-			ORDER BY (v.item_barcode = $1) DESC LIMIT 1`, code).Scan(&pid)
+			ORDER BY coalesce(v.item_barcode = $1, false) DESC, v.id LIMIT 1`, code).Scan(&pid, &out.VariantID)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil
 		}
 		if err != nil {
 			return err
 		}
-		out, found, err = loadOne(r.Context(), tx, pid, loadOpts{storeID: storeID})
+		out.ProductJSON, found, err = loadOne(r.Context(), tx, pid, loadOpts{storeID: storeID})
 		return err
 	})
 	if err != nil {
@@ -565,6 +581,7 @@ func (a *API) Mount(rt *rbac.Router) {
 	rt.Handle(http.MethodDelete, "/products/{id}", req("products", "delete"), a.remove)
 	rt.Handle(http.MethodPut, "/products/{id}/lock", req("pos", "create"), a.lock)
 	rt.Handle(http.MethodPost, "/product-variants", req("products", "edit"), a.addVariant)
+	rt.Handle(http.MethodPost, "/products/{id}/variants/matrix", req("products", "edit").InModule(attributes.Module), a.matrix)
 
 	rt.Handle(http.MethodGet, "/inventory", req("inventory", "view"), a.listInventory)
 	rt.Handle(http.MethodPost, "/inventory", req("inventory", "edit"), a.setInventory)
@@ -575,6 +592,7 @@ func (a *API) Mount(rt *rbac.Router) {
 
 	rt.Handle(http.MethodPost, "/products/import", rbac.Requirement{Kind: rbac.KindPermission, Perm: "products:import", BodyLimit: importBodyLimit}, a.importCSV)
 	rt.Handle(http.MethodGet, "/products/import/template", req("products", "import"), a.importTemplate)
+	rt.Handle(http.MethodGet, "/products/import/errors/{token}", req("products", "import"), a.importErrors)
 }
 
 func sortedKeys(m map[string]string) []string {

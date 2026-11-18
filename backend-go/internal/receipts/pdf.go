@@ -148,6 +148,9 @@ func RenderPDF(v View, logo []byte) ([]byte, error) {
 		if l.SKU != "" {
 			name += " · SKU " + l.SKU
 		}
+		if l.HSN != "" {
+			name += " · HSN " + l.HSN
+		}
 		disc := ""
 		if l.HasDiscount {
 			disc = l.Discount
@@ -202,6 +205,9 @@ func RenderPDF(v View, logo []byte) ([]byte, error) {
 	}
 	if len(v.Payments) == 0 && v.PaymentMethod != "" {
 		total("Payment", v.PaymentMethod+" ("+v.PaymentStatus+")")
+	}
+	if v.PaymentsNote != "" {
+		m.AddAutoRow(text.NewCol(12, v.PaymentsNote, tp(7.5, center, muted)))
 	}
 	m.AddRow(5)
 	for _, f := range v.Footer {

@@ -22,6 +22,7 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/apperr"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/httpx"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/migrate"
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/modules"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/rbac"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/secrets"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/tenancy"
@@ -51,6 +52,9 @@ type Request struct {
 	Currency   string // default INR
 	Locale     string // default en-IN
 	Timezone   string // default Asia/Kolkata
+	// BusinessType is the industry preset (default retail). It switches on
+	// the type's recommended modules and seeds its starting data.
+	BusinessType string
 }
 
 // options are the non-secret request fields replayed on retry.
@@ -60,6 +64,8 @@ type options struct {
 	Currency  string `json:"currency"`
 	Locale    string `json:"locale"`
 	Timezone  string `json:"timezone"`
+	// BusinessType is empty in runs recorded before industry Phase 1 (retail).
+	BusinessType string `json:"business_type,omitempty"`
 }
 
 // Result describes a provisioned tenant.
@@ -120,6 +126,13 @@ func (o *Orchestrator) validate(req *Request) error {
 	}
 	if req.OwnerName == "" {
 		req.OwnerName = "Owner"
+	}
+	req.BusinessType = strings.ToLower(strings.TrimSpace(req.BusinessType))
+	if req.BusinessType == "" {
+		req.BusinessType = modules.Retail
+	}
+	if !modules.ValidType(req.BusinessType) {
+		fields["businessType"] = "use retail, clothing, footwear or pharmacy"
 	}
 
 	switch {
@@ -192,12 +205,12 @@ func (o *Orchestrator) Provision(ctx context.Context, req Request) (Result, erro
 	if err != nil {
 		return Result{}, err
 	}
-	optsJSON, _ := json.Marshal(options{req.OwnerName, req.PlanCode, req.Currency, req.Locale, req.Timezone})
+	optsJSON, _ := json.Marshal(options{req.OwnerName, req.PlanCode, req.Currency, req.Locale, req.Timezone, req.BusinessType})
 	var runID int64
 	err = withSQLTx(ctx, pconn, func(tx *sql.Tx) error {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO platform.tenants (id, schema_name, db_role, slug, name, status, plan_id, owner_email)
-			VALUES ($1, $2, $3, $4, $5, 'provisioning', $6, $7)`,
-			id, t.Schema.String(), t.Role.String(), req.Slug, req.Name, planID, req.OwnerEmail); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO platform.tenants (id, schema_name, db_role, slug, name, status, plan_id, owner_email, business_type)
+			VALUES ($1, $2, $3, $4, $5, 'provisioning', $6, $7, $8)`,
+			id, t.Schema.String(), t.Role.String(), req.Slug, req.Name, planID, req.OwnerEmail, req.BusinessType); err != nil {
 			return err
 		}
 		return tx.QueryRowContext(ctx, `INSERT INTO platform.provisioning_runs (tenant_id, step, request) VALUES ($1, 2, $2) RETURNING id`,
@@ -251,6 +264,7 @@ func (o *Orchestrator) Retry(ctx context.Context, tenantID string) (Result, erro
 	var opts options
 	_ = json.Unmarshal(optsRaw, &opts)
 	req.OwnerName, req.PlanCode, req.Currency, req.Locale, req.Timezone = opts.OwnerName, opts.PlanCode, opts.Currency, opts.Locale, opts.Timezone
+	req.BusinessType = opts.BusinessType
 	if err := o.validate(&req); err != nil {
 		return Result{}, err
 	}
@@ -367,6 +381,8 @@ func (o *Orchestrator) fail(ctx context.Context, pconn *sql.DB, runID int64, t m
 const (
 	qSeedSettings = `INSERT INTO settings (id, business_name, currency, locale, timezone)
 		VALUES (1, $1, $2, $3, $4) ON CONFLICT (id) DO NOTHING`
+	qSeedBusiness = `UPDATE settings SET business_type = $1, modules = $2::text[]
+		WHERE id = 1 AND business_type = 'retail' AND modules = '{}'`
 	qSeedRoles = `INSERT INTO roles (name, description, color, is_system, system_key) VALUES
 		('Owner', 'Full access including billing', '#7c3aed', true, 'owner'),
 		('Admin', 'Full access except billing', '#2563eb', true, 'admin'),
@@ -393,6 +409,19 @@ func (o *Orchestrator) seed(ctx context.Context, t migrate.Target, req Request) 
 		if _, err := tx.Exec(ctx, qSeedSettings, req.Name, req.Currency, req.Locale, req.Timezone); err != nil {
 			return err
 		}
+		// Industry preset (item 1): type and its recommended modules, set
+		// only while the shop is still new (a retry never changes a choice
+		// the owner made since).
+		bt := req.BusinessType
+		if bt == "" {
+			bt = modules.Retail
+		}
+		if _, err := tx.Exec(ctx, qSeedBusiness, bt, modules.Recommended(bt)); err != nil {
+			return err
+		}
+		if err := modules.SeedPreset(ctx, tx, bt); err != nil {
+			return err
+		}
 		if _, err := tx.Exec(ctx, qSeedRoles); err != nil {
 			return err
 		}
@@ -400,8 +429,8 @@ func (o *Orchestrator) seed(ctx context.Context, t migrate.Target, req Request) 
 		if _, err := tx.Exec(ctx, `INSERT INTO role_permissions (role_id, permission_id)
 			SELECT r.id, p.id FROM roles r CROSS JOIN permissions p
 			WHERE r.system_key = 'owner' OR (r.system_key = 'admin' AND p.module <> 'billing'
-				AND (p.module || ':' || p.action) NOT IN ('sales:credit', 'customers:credit_limit'))
-			ON CONFLICT DO NOTHING`); err != nil {
+				AND (p.module || ':' || p.action) <> ALL($1::text[]))
+			ON CONFLICT DO NOTHING`, rbac.OwnerOnlyKeys()); err != nil {
 			return err
 		}
 		keys := make([]string, 0, len(rbac.BillerDefaults))

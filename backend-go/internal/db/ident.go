@@ -148,7 +148,7 @@ func GrantRoleSet(ctx context.Context, c Execer, role, member string) error {
 // lines (a deleted return line would allow returning more than sold) and
 // stock adjustments (corrections are new adjustments).
 var AppendOnlyTables = []string{"audit_log", "stock_movements", "return_items", "stock_adjustments",
-	"customer_payments", "customer_payment_allocations"}
+	"customer_payments", "customer_payment_allocations", "customer_credit_entries"}
 
 // GrantTenantPrivileges gives a tenant role exactly what TENANCY §5.3 lists:
 // USAGE on its schema and extensions, DML on its tables, sequence use,

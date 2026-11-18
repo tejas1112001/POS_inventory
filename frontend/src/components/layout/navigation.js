@@ -4,6 +4,7 @@
 import {
   BarChart3,
   Boxes,
+  ClipboardCheck,
   CreditCard,
   FileText,
   Globe,
@@ -12,6 +13,7 @@ import {
   ReceiptText,
   RotateCcw,
   Ruler,
+  Shirt,
   Settings,
   ShieldCheck,
   ShoppingCart,
@@ -44,6 +46,7 @@ export const NAV = [
       { label: 'Products', path: '/products', icon: Package, perm: ['products', 'view'], also: ['/add-product'] },
       { label: 'Stock', path: '/inventory', icon: Boxes, perm: ['inventory', 'view'] },
       { label: 'Adjustments & history', path: '/stock-adjustments', icon: SlidersHorizontal, perm: ['stock_adjustments', 'view'] },
+      { label: 'Stock counts', path: '/stock-counts', icon: ClipboardCheck, perm: ['stock_counts', 'view'], module: 'stock_counts' },
       { label: 'Purchases', path: '/purchases', icon: Truck, perm: ['purchases', 'view'], also: ['/add-purchase'] },
     ],
   },
@@ -60,6 +63,7 @@ export const NAV = [
       { label: 'Categories', path: '/categories', icon: Tag, perm: ['categories', 'view'], also: ['/add-category'] },
       { label: 'Brands', path: '/brands', icon: Award, perm: ['brands', 'view'], also: ['/add-brand'] },
       { label: 'Units', path: '/units', icon: Ruler, perm: ['units', 'view'], also: ['/add-unit'] },
+      { label: 'Attributes', path: '/attributes', icon: Shirt, perm: ['attributes', 'view'], module: 'product_attributes' },
     ],
   },
   { title: 'Reports', items: [{ label: 'Reports', path: '/sales-report', icon: BarChart3, perm: ['reports', 'view'], also: REPORT_PATHS }] },
@@ -81,11 +85,14 @@ export const NAV = [
   },
 ];
 
-// visibleNav keeps the items the user may open and drops empty groups.
-export function visibleNav(hasPermission) {
-  return NAV.map((g) => ({ ...g, items: g.items.filter((i) => !i.perm || hasPermission(i.perm[0], i.perm[1])) })).filter(
-    (g) => g.items.length > 0
-  );
+// visibleNav keeps the items the user may open and drops empty groups. An
+// item with a module (industry P1) also needs that module switched on for
+// the shop; hasModule defaults to "on" for callers that do not pass it.
+export function visibleNav(hasPermission, hasModule = () => true) {
+  return NAV.map((g) => ({
+    ...g,
+    items: g.items.filter((i) => (!i.perm || hasPermission(i.perm[0], i.perm[1])) && (!i.module || hasModule(i.module))),
+  })).filter((g) => g.items.length > 0);
 }
 
 // isItemActive: the item's page or one of its sub-pages is open.
@@ -106,6 +113,7 @@ export const TITLES = {
   '/add-product': 'Add product',
   '/inventory': 'Stock',
   '/stock-adjustments': 'Adjustments & history',
+  '/stock-counts': 'Stock counts',
   '/purchases': 'Purchases',
   '/add-purchase': 'New purchase',
   '/categories': 'Categories',

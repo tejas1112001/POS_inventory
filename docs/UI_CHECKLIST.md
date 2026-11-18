@@ -313,3 +313,188 @@ How to check (owner, or anyone who can edit settings):
 2. Ticks come from the shop's data, never from clicking: e.g. add a product → "First product" is ticked on the next dashboard load; sell something → "First sale"; fill address, phone and tax number in Settings → "Business profile and tax number". "Email sending" ticks when the shop's own email server is verified or any email has been sent.
 3. **Hide checklist** → confirm → it disappears for everyone in the shop, for good (audit: settings.onboarding_hidden). When every step is done it disappears by itself.
 4. Cashiers (no settings:edit) never see it.
+
+## Industry P1 – Item 1: Business type and modules
+
+How to check:
+1. An existing shop (owner): Settings → Shop shows a **Business type** card at the top with **Retail** chosen and no module ticked. Every other screen is unchanged (no new menu items).
+2. Choose **Clothing**: Sizes, colours and attributes, Barcode labels and Stock counts get ticked. Untick one, **Save business type** → "Business type saved." Reload: the choice is kept. Audit log: `settings.business_update` with before and after.
+3. Choose **Retail** again → every module unticked; save. Data from a module is never deleted when it goes off.
+4. As an admin or a cashier the card is read-only: "Only the owner can change the business type and modules." Roles & permissions lists **modules: Change business type and modules**; the Admin role does not have it, the Owner does.
+5. Super Admin console → Tenants: a **Type** column and an **All business types** filter. **New tenant** has a **Business type** field (default Retail). Create a Clothing shop: its owner's onboarding checklist shows "Import your catalogue (clothing template)" instead of "First product", and its Settings show Clothing with the three modules on.
+6. Console → a tenant → Overrides: the keys list has "Module: sizes, colours and attributes", "Module: barcode labels" and "Module: stock counts". Add one with value **off**: within 30 seconds the shop's Settings card shows that module as **Not in your plan**, and it can no longer be ticked (an already ticked one stays ticked but is not usable).
+7. API: `GET /api/auth/me` → `tenant.businessType`, `tenant.modules`, `tenant.entitledModules`.
+
+Known problems:
+- The modules themselves arrive with items 4 (attributes), 5 (labels) and 7 (stock counts); until then switching them on shows no new screen.
+- The onboarding "Import your catalogue" step opens the Products page; the template import itself arrives with item 6.
+- Existing shops' Biller role does not get new permissions automatically (roles are never reset); item 4 gives new shops' billers `attributes:view`.
+
+## Industry P1 – Item 2: Payments are "recorded"
+
+How to check:
+1. Checkout: sell one item paid part **Cash**, part **UPI** (with a reference). Sale done screen: "UPI (recorded)"; Cash has no label.
+2. Orders → that sale: the payments list shows "UPI (recorded)" and, under it, "Payments are recorded by the cashier and are not verified by a bank or payment provider."
+3. Print the receipt and download the PDF: the UPI line reads "UPI (recorded)" and the same sentence is printed above the footer. A cash-only sale shows neither the label nor the sentence.
+4. Email the receipt (customer with an email): the email shows the same label and sentence.
+5. Customer account: collect a dues payment by **Card** → the history shows "Card (recorded)" (hover for the hint). The statement shows "Payment received (card, recorded)".
+6. Reports → Sales by payment method: non-cash rows carry "(recorded)" and the legend is shown under the table.
+7. Old sales from before this change show the same labels (every existing payment is "recorded").
+
+Known problems:
+- Nothing can be marked "verified" in this release; that needs a payment provider (a later release).
+
+## Industry P1 – Item 3: Barcode scanning
+
+Use a USB or Bluetooth scanner in keyboard mode (it types the code and presses Enter). Without one, type the code fast and press Enter, or type it into the search box and press Enter.
+
+How to check:
+1. Settings → Appearance → **Barcode scanner**: click the test box and scan → "Scan recognised: <code> (n characters)". If a slow scanner is not recognised, raise "Time between scanner keystrokes" (stored in this browser only).
+2. Checkout: scan a product's barcode with the cursor anywhere (not in a field) → the exact variant is added with quantity 1. Scan again → quantity 2. Scanning while the search box has focus does the same and clears the box.
+3. Checkout: scan a variant's SKU → the same as a barcode.
+4. Checkout: scan an unknown code → a low beep, the toast "No product with barcode <code>", and the code stays in the search box so it can be fixed.
+5. Checkout: type a barcode into the search box and press Enter → that variant is added. Typing a product name and pressing Enter still works as before.
+6. Checkout: a product that is in use at another till → "… is in use at another till." and nothing is added.
+7. Checkout with the payment dialog open: scanning does nothing (no item added behind the dialog).
+8. Returns → New return, step Items with a sale chosen: scanning an item of that sale adds 1 to "Return now" (never more than is left); an item not on the sale → beep and "No item still returnable on this sale with barcode …". Without a sale (unlinked return): a scan adds a line, or 1 more on the same variant's line.
+9. Purchases → Add purchase, step Items: a scan adds a line (quantity 1, the variant's cost as the unit price), or 1 more on the same variant's line.
+10. A shop with no barcodes on its products: nothing changes; typing in the search box works as before.
+
+Known problems:
+- A scanner set to send Tab instead of Enter works; one set to send nothing after the code is not recognised (set the scanner to send Enter).
+- Scans are not recognised inside other text fields (on purpose, so typing a note is never taken as a scan).
+
+## Industry P1 – Item 4: Sizes, colours and attributes
+
+Set the shop to **Clothing** (Settings → Shop → Business type) first; a retail shop sees none of this.
+
+How to check:
+1. Menu → Catalogue setup → **Attributes** lists Department, Collection, Season, Size (XS…3XL) and Colour (free text). A Footwear shop gets Department, Size system, Size and Colour instead.
+2. **New attribute** "Fit", Variant, Choose from a list, choices Slim / Regular → saved. A second "fit" → "An attribute with this key already exists."
+3. Products → Add product → **Variable**, one variant (SKU TSH-01-S-RED). Open it: the **Sizes, colours and attributes** card. Enter article number TSH-01, Department Men, Season Spring/Summer; tick **Size** and **Colour**; give the variant Size S, Colour Red → **Save attributes**. The option now reads "S / Red".
+4. **Create variants** → tick S, M; Colour "Red, Blue" → **Preview**: 3 new variants (S / Red skipped) with SKUs TSH-01-S-BLUE, TSH-01-M-RED, TSH-01-M-BLUE → **Create 3 variants**. The product shows 4 options with stock 0.
+5. Create variants again with the same values → Preview says 0 new, 4 skipped. A pattern that repeats a SKU (e.g. "TSH-{colour}" with two sizes) → "The SKU pattern gives the same SKU to several variants".
+6. Products → search "tsh-01" finds the product by its article number.
+7. Checkout: the variant picker shows "S / Red", "M / Blue"…; sell S / Red (the only one with stock); Orders → that order shows "Crew tee (S / Red)", and it still does after the attribute is edited.
+8. Attributes → edit Size and remove "M" → refused: "M is used by 1 variants or products…". Adding "XXS" works. Delete Colour → refused while products use it; delete Fit → done.
+9. A plain product (no dimensions) still saves with any free attribute, as before.
+10. Settings → untick **Sizes, colours and attributes** → the Attributes menu and the product card disappear; products keep their labels; the Attributes page says the module is off.
+11. Roles: Admin has the four Attributes permissions; a new shop's Biller has "View product attributes".
+
+Known problems:
+- The variant grid creates variants with stock 0; receive stock with a purchase or a stock count (item 7).
+- Existing shops' Biller role does not get "View product attributes" automatically (roles are never reset); the owner can add it.
+
+## Industry P1 – Item 5: Barcodes and labels
+
+Set the shop to **Clothing** (Barcode labels is on by default) and have a product with 2–3 options, one without a barcode.
+
+How to check:
+1. **Scan check first** (design §5 spike): Settings → **Labels** → A4 sheet → **Test page**. Print it at **Actual size / 100 %** (not "Fit to page"). Scan two labels with a phone barcode app and with the shop's scanner (Settings → Appearance → Test scan): each reads 13 digits starting with 2, e.g. 2000000000015. Do the same on the 50 × 25 roll if the shop has a label printer.
+2. Product page → **Labels**: each option with its barcode (or "None: prints the SKU"), price and copies 1. **Create barcodes** → the missing ones get a code starting with 2; options that had a barcode keep it.
+3. Set copies 3 / 0 / 2, A4 sheet → the line under the table says "5 labels on 1 sheet" → **Print 5 labels**: a PDF opens in a new tab with 5 labels (name, option, price, bars, digits, SKU).
+4. Click outside the copy boxes and scan one of the option's labels: its copies go up by 1. Scan an unknown code: a beep and "No option of … has the code …".
+5. Checkout: scan a printed label → that option is added.
+6. Copies totalling more than 2,000 → the Print button is disabled with "At most 2000 labels per print".
+7. Settings → Labels → **Add layout** "Shelf 40 × 30": page 40 × 30, label 40 × 30, 1 × 1, fields Name, Price, Barcode bars → saved; **Test page** prints it. A label wider than the page → "the labels need … mm across but the page is … mm wide".
+8. Products → a product with sizes → **Create variants** → tick **Give each new variant an in-store barcode** → the new options have codes starting with 2.
+9. Roles: Admin has "Print barcode labels"; a Biller has not (no **Labels** button).
+10. Settings → untick **Barcode labels** → the Labels button, the Labels settings tab and the matrix tick box disappear; barcodes already made still scan at checkout.
+
+Known problems:
+- Labels print Latin text only well: names in Devanagari or other complex scripts show unjoined letters (same as receipts). Long names are cut with "…".
+- Printing from a received purchase (copies = quantity received) arrives with item 8, and from a stock count with item 7.
+- A scan while a copies box has the focus types into the box; click outside it first.
+
+## Industry P1 – Item 6: Import templates
+
+Set the shop to **Clothing**. Have a user with the Admin role and one Biller.
+
+How to check:
+1. Products → **Import** → Template shows **Clothing** (the shop's type). **Excel template** → open it in Excel: a Products sheet with one example row (TSH-01) and a Help sheet listing each column and the allowed values (Men, Women…; sizes XS–3XL). **CSV template** gives the same columns.
+2. Choose **General** → the CSV template has the same columns as before (name, sku, price…).
+3. In the Excel template replace the example with 3 rows: TSH-01 Crew tee size M, TSH-01 Crew tee size L (both Blue, opening qty 5 and 3), and BAG-9 Tote bag with no size. Type a 13-digit barcode in one row: it stays as typed (the column is text). Save as .xlsx.
+4. Choose the file → **Check file**: "2 products (3 options) would be created". Click Crew tee → rows M / Blue and L / Blue with SKU, price and "5 at Main Store". Nothing is saved yet (Products list unchanged).
+5. **Import** → "Imported 2 products (3 options)". Crew tee has options M / Blue and L / Blue, Department Men, stock 8.
+6. Errors: in a CSV give the two rows of one article different departments, a size XXXL, and a barcode Excel turned into 8.90123E+12 → "Nothing was imported" with each row and column listed. **Download the error report** → an Excel file with Row, Column, Problem and the original row.
+7. Two rows of one article with the same size and colour (M Blue, m blue) → "the same size and colour as row 2".
+8. Leave the dialog with the error list open for more than an hour → **Download the error report** says the report has expired (reports are kept 1 hour, one per user, and only the user who ran the import can download it).
+9. A Biller has no Import button (and gets 403 on the template and import).
+10. A **Retail** shop: Import works as before with the General template; a CSV with only the old columns imports exactly as before.
+
+Known problems:
+- Import creates products only; it does not update existing ones or add options to an existing article (an existing SKU or barcode is a row error).
+- Only the first sheet of a workbook is read; formulas are read as their last saved value.
+- An .xls (Excel 97–2003) file is refused: save it as .xlsx or CSV UTF-8.
+
+## Industry P1 – Item 7: Stock counts
+
+Set the shop to **Clothing** (Stock counts is on by default). Have a product with 3 options (5 in stock each) and another product in a brand.
+
+How to check:
+1. Sidebar → Inventory → **Stock counts** → **New count** → Everything in the store → **Start counting**: a count CNT-000001, Draft; "Not counted yet" lists all items.
+2. Scan option A twice (or type its barcode/SKU in the box and press Enter): A shows Counted 2, In stock now 5, Difference −3. Click outside any box and scan again: 3.
+3. Type 1 in B's Counted box and press Enter: Difference −4.
+4. **Upload a count sheet**: a CSV `sku,counted_qty` with `C,9` → C counted 9. A sheet with an unknown SKU → "Nothing was imported" and the row listed; nothing changes.
+5. Sell one C at checkout, then reload the count: C shows "Stock changed by −1 since counted" and a warning at the top.
+6. **New count** → One brand → that brand: scanning an option of the first product says it is not part of this count. Another whole-store count cannot take A ("already in draft count CNT-000001").
+7. **Labels** (Barcode labels on): copies = the counted quantities; print.
+8. **Review and complete**: the dialog says how many items change and by how many units → **Complete and update stock**: Completed; Stock shows A 3, B 1, C 9; the branded product unchanged. Adjustments & history → Stock changes lists "Stock count" lines.
+9. A completed or cancelled count has no boxes or buttons. **Cancel count** on a draft keeps it as Cancelled with no stock change.
+10. Roles: Admin has the three "stock count" permissions; a Biller has no Stock counts menu. A role with View + Count but not Complete has no **Review and complete** button.
+11. Settings → untick **Stock counts** → the menu item disappears and the pages say no access; stock changes made by counts stay in the history.
+
+Known problems:
+- With Stock counts turned off, the count pages are hidden (not read-only); their stock changes stay in Adjustments & history.
+- A scan while a Counted box has the focus types into the box; click outside it first.
+- "Not counted yet" lists up to 200 items (those with most stock); the total is always shown.
+- Two people can scan into the same count at once; a typed number replaces whatever was there.
+
+## Industry P1 – Item 8: Receive purchases in parts
+
+Have a purchase with status Ordered and two lines (for example 100 shirts and 5 caps), and a USB barcode scanner if possible.
+
+How to check:
+1. Open the purchase → **Receive goods**. Each line shows Ordered and Still to come.
+2. Type 60 for the shirts (or scan a shirt's barcode or SKU: each scan adds one) → **Receive 60 units**. A GRN number appears; the status is **Partially received**; the Received column shows 60 / 0; stock went up by 60.
+3. If labels are on, the label window opens with 60 shirt labels; print or close it. Each entry under **Goods received** also has **Print labels**.
+4. Open **Receive goods** again: the shirts show 40 still to come. Type 41 → refused ("At most 40 still to receive"). Scan a code that is not on the purchase → beep and a message.
+5. **Cancel** is gone for this purchase; payments and the note still work.
+6. **Everything arrived** → Receive: the status becomes **Received**, with the date. Goods received lists both GRNs.
+7. Another purchase: **Receive everything** (the old one-click way) still works and makes one GRN.
+8. Purchases list → status filter **Partially received**; Reports → Purchases shows each line's received quantity; the Dashboard counts partly received purchases as open.
+9. As a user without "approve purchases": no Receive buttons and no Goods received list.
+
+Known problems:
+- A partly received purchase that will never be completed cannot be closed; correct stock with a stock adjustment (as designed).
+
+## Industry P1 – Item 9: Returns policy, exchanges, store credit
+
+Have a named customer (not Walk-in), a few products in stock and two users: the owner and a cashier without "override return policy".
+
+How to check:
+1. Settings → **Returns**: Refunds is on, the rest off, no time limit — today's behaviour. A return made now works exactly as before.
+2. Turn on **Store credit** and **Exchanges**, set a time limit of 7 days and **Ask the condition** (restock: Resellable). Save.
+3. Sell 2 items to the customer. Returns → New → pick the sale, give each line a condition: one **Resellable**, one **Damaged**. Choose **Store credit** → Save. The return shows "Given back as Store credit", the damaged line says "not restocked", stock went up by 1 only.
+4. Customer account → **Store credit** shows the balance and the entry. As owner, **Adjust** (+50, reason) → balance goes up; −10000 is refused.
+5. Checkout for the same customer → payment **Store credit**: up to the balance; the receipt shows "Store credit left". For Walk-in there is no Store credit option.
+6. Returns → New → **Exchange**: pick the sale, a line to return, then scan or pick the new goods. The amounts update (customer pays / refund / to store credit). Pay the difference and save: you get a return and a new sale; the sale shows an "Exchange" payment. That sale cannot be voided.
+7. Return against a sale older than 7 days → refused with "Return window closed". As owner, type a reason (10+ characters) and save → it goes through; the audit log has "sale_return.policy_override". As the cashier the override box is not offered.
+8. Dashboard: collected today does not count exchange or store credit payments.
+
+## Industry P1 – Item 10: Thermal receipt and HSN on lines
+
+Have a product with an HSN code (Products → edit → HSN, e.g. 0902) and one without.
+
+How to check:
+1. Settings → Shop → Receipt text → **Receipt paper** shows A4 (as before). Choose **80 mm thermal roll** → Save.
+2. Sell both products → the receipt opens; its paper box shows 80 mm (on a computer that never picked a size). **Print**: the preview is a narrow roll, text black, long names wrap, each line shows "SKU …" and, for the first product, "HSN 0902".
+3. Pick **58 mm** in the receipt's paper box and print: narrower still. Reopen a receipt: this computer keeps 58 mm; another computer uses the shop's 80 mm.
+4. **Download PDF** / email: still A4, the first line shows "· HSN 0902".
+5. Change the product's HSN to 6109, reopen the old receipt: it still shows 0902 (the code at sale time). Receipts of sales made before this update show no HSN, as before.
+6. On the counter printer, print one receipt at 80 mm and check margins (hardware checklist §0.1); if the edges are cut, set the printer driver's margins to none.
+
+Known problems:
+- Browser print margins depend on the printer driver; some drivers add their own margin on thermal rolls.
+- Names in Devanagari or other complex scripts print well on screen and thermal (browser), but not in the PDF (as before).
+

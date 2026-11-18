@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, History, Pencil, Trash2 } from 'lucide-react';
+import { ArrowLeft, History, Pencil, Printer, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { usePermission } from '@/context/PermissionContext';
 import { useConfirm } from '@/components/feedback/ConfirmDialog';
@@ -11,6 +11,9 @@ import { ErrorState } from '@/components/kit/States';
 import { ProductImage } from '@/components/shared/product-image';
 import { variantLabel } from '@/components/pos/stock';
 import EditProductSheet from '@/components/products/EditProductSheet';
+import AttributesCard from '@/components/products/AttributesCard';
+import PrintLabelsDialog from '@/components/products/PrintLabelsDialog';
+import { useModules } from '@/hooks/useModules';
 import { formatCurrency, formatNumber } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
@@ -34,6 +37,8 @@ export default function ProductDetail() {
   const [stores, setStores] = useState([]);
   const [error, setError] = useState('');
   const [editing, setEditing] = useState(false);
+  const [printing, setPrinting] = useState(false);
+  const { hasModule } = useModules();
 
   const load = useCallback(() => {
     setError('');
@@ -112,6 +117,11 @@ export default function ProductDetail() {
               <History className="size-4" aria-hidden="true" /> Stock
             </Button>
           )}
+          {hasModule('barcode_labels') && hasPermission('labels', 'print') && (
+            <Button type="button" variant="outline" className="max-sm:h-11" onClick={() => setPrinting(true)}>
+              <Printer className="size-4" aria-hidden="true" /> Labels
+            </Button>
+          )}
           {hasPermission('products', 'edit') && (
             <Button type="button" variant="outline" className="max-sm:h-11" onClick={() => setEditing(true)}>
               <Pencil className="size-4" aria-hidden="true" /> Edit
@@ -182,6 +192,12 @@ export default function ProductDetail() {
           <Field label="Sold at">{product.sellingType}</Field>
           <Field label="Online shop">{product.isPublished ? 'Published' : 'Not published'}</Field>
           <Field label="Added by">{product.createdBy}</Field>
+          {product.articleNo && <Field label="Article number">{product.articleNo}</Field>}
+          {Object.entries(product.attributes || {}).map(([k, v]) => (
+            <Field key={k} label={k.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase())}>
+              {v}
+            </Field>
+          ))}
           {product.description && (
             <div className="col-span-2 md:col-span-4">
               <Field label="Description">{product.description}</Field>
@@ -190,7 +206,14 @@ export default function ProductDetail() {
         </dl>
       </section>
 
+      {hasModule('product_attributes') && hasPermission('attributes', 'view') && (
+        <AttributesCard product={product} canEdit={hasPermission('products', 'edit')} onSaved={load} />
+      )}
+
       <EditProductSheet product={editing ? product : null} onClose={() => setEditing(false)} onSaved={load} />
+      {printing && (
+        <PrintLabelsDialog product={product} canGenerate={hasPermission('products', 'edit')} onClose={() => setPrinting(false)} onChanged={load} />
+      )}
     </div>
   );
 }

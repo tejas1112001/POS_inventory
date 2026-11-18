@@ -25,6 +25,7 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/files"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/httpx"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/mailer"
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/modules"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/money"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/plans"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/rbac"
@@ -37,6 +38,7 @@ type Deps struct {
 	Sessions   *tenancy.Sessions
 	Files      *files.Service
 	Plans      *plans.Service
+	Modules    *modules.Service // industry module checks (item 1)
 	Envelope   *secrets.Envelope
 	Guard      mailer.Guard   // tenant SMTP SSRF guard
 	RootCAs    *x509.CertPool // nil: system roots
@@ -85,6 +87,9 @@ func (a *API) Mount(rt *rbac.Router) {
 	// Onboarding checklist (S10 item 8).
 	rt.Handle(http.MethodGet, "/onboarding", req("settings", "edit"), a.onboarding)
 	rt.Handle(http.MethodPost, "/onboarding/hide", req("settings", "edit"), a.hideOnboarding)
+	// Business type and modules (industry P1 item 1, A2, A3).
+	rt.Handle(http.MethodGet, "/modules", req("settings", "view"), a.listModules)
+	rt.Handle(http.MethodPut, "/settings/business", req("modules", "manage"), a.putBusiness)
 }
 
 // ---------------------------------------------------------------- model
@@ -99,6 +104,7 @@ type Business struct {
 	MaxDiscountPct                                                      decimal.Decimal
 	DefaultCustomerID                                                   *int64
 	HomePage                                                            string // "login" or "shop"
+	ReceiptPaper                                                        string // "a4", "80mm" or "58mm" (industry P1 item 10)
 	ShopStoreID                                                         *int64 // chosen default store; nil: see DefaultStore
 	NewCheckout                                                         bool   // the shop uses the new checkout screen (UI S6)
 	LowStockEmail                                                       bool   // the owner's daily low-stock email (S10 item 6)
@@ -133,7 +139,7 @@ func DefaultStore(ctx context.Context, tx tenancy.TenantTx) (id int64, slug stri
 const qLoad = `SELECT business_name, legal_name, address, phone, email::text, logo_file_id, currency, locale, timezone,
 		tax_label, tax_registration_no, tax_split, prices_include_tax_default, max_discount_pct_without_override,
 		invoice_prefix, receipt_header, receipt_footer, default_customer_id, home_page, shop_store_id, new_checkout, updated_at,
-		low_stock_email
+		low_stock_email, receipt_paper
 	FROM settings WHERE id = 1`
 
 // LoadBusiness reads the settings row in the caller's tenant transaction.
@@ -146,7 +152,7 @@ func scanBusiness(row pgx.Row) (Business, error) {
 	err := row.Scan(&b.Name, &b.LegalName, &b.Address, &b.Phone, &b.Email, &b.LogoFileID, &b.Currency, &b.Locale,
 		&b.Timezone, &b.TaxLabel, &b.TaxRegistrationNo, &b.TaxSplit, &b.PricesIncludeTax, &b.MaxDiscountPct,
 		&b.InvoicePrefix, &b.ReceiptHeader, &b.ReceiptFooter, &b.DefaultCustomerID, &b.HomePage, &b.ShopStoreID, &b.NewCheckout, &b.UpdatedAt,
-		&b.LowStockEmail)
+		&b.LowStockEmail, &b.ReceiptPaper)
 	return b, err
 }
 
@@ -183,7 +189,9 @@ type JSON struct {
 	NewCheckout       bool            `json:"newCheckout"`        // the shop's choice, and allowed (below)
 	NewCheckoutOK     bool            `json:"newCheckoutAllowed"` // false: the platform turned the new checkout off for this shop
 	LowStockEmail     bool            `json:"lowStockEmail"`
+	ReceiptPaper      string          `json:"receiptPaper"`
 	UpdatedAt         time.Time       `json:"updatedAt"`
+	modules.Summary                   // businessType, modules, enabledModules, entitledModules (A1)
 }
 
 func toJSON(b Business) JSON {
@@ -192,7 +200,7 @@ func toJSON(b Business) JSON {
 		Timezone: b.Timezone, TaxLabel: b.TaxLabel, TaxRegistrationNo: b.TaxRegistrationNo, TaxSplit: b.TaxSplit,
 		PricesIncludeTax: b.PricesIncludeTax, MaxDiscountPct: b.MaxDiscountPct, InvoicePrefix: b.InvoicePrefix,
 		ReceiptHeader: b.ReceiptHeader, ReceiptFooter: b.ReceiptFooter, DefaultCustomerID: b.DefaultCustomerID,
-		HomePage: b.HomePage, ShopStoreID: b.ShopStoreID, NewCheckout: b.NewCheckout, LowStockEmail: b.LowStockEmail, UpdatedAt: b.UpdatedAt}
+		HomePage: b.HomePage, ShopStoreID: b.ShopStoreID, NewCheckout: b.NewCheckout, LowStockEmail: b.LowStockEmail, ReceiptPaper: b.ReceiptPaper, UpdatedAt: b.UpdatedAt}
 }
 
 func (a *API) get(w http.ResponseWriter, r *http.Request) {
@@ -215,6 +223,10 @@ func (a *API) get(w http.ResponseWriter, r *http.Request) {
 	}
 	out.NewCheckoutOK = ok
 	out.NewCheckout = out.NewCheckout && ok
+	if out.Summary, err = a.d.Modules.Summarize(r.Context(), tenant(r)); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
 	httpx.WriteJSON(w, http.StatusOK, out)
 }
 
@@ -243,6 +255,7 @@ type settingsIn struct {
 	ShopStoreID       money.Int `json:"shopStoreId"`
 	NewCheckout       *bool     `json:"newCheckout"`
 	LowStockEmail     *bool     `json:"lowStockEmail"`
+	ReceiptPaper      *string   `json:"receiptPaper"`
 }
 
 var (
@@ -295,6 +308,14 @@ func (a *API) apply(in settingsIn, b *Business) (changed []string, err error) {
 	optText(f, "phone", in.Phone, &b.Phone, 40, false)
 	optText(f, "receiptHeader", in.ReceiptHeader, &b.ReceiptHeader, 500, true)
 	optText(f, "receiptFooter", in.ReceiptFooter, &b.ReceiptFooter, 500, true)
+	if in.ReceiptPaper != nil {
+		switch p := strings.TrimSpace(*in.ReceiptPaper); p {
+		case "a4", "80mm", "58mm":
+			b.ReceiptPaper = p
+		default:
+			f["receiptPaper"] = "Receipt paper is a4, 80mm or 58mm."
+		}
+	}
 	if in.Email != nil {
 		e := strings.TrimSpace(*in.Email)
 		switch {
@@ -426,6 +447,7 @@ func (a *API) apply(in settingsIn, b *Business) (changed []string, err error) {
 		{"defaultCustomerId", neqInt(before.DefaultCustomerID, b.DefaultCustomerID)},
 		{"homePage", before.HomePage != b.HomePage}, {"shopStoreId", neqInt(before.ShopStoreID, b.ShopStoreID)},
 		{"newCheckout", before.NewCheckout != b.NewCheckout}, {"lowStockEmail", before.LowStockEmail != b.LowStockEmail},
+		{"receiptPaper", before.ReceiptPaper != b.ReceiptPaper},
 	} {
 		if c.diff {
 			changed = append(changed, c.name)
@@ -442,7 +464,7 @@ const qUpdate = `UPDATE settings SET business_name = $1, legal_name = $2, addres
 		logo_file_id = $6, currency = $7, locale = $8, timezone = $9, tax_label = $10, tax_registration_no = $11,
 		tax_split = $12, prices_include_tax_default = $13, max_discount_pct_without_override = $14,
 		invoice_prefix = $15, receipt_header = $16, receipt_footer = $17, default_customer_id = $18,
-		home_page = $19, shop_store_id = $20, new_checkout = $21, low_stock_email = $22, updated_at = now()
+		home_page = $19, shop_store_id = $20, new_checkout = $21, low_stock_email = $22, receipt_paper = $23, updated_at = now()
 	WHERE id = 1`
 
 func (a *API) put(w http.ResponseWriter, r *http.Request) {
@@ -501,7 +523,7 @@ func (a *API) put(w http.ResponseWriter, r *http.Request) {
 		}
 		if _, err := tx.Exec(ctx, qUpdate, b.Name, b.LegalName, b.Address, b.Phone, b.Email, b.LogoFileID, b.Currency,
 			b.Locale, b.Timezone, b.TaxLabel, b.TaxRegistrationNo, b.TaxSplit, b.PricesIncludeTax, b.MaxDiscountPct,
-			b.InvoicePrefix, b.ReceiptHeader, b.ReceiptFooter, b.DefaultCustomerID, b.HomePage, b.ShopStoreID, b.NewCheckout, b.LowStockEmail); err != nil {
+			b.InvoicePrefix, b.ReceiptHeader, b.ReceiptFooter, b.DefaultCustomerID, b.HomePage, b.ShopStoreID, b.NewCheckout, b.LowStockEmail, b.ReceiptPaper); err != nil {
 			return err
 		}
 		if len(changed) > 0 {
@@ -518,5 +540,10 @@ func (a *API) put(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, toJSON(out))
+	res := toJSON(out)
+	if res.Summary, err = a.d.Modules.Summarize(r.Context(), t); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, res)
 }

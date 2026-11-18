@@ -28,7 +28,7 @@ var (
 
 // Line is one item, already formatted.
 type Line struct {
-	Name, Attributes, SKU                          string
+	Name, Attributes, SKU, HSN                     string
 	Qty                                            int
 	UnitPrice, Discount, TaxRate, TaxAmount, Total string
 	HasDiscount                                    bool
@@ -39,14 +39,23 @@ type TaxRow struct {
 	Label, Taxable, Amount string
 }
 
-// PaymentLine is one payment on a receipt.
+// PaymentLine is one payment on a receipt. Method is the label, with
+// " (recorded)" for every method except cash (industry P1 item 2, Q4).
 type PaymentLine struct {
 	Method, Amount, Reference string
+	Recorded                  bool
 }
+
+// RecordedMethods are labelled "(recorded)" (the list of sales.RecordedLabel;
+// receipts do not import sales).
+var RecordedMethods = map[string]bool{"upi": true, "card": true, "cheque": true, "deposit": true, "exchange": true, "store_credit": true}
+
+// RecordedNote is the legend printed under recorded payments.
+const RecordedNote = "Payments are recorded by the cashier and are not verified by a bank or payment provider."
 
 // MethodLabels are the payment methods as receipts and lists show them.
 var MethodLabels = map[string]string{"cash": "Cash", "upi": "UPI", "card": "Card", "credit": "On account",
-	"cheque": "Cheque", "deposit": "Bank deposit", "points": "Points"}
+	"cheque": "Cheque", "deposit": "Bank deposit", "points": "Points", "exchange": "Exchange", "store_credit": "Store credit"}
 
 // View is everything a receipt (PDF or email) shows, formatted for the
 // tenant's currency, number format and time zone.
@@ -73,6 +82,8 @@ type View struct {
 	// the balance is due.
 	Payments []PaymentLine
 	DueDate  string
+	// PaymentsNote is RecordedNote when a payment is labelled recorded.
+	PaymentsNote string
 
 	Header, Footer []string
 
@@ -98,7 +109,7 @@ const (
 		JOIN users u ON u.id = s.user_id
 		WHERE s.id = $1`
 	qItems = `SELECT i.product_name, i.sku, i.quantity, i.unit_price, i.discount, i.tax_rate, i.tax_amount,
-			i.cgst, i.sgst, i.igst, i.subtotal, v.attributes
+			i.cgst, i.sgst, i.igst, i.subtotal, v.attributes, i.variant_label, i.hsn_code
 		FROM order_items i LEFT JOIN product_variants v ON v.id = i.variant_id
 		WHERE i.sale_id = $1 ORDER BY i.id`
 	qLogo = `SELECT storage_key FROM files WHERE id = $1`
@@ -232,7 +243,12 @@ func Load(ctx context.Context, tx tenancy.TenantTx, receiptID int64) (View, erro
 		if label == "" {
 			label = m
 		}
-		v.Payments = append(v.Payments, PaymentLine{Method: label, Amount: f.Money(amt), Reference: ref})
+		rec := RecordedMethods[m]
+		if rec {
+			label += " (recorded)"
+			v.PaymentsNote = RecordedNote
+		}
+		v.Payments = append(v.Payments, PaymentLine{Method: label, Amount: f.Money(amt), Reference: ref, Recorded: rec})
 	}
 	prows.Close()
 	if err := prows.Err(); err != nil {
@@ -266,11 +282,18 @@ func Load(ctx context.Context, tx tenancy.TenantTx, receiptID int64) (View, erro
 			unit, ldisc, rate, ltax, ltotal decimal.Decimal
 			cgst, sgst, igst                *decimal.Decimal
 			attrs                           []byte
+			label, hsn                      *string
 		)
-		if err := rows.Scan(&name, &sku, &qty, &unit, &ldisc, &rate, &ltax, &cgst, &sgst, &igst, &ltotal, &attrs); err != nil {
+		if err := rows.Scan(&name, &sku, &qty, &unit, &ldisc, &rate, &ltax, &cgst, &sgst, &igst, &ltotal, &attrs, &label, &hsn); err != nil {
 			return v, err
 		}
-		v.Lines = append(v.Lines, Line{Name: name, Attributes: attributes(attrs), SKU: deref(sku), Qty: qty,
+		// The sale-time label ("M / Blue", industry P1 item 4) wins over
+		// the variant's current attributes; older lines have none.
+		attrText := attributes(attrs)
+		if label != nil && *label != "" {
+			attrText = *label
+		}
+		v.Lines = append(v.Lines, Line{Name: name, Attributes: attrText, SKU: deref(sku), HSN: deref(hsn), Qty: qty,
 			UnitPrice: f.Money(unit), Discount: f.Money(ldisc), HasDiscount: ldisc.IsPositive(),
 			TaxRate: f.Percent(rate), TaxAmount: f.Money(ltax), Total: f.Money(ltotal)})
 		if !rate.IsPositive() {

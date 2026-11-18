@@ -83,6 +83,7 @@ const (
 	CodeInternal           = "INTERNAL"
 	CodeUnavailable        = "UNAVAILABLE"
 	CodeMisdirected        = "MISDIRECTED_REQUEST"
+	CodeModuleOff          = "MODULE_OFF" // industry P1 item 1: module not entitled or not switched on
 )
 
 // Validation reports field errors.

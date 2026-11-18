@@ -39,6 +39,8 @@ type ItemJSON struct {
 	ProductName string          `json:"product_name"`
 	SKU         *string         `json:"sku"`
 	Quantity    int             `json:"quantity"`
+	ReceivedQty int             `json:"received_qty"` // industry P1 item 8
+	Barcode     *string         `json:"barcode"`      // the variant's current barcode (scanning while receiving)
 	UnitPrice   decimal.Decimal `json:"unitPrice"`
 	UnitPriceS  decimal.Decimal `json:"unit_price"`
 	Discount    decimal.Decimal `json:"discount"`
@@ -83,8 +85,9 @@ const (
 		FROM purchases p LEFT JOIN suppliers s ON s.id = p.supplier_id
 		WHERE p.id = ANY($1)`
 	qLoadItems = `SELECT i.id, i.purchase_id, i.product_id, i.variant_id, i.store_id, i.product_name, i.sku, i.quantity,
-			i.unit_price, i.discount, i.subtotal, i.created_at, st.name
+			i.unit_price, i.discount, i.subtotal, i.created_at, st.name, i.received_qty, v.item_barcode
 		FROM purchase_items i LEFT JOIN stores st ON st.id = i.store_id
+		LEFT JOIN product_variants v ON v.id = i.variant_id
 		WHERE i.purchase_id = ANY($1) ORDER BY i.purchase_id, i.id`
 )
 
@@ -128,7 +131,7 @@ func load(ctx context.Context, tx tenancy.TenantTx, ids []int64) ([]PurchaseJSON
 		var it ItemJSON
 		var store *string
 		if err := rows.Scan(&it.ID, &it.PurchaseID, &it.ProductID, &it.VariantID, &it.StoreID, &it.ProductName, &it.SKU,
-			&it.Quantity, &it.UnitPrice, &it.Discount, &it.Subtotal, &it.CreatedAt, &store); err != nil {
+			&it.Quantity, &it.UnitPrice, &it.Discount, &it.Subtotal, &it.CreatedAt, &store, &it.ReceivedQty, &it.Barcode); err != nil {
 			rows.Close()
 			return nil, err
 		}

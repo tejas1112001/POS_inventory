@@ -122,9 +122,10 @@ const (
 			coalesce(sum(s.due) FILTER (WHERE ` + sqlOverdue + `), 0)
 		FROM sales s WHERE ` + qScope
 	// Money taken in the period, whatever sale it pays: payments at the
-	// till and collections against dues (reversals subtract).
+	// till and collections against dues (reversals subtract). Exchange and
+	// store credit are not money taken (industry P1 item 9, Q6).
 	qDashCollected = `SELECT coalesce(sum(p.amount), 0) FROM sale_payments p JOIN sales s ON s.id = p.sale_id
-		WHERE p.method <> 'credit' AND s.status <> 'Void' AND ($1 = 0 OR s.user_id = $1) AND ($2 = 0 OR s.store_id = $2)
+		WHERE p.method NOT IN ('credit', 'exchange', 'store_credit') AND s.status <> 'Void' AND ($1 = 0 OR s.user_id = $1) AND ($2 = 0 OR s.store_id = $2)
 		AND ($3::timestamptz IS NULL OR p.created_at >= $3) AND ($4::timestamptz IS NULL OR p.created_at < $4)`
 	// Returns dated in the period at the store; for one user, only returns
 	// of that user's sales.
@@ -148,7 +149,7 @@ const (
 		JOIN products p ON p.id = v.product_id AND p.deleted_at IS NULL
 		JOIN stores st ON st.id = i.store_id AND st.deleted_at IS NULL AND st.status = 'Active'
 		WHERE ($1 = 0 OR i.store_id = $1)`
-	qDashPurchases = `SELECT count(*) FROM purchases WHERE status IN ('Ordered','Pending')`
+	qDashPurchases = `SELECT count(*) FROM purchases WHERE status IN ('Ordered','Pending','Partially received')`
 	qDashDues      = `SELECT count(DISTINCT s.customer_id) FROM sales s WHERE s.status <> 'Void' AND s.due > 0 AND ($1 = 0 OR s.store_id = $1)`
 	qDashCounts    = `SELECT (SELECT count(*) FROM customers WHERE deleted_at IS NULL),
 		(SELECT count(*) FROM products WHERE deleted_at IS NULL)`

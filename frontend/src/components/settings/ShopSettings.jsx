@@ -38,7 +38,13 @@ const MAX_LOGO = 2 * 1024 * 1024;
 const FIELDS = [
   'businessName', 'legalName', 'address', 'phone', 'email', 'currency', 'locale', 'timezone', 'taxLabel',
   'taxRegistrationNo', 'taxSplit', 'pricesIncludeTax', 'maxDiscountPct', 'invoicePrefix', 'receiptHeader', 'receiptFooter',
-  'homePage', 'shopStoreId', 'newCheckout', 'lowStockEmail',
+  'homePage', 'shopStoreId', 'newCheckout', 'lowStockEmail', 'receiptPaper',
+];
+
+const RECEIPT_PAPERS = [
+  { value: 'a4', label: 'A4 (office printer)' },
+  { value: '80mm', label: '80 mm thermal roll' },
+  { value: '58mm', label: '58 mm thermal roll' },
 ];
 
 function timeZones(current) {
@@ -235,6 +241,7 @@ export default function ShopSettings({ canEdit }) {
         <div className="grid gap-4 md:grid-cols-2">
           <TextArea id="receiptHeader" label="Header" hint="Shown above the shop name." value={form.receiptHeader} onChange={set('receiptHeader')} error={fields.receiptHeader} disabled={dis} maxLength={500} />
           <TextArea id="receiptFooter" label="Footer" hint="For example a return policy or a thank-you note." value={form.receiptFooter} onChange={set('receiptFooter')} error={fields.receiptFooter} disabled={dis} maxLength={500} />
+          <SelectField id="receiptPaper" label="Receipt paper" hint="What Print uses by default. Each computer can still pick another size on the receipt; emailed PDFs stay A4." value={form.receiptPaper || 'a4'} onChange={set('receiptPaper')} error={fields.receiptPaper} disabled={dis} options={RECEIPT_PAPERS} />
         </div>
       </SectionCard>
 

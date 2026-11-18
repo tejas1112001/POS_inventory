@@ -24,6 +24,7 @@ type TenantView struct {
 	Slug           string     `json:"slug"`
 	Name           string     `json:"name"`
 	Status         string     `json:"status"`
+	BusinessType   string     `json:"businessType"` // industry P1 (DB3): copy of the shop's own setting
 	Plan           string     `json:"plan,omitempty"`
 	OwnerEmail     string     `json:"ownerEmail"`
 	BillingEmail   string     `json:"billingEmail,omitempty"`
@@ -58,12 +59,12 @@ type ProvView struct {
 
 const qTenantCols = `t.id, t.slug::text, t.name, t.status, coalesce(p.code, ''), t.owner_email::text,
 	coalesce(t.billing_email::text, ''), coalesce(t.notes, ''), t.schema_version, t.storage_bytes,
-	t.last_activity_at, t.suspended_at, coalesce(t.suspend_reason, ''), t.created_at`
+	t.last_activity_at, t.suspended_at, coalesce(t.suspend_reason, ''), t.created_at, t.business_type`
 
 func scanTenant(row pgx.Row) (TenantView, error) {
 	var v TenantView
 	err := row.Scan(&v.ID, &v.Slug, &v.Name, &v.Status, &v.Plan, &v.OwnerEmail, &v.BillingEmail, &v.Notes,
-		&v.SchemaVersion, &v.StorageBytes, &v.LastActivityAt, &v.SuspendedAt, &v.SuspendReason, &v.CreatedAt)
+		&v.SchemaVersion, &v.StorageBytes, &v.LastActivityAt, &v.SuspendedAt, &v.SuspendReason, &v.CreatedAt, &v.BusinessType)
 	return v, err
 }
 
@@ -74,15 +75,18 @@ type ListFilter struct {
 	Sort   string // newest, oldest, name, activity, storage; anything else is newest
 	// Overrides keeps only tenants with an active override (UI S9).
 	Overrides bool
-	Limit     int
-	Offset    int
+	// BusinessType keeps one industry type ("" = all).
+	BusinessType string
+	Limit        int
+	Offset       int
 }
 
 // The list orders the console offers (UI S9): one constant query each.
 const (
 	qTenantList = `SELECT ` + qTenantCols + ` FROM platform.tenants t LEFT JOIN platform.plans p ON p.id = t.plan_id
 			WHERE ($1 = '' OR t.status = $1) AND ($2 = '' OR lower(t.slug::text) LIKE $2 OR lower(t.name) LIKE $2 OR lower(t.owner_email::text) LIKE $2)
-			AND (NOT $5 OR EXISTS (SELECT 1 FROM platform.tenant_overrides o WHERE o.tenant_id = t.id AND o.revoked_at IS NULL AND o.expires_at > now()))`
+			AND (NOT $5 OR EXISTS (SELECT 1 FROM platform.tenant_overrides o WHERE o.tenant_id = t.id AND o.revoked_at IS NULL AND o.expires_at > now()))
+			AND ($6 = '' OR t.business_type = $6)`
 	qTenantsNewest   = qTenantList + ` ORDER BY t.created_at DESC, t.id LIMIT $3 OFFSET $4`
 	qTenantsOldest   = qTenantList + ` ORDER BY t.created_at ASC, t.id LIMIT $3 OFFSET $4`
 	qTenantsName     = qTenantList + ` ORDER BY lower(t.name), t.id LIMIT $3 OFFSET $4`
@@ -124,11 +128,12 @@ func (s *Service) ListTenants(ctx context.Context, f ListFilter) ([]TenantView, 
 	err := s.ro(ctx, func(tx tenancy.PlatformTx) error {
 		if err := tx.QueryRow(ctx, `SELECT count(*) FROM platform.tenants t
 			WHERE ($1 = '' OR t.status = $1) AND ($2 = '' OR lower(t.slug::text) LIKE $2 OR lower(t.name) LIKE $2 OR lower(t.owner_email::text) LIKE $2)
-			AND (NOT $3 OR EXISTS (SELECT 1 FROM platform.tenant_overrides o WHERE o.tenant_id = t.id AND o.revoked_at IS NULL AND o.expires_at > now()))`,
-			f.Status, like, f.Overrides).Scan(&total); err != nil {
+			AND (NOT $3 OR EXISTS (SELECT 1 FROM platform.tenant_overrides o WHERE o.tenant_id = t.id AND o.revoked_at IS NULL AND o.expires_at > now()))
+			AND ($4 = '' OR t.business_type = $4)`,
+			f.Status, like, f.Overrides, f.BusinessType).Scan(&total); err != nil {
 			return err
 		}
-		rows, err := queryTenants(ctx, tx, f.Sort, f.Status, like, f.Limit, f.Offset, f.Overrides)
+		rows, err := queryTenants(ctx, tx, f.Sort, f.Status, like, f.Limit, f.Offset, f.Overrides, f.BusinessType)
 		if err != nil {
 			return err
 		}
@@ -205,6 +210,8 @@ type CreateTenantInput struct {
 	Currency   string `json:"currency"`
 	Locale     string `json:"locale"`
 	Timezone   string `json:"timezone"`
+	// BusinessType is the industry preset (industry P1 item 1; default retail).
+	BusinessType string `json:"businessType"`
 }
 
 func (s *Service) provisioner() (*provisioning.Orchestrator, error) {
@@ -225,12 +232,12 @@ func (s *Service) CreateTenant(ctx context.Context, a Actor, in CreateTenantInpu
 	}
 	res, perr := p.Provision(ctx, provisioning.Request{
 		Slug: in.Slug, Name: in.Name, OwnerEmail: in.OwnerEmail, OwnerName: in.OwnerName,
-		PlanCode: in.PlanCode, Currency: in.Currency, Locale: in.Locale, Timezone: in.Timezone,
+		PlanCode: in.PlanCode, Currency: in.Currency, Locale: in.Locale, Timezone: in.Timezone, BusinessType: in.BusinessType,
 	})
 	if res.TenantID != "" {
 		_ = s.rw(context.WithoutCancel(ctx), func(tx tenancy.PlatformTx) error {
 			return writeAudit(ctx, tx, AuditEntry{ActorID: a.UserID, ActorEmail: a.Email, Action: "tenant.create",
-				TargetTenant: res.TenantID, After: map[string]any{"slug": in.Slug, "name": in.Name, "status": res.Status},
+				TargetTenant: res.TenantID, After: map[string]any{"slug": in.Slug, "name": in.Name, "status": res.Status, "businessType": in.BusinessType},
 				IP: m.IP, UserAgent: m.UserAgent, RequestID: m.RequestID})
 		})
 	}

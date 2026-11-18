@@ -53,7 +53,7 @@ func Start(ctx context.Context) (*DB, error) {
 		tcpostgres.WithPassword(adminPw),
 		testcontainers.WithCmd("postgres",
 			"-c", "shared_preload_libraries=pg_stat_statements",
-			"-c", "max_locks_per_transaction=1024",
+			"-c", "max_locks_per_transaction=1024", "-c", "max_connections=200",
 			"-c", "fsync=off", "-c", "full_page_writes=off"),
 		tcpostgres.BasicWaitStrategies(),
 	)

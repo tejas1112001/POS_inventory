@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Banknote, CheckCircle2, CreditCard, Delete, Landmark, Loader2, NotebookPen, Plus, ScrollText, Smartphone, Star, X } from 'lucide-react';
+import { Banknote, CheckCircle2, CreditCard, Delete, Gift, Landmark, Loader2, NotebookPen, Plus, ScrollText, Smartphone, Star, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -8,6 +8,7 @@ import { formatCurrency, todayInShop } from '@/lib/format';
 import { addDays, methodLabel } from '@/lib/payments';
 import { cn } from '@/lib/utils';
 import { parseAmount } from './useCheckout';
+import { api } from '@/services/api';
 
 // Payment methods (S10 item 5): the values are what the server stores.
 const TYPES = [
@@ -18,6 +19,8 @@ const TYPES = [
   { value: 'deposit', label: 'Deposit', icon: Landmark },
   { value: 'points', label: 'Points', icon: Star },
 ];
+// Store credit (industry P1 item 9, A22): shown for a named customer with a balance.
+const STORE_CREDIT = { value: 'store_credit', label: 'Store credit', icon: Gift };
 const WITH_REF = { upi: 'UPI transaction ID', card: 'Card last 4 digits', cheque: 'Cheque number', deposit: 'Bank reference' };
 const NOTES = [10, 20, 50, 100, 200, 500, 2000];
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', 'del'];
@@ -29,7 +32,10 @@ const round2 = (v) => Math.round(v * 100) / 100;
 // date. The server checks the credit limit and answers "Credit limit
 // reached: …" when it is passed; the sheet stays open with that message.
 // Pressing Complete again reuses the same sale key (never charged twice).
-export default function PaymentSheet({ open, onClose, total, customerEmail = '', onPay, onAccount = null }) {
+//
+// creditCustomer (a named customer's id) offers their store credit.
+export default function PaymentSheet({ open, onClose, total, customerEmail = '', onPay, onAccount = null, creditCustomer = null }) {
+  const [creditLeft, setCreditLeft] = useState(0);
   const [type, setType] = useState('cash');
   const [entry, setEntry] = useState(''); // cash received, or the amount for other methods
   const [reference, setReference] = useState('');
@@ -55,6 +61,18 @@ export default function PaymentSheet({ open, onClose, total, customerEmail = '',
     setEmail(customerEmail);
   }, [open, customerEmail]);
 
+  useEffect(() => {
+    setCreditLeft(0);
+    if (!open || !creditCustomer) return;
+    api
+      .get(`/api/customers/${creditCustomer}/store-credit`, { quiet: true })
+      .then((r) => setCreditLeft(Number(r.balance) || 0))
+      .catch(() => setCreditLeft(0));
+  }, [open, creditCustomer]);
+  const creditUsed = round2(lines.filter((l) => l.method === 'store_credit').reduce((s, l) => s + l.amount, 0));
+  const creditFree = round2(Math.max(creditLeft - creditUsed, 0));
+  const types = creditLeft > 0 ? [...TYPES, STORE_CREDIT] : TYPES;
+
   const cash = type === 'cash';
   const paidSoFar = round2(lines.reduce((s, l) => s + l.amount, 0));
   const left = round2(Math.max(total - paidSoFar, 0));
@@ -73,6 +91,13 @@ export default function PaymentSheet({ open, onClose, total, customerEmail = '',
 
   // current turns what is typed into a payment line (null: nothing typed).
   const current = () => {
+    if (type === 'store_credit') {
+      const want = entry.trim() === '' ? Math.min(left, creditFree) : value;
+      if (entry.trim() !== '' && !(value > 0)) throw new Error('Enter an amount above 0.');
+      if (want > creditFree + 0.001) throw new Error(`Only ${formatCurrency(creditFree)} of store credit is left.`);
+      if (want > left + 0.001) throw new Error(`Only ${formatCurrency(left)} is left to pay.`);
+      return want > 0 ? { method: 'store_credit', amount: round2(want), reference: '' } : null;
+    }
     if (entry.trim() === '') return cash ? null : left > 0 ? { method: type, amount: left, reference: reference.trim() } : null;
     if (!(value > 0)) throw new Error('Enter an amount above 0.');
     if (cash) return { method: 'cash', amount: round2(Math.min(value, left)), tendered: value, reference: '' };
@@ -256,7 +281,7 @@ export default function PaymentSheet({ open, onClose, total, customerEmail = '',
               <fieldset>
                 <legend className="mb-1.5 text-sm font-medium">Payment method</legend>
                 <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Payment method">
-                  {TYPES.map(({ value: v, label, icon: Icon }) => (
+                  {types.map(({ value: v, label, icon: Icon }) => (
                     <button
                       key={v}
                       type="button"
@@ -280,6 +305,9 @@ export default function PaymentSheet({ open, onClose, total, customerEmail = '',
                 </div>
               </fieldset>
 
+              {creditLeft > 0 && (
+                <p className="text-xs text-muted-foreground">Store credit available: {formatCurrency(creditFree)}</p>
+              )}
               {onAccount ? (
                 <div className="space-y-2 rounded-lg border bg-card px-3 py-2.5">
                   <label className="flex items-center gap-2 text-sm font-medium">

@@ -14,7 +14,7 @@ import { EmptyState } from '@/components/kit/States';
 import usePurchaseActions from '@/components/purchases/usePurchaseActions';
 import { formatCurrency, formatDate } from '@/lib/format';
 
-const STATUS = ['Ordered', 'Pending', 'Received', 'Cancelled'].map((v) => ({ value: v, label: v }));
+const STATUS = ['Ordered', 'Pending', 'Partially received', 'Received', 'Cancelled'].map((v) => ({ value: v, label: v }));
 const PAYMENT = ['Paid', 'Partial', 'Unpaid', 'Overdue'].map((v) => ({ value: v, label: v }));
 
 // Purchases (/purchases): stock bought from suppliers. Receive puts the
@@ -99,7 +99,7 @@ export default function Purchases() {
             label={row.reference}
             actions={[
               { label: 'Open', icon: Eye, onSelect: () => navigate(`/purchases/${row.id}`) },
-              actions.canReceive(row) && { label: 'Receive into stock', icon: PackageCheck, onSelect: () => actions.receive(row) },
+              actions.canReceive(row) && { label: 'Receive everything', icon: PackageCheck, onSelect: () => actions.receive(row) },
               actions.canPay(row) && { label: 'Record payment', icon: Wallet, onSelect: () => actions.pay(row) },
               actions.canCancel(row) && { label: 'Cancel purchase', icon: Ban, destructive: true, onSelect: () => actions.cancel(row) },
             ]}

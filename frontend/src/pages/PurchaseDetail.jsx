@@ -1,11 +1,15 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, Ban, PackageCheck, Wallet } from 'lucide-react';
+import { ArrowLeft, Ban, PackageCheck, Tag, Truck, Wallet } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { api } from '@/services/api';
 import StatusBadge from '@/components/kit/StatusBadge';
 import { ErrorState } from '@/components/kit/States';
 import usePurchaseActions from '@/components/purchases/usePurchaseActions';
+import ReceiveGoodsDialog from '@/components/purchases/ReceiveGoodsDialog';
+import PrintLabelsDialog from '@/components/products/PrintLabelsDialog';
+import { usePermission } from '@/context/PermissionContext';
+import { useModules } from '@/hooks/useModules';
 import { formatCurrency, formatDate, formatDateTime } from '@/lib/format';
 
 const n = (v) => Number(v) || 0;
@@ -20,12 +24,20 @@ function Row({ label, value, strong }) {
 }
 
 // PurchaseDetail (/purchases/:id): the purchase, its lines (with the store
-// each one stocks), totals and payment, and Receive / Record payment /
-// Cancel.
+// each one stocks, and how much has arrived), totals and payment, its goods
+// receipts, and Receive goods / Record payment / Cancel. Goods can arrive
+// in parts (industry P1 item 8); labels print for what arrived.
 export default function PurchaseDetail() {
   const { id } = useParams();
   const [p, setP] = useState(null);
   const [error, setError] = useState('');
+  const [receipts, setReceipts] = useState([]);
+  const [receiving, setReceiving] = useState(false);
+  const [labels, setLabels] = useState(null); // a receipt
+  const { hasPermission } = usePermission();
+  const canApprove = hasPermission('purchases', 'approve');
+  const { hasModule } = useModules();
+  const canLabels = hasModule('barcode_labels') && hasPermission('labels', 'print');
 
   const load = useCallback(() => {
     setError('');
@@ -33,9 +45,17 @@ export default function PurchaseDetail() {
       .get(`/api/purchases/${id}`, { quiet: true })
       .then(setP)
       .catch((err) => setError(err.status === 404 ? 'This purchase does not exist.' : err.message));
-  }, [id]);
+    if (canApprove) {
+      api
+        .get(`/api/purchases/${id}/receipts`, { quiet: true })
+        .then(setReceipts)
+        .catch(() => setReceipts([]));
+    }
+  }, [id, canApprove]);
   useEffect(load, [load]);
   const actions = usePurchaseActions(load);
+  const partial = p?.status === 'Partially received';
+  const barcodeOf = (itemId) => (p?.items || []).find((i) => i.id === itemId)?.barcode || null;
 
   if (error) {
     return (
@@ -65,9 +85,14 @@ export default function PurchaseDetail() {
         </div>
         <div className="flex flex-wrap gap-2">
           {actions.canReceive(p) && (
-            <Button type="button" className="max-sm:h-11" onClick={() => actions.receive(p)}>
-              <PackageCheck className="size-4" aria-hidden="true" /> Receive into stock
-            </Button>
+            <>
+              <Button type="button" className="max-sm:h-11" onClick={() => setReceiving(true)}>
+                <Truck className="size-4" aria-hidden="true" /> Receive goods
+              </Button>
+              <Button type="button" variant="outline" className="max-sm:h-11" onClick={() => actions.receive(p)}>
+                <PackageCheck className="size-4" aria-hidden="true" /> Receive everything
+              </Button>
+            </>
           )}
           {actions.canPay(p) && (
             <Button type="button" variant="outline" className="max-sm:h-11" onClick={() => actions.pay(p)}>
@@ -87,7 +112,12 @@ export default function PurchaseDetail() {
           Received{p.received_at ? ` on ${formatDateTime(p.received_at)}` : ''}: the items are in stock. Corrections go through stock adjustments.
         </p>
       )}
-      {(p.status === 'Ordered' || p.status === 'Pending') && !actions.canReceive(p) && (
+      {partial && (
+        <p role="status" className="rounded-lg bg-warning-bg px-4 py-3 text-sm text-warning-fg">
+          Part of this purchase has arrived. The rest is still to come; it cannot be cancelled now (correct stock with a stock adjustment).
+        </p>
+      )}
+      {(p.status === 'Ordered' || p.status === 'Pending' || partial) && !actions.canReceive(p) && (
         <p className="rounded-lg bg-info-bg px-4 py-3 text-sm text-info-fg">Not received yet. Receiving needs the "approve purchases" permission.</p>
       )}
 
@@ -103,6 +133,7 @@ export default function PurchaseDetail() {
                   <th scope="col" className="px-4 py-2 font-medium">Item</th>
                   <th scope="col" className="hidden px-3 py-2 font-medium md:table-cell">Store</th>
                   <th scope="col" className="px-3 py-2 text-right font-medium">Qty</th>
+                  <th scope="col" className="px-3 py-2 text-right font-medium">Received</th>
                   <th scope="col" className="px-3 py-2 text-right font-medium">Unit cost</th>
                   <th scope="col" className="px-4 py-2 text-right font-medium">Total</th>
                 </tr>
@@ -119,6 +150,9 @@ export default function PurchaseDetail() {
                     </td>
                     <td className="hidden px-3 py-2 md:table-cell">{i.store?.name || '—'}</td>
                     <td className="px-3 py-2 text-right tabular-nums">{i.quantity}</td>
+                    <td className={`px-3 py-2 text-right tabular-nums ${n(i.received_qty) < n(i.quantity) && p.status !== 'Cancelled' ? 'text-warning-fg' : ''}`}>
+                      {n(i.received_qty)}
+                    </td>
                     <td className="px-3 py-2 text-right tabular-nums">{formatCurrency(i.unit_price)}</td>
                     <td className="px-4 py-2 text-right font-medium tabular-nums">{formatCurrency(i.subtotal)}</td>
                   </tr>
@@ -140,6 +174,55 @@ export default function PurchaseDetail() {
           {p.note && <p className="mt-3 border-t pt-2 text-sm text-muted-foreground">{p.note}</p>}
         </section>
       </div>
+      {receipts.length > 0 && (
+        <section className="overflow-hidden rounded-lg border bg-card shadow-xs" aria-labelledby="prc-h">
+          <h2 id="prc-h" className="border-b px-4 py-3 text-base font-semibold">
+            Goods received
+          </h2>
+          <ul className="divide-y">
+            {receipts.map((r) => (
+              <li key={r.id} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="text-sm">
+                  <p className="font-medium">
+                    {r.reference} · {formatDateTime(r.receivedAt)}
+                    {r.receivedBy?.name ? ` · ${r.receivedBy.name}` : ''}
+                  </p>
+                  <p className="text-muted-foreground">
+                    {r.lines.map((l) => `${l.quantity} × ${l.productName}${l.sku ? ` (${l.sku})` : ''}`).join(', ')}
+                  </p>
+                  {r.note && <p className="text-muted-foreground">{r.note}</p>}
+                </div>
+                {canLabels && (
+                  <Button type="button" variant="outline" size="sm" className="max-sm:h-11" onClick={() => setLabels(r)}>
+                    <Tag className="size-4" aria-hidden="true" /> Print labels
+                  </Button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      {receiving && (
+        <ReceiveGoodsDialog
+          purchase={p}
+          onClose={() => setReceiving(false)}
+          onDone={(out) => {
+            setReceiving(false);
+            setP(out.purchase);
+            load();
+            if (canLabels) setLabels(out.receipt);
+          }}
+        />
+      )}
+      {labels && (
+        <PrintLabelsDialog
+          title={`${p.reference} · ${labels.reference}`}
+          rows={labels.lines.map((l) => ({ id: l.variantId, name: l.productName, sku: l.sku, itemBarcode: barcodeOf(l.purchaseItemId), copies: l.quantity }))}
+          canGenerate={hasPermission('products', 'edit')}
+          onClose={() => setLabels(null)}
+          onChanged={load}
+        />
+      )}
       {actions.sheet}
     </div>
   );

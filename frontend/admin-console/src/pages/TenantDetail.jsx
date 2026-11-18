@@ -174,6 +174,7 @@ function Overview({ tenant: t, reload }) {
               ['Owner', t.ownerEmail],
               ['Billing email', t.billingEmail],
               ['Plan', t.plan],
+              ['Business type', t.businessType],
               ['Created', formatDate(t.createdAt)],
               ['Last activity', t.lastActivityAt ? formatDateTime(t.lastActivityAt) : 'None yet'],
               ['Schema version', t.schemaVersion],

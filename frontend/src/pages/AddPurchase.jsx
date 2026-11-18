@@ -9,6 +9,8 @@ import { useNavigate } from 'react-router-dom';
 import SupplierModal from '../components/forms/SupplierModal';
 import { api } from '../services/api';
 import { todayInShop } from '@/lib/format';
+import { beep, findByCode } from '@/lib/scan';
+import { useScanner } from '@/hooks/useScanner';
 import { usePermission } from '../hooks/usePermission';
 import {
   InformationCircleIcon,
@@ -130,6 +132,27 @@ const AddPurchase = () => {
     
     setPurchaseItems(newItems);
   };
+
+  // Barcode scanning on the Items step (industry P1 item 3): a scan adds
+  // the variant with quantity 1, or one more on its existing line.
+  useScanner(
+    (code) => {
+      const hit = findByCode(products, code);
+      if (!hit) {
+        beep();
+        toast.error(`No product with barcode ${code}`);
+        return;
+      }
+      setPurchaseItems((prev) => {
+        const same = prev.find((i) => String(i.variantId) === String(hit.variant.id));
+        if (same) return prev.map((i) => (i === same ? { ...i, quantity: String((Number(i.quantity) || 0) + 1) } : i));
+        const line = { productId: hit.product.id, variantId: hit.variant.id, storeId: stores[0]?.id || '', quantity: '1', unitPrice: hit.variant.cost != null ? String(hit.variant.cost) : '' };
+        const empty = prev.find((i) => !i.productId);
+        return empty ? prev.map((i) => (i === empty ? { ...i, ...line, storeId: i.storeId || line.storeId } : i)) : [...prev, line];
+      });
+    },
+    { enabled: currentStep === 1 }
+  );
 
   const getProductVariants = (productId) => {
     const product = products.find(p => String(p.id) === String(productId));

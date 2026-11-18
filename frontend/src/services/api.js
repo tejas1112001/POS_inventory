@@ -175,11 +175,13 @@ export const api = {
   },
 
   // openBlob fetches a file with the session and opens it in a new tab
-  // (receipt PDFs). The tab is opened first so pop-up blockers allow it.
+  // (receipt and label PDFs). The tab is opened first so pop-up blockers
+  // allow it. opts.method and opts.body send a POST (label PDFs).
   async openBlob(endpoint, opts = {}) {
+    const { method = 'GET', ...rest } = opts;
     const win = window.open('', '_blank');
     try {
-      const res = await request('GET', endpoint, { ...opts, raw: true });
+      const res = await request(method, endpoint, { ...rest, raw: true });
       const url = URL.createObjectURL(await res.blob());
       if (win) win.location.href = url;
       else window.location.assign(url);

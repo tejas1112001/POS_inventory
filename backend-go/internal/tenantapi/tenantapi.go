@@ -20,6 +20,7 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/auth"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/authtoken"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/httpx"
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/modules"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/obs"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/rbac"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/tenancy"
@@ -44,6 +45,9 @@ type Deps struct {
 	LoginPerTenant int
 	// Modules register their routes on the same rbac router (steps 6+).
 	Modules []interface{ Mount(*rbac.Router) }
+	// Industry modules (docs/INDUSTRY_PHASE1_DESIGN.md item 1): the route
+	// guard for InModule routes and the /auth/me summary.
+	Industry *modules.Service
 }
 
 // API holds the handlers.
@@ -90,6 +94,9 @@ func (a *API) Router() *rbac.Router { return a.router }
 // Mount registers every tenant route under /api and runs the self-check.
 func (a *API) Mount(api chi.Router) error {
 	rt := rbac.NewRouter(api, "/api", a.d.States.Guard(a.d.Signer))
+	if a.d.Industry != nil {
+		rt.WithModuleGuard(a.d.Industry.Guard)
+	}
 	a.router = rt
 	ipLogin := a.limit("login_ip", 20, time.Minute, a.byIP)
 	perTenant := a.d.LoginPerTenant
@@ -145,7 +152,14 @@ func (a *API) Mount(api chi.Router) error {
 	for _, m := range a.d.Modules {
 		m.Mount(rt)
 	}
-	return rt.SelfCheck()
+	if err := rt.SelfCheck(); err != nil {
+		return err
+	}
+	var routes []modules.Route
+	for k, v := range rt.Declarations() {
+		routes = append(routes, modules.Route{Key: k, Module: v.Module})
+	}
+	return modules.CheckRoutes(modules.Registry, routes)
 }
 
 // ------------------------------------------------------------ helpers
@@ -254,6 +268,16 @@ func (a *API) me(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		httpx.WriteError(w, r, err)
 		return
+	}
+	if a.d.Industry != nil && body.Tenant != nil {
+		sum, err := a.d.Industry.Summarize(r.Context(), tenant(r))
+		if err != nil {
+			httpx.WriteError(w, r, err)
+			return
+		}
+		body.Tenant["businessType"] = sum.BusinessType
+		body.Tenant["modules"] = sum.Modules
+		body.Tenant["entitledModules"] = sum.EntitledModules
 	}
 	httpx.WriteJSON(w, http.StatusOK, body)
 }

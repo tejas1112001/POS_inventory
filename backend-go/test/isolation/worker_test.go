@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/mailer/smtptest"
@@ -116,7 +117,13 @@ func outboxByTo(t *testing.T, l, to string) outboxState {
 	t.Helper()
 	var s outboxState
 	var via, class *string
-	require.NoError(t, admin(t).QueryRow(context.Background(), `SELECT status, sent_via, last_error_class, attempts, next_retry_at
+	// One connection per look, closed at once: waitOutbox polls every
+	// 100 ms, and admin(t) keeps each connection open until the test ends.
+	ctx := context.Background()
+	c, err := pgx.Connect(ctx, tdb.AdminDSN.Reveal())
+	require.NoError(t, err)
+	defer func() { _ = c.Close(ctx) }()
+	require.NoError(t, c.QueryRow(ctx, `SELECT status, sent_via, last_error_class, attempts, next_retry_at
 		FROM `+schema(l)+`.email_outbox WHERE to_addr = $1 ORDER BY id DESC LIMIT 1`, to).Scan(&s.Status, &via, &class, &s.Attempts, &s.NextRetry))
 	if via != nil {
 		s.Via = *via
@@ -310,27 +317,42 @@ func TestLimitWaitsDoNotUseAttempts(t *testing.T) {
 		_, err := adm.Exec(ctx, `UPDATE `+schema(l)+`.email_outbox SET sent_at = now() - interval '25 hours' WHERE status = 'sent'`)
 		require.NoError(t, err)
 	}
+	// dueNow makes the row due and wakes the shop's mail. Upsert, not
+	// UPDATE: right after a wait the worker deletes the shop's dispatch row
+	// and writes it again (settleDispatch); an UPDATE in between changed
+	// nothing, the wake-up was lost and the row waited an hour (the old
+	// random failure). The row is made due first, so a worker that reads it
+	// after the delete schedules it too.
 	dueNow := func(t *testing.T, l, to string) {
 		_, err := adm.Exec(ctx, `UPDATE `+schema(l)+`.email_outbox SET next_retry_at = now() WHERE to_addr = $1`, to)
 		require.NoError(t, err)
-		_, err = adm.Exec(ctx, `UPDATE platform.mail_dispatch SET next_attempt_at = now() WHERE tenant_id = $1`, tenants[l].ID)
+		_, err = adm.Exec(ctx, `INSERT INTO platform.mail_dispatch (tenant_id, next_attempt_at) VALUES ($1, now())
+			ON CONFLICT (tenant_id) DO UPDATE SET next_attempt_at = now()`, tenants[l].ID)
 		require.NoError(t, err)
 	}
-	waiting := func(s outboxState) bool {
-		return s.Status == "failed" && s.NextRetry.After(time.Now().Add(30*time.Minute))
-	}
 	// held sells with a receipt email and checks that the row waits for
-	// the limit three times over without using an attempt.
+	// the limit three times over without using an attempt. Each wait must
+	// be a new one (every wait sets the retry an hour from then, so it is
+	// later than the last), not the previous state read again. After the
+	// last wait the row is left waiting, so the worker cannot look at it
+	// again while the caller clears the window (that race made the row
+	// wait another hour and the test fail now and then).
 	held := func(t *testing.T, l, tok string, p stocked, store float64, to string) {
 		t.Helper()
 		body := posSale(store, line(p, 1))
 		body["receiptEmail"] = to
 		require.Equal(t, 201, sell(t, l, tok, body, nil).Code)
-		for range 3 {
-			st := waitOutbox(t, l, to, waiting)
+		var last time.Time
+		for i := range 3 {
+			st := waitOutbox(t, l, to, func(s outboxState) bool {
+				return s.Status == "failed" && s.NextRetry.After(time.Now().Add(30*time.Minute)) && s.NextRetry.After(last)
+			})
 			require.Equal(t, "quota", st.Class)
 			require.Equal(t, 0, st.Attempts, "a wait for a limit uses no attempt")
-			dueNow(t, l, to)
+			last = st.NextRetry
+			if i < 2 {
+				dueNow(t, l, to)
+			}
 		}
 		require.False(t, gotMail(platSrv, to))
 		require.False(t, gotMail(smtpSrv, to))
@@ -339,7 +361,7 @@ func TestLimitWaitsDoNotUseAttempts(t *testing.T) {
 	t.Run("plan limit for platform mail", func(t *testing.T) {
 		tok, _ := ownerLogin(t, "c")
 		store := storeIDs(t, "c", tok)[0]
-		p := stockedProduct(t, "c", tok, "MAIL-PLANCAP", store, 5)
+		p := stockedProduct(t, "c", tok, fmt.Sprintf("MAIL-PLANCAP-%d", time.Now().UnixNano()), store, 5)
 		var limit int
 		require.NoError(t, adm.QueryRow(ctx, `SELECT (p.limits->>'max_emails_per_day')::int FROM platform.plans p
 			JOIN platform.tenants t ON t.plan_id = p.id WHERE t.id = $1`, tenants["c"].ID).Scan(&limit))
@@ -362,7 +384,7 @@ func TestLimitWaitsDoNotUseAttempts(t *testing.T) {
 		prepareTenantSMTP(t, tok, map[string]any{"dailyCap": 5, "fallbackToPlatform": false})
 		t.Cleanup(func() { prepareTenantSMTP(t, tok, map[string]any{"dailyCap": 300, "fallbackToPlatform": true}) })
 		store := storeIDs(t, "b", tok)[0]
-		p := stockedProduct(t, "b", tok, "MAIL-OWNCAP", store, 5)
+		p := stockedProduct(t, "b", tok, fmt.Sprintf("MAIL-OWNCAP-%d", time.Now().UnixNano()), store, 5)
 		fill(t, "b", "tenant", 5)
 
 		to := uniqueAddr("owncap")

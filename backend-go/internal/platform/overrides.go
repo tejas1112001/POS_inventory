@@ -39,6 +39,10 @@ var overrideKeys = map[string]overrideKey{
 	"public_shop":        {Label: "Online shop", Flag: true},
 	"csv_import":         {Label: "CSV import", Flag: true},
 	"new_checkout":       {Label: "New checkout", Flag: true},
+	// Industry Phase 1 modules (E2): false turns the module off for one shop.
+	"product_attributes": {Label: "Module: sizes, colours and attributes", Flag: true},
+	"barcode_labels":     {Label: "Module: barcode labels", Flag: true},
+	"stock_counts":       {Label: "Module: stock counts", Flag: true},
 }
 
 const (
@@ -86,7 +90,8 @@ type OverrideKeyView struct {
 
 // OverrideKeys returns the fixed list, in a stable order.
 func OverrideKeys() []OverrideKeyView {
-	order := []string{"max_stores", "max_users", "max_products", "max_emails_per_day", "max_storage_mb", "public_shop", "csv_import", "new_checkout"}
+	order := []string{"max_stores", "max_users", "max_products", "max_emails_per_day", "max_storage_mb", "public_shop", "csv_import", "new_checkout",
+		"product_attributes", "barcode_labels", "stock_counts"}
 	out := make([]OverrideKeyView, 0, len(order))
 	for _, k := range order {
 		d := overrideKeys[k]

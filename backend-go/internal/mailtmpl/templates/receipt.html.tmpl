@@ -11,7 +11,8 @@
 <tr><td style="padding:2px 16px 2px 0;color:#52525b;">Paid</td><td>{{.}}</td></tr>{{end}}{{if .Due}}
 <tr><td style="padding:2px 16px 2px 0;color:#52525b;">Balance due</td><td><strong>{{.Due}}</strong>{{if .DueDate}} by {{.DueDate}}{{end}}</td></tr>{{end}}
 </table>
-{{if .Attached}}<p style="margin:0;">Your receipt is attached as a PDF.</p>{{else}}<p style="margin:0;">Your receipt could not be attached. Please ask the store for a copy.</p>{{end}}
+{{if .PaymentsNote}}<p style="margin:0 0 12px;font-size:12px;color:#71717a;">{{.PaymentsNote}}</p>
+{{end}}{{if .Attached}}<p style="margin:0;">Your receipt is attached as a PDF.</p>{{else}}<p style="margin:0;">Your receipt could not be attached. Please ask the store for a copy.</p>{{end}}
 <p style="margin:16px 0 0;font-size:13px;color:#52525b;">{{.StoreName}}{{if .StoreAddress}}, {{.StoreAddress}}{{end}}{{if .StorePhone}} · {{.StorePhone}}{{end}}</p>
 {{range .Footer}}<p style="margin:4px 0 0;font-size:12px;color:#71717a;">{{.}}</p>{{end}}
 {{end}}

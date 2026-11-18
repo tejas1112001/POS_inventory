@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/attributes"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/files"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/tenancy"
 )
@@ -42,6 +43,9 @@ type VariantJSON struct {
 	CreatedAt        time.Time       `json:"createdAt"`
 	UpdatedAt        time.Time       `json:"updatedAt"`
 	Inventories      []InventoryJSON `json:"Inventories"`
+	// Label is "M / Blue" (or "UK 8 / Black") when the product has variant
+	// dimensions (industry P1 item 4); left out otherwise.
+	Label string `json:"label,omitempty"`
 }
 
 // ProductJSON is the old transformProduct() shape: model fields plus
@@ -76,6 +80,11 @@ type ProductJSON struct {
 	CreatedAt        time.Time        `json:"createdAt"`
 	UpdatedAt        time.Time        `json:"updatedAt"`
 	ProductVariants  []VariantJSON    `json:"ProductVariants"`
+	// Industry P1 item 4 (A7): product-level attribute values, the variant
+	// dimension keys in order, and the article (style) number.
+	Attributes  map[string]string `json:"attributes"`
+	VariantDims []string          `json:"variantDims"`
+	ArticleNo   *string           `json:"articleNo"`
 
 	Category       string          `json:"category"`
 	CategoryIDC    *int64          `json:"categoryId"`
@@ -120,7 +129,8 @@ const (
 		        WHERE sp.product_id = p.id AND sp.is_published AND ($2 = 0 OR sp.store_id = $2)),
 		EXISTS (SELECT 1 FROM store_products sp WHERE sp.product_id = p.id AND sp.is_featured AND ($2 = 0 OR sp.store_id = $2)),
 		EXISTS (SELECT 1 FROM store_products sp JOIN stores s ON s.id = sp.store_id AND s.deleted_at IS NULL
-		        WHERE sp.product_id = p.id AND sp.is_published)
+		        WHERE sp.product_id = p.id AND sp.is_published),
+		p.attributes, p.variant_dims, p.article_no
 		FROM products p
 		LEFT JOIN categories c ON c.id = p.category_id
 		LEFT JOIN brands b ON b.id = p.brand_id
@@ -154,7 +164,8 @@ func load(ctx context.Context, tx tenancy.TenantTx, ids []int64, o loadOpts) ([]
 		if err := rows.Scan(&p.ID, &p.Name, &p.Description, &p.Status, &p.imageID, &p.Slug, &p.SellingType, &p.ProductType,
 			&p.TaxType, &p.Tax, &p.HSNCode, &p.DiscountType, &p.DiscountValue, &p.Warranties, &p.BarcodeSymbology,
 			&p.CategoryID, &p.SubCategoryID, &p.BrandID, &p.UnitID, &p.SupplierID, &p.CreatedByID, &p.CreatedAt, &p.UpdatedAt,
-			&p.Category, &p.Brand, &p.Unit, &p.CreatedByName, &p.IsPublished, &p.IsFeatured, &anyPublished); err != nil {
+			&p.Category, &p.Brand, &p.Unit, &p.CreatedByName, &p.IsPublished, &p.IsFeatured, &anyPublished,
+			&p.Attributes, &p.VariantDims, &p.ArticleNo); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -186,6 +197,7 @@ func load(ctx context.Context, tx tenancy.TenantTx, ids []int64, o loadOpts) ([]
 		}
 		v.Inventories = []InventoryJSON{}
 		if p := byID[v.ProductID]; p != nil {
+			v.Label = attributes.Label(p.VariantDims, p.Attributes, v.Attributes)
 			p.ProductVariants = append(p.ProductVariants, v)
 			variantOwner[v.ID] = p
 			variantIDs = append(variantIDs, v.ID)

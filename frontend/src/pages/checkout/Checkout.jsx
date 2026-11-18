@@ -18,6 +18,8 @@ import { usePos } from '@/hooks/usePos';
 import { useShopSettings } from '@/hooks/useShopSettings';
 import { isRetryable, newIdempotencyKey, priceChanges } from '@/lib/checkout';
 import { formatCurrency } from '@/lib/format';
+import { beep, findByCode } from '@/lib/scan';
+import { useScanner } from '@/hooks/useScanner';
 import { cn } from '@/lib/utils';
 import { api } from '@/services/api';
 import useCheckout, { lineName } from './useCheckout';
@@ -112,7 +114,7 @@ export default function Checkout() {
       if (category === 'fav' && !favs.has(p.id)) return false;
       if (category !== 'all' && category !== 'fav' && p.category !== category) return false;
       if (!q) return true;
-      return p.name.toLowerCase().includes(q) || variantsOf(p).some((v) => v.sku?.toLowerCase().includes(q));
+      return p.name.toLowerCase().includes(q) || variantsOf(p).some((v) => v.sku?.toLowerCase().includes(q) || v.itemBarcode?.toLowerCase() === q);
     });
   }, [c.products, category, favs, search]);
 
@@ -135,16 +137,50 @@ export default function Checkout() {
     else c.setProblem(`"${product.name}" has no options to sell.`);
   };
 
-  const onSearchEnter = () => {
+  // addByCode adds the variant of an exact barcode or SKU (industry P1
+  // item 3): from the loaded list first, then the server (A5) for a
+  // product the list does not carry. Returns true when something matched.
+  const addByCode = async (code) => {
+    const hit = findByCode(c.products, code);
+    if (hit) {
+      if (isLocked(hit.product)) c.setProblem(`"${hit.product.name}" is in use at another till.`);
+      else await add(hit.product, hit.variant);
+      return true;
+    }
+    try {
+      const p = await api.get(`/api/products/barcode/${encodeURIComponent(code)}?storeId=${encodeURIComponent(c.storeId)}`, { quiet: true });
+      const v = variantsOf(p).find((x) => x.id === p.variantId) || (variantsOf(p).length === 1 ? variantsOf(p)[0] : null);
+      if (v) {
+        await add(p, v);
+        return true;
+      }
+    } catch (err) {
+      if (err.status !== 404) c.setProblem(err.message || 'Could not look up the barcode.');
+    }
+    return false;
+  };
+
+  // A scanner's code: added once per scan; no match beeps and keeps the
+  // code in the search box so it can be fixed.
+  const onScan = async (code) => {
+    if (await addByCode(code)) {
+      setSearch('');
+      return;
+    }
+    beep();
+    toast.error(`No product with barcode ${code}`);
+    setSearch(code);
+    focusSearch();
+  };
+  useScanner(onScan, { enabled: !payOpen, accept: (t) => t === searchRef.current });
+
+  const onSearchEnter = async () => {
     const q = search.trim().toLowerCase();
     if (!q) return;
-    for (const p of shown) {
-      const v = variantsOf(p).find((x) => x.sku?.toLowerCase() === q);
-      if (v && !isLocked(p)) {
-        add(p, v);
-        setSearch('');
-        return;
-      }
+    if (findByCode(c.products, search.trim())) {
+      await addByCode(search.trim());
+      setSearch('');
+      return;
     }
     const usable = shown.filter((p) => !isLocked(p) && productStock(p) > 0);
     if (usable.length === 1) {
@@ -501,8 +537,8 @@ export default function Checkout() {
               type="search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by name or SKU · F2"
-              aria-label="Search products by name or SKU"
+              placeholder="Scan, or search by name, SKU or barcode · F2"
+              aria-label="Search products by name, SKU or barcode"
               className="h-11 pl-10 text-base"
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey) {
@@ -598,6 +634,7 @@ export default function Checkout() {
         total={total}
         customerEmail={customer?.email || ''}
         onPay={pay}
+        creditCustomer={customer && String(customer.id) !== String(c.walkIn?.id) ? customer.id : null}
         onAccount={
           canCredit && customer && String(customer.id) !== String(c.walkIn?.id)
             ? { name: customer.name, owes: Number(customer.due) || 0, limit: customer.creditLimit == null ? null : Number(customer.creditLimit) }

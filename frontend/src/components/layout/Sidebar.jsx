@@ -4,6 +4,7 @@ import { isItemActive, visibleNav } from './navigation';
 import { ShoppingCart, ChevronsLeft, LogOut, X } from 'lucide-react';
 import { usePos } from '@/hooks/usePos';
 import { usePermission } from '@/hooks/usePermission';
+import { useModules } from '@/hooks/useModules';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -16,6 +17,7 @@ export default function Sidebar({ mobileOpen, setMobileOpen, collapsed: controll
   const setCollapsed = onCollapsedChange ?? setInternalCollapsed;
   const { currentUser, logout, tenant } = usePos();
   const { hasPermission } = usePermission();
+  const { hasModule } = useModules();
   const navigate = useNavigate();
 
   const handleSignOut = async () => {
@@ -24,7 +26,7 @@ export default function Sidebar({ mobileOpen, setMobileOpen, collapsed: controll
   };
 
   const { pathname } = useLocation();
-  const visibleSections = visibleNav(hasPermission);
+  const visibleSections = visibleNav(hasPermission, hasModule);
 
   return (
     <>

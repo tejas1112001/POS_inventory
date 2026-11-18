@@ -35,8 +35,19 @@ const (
 	MethodPoints  = "points"
 )
 
+// VerificationRecorded is the only payment verification in this release
+// (industry P1 item 2, D3): every payment is recorded by the cashier and
+// none is verified by a bank or provider.
+const VerificationRecorded = "recorded"
+
+// RecordedLabel are the methods that screens, receipts and reports label
+// "(recorded)" (Q4: every method except cash; the on-account part and
+// points are not money taken).
+var RecordedLabel = map[string]bool{MethodUPI: true, MethodCard: true, MethodCheque: true, MethodDeposit: true,
+	"exchange": true, "store_credit": true}
+
 var saleMethods = map[string]bool{MethodCash: true, MethodUPI: true, MethodCard: true, MethodCredit: true,
-	MethodCheque: true, MethodDeposit: true, MethodPoints: true}
+	MethodCheque: true, MethodDeposit: true, MethodPoints: true, MethodStoreCredit: true}
 
 // CollectMethods can pay dues later (no credit, no points).
 var CollectMethods = map[string]bool{MethodCash: true, MethodUPI: true, MethodCard: true, MethodCheque: true, MethodDeposit: true}
@@ -82,6 +93,7 @@ type payLine struct {
 	tendered  *decimal.Decimal
 	change    *decimal.Decimal
 	reference string
+	returnID  *int64 // exchange: the return whose value pays (industry P1 item 9)
 }
 
 func validatePayments(in []paymentIn, f fieldErrs) []payLine {
@@ -94,7 +106,7 @@ func validatePayments(in []paymentIn, f fieldErrs) []payLine {
 		k := fmt.Sprintf("payments[%d]", i)
 		m := strings.ToLower(strings.TrimSpace(p.Method))
 		if !saleMethods[m] {
-			f[k+".method"] = "Method must be cash, upi, card, credit, cheque, deposit or points."
+			f[k+".method"] = "Method must be cash, upi, card, credit, cheque, deposit, points or store_credit."
 		}
 		l := payLine{method: m}
 		if m != MethodCredit {
@@ -288,8 +300,8 @@ func dueDate(given string, saleDate time.Time, loc *time.Location) (*time.Time, 
 	return &d, nil
 }
 
-const qInsertPayment = `INSERT INTO sale_payments (sale_id, method, amount, tendered, change_due, reference, user_id, created_at)
-	VALUES ($1, $2, $3, $4, $5, NULLIF($6, ''), $7, $8)`
+const qInsertPayment = `INSERT INTO sale_payments (sale_id, method, amount, tendered, change_due, reference, user_id, created_at, sale_return_id)
+	VALUES ($1, $2, $3, $4, $5, NULLIF($6, ''), $7, $8, $9)`
 
 // writePayments replaces a sale's own payment rows (never the rows of
 // collections against dues).
@@ -298,7 +310,7 @@ func writePayments(ctx context.Context, tx tenancy.TenantTx, saleID, userID int6
 		return err
 	}
 	for _, r := range rows {
-		if _, err := tx.Exec(ctx, qInsertPayment, saleID, r.method, r.amount, r.tendered, r.change, r.reference, userID, at); err != nil {
+		if _, err := tx.Exec(ctx, qInsertPayment, saleID, r.method, r.amount, r.tendered, r.change, r.reference, userID, at, r.returnID); err != nil {
 			return err
 		}
 	}
@@ -328,6 +340,8 @@ type PaymentJSON struct {
 	Reference         *string          `json:"reference"`
 	CustomerPaymentID *int64           `json:"customerPaymentId"`
 	CreatedAt         time.Time        `json:"createdAt"`
+	Verification      string           `json:"verification"` // "recorded" (industry P1 item 2)
+	SaleReturnID      *int64           `json:"saleReturnId"` // exchange: the return that paid (industry P1 item 9)
 }
 
 // ownPayments are a sale's own non-credit payments (not collections).

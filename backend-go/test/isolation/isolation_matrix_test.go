@@ -28,6 +28,7 @@ type canaryTenant struct {
 	storeSlug        string
 	productID        string
 	barcode          string
+	importReport     string // a failed import's error report token (A14)
 }
 
 func seedCanary(t *testing.T) canaryTenant {
@@ -92,6 +93,23 @@ func seedCanary(t *testing.T) canaryTenant {
 	adj := postAdjustment(t, l, tok, ab, nil)
 	require.Equal(t, 201, adj.Code, adj.Raw)
 
+	// Industry P1 item 4: an attribute definition (module switched on).
+	setModules(t, l, "clothing")
+	ad := post("/api/attributes", map[string]any{"label": m + " fit", "key": "fit", "level": "variant", "kind": "text"})
+	c.ids = append(c.ids, id(ad.Body["id"]))
+
+	// Industry P1 item 7: a draft stock count.
+	sc := post("/api/stock-counts", map[string]any{"storeId": storeIDs(t, l, tok)[0], "note": m + " count"})
+	require.Equal(t, 201, sc.Code, sc.Raw)
+	c.ids = append(c.ids, id(sc.Body["id"]))
+
+	// Industry P1 item 6: a failed import leaves an error report holding
+	// the file's rows.
+	failed := uploadCSV(t, l, tok, "name,sku,price\n"+m+"-import,"+m+"-SKU,not-a-price\n", false)
+	require.Equal(t, 400, failed.Code, failed.Raw)
+	c.importReport, _ = failed.Body["errorReport"].(string)
+	require.NotEmpty(t, c.importReport)
+
 	role := post("/api/roles", map[string]any{"name": m + "-role"})
 	c.ids = append(c.ids, id(role.Body["id"]))
 	c.ids = append(c.ids, jsonID(float64(createUser(t, l, tok, m+"-user@"+l+".test", "biller", "canary-user-pass-123"))))
@@ -107,6 +125,7 @@ func (c canaryTenant) concretePaths(pattern string) []string {
 	p = strings.ReplaceAll(p, "{slug}", c.storeSlug)
 	p = strings.ReplaceAll(p, "{product}", c.productID)
 	p = strings.ReplaceAll(p, "{barcode}", c.barcode)
+	p = strings.ReplaceAll(p, "{token}", c.importReport)
 	ids := c.ids
 	if strings.HasPrefix(p, "/files/") {
 		ids = c.fileIDs

@@ -19,7 +19,16 @@ type PaymentMethodRow struct {
 	Payments    int             `json:"payments"`
 	Amount      decimal.Decimal `json:"amount"`
 	Collections decimal.Decimal `json:"collections"` // the part from collections against dues
+	// Verification is "recorded" on every row (industry P1 item 2): the
+	// cashier recorded these payments; none is verified by a provider.
+	// Recorded is true where screens label the method "(recorded)" (Q4).
+	Verification string `json:"verification"`
+	Recorded     bool   `json:"recorded"`
 }
+
+// recordedMethods are labelled "(recorded)" (Q4: all but cash; "credit"
+// is on account and points are not money taken).
+var recordedMethods = map[string]bool{"upi": true, "card": true, "cheque": true, "deposit": true, "exchange": true, "store_credit": true}
 
 const qPaymentMethods = `SELECT p.method, count(*), coalesce(sum(p.amount), 0),
 		coalesce(sum(p.amount) FILTER (WHERE p.customer_payment_id IS NOT NULL), 0)
@@ -52,6 +61,7 @@ func (a *API) paymentMethods(w http.ResponseWriter, r *http.Request) {
 			if err := rows.Scan(&x.Method, &x.Payments, &x.Amount, &x.Collections); err != nil {
 				return err
 			}
+			x.Verification, x.Recorded = "recorded", recordedMethods[x.Method]
 			out = append(out, x)
 		}
 		return rows.Err()

@@ -47,3 +47,7 @@
 .rc-narrow .rc-items td.rc-empty { display: none; }
 .rc-narrow .rc-items td:last-child { margin-left: auto; font-weight: 600; }
 .rc-narrow .rc-totals { max-width: none; }
+/* Thermal printers have no grey: print secondary text black; long names wrap (industry P1 item 10). */
+.rc-narrow, .rc-narrow .rc-muted, .rc-narrow .rc-sku { color: #000; }
+.rc-narrow .rc-items td:first-child { overflow-wrap: anywhere; }
+.rc-narrow .rc-sku { display: inline; margin-right: 6px; }

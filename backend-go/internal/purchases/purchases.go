@@ -3,7 +3,9 @@
 // names the variant and store it stocks. Stock goes in once, when the
 // purchase becomes Received, which needs purchases:approve. Received is
 // terminal: stock corrections go through stock adjustments. Totals are
-// computed here from the lines.
+// computed here from the lines. Industry P1 item 8: goods can also arrive
+// in parts (receipts.go); the purchase is then Partially received until
+// every line is in.
 package purchases
 
 import (
@@ -28,7 +30,6 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/docdate"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/httpx"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/idempotency"
-	"github.com/tejas1112001/POS_inventory/backend-go/internal/inventory"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/money"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/rbac"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/settings"
@@ -73,6 +74,8 @@ func (a *API) Mount(rt *rbac.Router) {
 	rt.Handle(http.MethodGet, "/purchases/{id}", req("purchases", "view"), a.get)
 	rt.Handle(http.MethodPost, "/purchases", req("purchases", "create"), a.create)
 	rt.Handle(http.MethodPut, "/purchases/{id}", req("purchases", "edit"), a.update)
+	rt.Handle(http.MethodGet, "/purchases/{id}/receipts", req("purchases", "approve"), a.listReceipts)
+	rt.Handle(http.MethodPost, "/purchases/{id}/receipts", req("purchases", "approve"), a.createReceipt)
 }
 
 func tenant(r *http.Request) tenancy.Tenant {
@@ -442,35 +445,6 @@ func payment(total, paid decimal.Decimal, overdue bool, currency string) (decima
 	return paid, total.Sub(paid), status, nil
 }
 
-// --------------------------------------------------------------- receive
-
-// receive puts every line's quantity into its store, through the ledger,
-// in deterministic lock order. The caller holds the purchase's row lock,
-// so a purchase is received at most once.
-func receive(ctx context.Context, tx tenancy.TenantTx, purchaseID, userID int64) (int, error) {
-	rows, err := tx.Query(ctx, `SELECT store_id, variant_id, quantity FROM purchase_items WHERE purchase_id = $1`, purchaseID)
-	if err != nil {
-		return 0, err
-	}
-	deltas := map[inventory.Key]int{}
-	units := 0
-	for rows.Next() {
-		var k inventory.Key
-		var q int
-		if err := rows.Scan(&k.Store, &k.Variant, &q); err != nil {
-			rows.Close()
-			return 0, err
-		}
-		deltas[k] += q
-		units += q
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
-		return 0, err
-	}
-	return units, inventory.LockAndApply(ctx, tx, deltas, nil, inventory.ReasonPurchase, inventory.Ref{Type: "purchase", ID: purchaseID}, userID)
-}
-
 // ----------------------------------------------------------------- create
 
 const (
@@ -593,12 +567,12 @@ func (a *API) create(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		if c.status == statusReceived {
-			units, err := receive(ctx, tx, id, p.UserID)
+			rc, err := receive(ctx, tx, id, p.UserID, nil, "")
 			if err != nil {
 				return err
 			}
 			e := meta
-			e.Action, e.After = "purchase.receive", map[string]any{"reference": ref, "units": units}
+			e.Action, e.After = "purchase.receive", map[string]any{"reference": ref, "receipt": rc.reference, "units": rc.units}
 			if err := audit.Write(ctx, tx, e); err != nil {
 				return err
 			}
@@ -630,8 +604,10 @@ func (a *API) create(w http.ResponseWriter, r *http.Request) {
 // ----------------------------------------------------------------- update
 
 // update is PUT /api/purchases/{id}: status, payment and note. Moving to
-// Received needs purchases:approve and stocks the lines; Received and
-// Cancelled are final (409 INVALID_STATE on any other status).
+// Received needs purchases:approve and stocks everything still outstanding
+// in one goods receipt (A17); Received and Cancelled are final (409
+// INVALID_STATE on any other status). A partly received purchase can only
+// stay so or become Received.
 func (a *API) update(w http.ResponseWriter, r *http.Request) {
 	id, err := pathID(r)
 	if err != nil {
@@ -644,7 +620,12 @@ func (a *API) update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	f := map[string]string{}
-	newStatus := statusChoice(in.Status, f)
+	var newStatus string
+	if in.Status != nil && strings.TrimSpace(*in.Status) == statusPartial {
+		newStatus = statusPartial // allowed only unchanged (checked below)
+	} else {
+		newStatus = statusChoice(in.Status, f)
+	}
 	overdue, overdueSet := paymentChoice(in.PaymentStatus, f)
 	note, noteSet := noteChoice(in.Note, f)
 	if in.Paid.Valid && in.Paid.D.IsNegative() {
@@ -679,6 +660,12 @@ func (a *API) update(w http.ResponseWriter, r *http.Request) {
 			return apperr.Conflict(apperr.CodeInvalidState, "A received purchase cannot change status. Correct stock with a stock adjustment.")
 		case status == statusCancelled && newStatus != statusCancelled:
 			return apperr.Conflict(apperr.CodeInvalidState, "A cancelled purchase cannot be reopened.")
+		case newStatus == statusPartial && status != statusPartial:
+			return apperr.Conflict(apperr.CodeInvalidState, "A purchase becomes Partially received when goods arrive. Use Receive goods.")
+		case status == statusPartial && newStatus == statusCancelled:
+			return apperr.Conflict(apperr.CodeInvalidState, "Part of this purchase has arrived, so it cannot be cancelled. Correct stock with a stock adjustment.")
+		case status == statusPartial && newStatus != statusPartial && newStatus != statusReceived:
+			return apperr.Conflict(apperr.CodeInvalidState, "Part of this purchase has arrived, so it cannot go back to "+newStatus+".")
 		case newStatus == statusReceived && status != statusReceived && !p.Has("purchases:approve"):
 			return apperr.Forbidden(apperr.CodeForbidden, "Receiving a purchase needs the approve permission.")
 		}
@@ -714,12 +701,12 @@ func (a *API) update(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		if receiving {
-			units, err := receive(ctx, tx, id, p.UserID)
+			rc, err := receive(ctx, tx, id, p.UserID, nil, "")
 			if err != nil {
 				return err
 			}
 			e := meta
-			e.Action, e.After = "purchase.receive", map[string]any{"reference": ref, "units": units}
+			e.Action, e.After = "purchase.receive", map[string]any{"reference": ref, "receipt": rc.reference, "units": rc.units}
 			if err := audit.Write(ctx, tx, e); err != nil {
 				return err
 			}

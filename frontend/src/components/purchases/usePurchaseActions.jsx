@@ -7,6 +7,8 @@ import PurchasePaymentSheet from './PurchasePaymentSheet';
 
 const n = (v) => Number(v) || 0;
 const open = (p) => p && (p.status === 'Ordered' || p.status === 'Pending');
+// receivable: not yet fully received (industry P1 item 8: also in part).
+const receivable = (p) => open(p) || p?.status === 'Partially received';
 
 // usePurchaseActions: receive (purchases:approve), cancel (purchases:edit)
 // and record payment (purchases:edit), with their confirm windows.
@@ -15,14 +17,14 @@ export default function usePurchaseActions(onChanged) {
   const { hasPermission } = usePermission();
   const [paying, setPaying] = useState(null);
 
-  const units = (p) => (p.items || []).reduce((s, i) => s + n(i.quantity), 0);
+  const units = (p) => (p.items || []).reduce((s, i) => s + Math.max(0, n(i.quantity) - n(i.received_qty)), 0);
   const stores = (p) => [...new Set((p.items || []).map((i) => i.store?.name).filter(Boolean))].join(', ');
 
   const receive = async (p) => {
     const ok = await confirm({
       title: `Receive ${p.reference}?`,
-      body: `${units(p)} units go into stock${stores(p) ? ` at ${stores(p)}` : ''}. This is done once and cannot be undone; later corrections are stock adjustments.`,
-      confirmLabel: 'Receive into stock',
+      body: `All ${units(p)} units still to come go into stock${stores(p) ? ` at ${stores(p)}` : ''}. This cannot be undone; later corrections are stock adjustments. To receive only part, open the purchase and use Receive goods.`,
+      confirmLabel: 'Receive everything',
     });
     if (!ok) return;
     try {
@@ -53,7 +55,7 @@ export default function usePurchaseActions(onChanged) {
   };
 
   return {
-    canReceive: (p) => open(p) && hasPermission('purchases', 'approve'),
+    canReceive: (p) => receivable(p) && hasPermission('purchases', 'approve'),
     canCancel: (p) => open(p) && hasPermission('purchases', 'edit'),
     canPay: (p) => p && p.status !== 'Cancelled' && n(p.due) > 0 && hasPermission('purchases', 'edit'),
     receive,

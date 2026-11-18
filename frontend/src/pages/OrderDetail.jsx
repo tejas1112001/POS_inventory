@@ -1,4 +1,4 @@
-import { formatDay, methodLabel } from '@/lib/payments';
+import { formatDay, isRecorded, methodLabel, paymentLabel, RECORDED_LEGEND } from '@/lib/payments';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Ban, FileText, Printer, Undo2 } from 'lucide-react';
@@ -165,7 +165,8 @@ export default function OrderDetail() {
               </thead>
               <tbody className="divide-y">
                 {items.map((i) => {
-                  const attrs = attrText(i.variant?.attributes);
+                  // The sale-time label ("M / Blue", industry P1 item 4) wins over today's attributes.
+                  const attrs = i.variantLabel || attrText(i.variant?.attributes);
                   return (
                     <tr key={i.id}>
                       <td className="px-4 py-2">
@@ -205,10 +206,11 @@ export default function OrderDetail() {
               <Row
                 key={p.id}
                 muted
-                label={`${p.customerPaymentId ? (n(p.amount) < 0 ? 'Reversed' : 'Collected') + ' · ' : ''}${methodLabel(p.method)}${p.reference ? ` (${p.reference})` : ''}`}
+                label={`${p.customerPaymentId ? (n(p.amount) < 0 ? 'Reversed' : 'Collected') + ' · ' : ''}${paymentLabel(p.method)}${p.reference ? ` (${p.reference})` : ''}`}
                 value={formatCurrency(p.amount)}
               />
             ))}
+          {(sale.payments || []).some((p) => isRecorded(p.method)) && <p className="text-xs text-muted-foreground">{RECORDED_LEGEND}</p>}
           <Row label="Paid" value={formatCurrency(sale.paid)} />
           {n(sale.tendered) > 0 && <Row muted label="Received" value={formatCurrency(sale.tendered)} />}
           {n(sale.tendered) > 0 && <Row muted label="Change" value={formatCurrency(sale.change)} />}

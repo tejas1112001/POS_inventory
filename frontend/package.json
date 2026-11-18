@@ -11,6 +11,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "build:admin": "vite build --config vite.admin.config.js",
+    "test:unit": "node --test \"src/lib/*.test.js\"",
     "dev:admin": "vite --config vite.admin.config.js",
     "test:e2e": "playwright test -c e2e/playwright.config.js"
   },

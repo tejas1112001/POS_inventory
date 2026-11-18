@@ -27,8 +27,9 @@ const (
 type Requirement struct {
 	Kind          Kind
 	Perm          string
-	AllowReadOnly bool  // passes the read_only tenant gate (billing exemption)
-	BodyLimit     int64 // 0 = httpx.DefaultBodyLimit (1 MiB)
+	AllowReadOnly bool   // passes the read_only tenant gate (billing exemption)
+	BodyLimit     int64  // 0 = httpx.DefaultBodyLimit (1 MiB)
+	Module        string // industry module that must be entitled and on (403 MODULE_OFF)
 }
 
 // Public marks an unauthenticated route.
@@ -45,6 +46,10 @@ func Require(module, action string) Requirement {
 // Uploads raises the body limit to httpx.UploadBodyLimit (8 MiB) for routes
 // that accept images.
 func (r Requirement) Uploads() Requirement { r.BodyLimit = httpx.UploadBodyLimit; return r }
+
+// InModule returns r refused with 403 MODULE_OFF unless the industry
+// module is entitled and switched on (docs/INDUSTRY_PHASE1_DESIGN.md item 1).
+func (r Requirement) InModule(key string) Requirement { r.Module = key; return r }
 
 // ReadOnlyOK returns r with the read_only gate exemption. Only the routes on
 // AllowReadOnlyList may use it (checked by a router-walk test).
@@ -69,14 +74,23 @@ var AllowReadOnlyList = map[string]bool{
 // Guard builds the middleware for a requirement.
 type Guard func(Requirement) func(http.Handler) http.Handler
 
+// ModuleGuard builds the middleware that refuses a route when its module
+// is off. It runs after Guard (signed in, permitted).
+type ModuleGuard func(module string) func(http.Handler) http.Handler
+
 // Router registers tenant routes together with their requirement.
 type Router struct {
 	r      chi.Router
 	prefix string
 	guard  Guard
+	module ModuleGuard
 	mu     *sync.Mutex
 	decl   map[string]Requirement
 }
+
+// WithModuleGuard sets the module middleware. Routes registered with
+// InModule before it is set, or without it, fail the self-check.
+func (rt *Router) WithModuleGuard(g ModuleGuard) *Router { rt.module = g; return rt }
 
 // NewRouter wraps r (mounted at prefix, e.g. "/api") with guard.
 func NewRouter(r chi.Router, prefix string, guard Guard) *Router {
@@ -92,7 +106,11 @@ func (rt *Router) Handle(method, pattern string, req Requirement, h http.Handler
 	if limit <= 0 {
 		limit = httpx.DefaultBodyLimit
 	}
-	rt.r.With(httpx.BodyLimit(limit), rt.guard(req)).Method(method, pattern, h)
+	mws := []func(http.Handler) http.Handler{httpx.BodyLimit(limit), rt.guard(req)}
+	if req.Module != "" && rt.module != nil {
+		mws = append(mws, rt.module(req.Module))
+	}
+	rt.r.With(mws...).Method(method, pattern, h)
 }
 
 // Declarations returns every registered route and requirement.
@@ -128,6 +146,9 @@ func (rt *Router) SelfCheck() error {
 	for k, v := range decl {
 		if v.AllowReadOnly && !AllowReadOnlyList[k] {
 			problems = append(problems, "read_only exemption not allow-listed: "+k)
+		}
+		if v.Module != "" && rt.module == nil {
+			problems = append(problems, "module route without a module guard: "+k)
 		}
 	}
 	if len(problems) > 0 {

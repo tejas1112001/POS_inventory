@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useImageSrc } from '@/components/shared/auth-image';
 import { cn } from '@/lib/utils';
+import { isRecorded, paymentLabel, RECORDED_LEGEND } from '@/lib/payments';
 import './receipt.css';
 import receiptCss from './receipt.css?raw';
 
@@ -18,7 +19,8 @@ const n = (v) => Number(v) || 0;
 const pct = (v) => `${Number(n(v).toFixed(3))}%`;
 const lines = (s) => (s || '').split('\n').map((x) => x.trim()).filter(Boolean);
 
-// Paper sizes for printing; the choice is kept in this browser.
+// Paper sizes for printing. The shop sets a default (Settings, industry P1
+// item 10); a choice made here is kept in this browser and wins.
 const PAPERS = [
   { value: 'a4', label: 'A4', page: '@page { size: A4; margin: 12mm; }', narrow: false },
   { value: '80mm', label: '80 mm', page: '@page { size: 80mm auto; margin: 3mm; } body { width: 74mm; }', narrow: true },
@@ -28,9 +30,9 @@ const PAPER_KEY = 'pos.receiptPaper';
 function savedPaper() {
   try {
     const v = localStorage.getItem(PAPER_KEY);
-    return PAPERS.some((p) => p.value === v) ? v : 'a4';
+    return PAPERS.some((p) => p.value === v) ? v : '';
   } catch {
-    return 'a4';
+    return '';
   }
 }
 
@@ -97,6 +99,8 @@ async function printNode(node, paper, title) {
 
 function ReceiptBody({ sale, store, settings, businessName, taxLabel, logoUrl, narrow, bodyRef }) {
   const items = sale.items || [];
+  // The sale's own payments and collections, without the on-account part (as on the PDF).
+  const payments = (sale.payments || []).filter((p) => p.method !== 'credit');
   const rows = taxRows(items, taxLabel);
   const taxReg = settings?.taxRegistrationNo;
   const taxId = taxReg ? (taxLabel === 'GST' ? `GSTIN: ${taxReg}` : `${taxLabel} No: ${taxReg}`) : '';
@@ -159,13 +163,14 @@ function ReceiptBody({ sale, store, settings, businessName, taxLabel, logoUrl, n
         </thead>
         <tbody>
           {items.map((i, k) => {
-            const attrs = attrText(i.variant?.attributes);
+            const attrs = i.variantLabel || attrText(i.variant?.attributes); // sale-time label first (industry P1 item 4)
             return (
               <tr key={i.id || k}>
                 <td>
                   {i.product_name || i.name}
                   {attrs && ` (${attrs})`}
                   {i.sku && <span className="rc-sku">SKU {i.sku}</span>}
+                  {i.hsn_code && <span className="rc-sku">HSN {i.hsn_code}</span>}
                 </td>
                 <td className="rc-qty">{i.quantity}</td>
                 <td>{formatCurrency(i.unit_price)}</td>
@@ -210,6 +215,15 @@ function ReceiptBody({ sale, store, settings, businessName, taxLabel, logoUrl, n
           <span>Total</span>
           <span>{formatCurrency(sale.total)}</span>
         </div>
+        {payments.map((p) => (
+          <div key={p.id} className="rc-muted">
+            <span>
+              {paymentLabel(p.method)}
+              {p.reference ? ` (${p.reference})` : ''}
+            </span>
+            <span>{formatCurrency(p.amount)}</span>
+          </div>
+        ))}
         <div>
           <span>Paid</span>
           <span>{formatCurrency(sale.paid)}</span>
@@ -232,7 +246,13 @@ function ReceiptBody({ sale, store, settings, businessName, taxLabel, logoUrl, n
             <span>{formatCurrency(sale.due)}</span>
           </div>
         )}
-        {sale.payment_method && (
+        {n(sale.storeCreditLeft) > 0 && (
+          <div>
+            <span>Store credit left</span>
+            <span>{formatCurrency(sale.storeCreditLeft)}</span>
+          </div>
+        )}
+        {payments.length === 0 && sale.payment_method && (
           <div>
             <span>Payment</span>
             <span>
@@ -241,6 +261,7 @@ function ReceiptBody({ sale, store, settings, businessName, taxLabel, logoUrl, n
           </div>
         )}
       </div>
+      {payments.some((p) => isRecorded(p.method)) && <p className="rc-center rc-muted">{RECORDED_LEGEND}</p>}
       <div className="rc-lines">
         {lines(settings?.receiptFooter).map((l, i) => (
           <p key={i} className="rc-center rc-muted">
@@ -298,7 +319,8 @@ export default function Receipt({ isOpen = true, onClose, sale: given, saleId, s
     };
   }, [given, saleId]);
 
-  const paperDef = useMemo(() => PAPERS.find((p) => p.value === paper) || PAPERS[0], [paper]);
+  const shopPaper = settings?.receiptPaper;
+  const paperDef = useMemo(() => PAPERS.find((p) => p.value === (paper || shopPaper)) || PAPERS[0], [paper, shopPaper]);
   const printed = useRef(false);
 
   const canDownload = hasPermission('receipts', 'view');
@@ -424,7 +446,7 @@ export default function Receipt({ isOpen = true, onClose, sale: given, saleId, s
             <div className="flex w-full flex-wrap items-center gap-2">
               <label className="flex items-center gap-2 text-sm text-muted-foreground">
                 Paper
-                <select className="h-10 rounded-md border bg-card px-2 text-foreground" value={paper} onChange={(e) => choosePaper(e.target.value)}>
+                <select className="h-10 rounded-md border bg-card px-2 text-foreground" value={paperDef.value} onChange={(e) => choosePaper(e.target.value)}>
                   {PAPERS.map((p) => (
                     <option key={p.value} value={p.value}>
                       {p.label}
