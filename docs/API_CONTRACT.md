@@ -503,6 +503,13 @@ Sections, per batch and store: `recalled` (a recalled batch, sellable and quaran
 
 Daily digest: with `expiryDigest` on and the module on, the hourly job queues one email per active owner from 08:00 shop time, once a day (outbox key `expiry_digest:<day>:<user>`), only when the report has rows. It goes through the mail outbox and its daily limits.
 
+**Item 8: pharmacy import template** (no migration).
+
+| # | Method | Path | Guard | Notes |
+|---|---|---|---|---|
+| A35 | GET | `/api/products/import/template?type=pharmacy&format=csv\|xlsx` | `products:import` | Columns `name, sku, barcode, category, brand, hsn_code, tax_type, tax_rate, price, cost, batch_no, expiry, mfg_date, mrp, store, opening_qty, quantity_alert`; the Help sheet explains each. Batch and date columns are formatted as text in the .xlsx |
+| A35 | POST | `/api/products/import[?dryRun=true]` | as before | A file with `batch_no` or `expiry` columns is a pharmacy file (module off → 403 `MODULE_OFF`; with `article_no` or attribute columns → 400). One row per batch: rows with the same SKU are batches of one single product, and must agree on name, price, cost, tax, barcode and the other product columns. `expiry` is required (`YYYY-MM-DD`, `MM/YYYY` = the month's last day, or an Excel date); `mfg_date` optional (`MM/YYYY` = the first day), before the expiry and not in the future; `mrp` ≥ 0. A batch number has one expiry and appears once per store. An empty `store` is the first store. Expired rows are warnings: the product is created but that row's stock and batch are not imported. Rows expiring within the near-expiry days are imported and listed as warnings. The answer gains `warnings[{row, field, message}]` (all templates; empty when none), and in a dry run each pharmacy variant gains `batches[{row, batchNo, expiry, store, qty, skipped}]`. Products track batches; the stock goes into the named batches (ledger reason `import`). With the module on, products from the other templates also track batches, their opening stock in the unknown batch (design §0) |
+
 ---
 
 ## 6. Frontend changes (minimal set, Phase 2)

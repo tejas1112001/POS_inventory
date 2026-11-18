@@ -627,3 +627,14 @@ How to check:
 Known problems:
 - Exports are Excel and PDF like the other reports; the design said CSV and Excel.
 
+## Industry P3 – Item 8: Pharmacy import template
+
+How to check:
+1. Products → Import: the Template list has **Pharmacy** only when Batches & expiry is on. Download the Excel template: a Products sheet with the batch columns and a Help sheet.
+2. Fill three rows for one SKU (batches P1 and P2 in the main store, P1 again in a second store using its slug), one row with an expiry last month, and one with an expiry next month. Use `MM/YYYY` for some expiries.
+3. **Check file**: one product per SKU; open it to see each batch row with its store and quantity. The expired row is struck through and marked "expired, not imported". An amber box lists the expired row and the near-expiry row.
+4. Change one row's price or name for the same SKU, or give a batch two expiries: Check file lists the row errors and nothing is saved.
+5. **Import**: Batches & expiry shows the batches with their expiry, MRP and stock per store; the product's stock in each store is the sum of its batches; the expired batch is not there.
+6. In a pharmacy shop the General template still works; its products track batches and the opening stock shows as "No batch".
+7. In a retail shop (module off) the Pharmacy template is not offered and imports work as before.
+

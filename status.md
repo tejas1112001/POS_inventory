@@ -11,11 +11,13 @@ Branch `industry/phase3` (from main `2ac28f2`), local only: no push or merge wit
 | 5 | Write-offs, recall, trace (A30, A31; P9, P10) | Done (tenant migration 00029: DB34); committed and deployed |
 | 6 | Stock counts per batch (A32) | Done (tenant migration 00030: DB35); committed and deployed |
 | 7 | Expiry report, dashboard tile, batch settings, daily digest (A33, A34) | Done (tenant migration 00031: outbox kind); committed and deployed |
-| 8 | Pharmacy import template (A35) | In progress (drafted) |
+| 8 | Pharmacy import template (A35) | Done (no migration); committed and deployed |
 
 ## Phase 3 notes
 - Item 1: every stock change already goes through `inventory.Move`/`Set`/`Apply`; they now keep tracked products' batches in step (increase → unknown batch, decrease → earliest expiry first, unknown last). `ApplyBatched` takes named batches for items 2–8.
 - Item 7: report exports are Excel and PDF like the other reports (the design said CSV and Excel).
+- Item 8: before this item, products imported into a shop with the module on did not track batches (the import skipped the item 1 default). Imports now turn tracking on in such shops: pharmacy rows go into their batches, other templates' opening stock into the unknown batch. Retail shops are unchanged.
+- Item 8: expired rows still create the product (catalog), but their batch and stock are not imported.
 - Copy run: the dev database has no shops, so the copy shows only that the migrations apply (platform 15, tenants 25). Switch-on, reconciliation and totals come from a scratch two-store pharmacy shop in `TestBatchTrackingSwitchAndReconcile`.
 
 ---
@@ -42,7 +44,7 @@ How to check each item: `docs/UI_CHECKLIST.md`. Last updated: 2026-11-18.
 - Item 9, DB20: `sales.exchange_return_id` has no foreign key (a key would make a cycle with `sale_returns.sale_id`, which tenant export/restore refuses). Accepted by the owner on 2026-11-18. The column is UNIQUE (that is its index), and `linkExchange` links only a return of the same store and customer, never twice.
 - Pushing: from 2026-11-18 commits stay local; push only when the owner asks.
 - Test database: `max_connections` raised to 200 in `internal/testdb` (the isolation suite ran out of connections at the default 100 once items 4 and 5 added test shops). Test setup only.
-- Dev stack: running; platform migrations at 15, tenant migrations at 31 (Phase 3 items 1-7 deployed). The dev database has no shops (create one in the console to check in the browser).
+- Dev stack: running; platform migrations at 15, tenant migrations at 31 (Phase 3 items 1-8 deployed). The dev database has no shops (create one in the console to check in the browser).
 - govulncheck: clean after the Go 1.27.4 bump (GO-2026-6859 fixed).
 - Temporary worktree `D:/pos_baseline` removed.
 

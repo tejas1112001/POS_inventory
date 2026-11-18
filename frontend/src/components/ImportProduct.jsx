@@ -10,6 +10,7 @@ const TYPES = [
   ['retail', 'General (one row per product or option)'],
   ['clothing', 'Clothing (article number, size, colour…)'],
   ['footwear', 'Footwear (article number, size system, size, colour…)'],
+  ['pharmacy', 'Pharmacy (one row per batch: batch number, expiry, MRP…)'],
 ];
 
 // ImportProduct uploads a product file (C-19, API_CONTRACT §5.1.1; industry
@@ -18,11 +19,13 @@ const TYPES = [
 // will be created; "Import" saves all rows or none. Row errors are listed
 // and can be downloaded as a spreadsheet.
 export default function ImportProduct({ showForm, setShowForm, onImportComplete }) {
-  const { businessType } = useModules();
-  const [type, setType] = useState(() => (TYPES.some(([k]) => k === businessType) ? businessType : 'retail'));
+  const { businessType, hasModule } = useModules();
+  // The pharmacy template needs Batches & expiry (industry P3 item 8, A35).
+  const types = TYPES.filter(([k]) => k !== 'pharmacy' || hasModule('batch_expiry'));
+  const [type, setType] = useState(() => (types.some(([k]) => k === businessType) ? businessType : 'retail'));
   const [file, setFile] = useState(null);
   const [busy, setBusy] = useState('');
-  const [result, setResult] = useState(null); // {dryRun, created, variants, preview}
+  const [result, setResult] = useState(null); // {dryRun, created, variants, preview, warnings}
   const [errors, setErrors] = useState([]);
   const [report, setReport] = useState('');
   const [message, setMessage] = useState('');
@@ -61,7 +64,7 @@ export default function ImportProduct({ showForm, setShowForm, onImportComplete 
     form.append('file', file);
     try {
       const res = await api.postFormData(`/api/products/import${dryRun ? '?dryRun=true' : ''}`, form, { quiet: true });
-      setResult({ dryRun, created: res?.created ?? 0, variants: res?.variants ?? 0, preview: res?.preview || [] });
+      setResult({ dryRun, created: res?.created ?? 0, variants: res?.variants ?? 0, preview: res?.preview || [], warnings: res?.warnings || [] });
       if (!dryRun) onImportComplete?.();
     } catch (err) {
       const rows = Array.isArray(err.body?.errors) ? err.body.errors : [];
@@ -127,7 +130,7 @@ export default function ImportProduct({ showForm, setShowForm, onImportComplete 
             <label className="grid gap-1.5 font-medium">
               Template
               <select className="h-11 rounded-md border border-input bg-background px-3 sm:h-9" value={type} onChange={(e) => setType(e.target.value)}>
-                {TYPES.map(([k, label]) => (
+                {types.map(([k, label]) => (
                   <option key={k} value={k}>
                     {label}
                   </option>
@@ -160,6 +163,19 @@ export default function ImportProduct({ showForm, setShowForm, onImportComplete 
               {result.dryRun
                 ? `The file is fine: ${result.created} products (${result.variants} options) would be created. Nothing was saved yet.`
                 : `Imported ${result.created} products (${result.variants} options).`}
+            </div>
+          )}
+
+          {result?.warnings?.length > 0 && (
+            <div role="status" className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+              {result.warnings.length} batch row{result.warnings.length === 1 ? '' : 's'} to note:
+              <ul className="mt-1 max-h-40 list-none space-y-0.5 overflow-y-auto text-xs">
+                {result.warnings.map((r, i) => (
+                  <li key={`${r.row}-${i}`}>
+                    Row {r.row}: {r.message}
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
 
@@ -209,6 +225,18 @@ export default function ImportProduct({ showForm, setShowForm, onImportComplete 
                               <td className="py-0.5">{stockText(v) || '—'}</td>
                             </tr>
                           ))}
+                          {p.variants.flatMap((v) =>
+                            (v.batches || []).map((b) => (
+                              <tr key={`b-${b.row}`} className={b.skipped ? 'text-muted-foreground line-through' : ''}>
+                                <td className="py-0.5 pr-3 tabular-nums">{b.row}</td>
+                                <td className="py-0.5 pr-3" colSpan={4}>
+                                  Batch {b.batchNo} · Exp {b.expiry}
+                                  {b.skipped ? ' · expired, not imported' : ''}
+                                </td>
+                                <td className="py-0.5">{b.qty > 0 ? `${b.qty} at ${b.store}` : '—'}</td>
+                              </tr>
+                            ))
+                          )}
                         </tbody>
                       </table>
                     </div>
