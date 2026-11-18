@@ -1,6 +1,6 @@
 # Industry Phase 1 build status
 
-Branch `industry/phase1` (pushed to origin; not merged). Design: `docs/INDUSTRY_PHASE1_DESIGN.md`.
+Branch `industry/phase1`, merged into `main` on 2026-11-18 (PR #20, merge commit `2ac28f2`; CI green on main). Design: `docs/INDUSTRY_PHASE1_DESIGN.md`.
 How to check each item: `docs/UI_CHECKLIST.md`. Last updated: 2026-11-18.
 
 | Item | What | State |
@@ -21,11 +21,11 @@ How to check each item: `docs/UI_CHECKLIST.md`. Last updated: 2026-11-18.
 - Pushing: from 2026-11-18 commits stay local; push only when the owner asks.
 - Test database: `max_connections` raised to 200 in `internal/testdb` (the isolation suite ran out of connections at the default 100 once items 4 and 5 added test shops). Test setup only.
 - Dev stack: running; platform migrations at 14, tenant migrations at 24. The dev database has no shops (create one in the console to check in the browser).
-- govulncheck: 1 Go standard library finding (GO-2026-6859); the same on `main`, not caused by this work.
+- govulncheck: clean after the Go 1.27.4 bump (GO-2026-6859 fixed).
 - Temporary worktree `D:/pos_baseline` removed.
 
 ## Next step
-Phase 1: all ten items built; owner review of the checklist, then merge when approved. `TestLimitWaitsDoNotUseAttempts` flake fixed.
+Phase 1: all ten items built and merged (PR #20). Go is now 1.27.4 (GO-2026-6859). `TestLimitWaitsDoNotUseAttempts` flake fixed.
 
 Phase 3 (pharmacy): design note `docs/INDUSTRY_PHASE3_PHARMACY_DESIGN.md` drafted 2026-11-18 with the owner's answers Q8–Q12. Waiting for approval of DB25–DB37, P7–P10, A23–A35, E3 and Q13–Q17 before any code.
 
