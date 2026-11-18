@@ -25,6 +25,10 @@ const (
 	ReasonProductEdit = "product_edit"
 	ReasonImport      = "import"
 	ReasonStockCount  = "stock_count" // industry P1 item 7
+	// Industry P3 item 4 (DB33): units moved between sellable stock and a
+	// batch's quarantine.
+	ReasonQuarantine        = "quarantine"
+	ReasonQuarantineRelease = "quarantine_release"
 )
 
 // ErrInsufficient means a decrement would take stock below zero.
@@ -175,7 +179,8 @@ func Reconcile(ctx context.Context, tx tenancy.TenantTx) ([]Mismatch, error) {
 }
 
 // reconcileBatches: for tracked products (module on), stock = batch sum;
-// for every batch row, stock = sum of its movements (stock bucket).
+// for every batch row, stock = sum of its movements (stock bucket), and
+// quarantine = sum of its quarantine movements.
 func reconcileBatches(ctx context.Context, tx tenancy.TenantTx) ([]Mismatch, error) {
 	rows, err := tx.Query(ctx, `SELECT i.store_id, i.variant_id, i.qty, coalesce(bs.total, 0), 'batch_total', 0::bigint
 		FROM inventories i
@@ -189,7 +194,13 @@ func reconcileBatches(ctx context.Context, tx tenancy.TenantTx) ([]Mismatch, err
 		FROM batch_stock s JOIN batches b ON b.id = s.batch_id
 		LEFT JOIN (SELECT store_id, batch_id, sum(delta)::int AS total FROM batch_movements WHERE bucket = 'stock'
 		           GROUP BY store_id, batch_id) m ON m.store_id = s.store_id AND m.batch_id = s.batch_id
-		WHERE s.qty <> coalesce(m.total, 0)`)
+		WHERE s.qty <> coalesce(m.total, 0)
+		UNION ALL
+		SELECT s.store_id, b.variant_id, s.quarantined_qty, coalesce(m.total, 0), 'batch_quarantine', s.batch_id
+		FROM batch_stock s JOIN batches b ON b.id = s.batch_id
+		LEFT JOIN (SELECT store_id, batch_id, sum(delta)::int AS total FROM batch_movements WHERE bucket = 'quarantine'
+		           GROUP BY store_id, batch_id) m ON m.store_id = s.store_id AND m.batch_id = s.batch_id
+		WHERE s.quarantined_qty <> coalesce(m.total, 0)`)
 	if err != nil {
 		return nil, err
 	}

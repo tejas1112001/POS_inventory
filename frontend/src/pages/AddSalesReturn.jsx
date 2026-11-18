@@ -16,6 +16,7 @@ import { currencySymbol, formatCurrency, formatDate, todayInShop } from '@/lib/f
 import { newIdempotencyKey } from '@/lib/checkout';
 import { COLLECT_METHODS, methodLabel } from '@/lib/payments';
 import { CONDITIONS, DEFAULT_POLICY } from '@/lib/returns';
+import BatchSelect from '@/components/batches/BatchSelect';
 
 // Refusals the return policy gives (industry P1 item 9); a user with
 // sales_returns:override_policy can go ahead with a written reason.
@@ -30,7 +31,7 @@ const STEPS = [
 const inputCls = 'w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-blue-500';
 const today = () => todayInShop();
 let seq = 0;
-const freeLine = () => ({ key: ++seq, productId: '', variantId: '', quantity: 1, unitPrice: '', reason: '', condition: '' });
+const freeLine = () => ({ key: ++seq, productId: '', variantId: '', quantity: 1, unitPrice: '', reason: '', condition: '', batchId: '' });
 
 // AddSalesReturn records a return (C-13). A return linked to a sale lists
 // that sale's lines with what is left to return; the server refunds the
@@ -129,6 +130,12 @@ export default function AddSalesReturn() {
   const estimate = mode === 'linked' ? linkedTotal : freeTotal;
 
   const variantsOf = (pid) => lookups.products.find((p) => String(p.id) === String(pid))?.ProductVariants || [];
+  // Industry P3 item 4: products that track batches always need a condition
+  // (unsafe units go to quarantine), whatever the return policy says.
+  const soldTracked = (i) => (i.batches || []).length > 0;
+  const lineTracked = (l) => !!lookups.products.find((p) => String(p.id) === String(l.productId))?.tracksBatches;
+  const linkedCond = policy.conditions || (sale?.items || []).some(soldTracked);
+  const unlinkedCond = policy.conditions || lines.some(lineTracked);
   const setLine = (key, patch) => setLines((prev) => prev.map((l) => (l.key === key ? { ...l, ...patch } : l)));
 
   // Barcode scanning on the Items step (industry P1 item 3): one more of
@@ -211,13 +218,13 @@ export default function AddSalesReturn() {
       if (!chosen.length) return { message: 'Enter how many of at least one item come back.', step: 1 };
       const over = chosen.find((i) => Number(qty[i.id].quantity) > left(i));
       if (over) return { message: `Only ${left(over)} of ${over.product_name} can still be returned.`, step: 1 };
-      if (policy.conditions && chosen.some((i) => !qty[i.id].condition)) return { message: 'Choose the condition of each returned item.', step: 1 };
+      if (chosen.some((i) => (policy.conditions || soldTracked(i)) && !qty[i.id].condition)) return { message: 'Choose the condition of each returned item.', step: 1 };
       if (settlement === 'exchange' && !newLines.some((l) => Number(l.quantity) > 0)) return { message: 'Add the new goods the customer takes.', step: 2 };
       return null;
     }
     if (!info.customerId || !info.storeId) return { message: 'Choose the customer and the store.', step: 0 };
     if (!lines.some((l) => l.variantId && Number(l.quantity) > 0)) return { message: 'Add at least one product.', step: 1 };
-    if (policy.conditions && lines.some((l) => l.variantId && Number(l.quantity) > 0 && !l.condition)) {
+    if (lines.some((l) => l.variantId && Number(l.quantity) > 0 && (policy.conditions || lineTracked(l)) && !l.condition)) {
       return { message: 'Choose the condition of each returned item.', step: 1 };
     }
     return null;
@@ -262,6 +269,7 @@ export default function AddSalesReturn() {
           unitPrice: Number(l.unitPrice) || 0,
           reason: l.reason || undefined,
           condition: l.condition || undefined,
+          batchId: lineTracked(l) && l.batchId ? Number(l.batchId) : undefined,
         })),
     };
   };
@@ -479,7 +487,7 @@ export default function AddSalesReturn() {
                           <th>Returned before</th>
                           <th>Return now</th>
                           <th>Reason</th>
-                          {policy.conditions && <th>Condition</th>}
+                          {linkedCond && <th>Condition</th>}
                         </tr>
                       </thead>
                       <tbody>
@@ -519,14 +527,21 @@ export default function AddSalesReturn() {
                                 aria-label={`Reason for ${i.product_name}`}
                               />
                             </td>
-                            {policy.conditions && (
+                            {linkedCond && (
                               <td className="px-2 py-2">
-                                <ConditionSelect
-                                  value={qty[i.id]?.condition ?? ''}
-                                  onChange={(v) => setQty({ ...qty, [i.id]: { ...qty[i.id], condition: v } })}
-                                  label={`Condition of ${i.product_name}`}
-                                  restock={policy.restockConditions}
-                                />
+                                {(policy.conditions || soldTracked(i)) && (
+                                  <ConditionSelect
+                                    value={qty[i.id]?.condition ?? ''}
+                                    onChange={(v) => setQty({ ...qty, [i.id]: { ...qty[i.id], condition: v } })}
+                                    label={`Condition of ${i.product_name}`}
+                                    restock={policy.conditions ? policy.restockConditions : ['resellable']}
+                                  />
+                                )}
+                                {soldTracked(i) && (
+                                  <p className="mt-1 text-xs text-muted-foreground">
+                                    Back to batch {i.batches.map((b) => (b.unknown ? 'No batch' : b.batchNo)).join(', ')}; expired or recalled batches go to quarantine.
+                                  </p>
+                                )}
                               </td>
                             )}
                           </tr>
@@ -549,7 +564,7 @@ export default function AddSalesReturn() {
                         <th>Quantity</th>
                         <th>Refund per unit</th>
                         <th>Reason</th>
-                        {policy.conditions && <th>Condition</th>}
+                        {unlinkedCond && <th>Condition</th>}
                         <th />
                       </tr>
                     </thead>
@@ -595,9 +610,16 @@ export default function AddSalesReturn() {
                             <td className="px-2 py-2">
                               <input className={inputCls} maxLength={200} value={l.reason} aria-label="Reason" onChange={(e) => setLine(l.key, { reason: e.target.value })} />
                             </td>
-                            {policy.conditions && (
+                            {unlinkedCond && (
                               <td className="px-2 py-2">
-                                <ConditionSelect value={l.condition} onChange={(v) => setLine(l.key, { condition: v })} label="Condition" restock={policy.restockConditions} />
+                                {(policy.conditions || lineTracked(l)) && (
+                                  <ConditionSelect value={l.condition} onChange={(v) => setLine(l.key, { condition: v })} label="Condition"
+                                    restock={policy.conditions ? policy.restockConditions : ['resellable']} />
+                                )}
+                                {lineTracked(l) && l.variantId && (
+                                  <BatchSelect className={`${inputCls} mt-1`} variantId={l.variantId} value={l.batchId}
+                                    onChange={(v) => setLine(l.key, { batchId: v })} label="Batch" />
+                                )}
                               </td>
                             )}
                             <td className="px-2 py-2">

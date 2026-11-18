@@ -454,6 +454,20 @@ A line of a tracked product is filled from the store's **sellable** batches: sta
 | — | DELETE | `/api/sales/{id}` (void) | as before | Each unit goes back to the batch it was sold from |
 | — | GET | `/api/sales/{id}/receipt` (PDF), screen receipt | as before | Each tracked line shows "Batch B1 · Exp 03/2027 · MRP 45.00" (sale-time details; "No batch" for the unknown batch; "× n" when split) |
 
+**Item 4: returns per batch and quarantine** (tenant migration 00028: DB32 `return_item_batches`; DB33 ledger reasons `quarantine`, `quarantine_release`).
+
+Returned units of a tracked product go back to the batches the sale line was sold from, latest expiry first, never more than was sold from each (sale lines from before tracking: the unknown batch). Resellable units of a batch that can still be sold go to its stock; damaged or defective units, and units of an expired or recalled batch, go to its **quarantine**: counted, outside `inventories.qty`, never sold.
+
+| # | Method | Path | Guard | Notes |
+|---|---|---|---|---|
+| A28 | POST | `/api/sales/returns`, `/api/sales/exchanges` (returned goods) | as before | For tracked products `condition` is required whatever the return policy (400 `returnItems[i].condition` / `returnLines[i].condition`). Lines of a return without a sale accept `batchId` (a batch of that variant, else 400; module off → 403 `MODULE_OFF`; untracked → 400); without it the units go to quarantine under the unknown batch. `batchId` on a return against a sale → 400 |
+| A28 | GET | return responses | as before | `items[]` gain `batches[{batchId, batchNo, expiry, quantity, bucket: stock|quarantine, unknown}]` (empty for untracked lines); `restocked` is true when any unit went back on sale |
+| A29 | POST | `/api/batches/{id}/quarantine` | `batches:manage`, module | `{storeId, quantity, reason (5–500)}`: units found damaged leave sale for quarantine. More than the batch has → 409 `INSUFFICIENT_STOCK`. Audit `batch.quarantine`. Returns the batch (A23 detail) |
+| A29 | POST | `/api/batches/{id}/release` | `batches:manage`, module | Same body: back on sale. Expired or recalled batch → 409 `BATCH_NOT_SELLABLE` (`details.reason`); more than in quarantine → 409 `INSUFFICIENT_STOCK`. Audit `batch.release` |
+| — | — | stock reconciliation | — | Gains kind `batch_quarantine`: a batch's quarantine = the sum of its quarantine movements |
+
+Switching the module or a product's tracking off stays refused while units are in quarantine (item 1); release or write them off first.
+
 ---
 
 ## 6. Frontend changes (minimal set, Phase 2)

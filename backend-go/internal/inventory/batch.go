@@ -75,6 +75,17 @@ const (
 		FROM batch_stock bs JOIN batches b ON b.id = bs.batch_id
 		WHERE bs.store_id = $1 AND b.variant_id = $2
 		ORDER BY bs.batch_id FOR UPDATE OF bs`
+	qQuarantineAdd = `WITH s AS (INSERT INTO batch_stock (store_id, batch_id, quarantined_qty) VALUES ($1, $2, $3)
+			ON CONFLICT (store_id, batch_id) DO UPDATE SET quarantined_qty = batch_stock.quarantined_qty + EXCLUDED.quarantined_qty, updated_at = now()
+			RETURNING quarantined_qty)
+		INSERT INTO batch_movements (store_id, batch_id, bucket, delta, qty_after, reason, ref_type, ref_id, user_id)
+		SELECT $1, $2, 'quarantine', $3, s.quarantined_qty, $4, NULLIF($5, ''), NULLIF($6, 0), NULLIF($7, 0) FROM s
+		RETURNING qty_after`
+	qQuarantineTake = `WITH s AS (UPDATE batch_stock SET quarantined_qty = quarantined_qty - $3, updated_at = now()
+			WHERE store_id = $1 AND batch_id = $2 AND quarantined_qty >= $3 RETURNING quarantined_qty)
+		INSERT INTO batch_movements (store_id, batch_id, bucket, delta, qty_after, reason, ref_type, ref_id, user_id)
+		SELECT $1, $2, 'quarantine', -$3::int, s.quarantined_qty, $4, NULLIF($5, ''), NULLIF($6, 0), NULLIF($7, 0) FROM s
+		RETURNING qty_after`
 	qUnknownInsert = `INSERT INTO batches (variant_id, batch_no, is_unknown, created_by) VALUES ($1, 'UNBATCHED', true, NULLIF($2, 0))
 		ON CONFLICT (variant_id) WHERE is_unknown DO NOTHING RETURNING id`
 	qUnknownGet = `SELECT id FROM batches WHERE variant_id = $1 AND is_unknown`
@@ -255,6 +266,26 @@ func takeEarliest(ctx context.Context, tx tenancy.TenantTx, k Key, n int, reason
 		return fmt.Errorf("inventory: batch stock of variant %d in store %d is %d short of its stock", k.Variant, k.Store, n)
 	}
 	return nil
+}
+
+// Quarantine moves units into (delta > 0) or out of (delta < 0) a batch's
+// quarantine in a store (industry P3 item 4), with its ledger row.
+// Quarantined units are outside inventories.qty (§1.4): the caller moves
+// the sellable side, having locked the stock row first (§1.5).
+func Quarantine(ctx context.Context, tx tenancy.TenantTx, storeID, batchID int64, delta int, reason string, ref Ref, userID int64) error {
+	var after int
+	var err error
+	switch {
+	case delta > 0:
+		err = tx.QueryRow(ctx, qQuarantineAdd, storeID, batchID, delta, reason, ref.Type, ref.ID, userID).Scan(&after)
+	case delta < 0:
+		err = tx.QueryRow(ctx, qQuarantineTake, storeID, batchID, -delta, reason, ref.Type, ref.ID, userID).Scan(&after)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return apperr.Conflict(apperr.CodeInsufficientStock, "Not enough units of this batch in quarantine.").
+				WithDetails(map[string]any{"batchId": batchID, "requested": -delta})
+		}
+	}
+	return err
 }
 
 // UnknownBatch returns the variant's unknown batch, creating it.

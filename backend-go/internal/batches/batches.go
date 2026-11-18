@@ -57,6 +57,8 @@ func (a *API) Mount(rt *rbac.Router) {
 	rt.Handle(http.MethodGet, "/batches", req("view"), a.list)
 	rt.Handle(http.MethodGet, "/batches/{id}", req("view"), a.get)
 	rt.Handle(http.MethodPut, "/batches/{id}", req("manage"), a.update)
+	rt.Handle(http.MethodPost, "/batches/{id}/quarantine", req("manage"), a.quarantine) // item 4 (A29)
+	rt.Handle(http.MethodPost, "/batches/{id}/release", req("manage"), a.release)
 }
 
 func tenant(r *http.Request) tenancy.Tenant {

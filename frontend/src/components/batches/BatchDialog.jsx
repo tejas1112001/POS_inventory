@@ -23,6 +23,8 @@ const REASONS = {
   stock_count: 'Stock count',
   tracking_on: 'Tracking switched on',
   tracking_off: 'Tracking switched off',
+  quarantine: 'Quarantined',
+  quarantine_release: 'Released from quarantine',
 };
 
 // BatchDialog shows one batch (industry P3 item 1, A23): its stock per
@@ -33,11 +35,13 @@ export default function BatchDialog({ batchId, canManage, onClose, onSaved }) {
   const [error, setError] = useState(null);
   const [form, setForm] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [move, setMove] = useState(null); // {kind: quarantine | release, storeId, storeName, max, quantity, reason}
 
   useEffect(() => {
     if (!batchId) return;
     setB(null);
     setForm(null);
+    setMove(null);
     setError(null);
     api.get(`/api/batches/${batchId}`, { quiet: true }).then(setB).catch(setError);
   }, [batchId]);
@@ -75,6 +79,28 @@ export default function BatchDialog({ batchId, canManage, onClose, onSaved }) {
     }
   };
 
+  // doMove is A29: quarantine units found damaged, or release them back to sale.
+  const doMove = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const out = await api.post(
+        `/api/batches/${b.id}/${move.kind}`,
+        { storeId: move.storeId, quantity: Number(move.quantity), reason: move.reason },
+        { quiet: true },
+      );
+      setB(out);
+      setMove(null);
+      toast.success(move.kind === 'quarantine' ? 'Moved to quarantine.' : 'Released back to sale.');
+      onSaved?.();
+    } catch (err) {
+      setError(err);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const f = error?.fields || {};
   const set = (k) => (v) => setForm((cur) => ({ ...cur, [k]: v }));
   return (
@@ -90,7 +116,7 @@ export default function BatchDialog({ batchId, canManage, onClose, onSaved }) {
         </DialogHeader>
         {error && !error.fields && <InlineAlert>{error.message}</InlineAlert>}
         {!b && !error && <Loader2 className="mx-auto size-5 animate-spin" aria-label="Loading" />}
-        {b && !form && (
+        {b && !form && !move && (
           <div className="space-y-4 text-sm">
             <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <div>
@@ -125,6 +151,11 @@ export default function BatchDialog({ batchId, canManage, onClose, onSaved }) {
                   <th scope="col" className="py-1 text-right font-medium">
                     Quarantined
                   </th>
+                  {canManage && (
+                    <th scope="col" className="py-1">
+                      <span className="sr-only">Actions</span>
+                    </th>
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y">
@@ -133,6 +164,22 @@ export default function BatchDialog({ batchId, canManage, onClose, onSaved }) {
                     <td className="py-1">{s.storeName}</td>
                     <td className="py-1 text-right tabular-nums">{s.qty}</td>
                     <td className="py-1 text-right tabular-nums">{s.quarantined}</td>
+                    {canManage && (
+                      <td className="py-1 text-right">
+                        {s.qty > 0 && (
+                          <Button type="button" variant="ghost" size="sm" className="max-sm:h-11"
+                            onClick={() => setMove({ kind: 'quarantine', storeId: s.storeId, storeName: s.storeName, max: s.qty, quantity: '1', reason: '' })}>
+                            Quarantine
+                          </Button>
+                        )}
+                        {s.quarantined > 0 && !b.expired && b.status !== 'recalled' && (
+                          <Button type="button" variant="ghost" size="sm" className="max-sm:h-11"
+                            onClick={() => setMove({ kind: 'release', storeId: s.storeId, storeName: s.storeName, max: s.quarantined, quantity: '1', reason: '' })}>
+                            Release
+                          </Button>
+                        )}
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -170,6 +217,27 @@ export default function BatchDialog({ batchId, canManage, onClose, onSaved }) {
               </DialogFooter>
             )}
           </div>
+        )}
+        {b && move && (
+          <form onSubmit={doMove} className="grid gap-3 sm:grid-cols-2">
+            <p className="text-sm sm:col-span-2">
+              {move.kind === 'quarantine'
+                ? `Take units off sale at ${move.storeName}. They stay counted in quarantine and are never sold.`
+                : `Put quarantined units at ${move.storeName} back on sale.`}
+            </p>
+            <TextField id="b-mv-qty" label={`Quantity (up to ${move.max})`} inputMode="numeric" value={move.quantity}
+              onChange={(v) => setMove((cur) => ({ ...cur, quantity: v }))} error={f.quantity} />
+            <TextField id="b-mv-reason" label="Reason" value={move.reason} onChange={(v) => setMove((cur) => ({ ...cur, reason: v }))}
+              error={f.reason} maxLength={500} required />
+            <DialogFooter className="sm:col-span-2">
+              <Button type="button" variant="outline" className="max-sm:h-11" onClick={() => setMove(null)} disabled={busy}>
+                Cancel
+              </Button>
+              <Button type="submit" className="max-sm:h-11" disabled={busy}>
+                {busy && <Loader2 className="size-4 animate-spin" aria-hidden="true" />} {move.kind === 'quarantine' ? 'Quarantine' : 'Release'}
+              </Button>
+            </DialogFooter>
+          </form>
         )}
         {b && form && (
           <form onSubmit={save} className="grid gap-3 sm:grid-cols-2">

@@ -558,3 +558,20 @@ Known problems:
 - "Minimum days to sell" (default 0) is set in Settings → Batches with item 7.
 - The batch shown before payment can change if another till sells the same batch first; the sale then uses what is left, earliest first.
 
+## Industry P3 – Item 4: Returns per batch and quarantine
+
+Use the pharmacy shop from item 3: product A with batches EARLY and MID, and a sale of 5 (3 EARLY, 2 MID).
+
+How to check:
+1. Returns → New return → choose the sale: product A shows a **Condition** column even if the return policy has conditions off, and "Back to batch EARLY, MID". Saving without a condition is refused.
+2. Return 3 as **Resellable**: the return detail shows "Batch MID × 2 · back on sale" and "Batch EARLY × 1 · back on sale". Batches & expiry shows the units back.
+3. Make EARLY expired (correct its expiry to yesterday). Return the last 2 as Resellable: the detail shows "Batch EARLY × 2 · quarantine" in amber; product stock does not go up; the batch shows 2 under Quarantined.
+4. Sell 1 more and return it as **Damaged**: it goes to MID's quarantine.
+5. Return without a sale (needs the price override permission): a product that tracks batches shows Condition and a **Batch** list; "Not known (quarantine)" puts the units in quarantine under "No batch".
+6. Batches & expiry → MID → **Quarantine** at a store: quantity and reason (5+ characters); stock goes down, Quarantined goes up, and the movement list shows "Quarantined". Checkout cannot sell those units.
+7. **Release** puts them back. On an expired or recalled batch the Release button is not shown, and the server refuses it.
+8. Exchanges: the returned goods follow the same rules; a product that does not track batches returns exactly as before.
+
+Known problems:
+- Units in quarantine keep the batch module and the product's tracking on until they are released or written off (write-off comes with item 5).
+
