@@ -25,7 +25,9 @@ How to check each item: `docs/UI_CHECKLIST.md`. Last updated: 2026-11-18.
 - Temporary worktree `D:/pos_baseline` removed.
 
 ## Next step
-All ten items are built. Left: owner review of the checklist in the browser, then merge when approved. `TestLimitWaitsDoNotUseAttempts` flake fixed (lost wake-up in the test and a connection leak in its polling).
+Phase 1: all ten items built; owner review of the checklist, then merge when approved. `TestLimitWaitsDoNotUseAttempts` flake fixed.
+
+Phase 3 (pharmacy): design note `docs/INDUSTRY_PHASE3_PHARMACY_DESIGN.md` drafted 2026-11-18 with the owner's answers Q8–Q12. Waiting for approval of DB25–DB37, P7–P10, A23–A35, E3 and Q13–Q17 before any code.
 
 ## Decisions to confirm
 - Item 7: every stock-count route is in the `stock_counts` module (the item 1 route registry), so with the module off the count pages are hidden rather than read-only. Their stock movements stay in the stock history. Design §1 says completed counts stay readable; making the two GET routes readable while the module is off needs a small change to the item 1 route check.
