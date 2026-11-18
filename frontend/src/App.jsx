@@ -48,6 +48,7 @@ import Billing from './pages/Billing';
 import StockAdjustments from './pages/StockAdjustments';
 import StockCounts from './pages/StockCounts';
 import StockCountDetail from './pages/StockCountDetail';
+import Batches from './pages/Batches';
 import ShowcaseSettings from './pages/ShowcaseSettings';
 import Stores from './pages/Stores';
 
@@ -133,6 +134,7 @@ function AppRoutes() {
       <Route path="/stock-adjustments" element={<ProtectedLayout module="stock_adjustments" action="view"><StockAdjustments /></ProtectedLayout>} />
       <Route path="/stock-counts" element={<ProtectedLayout module="stock_counts" action="view"><StockCounts /></ProtectedLayout>} />
       <Route path="/stock-counts/:id" element={<ProtectedLayout module="stock_counts" action="view"><StockCountDetail /></ProtectedLayout>} />
+      <Route path="/batches" element={<ProtectedLayout module="batches" action="view"><Batches /></ProtectedLayout>} />
       <Route path="/settings" element={<ProtectedLayout><Settings /></ProtectedLayout>} />
       <Route path="/billing" element={<ProtectedLayout module="billing" action="view"><Billing /></ProtectedLayout>} />
       <Route path="/stores" element={<ProtectedLayout module="stores" action="view"><Stores /></ProtectedLayout>} />

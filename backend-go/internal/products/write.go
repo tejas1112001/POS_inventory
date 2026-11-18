@@ -92,6 +92,9 @@ type productIn struct {
 	Attributes  *map[string]any `json:"attributes"`
 	VariantDims *[]string       `json:"variantDims"`
 	ArticleNo   *string         `json:"articleNo"`
+	// Industry P3 item 1 (A25): null keeps the product as it is (a new
+	// product follows the shop default: tracking on with the module on).
+	TracksBatches *bool `json:"tracksBatches"`
 }
 
 var (

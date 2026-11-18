@@ -73,8 +73,14 @@ func Lock(ctx context.Context, tx tenancy.TenantTx, deltas map[Key]int, skus map
 // Apply moves locked rows by their deltas and writes one ledger row each.
 // All rows go to the database in one batch (one round trip; Phase 3
 // performance work); a row that does not exist yet (only for an increase)
-// is then created by Move, as before.
+// is then created by Move, as before. Batches of tracked products follow
+// (batch.go).
 func Apply(ctx context.Context, tx tenancy.TenantTx, keys []Key, deltas map[Key]int, reason string, ref Ref, userID int64) error {
+	return ApplyBatched(ctx, tx, keys, deltas, nil, reason, ref, userID)
+}
+
+// applyStock is Apply without the batches.
+func applyStock(ctx context.Context, tx tenancy.TenantTx, keys []Key, deltas map[Key]int, reason string, ref Ref, userID int64) error {
 	b := &pgx.Batch{}
 	var moved []Key
 	for _, k := range keys {
@@ -106,7 +112,7 @@ func Apply(ctx context.Context, tx tenancy.TenantTx, keys []Key, deltas map[Key]
 		return err
 	}
 	for _, k := range missing {
-		if _, err := Move(ctx, tx, k.Store, k.Variant, deltas[k], reason, ref, userID); err != nil {
+		if _, err := moveStock(ctx, tx, k.Store, k.Variant, deltas[k], reason, ref, userID); err != nil {
 			return err
 		}
 	}

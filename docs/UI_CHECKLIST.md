@@ -498,3 +498,23 @@ Known problems:
 - Browser print margins depend on the printer driver; some drivers add their own margin on thermal rolls.
 - Names in Devanagari or other complex scripts print well on screen and thermal (browser), but not in the PDF (as before).
 
+## Industry P3 – Item 1: Batches and expiry
+
+Use a shop with two stores. Have product A with stock in both stores (e.g. 10 and 4) and product B with stock in one.
+
+How to check:
+1. Settings → Business type → **Pharmacy** (or tick **Batches and expiry**) → Save. Sidebar → Inventory shows **Batches & expiry**; the list is empty ("Switch on … on a product to start"). Existing products are unchanged and sell as before.
+2. Products → A → the **Batches and expiry** card says the product does not track batches. Switch **Track batches and expiry** on: the toast says current stock is listed as "No batch"; the card shows No batch 14, Sellable 14, Expired 0.
+3. Batches & expiry: one row for A, batch "No batch", In stock 14. Open it: stock 10 / 4 per store; movements "Tracking switched on" +10 and +4.
+4. Sell 2 of A in the first store and add 3 with an adjustment: the batch shows 15; its movements list "Sale #…" −2 and "Adjustment" +3. The Stock page and the batch total always agree.
+5. Add a new product C with opening stock 7: its card shows tracking on and No batch 7 (new products track by default).
+6. Switch A off: its card says it does not track batches; Batches & expiry no longer lists it (tick **Show batches with no stock** to see its batch with 0). Sell 1 of A: works as before. Switch it on again: No batch = the stock then on hand.
+7. Settings → untick **Batches and expiry** → Save: the menu item disappears, the batch page says no access, products sell as before. Tick it again: A and C show their current stock under No batch.
+8. Filters: Status **Expired** / **No batch**, Expiry **in 30 days**, Store. (Dated batches arrive with receiving, item 2.)
+9. **Correct details** (Manage batches; dated batches only, not "No batch"): a reason under 5 characters is refused; MM/YYYY becomes the month's last day; a date more than 10 years ahead asks to tick "This expiry date is right"; a duplicate batch number is refused. The audit log shows "batch.edit".
+10. Roles: Admin has "View batches" and "Manage batches"; a Biller of a new shop has View only (sees the page, no switch, no Correct details).
+
+Known problems:
+- Until item 2 (receiving) and item 6 (counts by batch), all stock of a tracked product sits in "No batch"; dated batches cannot be created from the screen yet, so step 9 needs item 2.
+- The product card totals cover every store; the batch page can be filtered by store.
+- Switching tracking off is refused while units are in quarantine (quarantine arrives with item 4).

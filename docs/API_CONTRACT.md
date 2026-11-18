@@ -415,6 +415,23 @@ Phase 1 modules: `product_attributes`, `barcode_labels`, `stock_counts`. Presets
 
 Platform console: `POST /api/platform/tenants` takes `businessType` (default `retail`, validated); tenant views include `businessType`; `GET /api/platform/tenants?businessType=` filters; override keys gain `product_attributes`, `barcode_labels`, `stock_counts` (flag; `false` turns the module off for that shop).
 
+### 5.6 Industry Phase 3: pharmacy (`docs/INDUSTRY_PHASE3_PHARMACY_DESIGN.md`)
+
+Additive only: old requests and responses stay valid. Numbers follow the design note §14. Written as each item is built.
+
+**Item 1: batches and expiry** (migrations tenant 00025, platform 00015). Module `batch_expiry` ("Batches and expiry"): entitled in every plan (E3), recommended for pharmacy (the pharmacy preset is now `barcode_labels`, `stock_counts`, `batch_expiry`); console override key `batch_expiry` (flag). Permissions `batches:view` (P7; admin, and billers of new shops) and `batches:manage` (P8; admin).
+
+A product **tracks batches** when `products.tracks_batches` is true and the module is on. For those products, store by store, `inventories.qty` = sum of `batch_stock.qty`; every stock change writes the batch rows and one `batch_movements` row each (append-only, in tenant exports). Until items 2–8 name batches, an increase goes to the variant's unknown batch (`batchNo` `UNBATCHED`, no expiry) and a decrease comes out earliest expiry first, the unknown batch last (Q14). "Expired" = expiry before today in the shop's time zone; never stored. The nightly `stock.ledger_mismatch` audit also reports `kind: batch_total` (stock ≠ batch sum) and `kind: batch_ledger` (batch stock ≠ its movements, with `batch_id`).
+
+| # | Method | Path | Guard | Notes |
+|---|---|---|---|---|
+| A23 | GET | `/api/batches?productId&variantId&storeId&status&expiringWithinDays&includeEmpty` | `batches:view`, module | `{items[], limit: 500}` earliest expiry first (no expiry last). `status`: `available` (not recalled, not expired) \| `recalled` \| `expired` \| `unknown`; other values → 400. `expiringWithinDays=n`: expiry ≤ today + n (expired included). Without `includeEmpty=true` only batches with stock (in `storeId` if given). Item: `{id, variantId, productId, productName, sku, batchNo, expiry, mfgDate, mrp, cost, unknown, status, expired, daysToExpiry, recalledAt, recallReason, stock[{storeId, storeName, qty, quarantined}], totalQty, totalQuarantined, createdAt, updatedAt}` |
+| A23 | GET | `/api/batches/{id}` | `batches:view`, module | The item above plus `movements[{id, storeId, storeName, bucket, delta, qtyAfter, reason, refType, refId, userName, createdAt}]` (newest 200). Another shop's id → 404 |
+| A24 | PUT | `/api/batches/{id}` | `batches:manage`, module | `{batchNo?, expiry?, mfgDate?, mrp?, cost?, reason (5–500), confirmFarExpiry?}`; only fields sent change; `mrp`/`cost` null clears. `expiry` `YYYY-MM-DD` or `MM/YYYY` (= last day of the month); more than 10 years ahead → 400 `fields.expiry` unless `confirmFarExpiry: true`. `mfgDate` after expiry → 400. `batchNo` `UNBATCHED` (any case) → 400; another batch of the variant with that number → 409 `CONFLICT`. The unknown batch → 409 `INVALID_STATE`. Audit `batch.edit` (before, after + reason). Returns the A23 detail |
+| A25 | POST, PUT | `/api/products`, `/api/products/{id}` | as before | Body gains `tracksBatches` (bool, optional). Module off: sending it → 403 `MODULE_OFF`; leaving it out works as before. Module on: a new product tracks batches by default; an edit without the field keeps the product as it is. Any other value than that default needs `batches:manage` (403 `FORBIDDEN`). Switching on puts the stock then on hand into the unknown batch in each store; switching off closes the batch stock (batches and history stay) and is refused with 409 `INVALID_STATE` while units are quarantined. Audit `product.batch_tracking` |
+| A25 | GET | product responses | as before | Gain `tracksBatches` and `batchStock` (`null` when not tracked; else `{sellable, unbatched, quarantined, expired, nearestExpiry}` across stores) |
+| — | PUT | `/api/settings/business` | as before | Turning `batch_expiry` on starts tracking for every product that has it switched on (stock into the unknown batch); turning it off closes their batch stock. Refused (409) while units are quarantined |
+
 ---
 
 ## 6. Frontend changes (minimal set, Phase 2)

@@ -4,6 +4,7 @@
 import {
   BarChart3,
   Boxes,
+  CalendarClock,
   ClipboardCheck,
   CreditCard,
   FileText,
@@ -47,6 +48,7 @@ export const NAV = [
       { label: 'Stock', path: '/inventory', icon: Boxes, perm: ['inventory', 'view'] },
       { label: 'Adjustments & history', path: '/stock-adjustments', icon: SlidersHorizontal, perm: ['stock_adjustments', 'view'] },
       { label: 'Stock counts', path: '/stock-counts', icon: ClipboardCheck, perm: ['stock_counts', 'view'], module: 'stock_counts' },
+      { label: 'Batches & expiry', path: '/batches', icon: CalendarClock, perm: ['batches', 'view'], module: 'batch_expiry' },
       { label: 'Purchases', path: '/purchases', icon: Truck, perm: ['purchases', 'view'], also: ['/add-purchase'] },
     ],
   },
@@ -114,6 +116,7 @@ export const TITLES = {
   '/inventory': 'Stock',
   '/stock-adjustments': 'Adjustments & history',
   '/stock-counts': 'Stock counts',
+  '/batches': 'Batches & expiry',
   '/purchases': 'Purchases',
   '/add-purchase': 'New purchase',
   '/categories': 'Categories',

@@ -47,7 +47,7 @@ func TestModulesDefaultsForAnExistingShop(t *testing.T) {
 	l := billingTenant(t, "mod-default")
 	tok, _ := ownerLogin(t, l)
 	host := tenants[l].Host
-	all := []string{"product_attributes", "barcode_labels", "stock_counts"}
+	all := []string{"product_attributes", "barcode_labels", "stock_counts", "batch_expiry"} // + industry P3 (E3)
 
 	s := get(t, host, "/api/settings", tok)
 	require.Equal(t, 200, s.Code, s.Raw)
@@ -64,13 +64,13 @@ func TestModulesDefaultsForAnExistingShop(t *testing.T) {
 
 	m := get(t, host, "/api/modules", tok)
 	require.Equal(t, 200, m.Code, m.Raw)
-	require.Len(t, m.Body["modules"], 3)
+	require.Len(t, m.Body["modules"], 4)
 	for _, x := range m.Body["modules"].([]any) {
 		row := x.(map[string]any)
 		require.Equal(t, true, row["entitled"], row["key"])
 		require.Equal(t, false, row["enabled"], row["key"])
 	}
-	require.Equal(t, all, strList(m.Body["recommended"].(map[string]any)["clothing"]))
+	require.Equal(t, all[:3], strList(m.Body["recommended"].(map[string]any)["clothing"]))
 
 	// The column CHECK refuses an unknown module, and the type CHECK an
 	// unknown type.
@@ -154,7 +154,7 @@ func TestModuleEntitlement(t *testing.T) {
 	theApp.Plans().Forget(tenants[l].ID)
 	tok, _ := ownerLogin(t, l)
 	s := get(t, tenants[l].Host, "/api/settings", tok)
-	require.Equal(t, []string{"product_attributes", "barcode_labels"}, strList(s.Body["entitledModules"]))
+	require.Equal(t, []string{"product_attributes", "barcode_labels", "batch_expiry"}, strList(s.Body["entitledModules"]))
 	require.Equal(t, []string{"product_attributes", "barcode_labels"}, strList(s.Body["modules"]), "switched on but not entitled: not usable")
 	require.Equal(t, []string{"product_attributes", "barcode_labels", "stock_counts"}, strList(s.Body["enabledModules"]))
 	// Already on stays listed (data is kept); unticking then re-ticking is refused.
@@ -171,7 +171,7 @@ func TestModuleEntitlement(t *testing.T) {
 	onPlan(t, l2, p)
 	tok2, _ := ownerLogin(t, l2)
 	s = get(t, tenants[l2].Host, "/api/settings", tok2)
-	require.Equal(t, []string{"product_attributes", "stock_counts"}, strList(s.Body["entitledModules"]))
+	require.Equal(t, []string{"product_attributes", "stock_counts", "batch_expiry"}, strList(s.Body["entitledModules"]))
 	r = putBusiness(t, l2, tok2, map[string]any{"businessType": "pharmacy"})
 	require.Equal(t, 403, r.Code, "pharmacy recommends barcode labels, which the plan excludes: %s", r.Raw)
 	r = putBusiness(t, l2, tok2, map[string]any{"businessType": "pharmacy", "modules": []string{"stock_counts"}})

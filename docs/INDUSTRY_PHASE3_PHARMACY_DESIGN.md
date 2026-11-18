@@ -1,6 +1,6 @@
 # Industry Phase 3 (pharmacy) — Design note
 
-Status: **draft 2026-11-18, not approved.** No code until the owner approves the changes listed in §14 (DB, P, A, E) and the open questions in §13.
+Status: **approved 2026-11-18** (all of §14: DB25–DB37, P7–P10, A23–A35, E3; Q13–Q17 answered in §13). Built on branch `industry/phase3`, one item at a time.
 
 Based on:
 - `docs/INDUSTRY_FIT_PLAN.md` §5.4 (pharmacy) and Phase 3, and owner decision D6 (day one: batch and expiry, FEFO, expired stock blocked, alerts and reports; MRP control, prescriptions and scheduled drugs out until a pharmacist and a lawyer review them).
@@ -392,6 +392,21 @@ Numbering continues from Phase 1 so nothing clashes: **DB25…**, **P7…**, **A
 
 1. Item 1 (module, batches, batch stock, switching, reconciliation).
    - **Stop:** run the reconciliation and the switch-on on a copy of the dev database and add the report here, as for Phase 1 item 8.
+   - **Report (2026-11-18).**
+     - *Copy of the dev database:* platform migration 00015 and tenant migration 00025 applied cleanly (platform 14 → 15, tenants 24 → 25). The dev database has no shops, so there was no stock to switch on; the copy was dropped afterwards. The tenant migration's Down and Up are run by `TestRestoreOfAnOlderSchemaVersion`.
+     - *Scratch pharmacy shop with two stores* (`TestBatchTrackingSwitchAndReconcile`; product A sold 2 before the module):
+
+       | Stage | Product | Store | Stock | Batch sum | Unknown batch | Dated batches with stock |
+       |---|---|---|---|---|---|---|
+       | Switch-on | A | Main | 8 | 8 | 8 | 0 |
+       | Switch-on | A | Second | 4 | 4 | 4 | 0 |
+       | **Total** | | | **12** | **12** | | reconciliation: **0 mismatches** |
+       | Module off, then on | A | Main | 4 | 4 | 4 | 0 |
+       | Module off, then on | A | Second | 3 | 3 | 3 | 0 |
+       | Module off, then on | C (new) | Main | 5 | 5 | 5 | 0 |
+       | **Total** | | | **12** | **12** | | reconciliation: **0 mismatches** |
+
+     - Between the two stages: sales took the earliest expiry first and the unknown batch last; adjustments added to the unknown batch; switching the product off, selling while off and switching on again left stock = batch sum; 10 tills selling at once gave 6 sales, 4 refusals, no deadlock and 0 mismatches.
 2. Item 2 (receiving).
 3. Item 3 (selling).
 4. Item 4 (returns, quarantine).
@@ -439,11 +454,11 @@ Each item follows the routine at the top.
 | Q10 | Existing stock with no batch? | **Sell with a warning**; flagged on the dashboard until a batch count. Answered 2026-11-18. |
 | Q11 | Receiving expired or near-expiry goods? | **Refuse expired; warn and confirm near expiry** (window `nearExpiryDays`, default 90). Answered 2026-11-18. |
 | Q12 | Who may pick a batch other than FEFO? | **Any cashier; recorded on the sale line.** Expired, recalled and quarantined stay blocked. Answered 2026-11-18. |
-| Q13 | Editing a sale with tracked lines? | Proposed: **refused**; use return, exchange or void. |
-| Q14 | Where the unknown batch sits in FEFO? | Proposed: **last**, with a warning. |
-| Q15 | Is `batch_expiry` in every plan (E3)? | Proposed: **yes**, like Phase 1 E1; no price change. |
-| Q16 | Default "do not sell within N days of expiry"? | Proposed: **0** (only expired is blocked); the shop can raise it. |
-| Q17 | 2D GS1 code scanning for batch and expiry? | Proposed: **later**, after the pharmacy's answer in §11. |
+| Q13 | Editing a sale with tracked lines? | **Refused**; use return, exchange or void. Answered 2026-11-18. |
+| Q14 | Where the unknown batch sits in FEFO? | **Last**, with a warning. Answered 2026-11-18. |
+| Q15 | Is `batch_expiry` in every plan (E3)? | **Yes**, like Phase 1 E1; no price change. Answered 2026-11-18. |
+| Q16 | Default "do not sell within N days of expiry"? | **0** (only expired is blocked); the shop can raise it. Answered 2026-11-18. |
+| Q17 | 2D GS1 code scanning for batch and expiry? | **Later**, after the pharmacy's answer in §11. Answered 2026-11-18. |
 
 ## 14. Every change for a yes/no
 

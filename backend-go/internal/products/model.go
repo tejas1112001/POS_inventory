@@ -85,6 +85,10 @@ type ProductJSON struct {
 	Attributes  map[string]string `json:"attributes"`
 	VariantDims []string          `json:"variantDims"`
 	ArticleNo   *string           `json:"articleNo"`
+	// Industry P3 item 1 (A25): batch tracking and, when tracked, the batch
+	// stock at a glance (for the store asked for, or every store).
+	TracksBatches bool          `json:"tracksBatches"`
+	BatchStock    *BatchSummary `json:"batchStock"`
 
 	Category       string          `json:"category"`
 	CategoryIDC    *int64          `json:"categoryId"`
@@ -120,6 +124,9 @@ type loadOpts struct {
 	storeID int64 // > 0: inventories, publication and locks for this store only
 }
 
+// sqlShopToday is today's date in the shop's time zone.
+const sqlShopToday = `(now() AT TIME ZONE (SELECT timezone FROM settings WHERE id = 1))::date`
+
 const (
 	qLoadProducts = `SELECT p.id, p.name, p.description, p.status, p.image_file_id, p.slug::text, p.selling_type, p.product_type,
 		p.tax_type, p.tax_rate, p.hsn_code, p.discount_type, p.discount_value, p.warranties, p.barcode_symbology,
@@ -130,7 +137,15 @@ const (
 		EXISTS (SELECT 1 FROM store_products sp WHERE sp.product_id = p.id AND sp.is_featured AND ($2 = 0 OR sp.store_id = $2)),
 		EXISTS (SELECT 1 FROM store_products sp JOIN stores s ON s.id = sp.store_id AND s.deleted_at IS NULL
 		        WHERE sp.product_id = p.id AND sp.is_published),
-		p.attributes, p.variant_dims, p.article_no
+		p.attributes, p.variant_dims, p.article_no, p.tracks_batches,
+		CASE WHEN p.tracks_batches THEN (SELECT jsonb_build_object(
+			'sellable', coalesce(sum(s.qty) FILTER (WHERE bt.status = 'available' AND NOT coalesce(bt.expiry_date < ` + sqlShopToday + `, false)), 0),
+			'unbatched', coalesce(sum(s.qty) FILTER (WHERE bt.is_unknown), 0),
+			'quarantined', coalesce(sum(s.quarantined_qty), 0),
+			'expired', coalesce(sum(s.qty) FILTER (WHERE bt.expiry_date < ` + sqlShopToday + `), 0),
+			'nearestExpiry', to_char(min(bt.expiry_date) FILTER (WHERE s.qty > 0 AND bt.expiry_date >= ` + sqlShopToday + `), 'YYYY-MM-DD'))
+			FROM batch_stock s JOIN batches bt ON bt.id = s.batch_id JOIN product_variants bv ON bv.id = bt.variant_id
+			WHERE bv.product_id = p.id AND ($2 = 0 OR s.store_id = $2)) END
 		FROM products p
 		LEFT JOIN categories c ON c.id = p.category_id
 		LEFT JOIN brands b ON b.id = p.brand_id
@@ -165,7 +180,7 @@ func load(ctx context.Context, tx tenancy.TenantTx, ids []int64, o loadOpts) ([]
 			&p.TaxType, &p.Tax, &p.HSNCode, &p.DiscountType, &p.DiscountValue, &p.Warranties, &p.BarcodeSymbology,
 			&p.CategoryID, &p.SubCategoryID, &p.BrandID, &p.UnitID, &p.SupplierID, &p.CreatedByID, &p.CreatedAt, &p.UpdatedAt,
 			&p.Category, &p.Brand, &p.Unit, &p.CreatedByName, &p.IsPublished, &p.IsFeatured, &anyPublished,
-			&p.Attributes, &p.VariantDims, &p.ArticleNo); err != nil {
+			&p.Attributes, &p.VariantDims, &p.ArticleNo, &p.TracksBatches, &p.BatchStock); err != nil {
 			rows.Close()
 			return nil, err
 		}

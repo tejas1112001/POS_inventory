@@ -9,6 +9,7 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/apperr"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/audit"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/httpx"
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/inventory"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/modules"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/tenancy"
 )
@@ -126,6 +127,22 @@ func (a *API) putBusiness(w http.ResponseWriter, r *http.Request) {
 		}
 		if after.BusinessType != before.BusinessType {
 			if err := modules.SeedPreset(ctx, tx, after.BusinessType); err != nil {
+				return err
+			}
+		}
+		// Industry P3 item 1 (§1.3): batch tracking starts or stops with the
+		// module for every product that has it switched on.
+		if was, is := slices.Contains(before.Modules, modules.BatchExpiry), slices.Contains(after.Modules, modules.BatchExpiry); was != is {
+			ids, err := inventory.TrackedProducts(ctx, tx)
+			if err != nil {
+				return err
+			}
+			if is {
+				err = inventory.StartTracking(ctx, tx, ids, p.UserID)
+			} else {
+				err = inventory.StopTracking(ctx, tx, ids, p.UserID)
+			}
+			if err != nil {
 				return err
 			}
 		}
