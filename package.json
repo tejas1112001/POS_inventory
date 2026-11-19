@@ -2,10 +2,13 @@
   "private": true,
   "name": "posb",
   "workspaces": [
-    "frontend"
+    "frontend",
+    "landing"
   ],
   "scripts": {
     "build": "npm run build --workspace frontend",
-    "postinstall": "node scripts/fix-deps.cjs"
+    "postinstall": "node scripts/fix-deps.cjs",
+    "build:landing": "npm run build --workspace landing",
+    "dev:landing": "npm run dev --workspace landing"
   }
 }
