@@ -1,9 +1,14 @@
-import { Suspense, useEffect, useRef } from 'react';
+import { lazy, Suspense, useEffect, useRef } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
-import { InteractiveLayer } from '@/components/fx/InteractiveLayer';
+import { useIdle } from '@/lib/useIdle';
 import { CtaBand } from './CtaBand';
 import { Footer } from './Footer';
 import { Header } from './Header';
+
+// Mouse effects are decoration: load them only once the page is idle.
+const InteractiveLayer = lazy(() =>
+  import('@/components/fx/InteractiveLayer').then((m) => ({ default: m.InteractiveLayer })),
+);
 
 /**
  * Page frame: skip link, header, routed page, closing CTA and footer.
@@ -14,6 +19,7 @@ export function Layout() {
   const { pathname, hash } = useLocation();
   const mainRef = useRef(null);
   const firstRender = useRef(true);
+  const idle = useIdle();
 
   useEffect(() => {
     if (firstRender.current) {
@@ -43,7 +49,11 @@ export function Layout() {
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <InteractiveLayer />
+      {idle && (
+        <Suspense fallback={null}>
+          <InteractiveLayer />
+        </Suspense>
+      )}
       <a
         href="#main"
         className="sr-only z-50 rounded-lg bg-white px-4 py-3 font-semibold text-ink focus:not-sr-only focus:fixed focus:top-3 focus:left-3"
