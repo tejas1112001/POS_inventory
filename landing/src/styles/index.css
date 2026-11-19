@@ -1,0 +1,290 @@
+@import "tailwindcss";
+@import "@fontsource-variable/inter";
+
+/* Design tokens. Components use these names, not raw hex values. */
+@theme {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+
+  --color-night: #0b1220; /* dark hero, header, footer */
+  --color-ink: #0f172a; /* headings, dark cards */
+  --color-body: #475569; /* paragraph text on white (7.5:1) */
+  --color-muted: #64748b; /* small captions on white (4.8:1) */
+  --color-line: #e2e8f0; /* card borders */
+  --color-surface: #f8fafc; /* light section background */
+
+  --color-brand: #2563eb;
+  --color-brand-strong: #1d4ed8;
+  --color-brand-bright: #60a5fa; /* brand on dark backgrounds */
+  --color-brand-soft: #eff6ff;
+
+  --color-ok: #34d399; /* checks on dark */
+  --color-ok-strong: #065f46; /* success text on light */
+  --color-ok-soft: #ecfdf5;
+  --color-warn: #f59e0b;
+  --color-warn-strong: #9a3412;
+  --color-warn-soft: #fff7ed;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: #ffffff;
+    color: #334155;
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Tailwind v4 resets buttons to the default cursor. */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  summary {
+    cursor: pointer;
+  }
+
+  :focus-visible {
+    outline: 2px solid #3b82f6;
+    outline-offset: 2px;
+  }
+
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+/* Dark surface with a soft blue glow that follows the cursor; InteractiveLayer sets --mx / --my. */
+@utility surface-glow {
+  position: relative;
+  isolation: isolate;
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    pointer-events: none;
+    background: radial-gradient(420px circle at var(--mx, 50%) var(--my, 50%), rgba(59, 130, 246, 0.18), transparent 70%);
+    opacity: 0;
+    transition: opacity 300ms ease-out;
+  }
+  &:hover::before {
+    opacity: 1;
+  }
+}
+
+/* Card that lifts slightly on hover (motion-safe only), with a glow that follows the cursor. */
+@utility card-lift {
+  position: relative;
+  isolation: isolate;
+  transition:
+    border-color 150ms ease-out,
+    transform 150ms ease-out,
+    box-shadow 150ms ease-out;
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    pointer-events: none;
+    background: radial-gradient(260px circle at var(--mx, 50%) var(--my, 50%), rgba(59, 130, 246, 0.13), transparent 70%);
+    opacity: 0;
+    transition: opacity 200ms ease-out;
+  }
+  &:hover::before {
+    opacity: 1;
+  }
+  &:hover {
+    border-color: #93c5fd;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    &:hover {
+      transform: translateY(-2px);
+    }
+  }
+}
+
+/* Barcode stripes for the label preview. */
+@utility barcode {
+  background: repeating-linear-gradient(
+    90deg,
+    #0f172a 0 2px,
+    #fff 2px 4px,
+    #0f172a 4px 5px,
+    #fff 5px 8px,
+    #0f172a 8px 11px,
+    #fff 11px 12px
+  );
+}
+
+/* ---- Mouse effects (see components/fx). ---- */
+
+/* Dots in the side gutters; the mask keeps them out of the 1200px content column. */
+.dot-field {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  mask-image: linear-gradient(
+    to right,
+    #000 calc(50% - 690px),
+    transparent calc(50% - 600px),
+    transparent calc(50% + 600px),
+    #000 calc(50% + 690px)
+  );
+}
+
+/* Ring that trails the cursor. JS moves the box; ::after does the scaling. */
+.cursor-ring {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 80;
+  width: 34px;
+  height: 34px;
+  margin: -17px 0 0 -17px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 200ms ease-out;
+}
+.cursor-ring[data-visible="true"] {
+  opacity: 1;
+}
+.cursor-ring::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 1.5px solid rgba(59, 130, 246, 0.75);
+  border-radius: 9999px;
+  transition:
+    transform 200ms ease-out,
+    background-color 200ms ease-out,
+    border-color 200ms ease-out,
+    opacity 200ms ease-out;
+}
+.cursor-ring[data-state="link"]::after {
+  transform: scale(1.55);
+  border-color: rgba(59, 130, 246, 0.45);
+  background-color: rgba(59, 130, 246, 0.1);
+}
+.cursor-ring[data-state="text"]::after {
+  opacity: 0;
+}
+.cursor-ring[data-down="true"]::after {
+  transform: scale(0.75);
+}
+.cursor-ring[data-state="link"][data-down="true"]::after {
+  transform: scale(1.25);
+}
+
+/* Ripple left behind by a click. */
+.click-ripple {
+  position: fixed;
+  z-index: 79;
+  width: 90px;
+  height: 90px;
+  margin: -45px 0 0 -45px;
+  border: 2px solid rgba(59, 130, 246, 0.6);
+  border-radius: 9999px;
+  pointer-events: none;
+  animation: click-ripple 550ms ease-out forwards;
+}
+@keyframes click-ripple {
+  from {
+    transform: scale(0.1);
+    opacity: 1;
+  }
+  to {
+    transform: scale(1);
+    opacity: 0;
+  }
+}
+
+/* Home hero backdrop (sections/home/HeroBackdrop): drifting aurora light. */
+.aurora {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(70px);
+  mix-blend-mode: screen;
+  will-change: transform;
+  animation: aurora-drift 24s ease-in-out infinite alternate;
+}
+.aurora-1 {
+  top: -35%;
+  left: -12%;
+  width: min(760px, 60vw);
+  aspect-ratio: 1;
+  background: radial-gradient(circle, rgba(37, 99, 235, 0.55), transparent 65%);
+  --ax: 14vw;
+  --ay: 12vh;
+}
+.aurora-2 {
+  top: 5%;
+  right: -18%;
+  width: min(680px, 55vw);
+  aspect-ratio: 1;
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.45), transparent 65%);
+  animation-duration: 28s;
+  --ax: -12vw;
+  --ay: 16vh;
+}
+.aurora-3 {
+  bottom: -45%;
+  left: 28%;
+  width: min(820px, 65vw);
+  aspect-ratio: 1.6;
+  background: radial-gradient(ellipse, rgba(14, 165, 233, 0.35), transparent 65%);
+  animation-duration: 32s;
+  --ax: -16vw;
+  --ay: -10vh;
+}
+@keyframes aurora-drift {
+  from {
+    transform: translate(0, 0) scale(1);
+  }
+  to {
+    transform: translate(var(--ax), var(--ay)) scale(1.18);
+  }
+}
+
+/* Light that trails the cursor over the hero; HeroBackdrop sets --hx / --hy. */
+.aurora-cursor {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 560px;
+  height: 560px;
+  margin: -280px 0 0 -280px;
+  border-radius: 9999px;
+  background: radial-gradient(circle, rgba(56, 189, 248, 0.28), rgba(37, 99, 235, 0.12) 40%, transparent 65%);
+  mix-blend-mode: screen;
+  opacity: 0;
+  transform: translate(var(--hx, 50vw), var(--hy, 50%));
+  transition:
+    transform 900ms cubic-bezier(0.2, 0.7, 0.2, 1),
+    opacity 500ms ease-out;
+}
+[data-hover="true"] > .aurora-cursor {
+  opacity: 1;
+}
