@@ -85,7 +85,7 @@ function CompareTable() {
 function Faq() {
   const [open, setOpen] = useState(0);
   return (
-    <Container as="section" aria-labelledby="faq-title" className="pt-12 pb-24">
+    <Container as="section" aria-labelledby="faq-title" className="max-w-[860px] pt-12 pb-24">
       <h2 id="faq-title" className={cn(h2, 'mb-6')}>Questions</h2>
       <div className="flex flex-col gap-3">
         {faqs.map(([q, a], i) => {
