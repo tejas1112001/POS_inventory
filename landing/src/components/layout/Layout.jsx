@@ -1,5 +1,6 @@
 import { Suspense, useEffect, useRef } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
+import { InteractiveLayer } from '@/components/fx/InteractiveLayer';
 import { CtaBand } from './CtaBand';
 import { Footer } from './Footer';
 import { Header } from './Header';
@@ -42,6 +43,7 @@ export function Layout() {
 
   return (
     <div className="flex min-h-dvh flex-col">
+      <InteractiveLayer />
       <a
         href="#main"
         className="sr-only z-50 rounded-lg bg-white px-4 py-3 font-semibold text-ink focus:not-sr-only focus:fixed focus:top-3 focus:left-3"

@@ -3,7 +3,7 @@ import { cn } from '@/lib/cn';
 
 const base =
   'inline-flex items-center justify-center gap-2 rounded-xl font-semibold whitespace-nowrap ' +
-  'transition-[background-color,border-color,color] duration-150 ease-out disabled:opacity-60';
+  'transition-[background-color,border-color,color,transform] duration-150 ease-out disabled:opacity-60';
 
 const variants = {
   primary: 'bg-brand text-white hover:bg-brand-strong',
@@ -23,9 +23,11 @@ const sizes = {
 /**
  * One button style for the whole site.
  * `to` renders a router Link, `href` an anchor, otherwise a <button>.
+ * Large buttons lean toward the cursor (data-magnetic, see InteractiveLayer).
  */
 export function Button({ to, href, variant = 'primary', size = 'md', className, children, ...rest }) {
   const cls = cn(base, variants[variant], sizes[size], className);
+  if (size === 'lg' && variant !== 'link') rest = { 'data-magnetic': '', ...rest };
   if (to) {
     return (
       <Link to={to} className={cls} {...rest}>

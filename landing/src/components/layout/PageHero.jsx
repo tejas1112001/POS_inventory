@@ -3,7 +3,7 @@ import { Container, Eyebrow } from '@/components/ui/Heading';
 /** Dark title band at the top of every inner page. */
 export function PageHero({ eyebrow, title, lead }) {
   return (
-    <section className="bg-night bg-grid text-slate-200">
+    <section className="bg-night surface-glow text-slate-200">
       <Container className="flex flex-wrap items-end justify-between gap-8 pt-14 pb-16 sm:pt-16 sm:pb-[72px]">
         <div className="min-w-0 flex-[1_1_280px]">
           <Eyebrow dark>{eyebrow}</Eyebrow>

@@ -5,7 +5,7 @@ import { Container } from '@/components/ui/Heading';
 export function CtaBand() {
   return (
     <Container as="section" aria-labelledby="cta-title" className="pb-24">
-      <div className="bg-night bg-grid flex flex-wrap items-center justify-between gap-7 rounded-[28px] px-6 py-12 sm:px-12 sm:py-14">
+      <div className="bg-night surface-glow flex flex-wrap items-center justify-between gap-7 rounded-[28px] px-6 py-12 sm:px-12 sm:py-14">
         <div className="max-w-[600px]">
           <h2 id="cta-title" className="text-[30px] leading-[1.1] font-extrabold tracking-[-0.03em] text-white sm:text-[38px]">
             Ready to bill faster?

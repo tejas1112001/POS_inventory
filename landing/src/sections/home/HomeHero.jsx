@@ -5,6 +5,7 @@ import { money } from '@/lib/format';
 import { Button } from '@/components/ui/Button';
 import { CheckList } from '@/components/ui/CheckList';
 import { Container } from '@/components/ui/Heading';
+import { HeroBackdrop } from './HeroBackdrop';
 
 const SHOES_IN_STOCK = 5;
 
@@ -21,7 +22,8 @@ function BillMockup() {
   const action = 'flex min-h-11 flex-[1_1_80px] items-center justify-center gap-1.5 rounded-[10px] border border-slate-300 bg-white text-sm font-semibold text-ink';
 
   return (
-    <div className="relative min-w-0 flex-[1_1_520px] pt-7 pb-8">
+    // data-tilt: the whole mockup tilts toward the cursor; the badges float above it.
+    <div data-tilt="6" className="relative min-w-0 flex-[1_1_520px] pt-7 pb-8 transition-transform duration-300 ease-out transform-3d">
       <div aria-hidden="true" className="absolute inset-x-[30px] top-10 bottom-5 rounded-[40px] bg-brand opacity-30 blur-[90px]" />
 
       <div
@@ -100,13 +102,13 @@ function BillMockup() {
         </div>
       </div>
 
-      <div className="absolute top-0 right-[18px] flex items-center gap-2.5 rounded-[14px] border border-blue-400/40 bg-ink px-3.5 py-2.5 text-slate-200 shadow-[0_12px_30px_rgba(2,6,23,.5)]">
+      <div className="absolute top-0 right-[18px] flex translate-z-10 items-center gap-2.5 rounded-[14px] border border-blue-400/40 bg-ink px-3.5 py-2.5 text-slate-200 shadow-[0_12px_30px_rgba(2,6,23,.5)]">
         <TriangleAlert className="size-4 text-warn" aria-hidden="true" />
         <span className="text-[13px]">
           <strong className="text-white">Running Shoes UK 9</strong> · {SHOES_IN_STOCK - qty[1]} left
         </span>
       </div>
-      <div className="absolute bottom-0 left-[18px] flex items-center gap-2.5 rounded-[14px] border border-emerald-400/40 bg-ink px-3.5 py-2.5 text-slate-200 shadow-[0_12px_30px_rgba(2,6,23,.5)]">
+      <div className="absolute bottom-0 left-[18px] flex translate-z-10 items-center gap-2.5 rounded-[14px] border border-emerald-400/40 bg-ink px-3.5 py-2.5 text-slate-200 shadow-[0_12px_30px_rgba(2,6,23,.5)]">
         <ReceiptText className="size-[18px] text-ok" aria-hidden="true" />
         <span className="text-[13px]">
           GST invoice ready · <strong className="text-white">CGST + SGST</strong>
@@ -118,7 +120,8 @@ function BillMockup() {
 
 export function HomeHero() {
   return (
-    <section className="bg-night bg-grid text-slate-200">
+    <section className="relative isolate bg-night text-slate-200">
+      <HeroBackdrop />
       <Container className="flex flex-wrap-reverse items-center gap-16 pt-14 pb-20 sm:pt-[72px] sm:pb-[104px]">
         <BillMockup />
 

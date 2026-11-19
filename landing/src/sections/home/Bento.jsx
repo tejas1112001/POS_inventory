@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import { bento } from '@/content/site';
 import { cn } from '@/lib/cn';
+import { money0 } from '@/lib/format';
 import { Container, SectionTitle } from '@/components/ui/Heading';
 import { IconTile } from '@/components/ui/IconTile';
 
@@ -15,8 +17,49 @@ function SmallCard({ icon, title, body }) {
   );
 }
 
-// Decorative bar chart for the reports card.
-const BARS = [38, 55, 46, 72, 64, 92];
+// Sample weeks for the reports card chart; click the chart to step through them.
+const WEEKS = [
+  { label: 'This week', bars: [38, 55, 46, 72, 64, 92] },
+  { label: 'Last week', bars: [52, 40, 61, 58, 77, 70] },
+  { label: 'Festival week', bars: [64, 78, 85, 90, 96, 100] },
+];
+const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const RUPEES_PER_POINT = 420;
+
+function SalesChart() {
+  const [w, setW] = useState(0);
+  const { label, bars } = WEEKS[w];
+  const top = Math.max(...bars);
+  return (
+    <button
+      type="button"
+      onClick={() => setW((n) => (n + 1) % WEEKS.length)}
+      aria-label={`Sample sales chart: ${label}. Show the next week.`}
+      className="group/chart flex h-[170px] min-w-0 flex-[1_1_220px] flex-col gap-2 rounded-[14px] border border-line bg-white p-4 text-left transition-colors duration-150 hover:border-blue-300"
+    >
+      <span aria-hidden="true" className="flex items-center justify-between text-xs font-semibold text-muted">
+        {label}
+        <span className="text-brand opacity-0 transition-opacity duration-150 group-hover/chart:opacity-100">Next week →</span>
+      </span>
+      <span aria-hidden="true" className="flex flex-1 items-end gap-2.5">
+        {bars.map((h, i) => (
+          <span
+            key={DAYS[i]}
+            className={cn(
+              'group/bar relative flex-1 rounded-t-md rounded-b-xs transition-[height,background-color] duration-500 ease-out',
+              h === top ? 'bg-brand' : 'bg-blue-200 hover:bg-blue-400',
+            )}
+            style={{ height: `${h}%` }}
+          >
+            <span className="pointer-events-none absolute bottom-full left-1/2 mb-1.5 -translate-x-1/2 rounded-md bg-ink px-1.5 py-0.5 text-[11px] font-semibold whitespace-nowrap text-white opacity-0 transition-opacity duration-150 group-hover/bar:opacity-100">
+              {DAYS[i]} · {money0(h * RUPEES_PER_POINT)}
+            </span>
+          </span>
+        ))}
+      </span>
+    </button>
+  );
+}
 
 export function Bento() {
   const { checkout, reports, small, more } = bento;
@@ -55,15 +98,7 @@ export function Bento() {
             <h3 className="text-2xl font-bold text-ink">{reports.title}</h3>
             <p className="leading-relaxed text-body">{reports.body}</p>
           </div>
-          <div aria-hidden="true" className="flex h-[150px] flex-[1_1_220px] items-end gap-2.5 rounded-[14px] border border-line bg-white p-4">
-            {BARS.map((h, i) => (
-              <div
-                key={i}
-                className={cn('flex-1 rounded-t-md rounded-b-xs', i === BARS.length - 1 ? 'bg-brand' : i > 2 ? 'bg-blue-300' : 'bg-blue-200')}
-                style={{ height: `${h}%` }}
-              />
-            ))}
-          </div>
+          <SalesChart />
         </article>
 
         {more.map((c) => (

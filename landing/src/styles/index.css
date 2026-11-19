@@ -71,20 +71,48 @@
   }
 }
 
-/* Faint blueprint grid used on dark surfaces. */
-@utility bg-grid {
-  background-image:
-    linear-gradient(rgba(148, 163, 184, 0.07) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(148, 163, 184, 0.07) 1px, transparent 1px);
-  background-size: 48px 48px;
+/* Dark surface with a soft blue glow that follows the cursor; InteractiveLayer sets --mx / --my. */
+@utility surface-glow {
+  position: relative;
+  isolation: isolate;
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    pointer-events: none;
+    background: radial-gradient(420px circle at var(--mx, 50%) var(--my, 50%), rgba(59, 130, 246, 0.18), transparent 70%);
+    opacity: 0;
+    transition: opacity 300ms ease-out;
+  }
+  &:hover::before {
+    opacity: 1;
+  }
 }
 
-/* Card that lifts slightly on hover (motion-safe only). */
+/* Card that lifts slightly on hover (motion-safe only), with a glow that follows the cursor. */
 @utility card-lift {
+  position: relative;
+  isolation: isolate;
   transition:
     border-color 150ms ease-out,
     transform 150ms ease-out,
     box-shadow 150ms ease-out;
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    pointer-events: none;
+    background: radial-gradient(260px circle at var(--mx, 50%) var(--my, 50%), rgba(59, 130, 246, 0.13), transparent 70%);
+    opacity: 0;
+    transition: opacity 200ms ease-out;
+  }
+  &:hover::before {
+    opacity: 1;
+  }
   &:hover {
     border-color: #93c5fd;
   }
@@ -106,4 +134,157 @@
     #0f172a 8px 11px,
     #fff 11px 12px
   );
+}
+
+/* ---- Mouse effects (see components/fx). ---- */
+
+/* Dots in the side gutters; the mask keeps them out of the 1200px content column. */
+.dot-field {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  mask-image: linear-gradient(
+    to right,
+    #000 calc(50% - 690px),
+    transparent calc(50% - 600px),
+    transparent calc(50% + 600px),
+    #000 calc(50% + 690px)
+  );
+}
+
+/* Ring that trails the cursor. JS moves the box; ::after does the scaling. */
+.cursor-ring {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 80;
+  width: 34px;
+  height: 34px;
+  margin: -17px 0 0 -17px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 200ms ease-out;
+}
+.cursor-ring[data-visible="true"] {
+  opacity: 1;
+}
+.cursor-ring::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 1.5px solid rgba(59, 130, 246, 0.75);
+  border-radius: 9999px;
+  transition:
+    transform 200ms ease-out,
+    background-color 200ms ease-out,
+    border-color 200ms ease-out,
+    opacity 200ms ease-out;
+}
+.cursor-ring[data-state="link"]::after {
+  transform: scale(1.55);
+  border-color: rgba(59, 130, 246, 0.45);
+  background-color: rgba(59, 130, 246, 0.1);
+}
+.cursor-ring[data-state="text"]::after {
+  opacity: 0;
+}
+.cursor-ring[data-down="true"]::after {
+  transform: scale(0.75);
+}
+.cursor-ring[data-state="link"][data-down="true"]::after {
+  transform: scale(1.25);
+}
+
+/* Ripple left behind by a click. */
+.click-ripple {
+  position: fixed;
+  z-index: 79;
+  width: 90px;
+  height: 90px;
+  margin: -45px 0 0 -45px;
+  border: 2px solid rgba(59, 130, 246, 0.6);
+  border-radius: 9999px;
+  pointer-events: none;
+  animation: click-ripple 550ms ease-out forwards;
+}
+@keyframes click-ripple {
+  from {
+    transform: scale(0.1);
+    opacity: 1;
+  }
+  to {
+    transform: scale(1);
+    opacity: 0;
+  }
+}
+
+/* Home hero backdrop (sections/home/HeroBackdrop): drifting aurora light. */
+.aurora {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(70px);
+  mix-blend-mode: screen;
+  will-change: transform;
+  animation: aurora-drift 24s ease-in-out infinite alternate;
+}
+.aurora-1 {
+  top: -35%;
+  left: -12%;
+  width: min(760px, 60vw);
+  aspect-ratio: 1;
+  background: radial-gradient(circle, rgba(37, 99, 235, 0.55), transparent 65%);
+  --ax: 14vw;
+  --ay: 12vh;
+}
+.aurora-2 {
+  top: 5%;
+  right: -18%;
+  width: min(680px, 55vw);
+  aspect-ratio: 1;
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.45), transparent 65%);
+  animation-duration: 28s;
+  --ax: -12vw;
+  --ay: 16vh;
+}
+.aurora-3 {
+  bottom: -45%;
+  left: 28%;
+  width: min(820px, 65vw);
+  aspect-ratio: 1.6;
+  background: radial-gradient(ellipse, rgba(14, 165, 233, 0.35), transparent 65%);
+  animation-duration: 32s;
+  --ax: -16vw;
+  --ay: -10vh;
+}
+@keyframes aurora-drift {
+  from {
+    transform: translate(0, 0) scale(1);
+  }
+  to {
+    transform: translate(var(--ax), var(--ay)) scale(1.18);
+  }
+}
+
+/* Light that trails the cursor over the hero; HeroBackdrop sets --hx / --hy. */
+.aurora-cursor {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 560px;
+  height: 560px;
+  margin: -280px 0 0 -280px;
+  border-radius: 9999px;
+  background: radial-gradient(circle, rgba(56, 189, 248, 0.28), rgba(37, 99, 235, 0.12) 40%, transparent 65%);
+  mix-blend-mode: screen;
+  opacity: 0;
+  transform: translate(var(--hx, 50vw), var(--hy, 50%));
+  transition:
+    transform 900ms cubic-bezier(0.2, 0.7, 0.2, 1),
+    opacity 500ms ease-out;
+}
+[data-hover="true"] > .aurora-cursor {
+  opacity: 1;
 }

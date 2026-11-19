@@ -29,7 +29,7 @@ export function Header() {
   }, [open]);
 
   return (
-    <header className="bg-night bg-grid border-b border-slate-400/15 text-slate-200">
+    <header className="bg-night surface-glow border-b border-slate-400/15 text-slate-200">
       <Container className="flex items-center justify-between gap-4 py-4">
         <Logo />
 
