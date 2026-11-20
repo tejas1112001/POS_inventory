@@ -173,6 +173,9 @@ func (d *DB) CreateTenant(ctx context.Context, s TenantSpec) (tenancy.Tenant, er
 			return tenancy.Tenant{}, err
 		}
 	}
+	if err := migrate.EnsureTenantGroup(ctx, d.MigratorDSN, role.String()); err != nil {
+		return tenancy.Tenant{}, err
+	}
 
 	sqlDB, err := migrate.PlatformConn(d.MigratorDSN, "test-provision")
 	if err != nil {

@@ -37,6 +37,8 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'pos_migrator') THEN CREATE ROLE pos_migrator LOGIN CREATEROLE; END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'pos_app') THEN CREATE ROLE pos_app LOGIN; END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'pos_jobs') THEN CREATE ROLE pos_jobs LOGIN; END IF;
+  -- The group every tenant role joins for USAGE on extensions (db.TenantGroupRole).
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'pos_tenant') THEN CREATE ROLE pos_tenant NOLOGIN; END IF;
 END $$`
 	bsRoleAttrs = `DO $$
 BEGIN
@@ -56,6 +58,12 @@ BEGIN
   GRANT pos_owner TO pos_migrator WITH INHERIT FALSE, SET TRUE;
   GRANT pos_platform TO pos_app WITH INHERIT FALSE, SET TRUE;
   GRANT pos_platform TO pos_jobs WITH INHERIT FALSE, SET TRUE;
+  -- The migrator adds each new tenant role to pos_tenant, so it needs ADMIN
+  -- (it already has it when it created the group itself).
+  IF NOT EXISTS (SELECT 1 FROM pg_auth_members m JOIN pg_roles g ON g.oid = m.roleid JOIN pg_roles u ON u.oid = m.member
+                 WHERE g.rolname = 'pos_tenant' AND u.rolname = 'pos_migrator' AND m.admin_option) THEN
+    GRANT pos_tenant TO pos_migrator WITH ADMIN TRUE, INHERIT FALSE, SET FALSE;
+  END IF;
   -- A non-superuser admin (RDS) must be able to SET ROLE pos_owner for
   -- CREATE SCHEMA ... AUTHORIZATION pos_owner below.
   IF NOT (SELECT rolsuper FROM pg_roles WHERE rolname = current_user) THEN
@@ -74,6 +82,7 @@ BEGIN
   CREATE SCHEMA IF NOT EXISTS extensions AUTHORIZATION pos_owner;
   REVOKE CREATE ON SCHEMA extensions FROM PUBLIC;
   GRANT USAGE ON SCHEMA extensions TO pos_platform;
+  GRANT USAGE ON SCHEMA extensions TO pos_tenant;
   CREATE EXTENSION IF NOT EXISTS citext WITH SCHEMA extensions;
   CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA extensions;
   CREATE EXTENSION IF NOT EXISTS pg_stat_statements WITH SCHEMA extensions;

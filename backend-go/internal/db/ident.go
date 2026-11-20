@@ -151,10 +151,120 @@ var AppendOnlyTables = []string{"audit_log", "stock_movements", "return_items", 
 	"customer_payments", "customer_payment_allocations", "customer_credit_entries",
 	"batch_movements", "write_offs", "write_off_lines"}
 
+// TenantGroupRole is the group every tenant role and every restore
+// scratch role belongs to. It holds exactly one privilege, USAGE on the
+// shared extensions schema, so tenant roles reach citext and pg_trgm
+// through membership and no per-tenant step ever rewrites the extensions
+// schema's ACL row. Grants on that one row from parallel migrations failed
+// with "tuple concurrently updated", and the global lock that serialised
+// them made parallel runs time out (ARCHITECTURE_REVIEW H1). Never grant
+// this role anything else: every shop would get it.
+const TenantGroupRole = "pos_tenant"
+
+// ErrNotInTenantGroup means a tenant role is not yet a member of
+// TenantGroupRole (migrate.EnsureTenantGroup adds it).
+var ErrNotInTenantGroup = errors.New("db: tenant role is not a member of pos_tenant")
+
+// extensionsLock serialises the rare changes to the extensions schema's
+// ACL row (creating the group's grant, revoking an old direct grant).
+const extensionsLock = "SELECT pg_advisory_xact_lock(7340043)"
+
+const (
+	qGroupReady = `SELECT CASE WHEN EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'pos_tenant')
+		THEN has_schema_privilege('pos_tenant', 'extensions', 'USAGE') ELSE false END`
+	qCreateGroup = `DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'pos_tenant') THEN CREATE ROLE pos_tenant NOLOGIN; END IF;
+END $$`
+	qGroupHasUsage  = `SELECT has_schema_privilege('pos_tenant', 'extensions', 'USAGE')`
+	qGrantGroupUse  = `GRANT USAGE ON SCHEMA extensions TO pos_tenant`
+	qIsGroupMember  = `SELECT pg_has_role($1, 'pos_tenant', 'USAGE')`
+	qDirectExtGrant = `SELECT EXISTS (SELECT 1 FROM pg_namespace n CROSS JOIN LATERAL aclexplode(n.nspacl) a
+		JOIN pg_roles r ON r.oid = a.grantee WHERE n.nspname = 'extensions' AND r.rolname = $1)`
+)
+
+// EnsureTenantGroup creates TenantGroupRole and its USAGE grant on the
+// extensions schema if either is missing. c must log in as pos_migrator
+// (CREATEROLE: the creator gets ADMIN on the role, so it can add members)
+// and be able to SET ROLE owner, which owns the extensions schema. Cheap
+// and lock-free once the group exists.
+func EnsureTenantGroup(ctx context.Context, c *pgx.Conn, owner string) error {
+	var ready bool
+	if err := c.QueryRow(ctx, qGroupReady).Scan(&ready); err != nil {
+		return err
+	}
+	if ready {
+		return nil
+	}
+	return pgx.BeginFunc(ctx, c, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, extensionsLock); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, qCreateGroup); err != nil {
+			return err
+		}
+		var has bool
+		if err := tx.QueryRow(ctx, qGroupHasUsage).Scan(&has); err != nil || has {
+			return err
+		}
+		if err := SetLocalRole(ctx, tx, owner); err != nil {
+			return err
+		}
+		_, err := tx.Exec(ctx, qGrantGroupUse)
+		return err
+	})
+}
+
+// GrantTenantGroup makes role a member of TenantGroupRole, inheriting its
+// privilege (and nothing it could SET ROLE to). Run it outside a long
+// transaction: PostgreSQL lets one session at a time change a role's
+// members. c must hold ADMIN on the group (pos_migrator). Idempotent.
+func GrantTenantGroup(ctx context.Context, c Execer, role string) error {
+	r, err := quote(role)
+	if err != nil {
+		return err
+	}
+	_, err = c.Exec(ctx, "GRANT "+TenantGroupRole+" TO "+r+" WITH INHERIT TRUE, SET FALSE")
+	return err
+}
+
+// InTenantGroup reports whether role has TenantGroupRole's privileges.
+func InTenantGroup(ctx context.Context, c Execer, role string) (bool, error) {
+	if !identPattern.MatchString(role) {
+		return false, ErrBadIdentifier
+	}
+	var ok bool
+	err := queryRowScan(ctx, c, qIsGroupMember, []any{role}, &ok)
+	return ok, err
+}
+
+// RevokeDirectExtensionsUsage removes a direct USAGE grant on the
+// extensions schema that roles created before TenantGroupRole still hold.
+// Without one it changes nothing (and takes no lock). Run in a
+// transaction as the schema owner.
+func RevokeDirectExtensionsUsage(ctx context.Context, tx pgx.Tx, role string) error {
+	r, err := quote(role)
+	if err != nil {
+		return err
+	}
+	var direct bool
+	if err := tx.QueryRow(ctx, qDirectExtGrant, role).Scan(&direct); err != nil || !direct {
+		return err
+	}
+	if _, err := tx.Exec(ctx, extensionsLock); err != nil {
+		return err
+	}
+	_, err = tx.Exec(ctx, "REVOKE ALL ON SCHEMA extensions FROM "+r)
+	return err
+}
+
 // GrantTenantPrivileges gives a tenant role exactly what TENANCY §5.3 lists:
-// USAGE on its schema and extensions, DML on its tables, sequence use,
-// default privileges for tables created later by owner, and insert/select
-// only on audit_log if it exists. Idempotent.
+// USAGE on its schema, DML on its tables, sequence use, default privileges
+// for tables created later by owner, and insert/select only on the
+// append-only tables. USAGE on extensions comes from TenantGroupRole, which
+// role must already belong to (ErrNotInTenantGroup otherwise). Nothing here
+// touches a shared catalog row, so parallel runs never wait on each other.
+// Idempotent.
 func GrantTenantPrivileges(ctx context.Context, c Execer, schema, role, owner string) error {
 	s, err := quote(schema)
 	if err != nil {
@@ -168,19 +278,16 @@ func GrantTenantPrivileges(ctx context.Context, c Execer, schema, role, owner st
 	if err != nil {
 		return err
 	}
-	// Every tenant role is granted USAGE on the one shared extensions
-	// schema: concurrent grants update the same catalog row and fail with
-	// "tuple concurrently updated" (seen with migrate --parallelism 4).
-	// A transaction-scoped advisory lock serialises this short step; the
-	// callers that matter (tenant migrations, replace restores) run in a
-	// transaction, so the lock holds until commit.
-	if _, err := c.Exec(ctx, "SELECT pg_advisory_xact_lock(7340043)"); err != nil {
+	member, err := InTenantGroup(ctx, c, role)
+	if err != nil {
 		return err
+	}
+	if !member {
+		return ErrNotInTenantGroup
 	}
 	stmts := []string{
 		"REVOKE ALL ON SCHEMA " + s + " FROM PUBLIC",
 		"GRANT USAGE ON SCHEMA " + s + " TO " + r,
-		"GRANT USAGE ON SCHEMA extensions TO " + r,
 		"GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA " + s + " TO " + r,
 		"GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA " + s + " TO " + r,
 		"ALTER DEFAULT PRIVILEGES FOR ROLE " + o + " IN SCHEMA " + s + " GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO " + r,
@@ -370,8 +477,10 @@ func RenameSchema(ctx context.Context, c Execer, from, to string) error {
 }
 
 // RevokeTenantPrivileges undoes GrantTenantPrivileges for a role on a
-// schema (a scratch role after its schema became the live one).
-func RevokeTenantPrivileges(ctx context.Context, c Execer, schema, role, owner string) error {
+// schema (a scratch role after its schema became the live one). The role
+// keeps its TenantGroupRole membership (USAGE on extensions only) until it
+// is dropped; a direct extensions grant from before the group is removed.
+func RevokeTenantPrivileges(ctx context.Context, tx pgx.Tx, schema, role, owner string) error {
 	s, err := quote(schema)
 	if err != nil {
 		return err
@@ -384,24 +493,18 @@ func RevokeTenantPrivileges(ctx context.Context, c Execer, schema, role, owner s
 	if err != nil {
 		return err
 	}
-	// Same lock as GrantTenantPrivileges: both change the shared
-	// extensions schema's privileges.
-	if _, err := c.Exec(ctx, "SELECT pg_advisory_xact_lock(7340043)"); err != nil {
-		return err
-	}
 	for _, q := range []string{
 		"REVOKE ALL ON ALL TABLES IN SCHEMA " + s + " FROM " + r,
 		"REVOKE ALL ON ALL SEQUENCES IN SCHEMA " + s + " FROM " + r,
 		"ALTER DEFAULT PRIVILEGES FOR ROLE " + o + " IN SCHEMA " + s + " REVOKE ALL ON TABLES FROM " + r,
 		"ALTER DEFAULT PRIVILEGES FOR ROLE " + o + " IN SCHEMA " + s + " REVOKE ALL ON SEQUENCES FROM " + r,
 		"REVOKE ALL ON SCHEMA " + s + " FROM " + r,
-		"REVOKE ALL ON SCHEMA extensions FROM " + r,
 	} {
-		if _, err := c.Exec(ctx, q); err != nil {
+		if _, err := tx.Exec(ctx, q); err != nil {
 			return err
 		}
 	}
-	return nil
+	return RevokeDirectExtensionsUsage(ctx, tx, role)
 }
 
 // RevokeTenantSessions ends every session of a restored tenant (OPERATIONS

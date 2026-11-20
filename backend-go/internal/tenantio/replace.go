@@ -80,6 +80,11 @@ func (r *Restorer) swap(ctx context.Context, rep *Report, scratch tenancy.Scratc
 	if err != nil {
 		return err
 	}
+	// The live role must be in the pos_tenant group before the swap grants
+	// it the new schema (a role created before the group may not be yet).
+	if err := migrate.EnsureTenantGroup(ctx, r.DSN, role.String()); err != nil {
+		return err
+	}
 	cfg, err := migrate.OwnerConnConfig(r.DSN)
 	if err != nil {
 		return err

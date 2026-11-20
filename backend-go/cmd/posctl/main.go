@@ -159,7 +159,7 @@ func dbBootstrap(ctx context.Context, stdout io.Writer) error {
 	if err := migrate.Bootstrap(ctx, in); err != nil {
 		return err
 	}
-	fmt.Fprintln(stdout, "bootstrap ok: roles pos_owner, pos_migrator, pos_app, pos_platform, pos_jobs; schemas extensions, platform")
+	fmt.Fprintln(stdout, "bootstrap ok: roles pos_owner, pos_migrator, pos_app, pos_platform, pos_jobs, pos_tenant; schemas extensions, platform")
 	return nil
 }
 

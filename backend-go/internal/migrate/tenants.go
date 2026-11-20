@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/pressly/goose/v3"
 
 	dbfiles "github.com/tejas1112001/POS_inventory/backend-go/db"
@@ -330,6 +331,17 @@ func RunTenants(ctx context.Context, dsn secrets.Secret, o RunOptions) (RunRepor
 	if err != nil {
 		return RunReport{}, err
 	}
+	if !o.DryRun {
+		// Roles created before the pos_tenant group join it here, one at a
+		// time, so the parallel post-steps below never wait on each other.
+		roles := make([]string, len(targets))
+		for i, t := range targets {
+			roles[i] = t.Role.String()
+		}
+		if err := EnsureTenantGroup(ctx, dsn, roles...); err != nil {
+			return RunReport{}, err
+		}
+	}
 
 	rep := RunReport{Target: latest}
 	if o.ResumeRunID > 0 {
@@ -362,7 +374,7 @@ func RunTenants(ctx context.Context, dsn secrets.Secret, o RunOptions) (RunRepor
 			if o.DryRun {
 				r = DryRunTenant(ctx, dsn, t)
 			} else {
-				r = UpTenant(ctx, dsn, t, o.Log)
+				r = upWithRetry(ctx, dsn, t, o.Log)
 			}
 			var errText *string
 			if r.Err != nil {
@@ -396,6 +408,38 @@ func RunTenants(ctx context.Context, dsn secrets.Secret, o RunOptions) (RunRepor
 	sort.Slice(rep.Items, func(i, j int) bool { return rep.Items[i].TenantID < rep.Items[j].TenantID })
 	_, err = pconn.ExecContext(context.WithoutCancel(ctx), `UPDATE platform.migration_runs SET status = $2, finished_at = now() WHERE id = $1`, rep.RunID, rep.Status)
 	return rep, err
+}
+
+// lockRetryDelays are the waits before re-running a tenant whose run gave
+// up on lock_timeout (5 s, so DDL never queues behind POS traffic). Each
+// migration is its own transaction and the post-step is idempotent, so a
+// re-run continues where the failed one stopped.
+var lockRetryDelays = []time.Duration{3 * time.Second, 10 * time.Second}
+
+// upWithRetry is UpTenant, re-run up to twice when it failed only because
+// a lock was busy.
+func upWithRetry(ctx context.Context, dsn secrets.Secret, t Target, log *slog.Logger) ItemResult {
+	r := UpTenant(ctx, dsn, t, log)
+	for _, d := range lockRetryDelays {
+		if r.Status != "failed" || !isLockTimeout(r.Err) {
+			return r
+		}
+		select {
+		case <-ctx.Done():
+			return r
+		case <-time.After(d):
+		}
+		took := r.Duration
+		r = UpTenant(ctx, dsn, t, log)
+		r.Duration += took + d
+	}
+	return r
+}
+
+// isLockTimeout reports a lock_timeout cancellation (SQLSTATE 55P03).
+func isLockTimeout(err error) bool {
+	var pg *pgconn.PgError
+	return errors.As(err, &pg) && pg.Code == "55P03"
 }
 
 func listTargets(ctx context.Context, pconn *sql.DB, o RunOptions) ([]Target, error) {

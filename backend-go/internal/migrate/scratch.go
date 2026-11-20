@@ -40,6 +40,9 @@ func CreateScratch(ctx context.Context, dsn secrets.Secret, s tenancy.ScratchSch
 	if err := db.GrantRoleSet(ctx, mig, s.Role(), RoleMigrator); err != nil {
 		return err
 	}
+	if err := ensureTenantGroup(ctx, mig, []string{s.Role()}); err != nil {
+		return err
+	}
 	cfg, err := ownerConfig(dsn)
 	if err != nil {
 		return err

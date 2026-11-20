@@ -181,6 +181,9 @@ func CreateTenantSchema(ctx context.Context, dsn secrets.Secret, t Target) error
 			return err
 		}
 	}
+	if err := ensureTenantGroup(ctx, mig, []string{t.Role.String()}); err != nil {
+		return err
+	}
 	cfg, err := ownerConfig(dsn)
 	if err != nil {
 		return err
@@ -214,14 +217,16 @@ func dropSchemaAndRole(ctx context.Context, dsn secrets.Secret, schema, role str
 		_ = owner.Close(ctx)
 		return err
 	}
-	// The role's grant on the shared extensions schema would block DROP ROLE.
+	// A direct grant on the shared extensions schema (roles created before
+	// the pos_tenant group) would block DROP ROLE; group membership ends
+	// with the role.
 	var exists bool
 	if err := owner.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = $1)`, role).Scan(&exists); err != nil {
 		_ = owner.Close(ctx)
 		return err
 	}
 	if exists {
-		if err := db.RevokeSchemaUsage(ctx, owner, "extensions", role); err != nil {
+		if err := pgx.BeginFunc(ctx, owner, func(tx pgx.Tx) error { return db.RevokeDirectExtensionsUsage(ctx, tx, role) }); err != nil {
 			_ = owner.Close(ctx)
 			return err
 		}
