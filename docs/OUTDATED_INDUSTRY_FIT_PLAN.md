@@ -1,6 +1,6 @@
 # Industry Fit Plan — medical stores, salons, mobile & electronics, restaurants & cafes
 
-Status: **plan only, nothing built.** Written 2026-11-07 from the code on `main` (c4d98a4): Go backend (`backend-go/`), React app (`frontend/`), tenant migrations 00001–00016, platform migrations 00001–00013, and the docs in `docs/`.
+Status: **plan only, nothing built.** Written 2026-11-07 from the code on `main` (c4d98a4): Go backend (`backend/`), React app (`frontend/`), tenant migrations 00001–00016, platform migrations 00001–00013, and the docs in `docs/`.
 
 Effort scale (one developer, including tests): **S** ≤ 3 days · **M** 1–2 weeks · **L** 2–4 weeks · **XL** > 1 month.
 

@@ -62,7 +62,7 @@ export function DemoForm() {
       requestAnimationFrame(() => summaryRef.current?.focus());
       return;
     }
-    // TODO: send to the platform. POST /contact in backend-go/internal/landing
+    // TODO: send to the platform. POST /contact in backend/internal/landing
     // needs a CSRF token and origin check, so it is not wired up yet.
     setSent({ name: v.name.trim(), biz: v.biz.toLowerCase() });
   };

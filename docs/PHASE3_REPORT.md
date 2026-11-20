@@ -37,10 +37,10 @@ Branch `go-backend/phase2`, local commits only (no push since 2026-10-27; draft 
 
 | Tool | Scope | Result |
 |---|---|---|
-| golangci-lint v2.14 (incl. gosec, staticcheck, errcheck, revive) | backend-go | 0 issues |
-| staticcheck v0.8.2 | backend-go | 0 issues |
-| constsql (own analyzer: SQL must be constants) | backend-go incl. integration tests | 0 issues (the new tenant-list sort uses one constant query per order) |
-| govulncheck v1.9.0 | backend-go | 0 reachable. In required modules, not called: GO-2026-6866 and GO-2026-6860 (`golang.org/x/net` → upgraded to v0.62.0), GO-2026-5932 (`x/crypto/openpgp`, unmaintained, not used, no fix) |
+| golangci-lint v2.14 (incl. gosec, staticcheck, errcheck, revive) | backend | 0 issues |
+| staticcheck v0.8.2 | backend | 0 issues |
+| constsql (own analyzer: SQL must be constants) | backend incl. integration tests | 0 issues (the new tenant-list sort uses one constant query per order) |
+| govulncheck v1.9.0 | backend | 0 reachable. In required modules, not called: GO-2026-6866 and GO-2026-6860 (`golang.org/x/net` → upgraded to v0.62.0), GO-2026-5932 (`x/crypto/openpgp`, unmaintained, not used, no fix) |
 | gitleaks | full git history, 134 commits | no leaks |
 | npm audit (production deps) | frontend | 20 (1 critical, 13 high, 6 moderate) → **0** |
 
@@ -93,7 +93,7 @@ Not covered in the browser: the Super Admin console flows behind MFA (covered by
 
 ## 6. Performance
 
-Harness `backend-go/test/load` (run: `go test -tags integration,load -count=1 -timeout 30m -v ./test/load`). Postgres 18 in a container; the real app in process with `GOMAXPROCS=4`; 50 tenants each with 1,000 SKUs (imported with the CSV import); 50 clients, one per tenant, each from its own address. The plan named k6; this harness measures the same requests without adding 50 tenants to the dev database. Full tables: `backend-go/test/load/results.md`.
+Harness `backend/test/load` (run: `go test -tags integration,load -count=1 -timeout 30m -v ./test/load`). Postgres 18 in a container; the real app in process with `GOMAXPROCS=4`; 50 tenants each with 1,000 SKUs (imported with the CSV import); 50 clients, one per tenant, each from its own address. The plan named k6; this harness measures the same requests without adding 50 tenants to the dev database. Full tables: `backend/test/load/results.md`.
 
 **Realistic load** (each client pauses 1 s: about 50 requests/s, dashboard cache on):
 

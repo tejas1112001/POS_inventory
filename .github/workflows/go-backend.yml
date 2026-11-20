@@ -3,9 +3,9 @@ name: go-backend
 on:
   push:
     branches: [main]
-    paths: ["backend-go/**", ".github/workflows/go-backend.yml"]
+    paths: ["backend/**", ".github/workflows/go-backend.yml"]
   pull_request:
-    paths: ["backend-go/**", ".github/workflows/go-backend.yml"]
+    paths: ["backend/**", ".github/workflows/go-backend.yml"]
 
 permissions:
   contents: read
@@ -16,7 +16,7 @@ concurrency:
 
 defaults:
   run:
-    working-directory: backend-go
+    working-directory: backend
 
 jobs:
   check:
@@ -28,8 +28,8 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version-file: backend-go/go.mod
-          cache-dependency-path: backend-go/go.sum
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
       - name: gofmt
         run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
       - name: go mod tidy is clean
@@ -59,8 +59,8 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version-file: backend-go/go.mod
-          cache-dependency-path: backend-go/go.sum
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
       # Full history: the P0-1 history rewrite (2026-10-27) removed the
       # leaked backend/.env, so every commit must stay clean.
       - name: gitleaks (full history)

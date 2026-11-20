@@ -54,7 +54,7 @@ export function Footer() {
                         {l.label}
                       </Link>
                     ) : (
-                      // Terms and privacy are served by the platform (backend-go/internal/landing).
+                      // Terms and privacy are served by the platform (backend/internal/landing).
                       <a href={l.href} className={linkCls}>
                         {l.label}
                       </a>

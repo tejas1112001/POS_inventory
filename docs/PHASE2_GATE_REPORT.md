@@ -50,9 +50,9 @@ Platform users page, impersonation, migrations screen, announcements (not in 19b
 ## 5. Run it locally
 
 1. PowerShell in `frontend`: `npm run build` and `npm run build:admin` (`npm install` first is harmless; the new package is already in `node_modules`). `VITE_API_URL` must stay empty in `frontend/.env`, as for 19a.
-2. WSL in `backend-go`: `make up-web`.
+2. WSL in `backend`: `make up-web`.
 3. Open **https://admin.localhost:8443**. Sign in as `owner-console@posdev.test` with `console-first-signin-2026` (dev only). You then choose your own password, scan the QR code with your authenticator app and save the recovery codes.
-4. Exports: request one on a tenant's Exports tab; to run queued restore tests: `make restore-tests-dev` (WSL, `backend-go`).
+4. Exports: request one on a tenant's Exports tab; to run queued restore tests: `make restore-tests-dev` (WSL, `backend`).
 5. Hot reload: PowerShell in `frontend`: `$env:VITE_BEHIND_CADDY='1'; npm run dev:admin`; WSL: `ADMIN_UPSTREAM=host.docker.internal:5174 make up-web`.
 6. The shop app stays at https://demo-shop.localhost:8443. Stop with `make down`.
 
@@ -118,9 +118,9 @@ POS failed to load for cashiers (it read categories the biller role cannot see) 
 The repo's `node_modules` was installed from Windows, so build the app in a **Windows** terminal; run the stack from **WSL**.
 
 1. In `frontend/.env`, empty the API line: `VITE_API_URL=` (it still points at the old Express server). Then, in PowerShell in the `frontend` folder (`\\wsl.localhost\Ubuntu\home\tejas_shinde\projects\POS_inventory\frontend`): `npm run build`.
-2. In WSL, in `backend-go`: `make up-web` (posd serves `frontend/dist`). The dev database is already migrated; after future migrations run `make migrate-dev`.
+2. In WSL, in `backend`: `make up-web` (posd serves `frontend/dist`). The dev database is already migrated; after future migrations run `make migrate-dev`.
 3. Open **https://demo-shop.localhost:8443** (accept Caddy's certificate once). Owner: `owner@demo.test` / `smoke-test-pass-2026`. Cashier: the newest "Invited Cashier" on the Users page, password `invited-cashier-pass-1` (or invite one: the email is in Mailpit). Emails: **http://localhost:8026**.
-4. Hot reload instead of rebuilding: PowerShell in `frontend`: `$env:VITE_BEHIND_CADDY='1'; npm run dev`; WSL in `backend-go`: `FRONTEND_UPSTREAM=host.docker.internal:5173 make up-web`. Same URL.
+4. Hot reload instead of rebuilding: PowerShell in `frontend`: `$env:VITE_BEHIND_CADDY='1'; npm run dev`; WSL in `backend`: `FRONTEND_UPSTREAM=host.docker.internal:5173 make up-web`. Same URL.
 5. Stop: `make down`.
 
 ---
@@ -590,7 +590,7 @@ The repo's `node_modules` was installed from Windows, so build the app in a **Wi
 | Date | 2026-10-19 |
 | Branch | `go-backend/phase2` (local, not pushed) |
 | Commits | `9dc196a` .gitattributes · `cf75fb2` step 1 · `645c81d` step 2 · `0ef07b2` step 3 · `f85ffe2` step 4 · `f4ccf20` step 5 |
-| Size | 98 files, ~16.8k lines in `backend-go/` |
+| Size | 98 files, ~16.8k lines in `backend/` |
 | Status | **Stopped for review** (PHASE1_DESIGN §8). Nothing from step 6 on is built |
 
 ## 1. What was built

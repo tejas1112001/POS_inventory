@@ -2,7 +2,7 @@
 
 Playwright tests that drive the real app at 360, 768 and 1280 px.
 
-1. Start the dev stack: `cd backend-go && make up-web` (after `npm run build` and `npm run build:admin` in `frontend`).
+1. Start the dev stack: `cd backend && make up-web` (after `npm run build` and `npm run build:admin` in `frontend`).
 2. Run, with the demo-shop owner (and optionally a Biller cashier):
 
    ```sh

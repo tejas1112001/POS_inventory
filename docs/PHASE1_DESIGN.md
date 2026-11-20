@@ -25,7 +25,7 @@
 |---|---|---|
 | A1 | Production Postgres is **≥ 16** (we target 18) on a managed provider that allows `CREATEROLE`, thousands of roles and PG16 grant syntax | Confirmed per provider by the preflight (OPERATIONS §8) before a managed instance is used. On PG 14/15 roles still work with `NOINHERIT` on `pos_app` |
 | A2 | Early scale is ≤ 1,000 tenants per DB | See TENANCY §1 for ceiling and triggers |
-| A3 | The Go backend lives in `backend-go/` next to the old `backend/` until cutover | **Decided** (Q-8) |
+| A3 | The Go backend lives in `backend/` next to the old `backend/` until cutover | **Decided** (Q-8) |
 | A4 | Quantities stay integers (contract) | Weight-based selling needs `numeric` qty later (expand migration) |
 | A5 | One currency per tenant; GST-style tax config by default but country-agnostic | Multi-currency per tenant is out of scope |
 | A7 | Go 1.27.2 (current stable, checked on go.dev) instead of the "1.23+" floor | 1.23 is out of security support; we pin `go 1.27` + `toolchain go1.27.2` and follow patch releases |
@@ -152,7 +152,7 @@ The same binary runs API + workers (`POSD_MODE=all|api|worker`) so it can be spl
 ### 3.1 Folder structure
 
 ```
-backend-go/
+backend/
 ├─ cmd/
 │  ├─ posd/            # HTTP API + workers (mode flag)
 │  └─ posctl/          # migrate, db preflight, bootstrap-superadmin, provision, export, restore, drift
@@ -658,7 +658,7 @@ Each step is one or more small commits with tests. Nothing merges without `go ve
 
 | # | Step | Key outputs |
 |---|---|---|
-| 1 | Foundation | `backend-go/` module, config (fail-fast, leaked-secret hash deny list), slog + redaction, errors, httpx (strict JSON, body caps, timeouts, secure headers incl. the strict admin-host CSP, request id, recover), metrics, `/healthz` `/readyz`, graceful shutdown, Dockerfile (distroless nonroot), Makefile, CI (golangci-lint + `constsql`, gosec, govulncheck, gitleaks, goleak), Dependabot, docker-compose (Postgres 18, Caddy `tls internal`, MinIO, Mailpit). Untrack `frontend/.env` (O-8) |
+| 1 | Foundation | `backend/` module, config (fail-fast, leaked-secret hash deny list), slog + redaction, errors, httpx (strict JSON, body caps, timeouts, secure headers incl. the strict admin-host CSP, request id, recover), metrics, `/healthz` `/readyz`, graceful shutdown, Dockerfile (distroless nonroot), Makefile, CI (golangci-lint + `constsql`, gosec, govulncheck, gitleaks, goleak), Dependabot, docker-compose (Postgres 18, Caddy `tls internal`, MinIO, Mailpit). Untrack `frontend/.env` (O-8) |
 | 2 | Platform schema + registry | `extensions` + platform migrations (incl. `pg_stat_statements`), `tenancy` (SchemaName, host resolver, cache, Sessions with post-condition check, roles), change listener (TENANCY §5.5), `posctl db preflight`, **search_path and extensions tests** (TENANCY §5.4) |
 | 3 | Migration runner + provisioning | goose two tracks over startup-parameter connections (TENANCY §8, incl. the `NO TRANSACTION` + reconnect tests), dry run, resume, drift, default privileges + grant re-apply, tenant-bound `mark_outbox_pending()`, provisioning orchestrator + compensation |
 | 4 | Super Admin | platform auth with separate `PLATFORM_JWT_KEYS` (S3), TOTP, recovery codes, step-up, tenants admin, audit, bootstrap CLI |
@@ -759,7 +759,7 @@ Tools: Caddy, Mailpit, MinIO, `pg_stat_statements`, Dependabot and goleak are **
 | Q-5 | Public self-signup **off**; the Super Admin creates tenants. Not built | TENANCY §6, §7.1, §6 config |
 | Q-6 | Contract changes C-01…C-21 **approved** | API_CONTRACT §4 |
 | Q-7 | Owner rotates the JWT secret and DB password. History rewrite: exact commands handed over; nothing destructive runs until the owner confirms | P0-1 |
-| Q-8 | Code in `backend-go/` next to `backend/` | A3, §3.1 |
+| Q-8 | Code in `backend/` next to `backend/` | A3, §3.1 |
 | Q-9 | Checked 2026-10-15: **Go and Docker are not installed**. Install list handed over; Phase 2 waits | §8 prerequisite, LIBRARIES |
 | Q-10 | Sale edit keeps the original biller; `updated_by` recorded | C-04, §5 |
 | Q-11 | Suspended tenant blocked from **all** logins; pays through the Razorpay link sent by email | TENANCY §5, BILLING §3, §5, §10 |

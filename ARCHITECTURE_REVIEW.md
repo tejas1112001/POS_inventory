@@ -17,7 +17,7 @@
 
 ### 1.1 Creating a shop
 
-`backend-go/internal/provisioning/provisioning.go` is a 10-step state machine (TENANCY_DESIGN §6). Every step can safely be re-run.
+`backend/internal/provisioning/provisioning.go` is a 10-step state machine (TENANCY_DESIGN §6). Every step can safely be re-run.
 
 | # | Step |
 |---|---|
@@ -115,7 +115,7 @@ purchases ─< purchase_items ;  purchase_receipts ─< purchase_receipt_items �
 ### High
 
 #### H1. Tenant migrations serialise on one global lock and fail as shops are added
-- **Where:** `backend-go/internal/db/ident.go:177` (`GrantTenantPrivileges`)
+- **Where:** `backend/internal/db/ident.go:177` (`GrantTenantPrivileges`)
 - **What:**
   - The grant step takes the global lock `pg_advisory_xact_lock(7340043)`, so every shop's post-migration grant step waits for the others.
   - The migration connection runs with `lock_timeout = 5s`, so with 8 shops migrating in parallel some give up and fail.

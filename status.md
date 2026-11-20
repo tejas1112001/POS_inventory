@@ -16,7 +16,7 @@ Notes: sale lines keep MRP at sale time (`order_items.mrp`, `mrp_amount`); a bat
 
 # Super Admin console MFA switch (temporary)
 
-2026-11-20: MFA for the Super Admin console is **off** on request (`PLATFORM_MFA_DISABLED=true` in `backend-go/deploy/.env`, git-ignored). Code default stays on. To turn it back on: set it to `false` (or remove the line) and restart the app container. Authenticators already set up are kept and work again as soon as it is on; users who signed in while it was off are asked to enrol at their next sign-in.
+2026-11-20: MFA for the Super Admin console is **off** on request (`PLATFORM_MFA_DISABLED=true` in `backend/deploy/.env`, git-ignored). Code default stays on. To turn it back on: set it to `false` (or remove the line) and restart the app container. Authenticators already set up are kept and work again as soon as it is on; users who signed in while it was off are asked to enrol at their next sign-in.
 
 ---
 

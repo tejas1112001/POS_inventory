@@ -4,7 +4,7 @@ Status as of 2026-11-19: **the React landing site (`landing/`) is not deployed y
 
 ## 1. What is live today
 
-The main address (`<BASE_DOMAIN>`, host kind `HostApex`) is served by the Go app's own server-rendered pages in `backend-go/internal/landing`: Go templates plus an embedded `static/site.css`. The React BillPiko marketing site in `landing/` is separate and not wired into the app, Caddy or CI.
+The main address (`<BASE_DOMAIN>`, host kind `HostApex`) is served by the Go app's own server-rendered pages in `backend/internal/landing`: Go templates plus an embedded `static/site.css`. The React BillPiko marketing site in `landing/` is separate and not wired into the app, Caddy or CI.
 
 CI today: `.github/workflows/frontend.yml` (shop app and Super Admin console) and `go-backend.yml`. Neither touches `landing/`.
 
@@ -24,7 +24,7 @@ The dev server must never be what visitors get. It serves unbundled modules, Rea
 
 Two options:
 
-- **(a) The Go app serves it (recommended).** This is the same pattern as the shop app and console: `STATIC_DIR` with `tenant/` and `admin/` mounts in `backend-go/deploy/docker-compose.web.yml`. Add a `landing/` mount and serve it on `HostApex`. The site then shares one origin with the Go form handlers and gets the same security headers from one place.
+- **(a) The Go app serves it (recommended).** This is the same pattern as the shop app and console: `STATIC_DIR` with `tenant/` and `admin/` mounts in `backend/deploy/docker-compose.web.yml`. Add a `landing/` mount and serve it on `HostApex`. The site then shares one origin with the Go form handlers and gets the same security headers from one place.
 - **(b) Caddy `file_server`** for the apex host, with the Go-owned paths (section 4) reverse-proxied to the app.
 
 Whichever option is chosen:
@@ -36,7 +36,7 @@ Whichever option is chosen:
 
 ## 4. Paths the Go app keeps on the main address
 
-The React site links to these and expects the Go app to keep serving them (`backend-go/internal/landing/landing.go`):
+The React site links to these and expects the Go app to keep serving them (`backend/internal/landing/landing.go`):
 
 - `/terms`, `/privacy` (footer links)
 - `/login`, `/login/go` (staff sign-in redirect to the shop's address)

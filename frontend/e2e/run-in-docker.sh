@@ -1,6 +1,6 @@
 #!/bin/sh
 # Runs the browser tests in the official Playwright image, attached to the
-# dev stack's network (start it first: make up-web in backend-go).
+# dev stack's network (start it first: make up-web in backend).
 #   E2E_OWNER_EMAIL=... E2E_OWNER_PASSWORD=... [E2E_CASHIER_EMAIL=... E2E_CASHIER_PASSWORD=...] \
 #   [E2E_SHOTS=/repo/docs/ui-audit/slices/S0] frontend/e2e/run-in-docker.sh [playwright args]
 set -eu

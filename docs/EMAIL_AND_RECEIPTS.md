@@ -262,7 +262,7 @@ Tenant business name, logo, legal name, tax registration no. (GSTIN) and address
 
 **Why.** Devanagari needs complex text shaping: conjuncts (`क्ष`, `ज्ञ`, `श्र`, `त्र`), the reph (`र्` above the next consonant, as in `धर्मेंद्र`), and the pre-base vowel sign `ि`, which is typed after its consonant but drawn before it (`कि`). maroto v2 draws text through a gofpdf-style engine, which as far as I can tell maps characters to glyphs one by one with no OpenType shaping. If so, conjuncts break apart and `ि` lands on the wrong side. Receipts are English, but customer names are tenant data and are often typed in Marathi or Hindi.
 
-**Spike** (`backend-go/spikes/pdfshaping/`, throwaway, about half a day):
+**Spike** (`backend/spikes/pdfshaping/`, throwaway, about half a day):
 1. Render a one-page receipt with maroto v2.4.3 and embedded Noto Sans Devanagari, with customer names `क्षितिज ज्ञानेश्वर कुलकर्णी`, `श्रीकृष्ण त्रिपाठी`, `धर्मेंद्र सिंह`, `किरण पाटील` and a mixed line `Total ₹1,23,456.00`.
 2. Render the same names in an HTML page in Chromium as the reference.
 3. Compare them side by side (a person checks; text extraction cannot judge shaping). Result and screenshots go into `docs/spikes/PDF_SHAPING.md`.
