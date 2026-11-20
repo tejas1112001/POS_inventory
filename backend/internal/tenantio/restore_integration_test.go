@@ -161,7 +161,14 @@ func TestRestoreWritesToNoOtherSchema(t *testing.T) {
 	a := newShop(t, "rst-iso")
 	newShop(t, "rst-iso-other")
 	rec, _ := export(t, a, false)
-	// Let every earlier backend's statistics settle.
+	// Let every earlier backend's statistics settle. A backend flushes
+	// them when it goes idle, but at most once a second; one that wrote
+	// just after a flush holds its counts for up to 10 s while idle
+	// (PGSTAT_IDLE_INTERVAL), which made this test flaky. Ending the idle
+	// backends flushes them now (the pools replace them on next use).
+	_, err := tdb.Admin(t).Exec(ctx, `SELECT pg_terminate_backend(pid) FROM pg_stat_activity
+		WHERE datname = current_database() AND pid <> pg_backend_pid() AND state = 'idle' AND backend_type = 'client backend'`)
+	require.NoError(t, err)
 	time.Sleep(1500 * time.Millisecond)
 	before := writes(t, "")
 	rep, err := restore(t, a, rec.ID, tenantio.ModeScratch)
