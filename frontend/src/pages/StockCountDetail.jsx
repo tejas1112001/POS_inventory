@@ -16,12 +16,12 @@ import { formatDateTime } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { api } from '@/services/api';
 import { toast } from '../../shared/toast/store';
-import { parseQty, qtyHint } from '@/lib/qty';
+import { fmtQty, parseQty, qtyHint } from '@/lib/qty';
 
 const inputCls =
   'h-11 w-full rounded-md border border-input bg-background px-3 text-base outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 sm:h-9 sm:text-sm';
 
-const signed = (n) => (n > 0 ? `+${n}` : String(n));
+const signed = (n) => (n > 0 ? `+${fmtQty(n)}` : fmtQty(n));
 const itemName = (l) => `${l.productName}${l.label ? ` · ${l.label}` : ''}`;
 
 // StockCountDetail is one stock count (industry P1 item 7, A15). In a
@@ -104,7 +104,7 @@ export default function StockCountDetail() {
     try {
       const r = await change({ lines: [{ code: c, add: 1 }] }, { quietError: true });
       const l = r.lines?.[0];
-      if (l) toast.success(`${itemName(l)}: ${l.countedQty}`);
+      if (l) toast.success(`${itemName(l)}: ${fmtQty(l.countedQty)}`);
     } catch (err) {
       // A product counted by batch: choose the batch (the scan does not
       // land on "No batch").
@@ -381,6 +381,7 @@ export default function StockCountDetail() {
                         type="number"
                         min="0"
                         step="any"
+                        inputMode="decimal"
                         className={inputCls}
                         defaultValue={l.countedQty}
                         aria-label={`Counted ${itemName(l)}`}
@@ -388,10 +389,10 @@ export default function StockCountDetail() {
                         onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
                       />
                     ) : (
-                      <span className="tabular-nums">{l.countedQty}</span>
+                      <span className="tabular-nums">{fmtQty(l.countedQty)}</span>
                     )}
                   </td>
-                  <td className="px-3 py-2 text-right tabular-nums">{draft ? l.currentQty : (l.expected ?? '—')}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{draft ? fmtQty(l.currentQty) : l.expected != null ? fmtQty(l.expected) : '—'}</td>
                   <td
                     className={cn(
                       'px-3 py-2 text-right font-medium tabular-nums',
@@ -423,7 +424,7 @@ export default function StockCountDetail() {
       {draft && count.uncountedBatches?.length > 0 && (
         <InlineAlert kind="warning">
           These batches have no line and will be set to 0 when you complete (their products are counted by batch):{' '}
-          {count.uncountedBatches.map((b) => `${b.productName} ${b.unknown ? 'No batch' : b.batchNo} (${b.currentQty})`).join(', ')}.
+          {count.uncountedBatches.map((b) => `${b.productName} ${b.unknown ? 'No batch' : b.batchNo} (${fmtQty(b.currentQty)})`).join(', ')}.
         </InlineAlert>
       )}
       {expiredFound.length > 0 && canWriteOff && (
@@ -462,7 +463,7 @@ export default function StockCountDetail() {
                           {u.sku}
                         </div>
                       </td>
-                      <td className="px-3 py-1.5 text-right tabular-nums">{u.currentQty} in stock</td>
+                      <td className="px-3 py-1.5 text-right tabular-nums">{fmtQty(u.currentQty)} in stock</td>
                       {canEdit && (
                         <td className="w-32 px-3 py-1.5 text-right">
                           <Button type="button" size="sm" variant="outline" onClick={() => countZero(u)}>

@@ -13,6 +13,7 @@ import { usePermission } from '../context/PermissionContext';
 import { api } from '../services/api';
 import { currencySymbol, formatCurrency, todayInShop } from '@/lib/format';
 import { isRetryable, newIdempotencyKey, priceChanges } from '@/lib/checkout';
+import { parseQty } from '@/lib/qty';
 
 const inputCls = 'w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-blue-500';
 const today = () => todayInShop(); // YYYY-MM-DD in the shop's time zone
@@ -86,7 +87,7 @@ export default function AddSales() {
     const usable = lines.filter((l) => l.variantId);
     if (usable.length === 0) return { message: 'Add at least one product.', step: 1 };
     // H3: part units (1.25 kg) are allowed; the server refuses them for whole-unit products.
-    if (usable.some((l) => !(Number(l.quantity) > 0))) return { message: 'Every quantity must be above 0.', step: 1 };
+    if (usable.some((l) => !(parseQty(l.quantity, { fractional: true }) > 0))) return { message: 'Every quantity must be above 0, with at most 3 decimals.', step: 1 };
     return null;
   };
 

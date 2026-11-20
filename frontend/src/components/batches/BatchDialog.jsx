@@ -9,6 +9,7 @@ import { api } from '@/services/api';
 import { toast } from '../../../shared/toast/store';
 import BatchExpiry from './BatchExpiry';
 import { WRITE_OFF_REASONS } from '@/lib/writeOffs';
+import { fmtQty } from '@/lib/qty';
 
 const REASONS = {
   opening: 'Opening stock',
@@ -261,9 +262,9 @@ export default function BatchDialog({ batchId, canManage, canWriteOff, canRecall
                     </span>
                     <span className="tabular-nums">
                       <span className={m.delta < 0 ? 'text-destructive' : 'text-emerald-700 dark:text-emerald-400'}>
-                        {m.delta > 0 ? `+${m.delta}` : m.delta}
+                        {m.delta > 0 ? `+${fmtQty(m.delta)}` : fmtQty(m.delta)}
                       </span>{' '}
-                      → {m.qtyAfter}
+                      → {fmtQty(m.qtyAfter)}
                     </span>
                     <span className="w-full text-xs text-muted-foreground">
                       {formatDateTime(m.createdAt)}
@@ -277,25 +278,25 @@ export default function BatchDialog({ batchId, canManage, canWriteOff, canRecall
               <div>
                 <h3 className="mb-1 text-sm font-semibold">Where it went</h3>
                 <p className="mb-1 text-xs text-muted-foreground">
-                  Sold {trace.sold} · returned {trace.returned} · written off {trace.writtenOff}. Walk-in customers are not named.
+                  Sold {fmtQty(trace.sold)} · returned {fmtQty(trace.returned)} · written off {fmtQty(trace.writtenOff)}. Walk-in customers are not named.
                 </p>
                 <ul className="divide-y rounded-md border text-xs">
                   {trace.sales.length + trace.returns.length + trace.writeOffs.length === 0 && <li className="p-2 text-muted-foreground">Not sold, returned or written off.</li>}
                   {trace.sales.map((s) => (
                     <li key={`s${s.saleId}`} className="p-2">
-                      Sale {s.reference} · {formatDateTime(s.date)} · {s.storeName} · × {s.quantity}
+                      Sale {s.reference} · {formatDateTime(s.date)} · {s.storeName} · × {fmtQty(s.quantity)}
                       {s.customerName ? ` · ${s.customerName}${s.customerPhone ? ` (${s.customerPhone})` : ''}` : ''}
                       {s.status === 'Void' ? ' · voided' : ''}
                     </li>
                   ))}
                   {trace.returns.map((x) => (
                     <li key={`r${x.returnId}-${x.bucket}`} className="p-2">
-                      Return {x.reference} · {formatDateTime(x.date)} · {x.storeName} · × {x.quantity} · {x.bucket === 'quarantine' ? 'to quarantine' : 'back on sale'}
+                      Return {x.reference} · {formatDateTime(x.date)} · {x.storeName} · × {fmtQty(x.quantity)} · {x.bucket === 'quarantine' ? 'to quarantine' : 'back on sale'}
                     </li>
                   ))}
                   {trace.writeOffs.map((x) => (
                     <li key={`w${x.writeOffId}-${x.from}`} className="p-2">
-                      Write-off {x.reference} · {formatDateTime(x.date)} · {x.storeName} · × {x.quantity} · {x.reason}
+                      Write-off {x.reference} · {formatDateTime(x.date)} · {x.storeName} · × {fmtQty(x.quantity)} · {x.reason}
                     </li>
                   ))}
                 </ul>
@@ -326,8 +327,8 @@ export default function BatchDialog({ batchId, canManage, canWriteOff, canRecall
             <p className="text-sm sm:col-span-2">Take units out of {wo.storeName} for good. This cannot be undone.</p>
             <SelectField id="b-wo-from" label="From" value={wo.from} onChange={(v) => setWo((cur) => ({ ...cur, from: v }))}
               options={[
-                ...(wo.qty > 0 ? [{ value: 'stock', label: `Stock (${wo.qty})` }] : []),
-                ...(wo.quarantined > 0 ? [{ value: 'quarantine', label: `Quarantine (${wo.quarantined})` }] : []),
+                ...(wo.qty > 0 ? [{ value: 'stock', label: `Stock (${fmtQty(wo.qty)})` }] : []),
+                ...(wo.quarantined > 0 ? [{ value: 'quarantine', label: `Quarantine (${fmtQty(wo.quarantined)})` }] : []),
               ]} />
             <TextField id="b-wo-qty" label="Quantity" inputMode="numeric" value={wo.quantity}
               onChange={(v) => setWo((cur) => ({ ...cur, quantity: v }))} error={f['lines[0].quantity']} />

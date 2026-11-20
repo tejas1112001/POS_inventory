@@ -6,6 +6,7 @@ import { SelectField } from '@/components/settings/FormKit';
 import { formatDateTime } from '@/lib/format';
 import { api } from '@/services/api';
 import { WRITE_OFF_REASONS } from '@/lib/writeOffs';
+import { fmtQty } from '@/lib/qty';
 
 const reasonLabel = (v) => WRITE_OFF_REASONS.find((r) => r.value === v)?.label || v;
 
@@ -89,7 +90,7 @@ export default function WriteOffs() {
                           {w.lines.map((l) => (
                             <p key={`${l.batchId}-${l.from}`}>
                               {l.productName} · {l.unknown ? 'No batch' : `Batch ${l.batchNo}`}
-                              {l.expiry ? ` · Exp ${l.expiry}` : ''} × {l.quantity} · from {l.from === 'quarantine' ? 'quarantine' : 'stock'}
+                              {l.expiry ? ` · Exp ${l.expiry}` : ''} × {fmtQty(l.quantity)} · from {l.from === 'quarantine' ? 'quarantine' : 'stock'}
                             </p>
                           ))}
                           <p className="mt-1 text-muted-foreground">{w.createdByName ? `By ${w.createdByName}` : ''}</p>

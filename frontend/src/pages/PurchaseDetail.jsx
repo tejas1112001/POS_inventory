@@ -12,6 +12,7 @@ import { usePermission } from '@/context/PermissionContext';
 import { useModules } from '@/hooks/useModules';
 import { formatCurrency, formatDate, formatDateTime } from '@/lib/format';
 import { unitQtyText } from '@/lib/saleUnits';
+import { fmtQty } from '@/lib/qty';
 
 const n = (v) => Number(v) || 0;
 
@@ -192,7 +193,7 @@ export default function PurchaseDetail() {
                     {r.lines
                       .map(
                         (l) =>
-                          `${l.quantity} × ${l.productName}${l.sku ? ` (${l.sku})` : ''}` +
+                          `${fmtQty(l.quantity)} × ${l.productName}${l.sku ? ` (${l.sku})` : ''}` +
                           ((l.batches || []).length ? ` [${l.batches.map((b) => `${b.batchNo} exp ${b.expiry} × ${b.quantity}`).join('; ')}]` : '')
                       )
                       .join(', ')}

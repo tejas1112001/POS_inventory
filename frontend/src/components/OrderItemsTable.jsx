@@ -1,7 +1,8 @@
 import React from "react";
+import { addQty, fmtQty } from '../lib/qty';
 
 const OrderItemsTable = ({ items }) => {
-  const totalQty = items.reduce((sum, item) => sum + item.quantity, 0);
+  const totalQty = addQty(...items.map((item) => item.quantity));
   const totalValue = items.reduce((sum, item) => sum + item.subtotal, 0);
 
   return (
@@ -21,7 +22,7 @@ const OrderItemsTable = ({ items }) => {
             <tr key={idx}>
               <td>{item.code} - {item.name}</td>
               <td>Rs. {item.cost}</td>
-              <td>{item.quantity}</td>
+              <td>{fmtQty(item.quantity)}</td>
               <td>{item.discount}%</td>
               <td>Rs. {item.subtotal}</td>
             </tr>

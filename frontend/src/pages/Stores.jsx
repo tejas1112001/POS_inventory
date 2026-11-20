@@ -15,9 +15,10 @@ import StatusBadge from '@/components/kit/StatusBadge';
 import { EmptyState } from '@/components/kit/States';
 import { FormSheet, SelectField, STATUS_OPTIONS, TextAreaField, TextField } from '@/components/kit/Form';
 import { GstinField, StateField } from '@/components/forms/GstFields';
+import { fmtQty } from '@/lib/qty';
 
 const trim = (v) => (typeof v === 'string' ? v.trim() : v);
-const units = (n) => `${Number(n || 0).toLocaleString()} ${Number(n) === 1 ? 'unit' : 'units'}`;
+const units = (n) => `${fmtQty(n || 0)} ${Number(n) === 1 ? 'unit' : 'units'}`;
 
 const columns = [
   {

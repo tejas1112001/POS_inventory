@@ -13,6 +13,7 @@ import { useGstStates } from '@/lib/gst';
 import { receiptGst } from '@/lib/gstReceipt';
 
 const SPLIT_LABELS = { cgst_sgst: 'CGST + SGST', cgst_utgst: 'CGST + UTGST', igst: 'IGST' };
+import { fmtQty } from '@/lib/qty';
 
 const CONDITION_LABEL = Object.fromEntries(CONDITIONS.map((c) => [c.value, c.label]));
 
@@ -153,7 +154,7 @@ export default function ReturnDetail() {
                       {(i.batches || []).map((b) => (
                         <span key={`${b.batchId}-${b.bucket}`} className={`block text-xs ${b.bucket === 'quarantine' ? 'text-warning-fg' : 'text-muted-foreground'}`}>
                           {b.unknown ? 'No batch' : `Batch ${b.batchNo}`}
-                          {b.expiry ? ` · Exp ${b.expiry}` : ''} × {b.quantity} · {b.bucket === 'quarantine' ? 'quarantine' : 'back on sale'}
+                          {b.expiry ? ` · Exp ${b.expiry}` : ''} × {fmtQty(b.quantity)} · {b.bucket === 'quarantine' ? 'quarantine' : 'back on sale'}
                         </span>
                       ))}
                     </td>

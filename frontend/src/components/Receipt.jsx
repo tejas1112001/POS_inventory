@@ -17,6 +17,7 @@ import { cn } from '@/lib/utils';
 import { isRecorded, paymentLabel, RECORDED_LEGEND } from '@/lib/payments';
 import './receipt.css';
 import receiptCss from './receipt.css?raw';
+import { fmtQty } from '@/lib/qty';
 
 const n = (v) => Number(v) || 0;
 const pct = (v) => `${Number(n(v).toFixed(3))}%`;
@@ -191,7 +192,7 @@ function ReceiptBody({ sale, store, settings, businessName, taxLabel, logoUrl, n
                       {b.unknown ? 'No batch' : `Batch ${b.batchNo}`}
                       {b.expiry ? ` · Exp ${b.expiry.slice(5, 7)}/${b.expiry.slice(0, 4)}` : ''}
                       {b.mrp != null ? ` · MRP ${Number(b.mrp).toFixed(2)}` : ''}
-                      {i.batches.length > 1 ? ` × ${b.quantity}` : ''}
+                      {i.batches.length > 1 ? ` × ${fmtQty(b.quantity)}` : ''}
                     </span>
                   ))}
                   {showMrp && i.mrp != null && !(i.batches || []).some((b) => b.mrp != null) && (

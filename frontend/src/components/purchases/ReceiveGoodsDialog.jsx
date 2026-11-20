@@ -120,7 +120,7 @@ export default function ReceiveGoodsDialog({ purchase, onClose, onDone }) {
         { quiet: true, headers: { 'Idempotency-Key': key } }
       );
       setNear(null);
-      toast.success(`${out.receipt.reference}: ${units} units added to stock.`);
+      toast.success(`${out.receipt.reference}: ${fmtQty(units)} units added to stock.`);
       onDone?.(out);
     } catch (err) {
       if (err?.code === 'NEAR_EXPIRY') {
@@ -300,7 +300,7 @@ export default function ReceiveGoodsDialog({ purchase, onClose, onDone }) {
             <ul className="my-2 list-disc pl-5">
               {(near.batches || []).map((b) => (
                 <li key={`${b.line}-${b.batchNo}`}>
-                  {b.batchNo}: expires {b.expiry} ({b.daysLeft} days), {b.quantity} units
+                  {b.batchNo}: expires {b.expiry} ({b.daysLeft} days), {fmtQty(b.quantity)} units
                 </li>
               ))}
             </ul>
@@ -324,7 +324,7 @@ export default function ReceiveGoodsDialog({ purchase, onClose, onDone }) {
             </Button>
             <Button type="button" onClick={() => save(false)} disabled={busy || units === 0}>
               {busy ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <PackageCheck className="size-4" aria-hidden="true" />}
-              Receive {units > 0 ? `${units} units` : ''}
+              Receive {units > 0 ? `${fmtQty(units)} units` : ''}
             </Button>
           </div>
         </DialogFooter>

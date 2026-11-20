@@ -19,6 +19,7 @@ import PrintLabelsDialog from '@/components/products/PrintLabelsDialog';
 import { useModules } from '@/hooks/useModules';
 import { formatCurrency, formatNumber } from '@/lib/format';
 import { cn } from '@/lib/utils';
+import { addQty, fmtQty } from '@/lib/qty';
 
 function Field({ label, children }) {
   return (
@@ -94,7 +95,7 @@ export default function ProductDetail() {
   const storeIds = [...new Set(variants.flatMap((v) => (v.Inventories || []).map((i) => i.store_id)))];
   const storeName = (sid) => stores.find((s) => s.id === sid)?.name || `Store ${sid}`;
   const inv = (v, sid) => (v.Inventories || []).find((i) => i.store_id === sid);
-  const total = (v) => (v.Inventories || []).reduce((n, i) => n + (Number(i.qty) || 0), 0);
+  const total = (v) => addQty(...(v.Inventories || []).map((i) => Number(i.qty) || 0));
   const many = variants.length > 1;
 
   return (
@@ -176,7 +177,7 @@ export default function ProductDetail() {
                     const low = i && qty > 0 && qty <= Number(i.quantityAlert);
                     return (
                       <td key={sid} className={cn('px-3 py-2 text-right tabular-nums', qty <= 0 && 'text-danger-fg', low && 'text-warning-fg')}>
-                        {i ? formatNumber(qty, 0) : '—'}
+                        {i ? fmtQty(qty) : '—'}
                         {low && <span className="sr-only"> (low)</span>}
                       </td>
                     );

@@ -450,7 +450,7 @@ export default function Checkout() {
                             {ql.batches.map((b) => (
                               <p key={b.batchId} className={b.unknown ? 'font-medium text-warning-fg' : ''}>
                                 {b.unknown ? 'No batch recorded: check the pack' : `Batch ${b.batchNo} · Exp ${b.expiry}`}
-                                {ql.batches.length > 1 ? ` × ${b.quantity}` : ''}
+                                {ql.batches.length > 1 ? ` × ${fmtQty(b.quantity)}` : ''}
                                 {b.chosen ? ' (chosen)' : ''}
                               </p>
                             ))}

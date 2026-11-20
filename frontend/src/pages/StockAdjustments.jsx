@@ -11,6 +11,7 @@ import { api } from '@/services/api';
 import { formatDateTime } from '@/lib/format';
 import { newIdempotencyKey } from '@/lib/checkout';
 import { cn } from '@/lib/utils';
+import { fmtQty } from '@/lib/qty';
 
 const PAGE = 50;
 const REASONS = ['Stock count correction', 'Damaged', 'Expired', 'Lost or stolen', 'Returned to supplier', 'Found', 'Other'];
@@ -179,7 +180,7 @@ function AdjustmentList({ storeId, storeName, reload }) {
               <td className="px-2 py-2">{a.creator?.name}</td>
               <td className={cn('px-2 py-2 text-right font-semibold', a.type === 'Addition' ? 'text-emerald-700' : 'text-red-700')}>
                 {a.type === 'Addition' ? '+' : '−'}
-                {a.quantity}
+                {fmtQty(a.quantity)}
               </td>
               <td className="px-2 py-2 text-right">{a.qtyAfter}</td>
               <td />
@@ -226,7 +227,7 @@ function HistoryList({ storeId, storeName, reload }) {
               <td className="px-2 py-2">{REASON[String(m.reason).toLowerCase()] || m.reason}</td>
               <td />
               <td className={cn('px-2 py-2 text-right font-semibold', m.delta >= 0 ? 'text-emerald-700' : 'text-red-700')}>
-                {m.delta > 0 ? `+${m.delta}` : m.delta < 0 ? `−${-m.delta}` : '0'}
+                {m.delta > 0 ? `+${fmtQty(m.delta)}` : m.delta < 0 ? `−${fmtQty(-m.delta)}` : '0'}
               </td>
               <td className="px-2 py-2 text-right">{m.qtyAfter}</td>
               <td />
@@ -272,8 +273,8 @@ function AdjustmentDialog({ stores, defaultStore, onClose, onSaved }) {
     setNotice(null);
     setFields({});
     const reason = form.reason === 'Other' ? form.other.trim() : form.reason;
-    if (!form.storeId || !form.variantId || !(qty >= 1) || !reason) {
-      setNotice({ kind: 'error', text: 'Choose a store and a product, a quantity of at least 1 and a reason.' });
+    if (!form.storeId || !form.variantId || !(qty > 0) || !reason) {
+      setNotice({ kind: 'error', text: 'Choose a store and a product, a quantity above 0 and a reason.' });
       return;
     }
     setBusy(true);

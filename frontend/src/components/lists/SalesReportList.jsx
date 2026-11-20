@@ -60,10 +60,10 @@ export default function SalesReportList() {
       { id: 'store', accessorFn: (r) => r.store?.name || '', header: 'Store', size: 120 },
       // H3: "2 Box (24)" for a line sold in another unit.
       { accessorKey: 'soldQty', header: 'Sold', size: 100, meta: { align: 'center' }, cell: ({ row }) => unitQtyText(row.original, row.original.soldQty) },
-      { accessorKey: 'returnedQty', header: 'Returned', size: 80, meta: { align: 'center' } },
+      { accessorKey: 'returnedQty', header: 'Returned', size: 80, meta: { align: 'center' }, cell: (c) => fmtQty(c.getValue()) },
       { accessorKey: 'soldAmount', header: 'Sold amount', size: 120, cell: ({ getValue }) => formatCurrency(getValue()) },
       { accessorKey: 'netAmount', header: 'Net', size: 120, cell: ({ getValue }) => formatCurrency(getValue()) },
-      { accessorKey: 'stockQty', header: 'In stock', size: 80, meta: { align: 'center' } },
+      { accessorKey: 'stockQty', header: 'In stock', size: 80, meta: { align: 'center' }, cell: (c) => fmtQty(c.getValue()) },
     ],
     []
   );

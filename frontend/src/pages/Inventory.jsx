@@ -14,6 +14,7 @@ import { FormSheet, TextField } from '@/components/kit/Form';
 import { ProductImage } from '@/components/shared/product-image';
 import { formatCurrency } from '@/lib/format';
 import { cn } from '@/lib/utils';
+import { fmtQty } from '@/lib/qty';
 
 const STOCK = ['In Stock', 'Low Stock', 'Out of Stock'];
 
@@ -64,7 +65,7 @@ export default function Inventory() {
       { variantId: editing.variantId, storeId: editing.storeId, qty: Number(v.qty), quantityAlert: Number(v.quantityAlert) },
       { quiet: true }
     );
-    toast.success(`Stock of ${editing.productName} set to ${Number(v.qty)}.`);
+    toast.success(`Stock of ${editing.productName} set to ${fmtQty(v.qty)}.`);
     list.reload();
     setTick((t) => t + 1);
   };
@@ -158,7 +159,7 @@ export default function Inventory() {
         open={!!editing}
         onOpenChange={(o) => !o && setEditing(null)}
         title="Set stock"
-        description={editing ? `${editing.productName} · ${editing.storeName}. Now ${editing.qty}. The number you enter replaces it.` : ''}
+        description={editing ? `${editing.productName} · ${editing.storeName}. Now ${fmtQty(editing.qty)}. The number you enter replaces it.` : ''}
         defaultValues={{ qty: String(editing?.qty ?? 0), quantityAlert: String(editing?.quantityAlert ?? 0) }}
         onSubmit={save}
         submitLabel="Save stock"

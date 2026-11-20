@@ -11,6 +11,7 @@ import { useServerReport } from '@/hooks/useServerReport';
 import { api } from '@/services/api';
 import { formatDate, formatCurrency } from '@/lib/format';
 import { unitQtyText } from '@/lib/saleUnits';
+import { fmtQty } from '@/lib/qty';
 
 const n = (v) => Number(v) || 0;
 
@@ -51,7 +52,7 @@ export default function PurchaseReportList() {
       // H3: "2 Carton (48)" for a line bought in another unit.
       { accessorKey: 'purchaseQty', header: 'Qty', size: 100, meta: { align: 'center' }, cell: ({ row }) => unitQtyText(row.original, row.original.purchaseQty) },
       { accessorKey: 'purchaseAmount', header: 'Amount', size: 120, cell: ({ getValue }) => formatCurrency(getValue()) },
-      { accessorKey: 'stockQty', header: 'In stock', size: 80, meta: { align: 'center' } },
+      { accessorKey: 'stockQty', header: 'In stock', size: 80, meta: { align: 'center' }, cell: (c) => fmtQty(c.getValue()) },
     ],
     []
   );

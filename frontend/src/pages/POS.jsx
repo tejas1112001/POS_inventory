@@ -61,7 +61,7 @@ export default function POS() {
     return sum + (l.taxType === 'Inclusive' ? lineTotal - lineTotal / (1 + rate) : lineTotal * rate);
   }, 0);
   const total = Math.max(0, subtotal + tax - discount);
-  const itemCount = lines.reduce((n, l) => n + l.quantity, 0);
+  const itemCount = addQty(...lines.map((l) => l.quantity));
 
   const fetchProducts = useCallback(async (storeId) => {
     if (!storeId) return;

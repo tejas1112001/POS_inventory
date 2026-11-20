@@ -4,6 +4,7 @@ import { usePermission } from '@/context/PermissionContext';
 import { api } from '@/services/api';
 import { toast } from '../../../shared/toast/store';
 import PurchasePaymentSheet from './PurchasePaymentSheet';
+import { addQty, fmtQty } from '@/lib/qty';
 
 const n = (v) => Number(v) || 0;
 const open = (p) => p && (p.status === 'Ordered' || p.status === 'Pending');
@@ -17,7 +18,7 @@ export default function usePurchaseActions(onChanged) {
   const { hasPermission } = usePermission();
   const [paying, setPaying] = useState(null);
 
-  const units = (p) => (p.items || []).reduce((s, i) => s + Math.max(0, n(i.quantity) - n(i.received_qty)), 0);
+  const units = (p) => fmtQty(addQty(...(p.items || []).map((i) => Math.max(0, addQty(n(i.quantity), -n(i.received_qty))))));
   const stores = (p) => [...new Set((p.items || []).map((i) => i.store?.name).filter(Boolean))].join(', ');
 
   const receive = async (p) => {

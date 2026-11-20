@@ -11,6 +11,7 @@ import { ErrorState } from '@/components/kit/States';
 import { formatCurrency, formatNumber, getFormatSettings, todayInShop } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import OnboardingCard from '@/components/dashboard/OnboardingCard';
+import { fmtQty } from '@/lib/qty';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, Filler, Tooltip);
 
@@ -302,7 +303,7 @@ export default function Dashboard() {
               <Stat big label="Net sales" value={formatCurrency(cur.net)} delta={prev && change(cur.net, prev.net)} hint={prev ? 'vs previous period' : 'after returns'} />
               <Stat big label="Orders" value={formatNumber(cur.orders, 0)} delta={prev && change(cur.orders, prev.orders)} />
               <Stat big label="Average bill" value={formatCurrency(avg(cur))} delta={prev && change(avg(cur), avg(prev))} />
-              <Stat big label="Items sold" value={formatNumber(cur.itemsSold, 0)} delta={prev && change(cur.itemsSold, prev.itemsSold)} />
+              <Stat big label="Items sold" value={fmtQty(cur.itemsSold)} delta={prev && change(cur.itemsSold, prev.itemsSold)} />
             </section>
 
             <section aria-label="Money" className="grid grid-cols-2 gap-3 lg:grid-cols-4">

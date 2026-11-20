@@ -18,9 +18,10 @@ import { ProductImage } from '@/components/shared/product-image';
 import ImportProduct from '@/components/ImportProduct';
 import EditProductSheet from '@/components/products/EditProductSheet';
 import { formatCurrency, formatNumber } from '@/lib/format';
+import { addQty } from '@/lib/qty';
 
 const variantsOf = (p) => p?.ProductVariants || [];
-const stockOf = (p) => variantsOf(p).reduce((n, v) => n + (v.Inventories || []).reduce((m, i) => m + (Number(i.qty) || 0), 0), 0);
+const stockOf = (p) => addQty(...variantsOf(p).flatMap((v) => (v.Inventories || []).map((i) => Number(i.qty) || 0)));
 
 function priceText(p) {
   const prices = variantsOf(p).map((v) => Number(v.price));
