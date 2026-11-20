@@ -187,7 +187,7 @@ func (h *HTTP) needAny(perms ...string) func(http.Handler) http.Handler {
 
 func (h *HTTP) stepUpRequired(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !h.svc.now().Before(actorFrom(r.Context()).StepUpUntil) {
+		if !h.svc.cfg.MFADisabled && !h.svc.now().Before(actorFrom(r.Context()).StepUpUntil) {
 			httpx.WriteError(w, r, apperr.Forbidden(apperr.CodeStepUpRequired, "Confirm with your authenticator code first"))
 			return
 		}
@@ -212,6 +212,16 @@ func (h *HTTP) writeSession(w http.ResponseWriter, res SessionResult) {
 	httpx.WriteJSON(w, http.StatusOK, res)
 }
 
+// writeLogin answers a sign-in step: the session when MFA is disabled and
+// one was started, otherwise the next challenge.
+func (h *HTTP) writeLogin(w http.ResponseWriter, res LoginResult) {
+	if s := res.Session(); s != nil {
+		h.writeSession(w, *s)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, res)
+}
+
 // --------------------------------------------------------------- handlers
 
 func (h *HTTP) login(w http.ResponseWriter, r *http.Request) {
@@ -228,7 +238,7 @@ func (h *HTTP) login(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, res)
+	h.writeLogin(w, res)
 }
 
 func (h *HTTP) passwordChange(w http.ResponseWriter, r *http.Request) {
@@ -247,7 +257,7 @@ func (h *HTTP) passwordChange(w http.ResponseWriter, r *http.Request) {
 			httpx.WriteError(w, r, err)
 			return
 		}
-		httpx.WriteJSON(w, http.StatusOK, res)
+		h.writeLogin(w, res)
 		return
 	}
 	// Signed-in change: needs a valid access token.

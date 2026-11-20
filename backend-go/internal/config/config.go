@@ -68,6 +68,11 @@ type Config struct {
 	PlatformSessionMax     time.Duration `env:"PLATFORM_SESSION_MAX" envDefault:"8h"`
 	PlatformIdleTimeout    time.Duration `env:"PLATFORM_IDLE_TIMEOUT" envDefault:"30m"`
 
+	// PlatformMFADisabled turns off MFA for the Super Admin console:
+	// sign-in needs only the password and destructive actions skip the
+	// step-up code. Temporary switch; leave unset (false) normally.
+	PlatformMFADisabled bool `env:"PLATFORM_MFA_DISABLED" envDefault:"false"`
+
 	PlatformIPAllowlistRaw string         `env:"PLATFORM_IP_ALLOWLIST"`
 	PlatformIPAllowlist    []netip.Prefix `env:"-"`
 

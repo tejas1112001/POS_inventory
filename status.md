@@ -1,3 +1,9 @@
+# Super Admin console MFA switch (temporary)
+
+2026-11-20: MFA for the Super Admin console is **off** on request (`PLATFORM_MFA_DISABLED=true` in `backend-go/deploy/.env`, git-ignored). Code default stays on. To turn it back on: set it to `false` (or remove the line) and restart the app container. Authenticators already set up are kept and work again as soon as it is on; users who signed in while it was off are asked to enrol at their next sign-in.
+
+---
+
 # Industry Phase 3 (pharmacy) build status (merged)
 
 Merged into `main` on 2026-11-18 (`aea9af7`), with the owner's OK; the `industry/phase3` branch is deleted. What is left: `NEXT_STEPS.md`. Design: `docs/INDUSTRY_PHASE3_PHARMACY_DESIGN.md`, approved 2026-11-18 (all of §14; Q13 refuse, Q14 last, Q15 yes, Q16 0, Q17 later). Last updated: 2026-11-18.

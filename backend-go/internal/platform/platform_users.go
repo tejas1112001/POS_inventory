@@ -447,6 +447,14 @@ func (s *Service) AcceptInvite(ctx context.Context, token, password string, m Me
 			failed_logins = 0, locked_at = NULL, updated_at = now() WHERE id = $1 AND status = 'Active'`, u.ID, hash); err != nil {
 			return err
 		}
+		if s.cfg.MFADisabled {
+			if err := writeAudit(ctx, tx, AuditEntry{ActorID: u.ID, ActorEmail: u.Email, Action: "platform_user.invite_accepted",
+				IP: m.IP, UserAgent: m.UserAgent, RequestID: m.RequestID}); err != nil {
+				return err
+			}
+			res, err = s.startWithoutMFA(ctx, tx, u, m)
+			return err
+		}
 		purpose := "enroll"
 		res.MFAEnrollRequired = true
 		if u.MFAEnrolled { // cannot happen through the console; kept safe
@@ -583,5 +591,5 @@ func (h *HTTP) acceptInvite(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, res)
+	h.writeLogin(w, res)
 }

@@ -69,6 +69,10 @@ type Config struct {
 	// OverridesChanged lets this instance forget its cached overrides of a
 	// tenant at once (other instances within 30 seconds).
 	OverridesChanged func(tenantID string)
+	// MFADisabled (PLATFORM_MFA_DISABLED) skips MFA: the password alone
+	// starts a session, unenrolled users may hold sessions, and step-up is
+	// not asked for. Enrolled authenticators are kept for when it is on again.
+	MFADisabled bool
 }
 
 // Service implements the platform API.
@@ -87,6 +91,10 @@ func NewService(c Config) *Service {
 	}
 	if c.Log == nil {
 		c.Log = slog.Default()
+	}
+	if c.MFADisabled {
+		c.Log.Warn("platform MFA is DISABLED (PLATFORM_MFA_DISABLED=true): console sign-in needs only a password",
+			slog.String("event", "security.platform_mfa_disabled"))
 	}
 	return &Service{cfg: c, now: c.Now}
 }
@@ -178,10 +186,31 @@ type LoginResult struct {
 	MFARequired            bool   `json:"mfaRequired,omitempty"`
 	MFAEnrollRequired      bool   `json:"mfaEnrollRequired,omitempty"`
 	PasswordChangeRequired bool   `json:"passwordChangeRequired,omitempty"`
+	// session is set instead of a challenge when MFA is disabled.
+	session *SessionResult
 }
 
-// Login checks email and password and returns the next step. It never
-// issues a session directly: MFA is mandatory.
+// Session returns the session started without MFA, or nil.
+func (r LoginResult) Session() *SessionResult { return r.session }
+
+// startWithoutMFA ends a sign-in step with a session (MFA disabled).
+func (s *Service) startWithoutMFA(ctx context.Context, tx tenancy.PlatformTx, u user, m Meta) (LoginResult, error) {
+	if _, err := tx.Exec(ctx, `UPDATE platform.platform_users SET last_login_at = now() WHERE id = $1`, u.ID); err != nil {
+		return LoginResult{}, err
+	}
+	sess, err := s.startSession(ctx, tx, u, m)
+	if err != nil {
+		return LoginResult{}, err
+	}
+	if err := writeAudit(ctx, tx, AuditEntry{ActorID: u.ID, ActorEmail: u.Email, Action: "login.success",
+		After: map[string]any{"method": "password_only_mfa_disabled"}, IP: m.IP, UserAgent: m.UserAgent, RequestID: m.RequestID}); err != nil {
+		return LoginResult{}, err
+	}
+	return LoginResult{session: &sess}, nil
+}
+
+// Login checks email and password and returns the next step. Unless MFA is
+// disabled it never issues a session directly: MFA is mandatory.
 func (s *Service) Login(ctx context.Context, email, password string, m Meta) (LoginResult, error) {
 	email = strings.TrimSpace(email)
 	if email == "" || password == "" || len(email) > 254 || len(password) > 256 {
@@ -229,6 +258,10 @@ func (s *Service) Login(ctx context.Context, email, password string, m Meta) (Lo
 	var res LoginResult
 	err = s.rw(ctx, func(tx tenancy.PlatformTx) error {
 		if _, err := tx.Exec(ctx, `UPDATE platform.platform_users SET failed_logins = 0 WHERE id = $1`, u.ID); err != nil {
+			return err
+		}
+		if s.cfg.MFADisabled && !u.MustChange {
+			res, err = s.startWithoutMFA(ctx, tx, u, m)
 			return err
 		}
 		purpose := "mfa"
@@ -348,17 +381,22 @@ func (s *Service) ChangePasswordForced(ctx context.Context, challengeID, newPass
 		if err := s.burnChallenge(ctx, tx, cid); err != nil {
 			return err
 		}
+		if err := writeAudit(ctx, tx, AuditEntry{ActorID: u.ID, ActorEmail: u.Email, Action: "password.changed",
+			After: map[string]any{"forced": true}, IP: m.IP, UserAgent: m.UserAgent, RequestID: m.RequestID}); err != nil {
+			return err
+		}
+		if s.cfg.MFADisabled {
+			res, err = s.startWithoutMFA(ctx, tx, u, m)
+			return err
+		}
 		purpose := "mfa"
 		if !u.MFAEnrolled {
 			purpose, res.MFAEnrollRequired = "enroll", true
 		} else {
 			res.MFARequired = true
 		}
-		if res.ChallengeID, err = s.newChallenge(ctx, tx, u.ID, purpose, m); err != nil {
-			return err
-		}
-		return writeAudit(ctx, tx, AuditEntry{ActorID: u.ID, ActorEmail: u.Email, Action: "password.changed",
-			After: map[string]any{"forced": true}, IP: m.IP, UserAgent: m.UserAgent, RequestID: m.RequestID})
+		res.ChallengeID, err = s.newChallenge(ctx, tx, u.ID, purpose, m)
+		return err
 	})
 	return res, err
 }
@@ -793,7 +831,7 @@ func (s *Service) Authenticate(ctx context.Context, token string) (Actor, error)
 			return err
 		}
 		now := s.now()
-		if revoked || !now.Before(abs) || now.Sub(lastSeen) > s.cfg.IdleTimeout || status != "Active" || locked || !mfaOK {
+		if revoked || !now.Before(abs) || now.Sub(lastSeen) > s.cfg.IdleTimeout || status != "Active" || locked || (!mfaOK && !s.cfg.MFADisabled) {
 			return apperr.Unauthenticated(apperr.CodeUnauthenticated, "Session expired")
 		}
 		if now.Sub(lastSeen) > lastSeenWriteEvery {
