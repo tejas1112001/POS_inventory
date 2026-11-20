@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tejas1112001/POS_inventory/backend/internal/inventory"
+	"github.com/tejas1112001/POS_inventory/backend/internal/qty"
 	"github.com/tejas1112001/POS_inventory/backend/internal/tenancy"
 )
 
@@ -88,8 +89,8 @@ func TestCheckpointedReconcile(t *testing.T) {
 	require.False(t, res.Full)
 	got := mismatchesFor(res, vid)
 	require.Len(t, got, 1)
-	require.Equal(t, 9, got[0].Qty)
-	require.Equal(t, 7, got[0].LedgerSum)
+	require.Equal(t, qty.Int(9), got[0].Qty)
+	require.Equal(t, qty.Int(7), got[0].LedgerSum)
 
 	// 5. Checkpoints older than a week: full check, rebuilt (the wrong
 	// one is gone).

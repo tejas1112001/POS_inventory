@@ -27,6 +27,7 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend/internal/inventory"
 	"github.com/tejas1112001/POS_inventory/backend/internal/plans"
 	"github.com/tejas1112001/POS_inventory/backend/internal/pricing"
+	"github.com/tejas1112001/POS_inventory/backend/internal/qty"
 	"github.com/tejas1112001/POS_inventory/backend/internal/tenancy"
 	"github.com/tejas1112001/POS_inventory/backend/internal/xlsx"
 )
@@ -117,7 +118,7 @@ type importRow struct {
 	price, cost, taxRate                              decimal.Decimal
 	mrp                                               *decimal.Decimal // the variant's MRP (not the pharmacy template: there it is the batch's)
 	hasTax                                            bool
-	qty, alert                                        int
+	qty, alert                                        qty.Q
 	categoryID, subCategoryID, brandID, unitID, store int64
 	b                                                 batchFields // pharmacy template
 }
@@ -125,7 +126,7 @@ type importRow struct {
 // PreviewStock is a variant's opening stock in one store.
 type PreviewStock struct {
 	Store string `json:"store"`
-	Qty   int    `json:"qty"`
+	Qty   qty.Q  `json:"qty"`
 }
 
 // PreviewVariant is one option the import would create.
@@ -626,11 +627,12 @@ func (a *API) runImport(ctx context.Context, t tenancy.Tenant, uid int64, raw []
 			}
 			for _, n := range []struct {
 				col string
-				out *int
+				out *qty.Q
 			}{{"opening_qty", &ir.qty}, {"quantity_alert", &ir.alert}} {
 				if s := v[n.col]; s != "" {
-					q, err := strconv.Atoi(s)
-					if err != nil || q < 0 || q > 1_000_000_000 {
+					// Imported products sell in whole units (H3).
+					q, err := qty.Parse(s)
+					if err != nil || q.IsNegative() || q.Greater(maxStock) || !q.IsWhole() {
 						addErr(line, n.col, "must be a whole number >= 0")
 					}
 					*n.out = q
@@ -662,7 +664,7 @@ func (a *API) runImport(ctx context.Context, t tenancy.Tenant, uid int64, raw []
 				if ir.store, ok = lookups.stores[strings.ToLower(s)]; !ok {
 					addErr(line, "store", "unknown store (use the store slug)")
 				}
-			case ir.qty == 0 && ir.alert == 0:
+			case ir.qty.IsZero() && ir.alert.IsZero():
 			case (industry || ph.file) && lookups.firstStore > 0:
 				ir.store = lookups.firstStore // clothing, footwear and pharmacy: the first store
 			default:

@@ -32,6 +32,7 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend/internal/idempotency"
 	"github.com/tejas1112001/POS_inventory/backend/internal/inventory"
 	"github.com/tejas1112001/POS_inventory/backend/internal/money"
+	"github.com/tejas1112001/POS_inventory/backend/internal/qty"
 	"github.com/tejas1112001/POS_inventory/backend/internal/tenancy"
 )
 
@@ -49,7 +50,7 @@ type returnItemIn struct {
 	OrderItemID money.Int `json:"orderItemId"`
 	ProductID   money.Int `json:"productId"`
 	VariantID   money.Int `json:"variantId"`
-	Quantity    money.Int `json:"quantity"`
+	Quantity    qty.In    `json:"quantity"`
 	UnitPrice   money.Dec `json:"unitPrice"`
 	Reason      *string   `json:"reason"`
 	Condition   *string   `json:"condition"` // industry P1 item 9: resellable, damaged, defective
@@ -89,7 +90,7 @@ type returnIn struct {
 
 type returnLine struct {
 	orderItemID, productID, variantID int64
-	qty                               int64
+	qty                               qty.Q
 	price                             decimal.Decimal
 	priceSet                          bool
 	reason, condition                 string
@@ -139,8 +140,8 @@ func validateReturn(in returnIn) (cleanReturn, error) {
 	for i, it := range in.ReturnItems {
 		k := fmt.Sprintf("returnItems[%d]", i)
 		l := returnLine{orderItemID: it.OrderItemID.V, productID: it.ProductID.V, variantID: it.VariantID.V, qty: it.Quantity.V}
-		if !it.Quantity.Valid || it.Quantity.V <= 0 || it.Quantity.V > maxQty {
-			f[k+".quantity"] = "Quantity must be a whole number above 0."
+		if !it.Quantity.Valid || !it.Quantity.V.IsPositive() || it.Quantity.V.Greater(qty.Int(maxQty)) {
+			f[k+".quantity"] = "Quantity must be above 0."
 		}
 		for name, id := range map[string]money.Int{"orderItemId": it.OrderItemID, "productId": it.ProductID, "variantId": it.VariantID} {
 			if id.Valid && id.V <= 0 {
@@ -233,7 +234,7 @@ type soldLine struct {
 	productID, variantID          *int64
 	name                          string
 	sku                           *string
-	qty, returned                 int64
+	qty, returned                 qty.Q
 	unit, discount, tax, subtotal decimal.Decimal
 	cgst, sgst, igst              *decimal.Decimal
 }
@@ -267,7 +268,7 @@ type returnRow struct {
 	variantID                     int64
 	name                          string
 	sku                           *string
-	qty                           int64
+	qty                           qty.Q
 	unit, discount, tax, subtotal decimal.Decimal
 	cgst, sgst, igst              *decimal.Decimal
 	reason, condition             string
@@ -283,9 +284,9 @@ type ReturnExcess struct {
 	ProductID int64  `json:"productId"`
 	VariantID int64  `json:"variantId"`
 	SKU       string `json:"sku"`
-	Sold      int64  `json:"sold"`
-	Returned  int64  `json:"returned"`
-	Requested int64  `json:"requested"`
+	Sold      qty.Q  `json:"sold"`
+	Returned  qty.Q  `json:"returned"`
+	Requested qty.Q  `json:"requested"`
 }
 
 func (s *soldLine) matches(l returnLine) bool {
@@ -334,12 +335,12 @@ func matchSold(c cleanReturn, sold []soldLine, currency string) ([]returnRow, er
 			f[k+".variantId"] = "Choose a variant: the sale has more than one variant of this product."
 			continue
 		}
-		var soldQ, returned int64
+		var soldQ, returned qty.Q
 		for _, s := range cand {
-			soldQ += s.qty
-			returned += s.returned
+			soldQ = soldQ.Add(s.qty)
+			returned = returned.Add(s.returned)
 		}
-		if l.qty > soldQ-returned {
+		if l.qty.Greater(soldQ.Sub(returned)) {
 			sku := ""
 			if cand[0].sku != nil {
 				sku = *cand[0].sku
@@ -354,8 +355,8 @@ func matchSold(c cleanReturn, sold []soldLine, currency string) ([]returnRow, er
 		}
 		left := l.qty
 		for _, s := range cand {
-			take := min(left, s.qty-s.returned)
-			if take <= 0 {
+			take := qty.Min(left, s.qty.Sub(s.returned))
+			if !take.IsPositive() {
 				continue
 			}
 			out = append(out, returnRow{orderItemID: &s.id, productID: s.productID, variantID: *s.variantID, name: s.name,
@@ -367,8 +368,8 @@ func matchSold(c cleanReturn, sold []soldLine, currency string) ([]returnRow, er
 				sgst:     refundSharePtr(s.sgst, s.qty, s.returned, take, currency),
 				igst:     refundSharePtr(s.igst, s.qty, s.returned, take, currency),
 				reason:   l.reason, condition: l.condition, line: i})
-			s.returned += take
-			if left -= take; left == 0 {
+			s.returned = s.returned.Add(take)
+			if left = left.Sub(take); left.IsZero() {
 				break
 			}
 		}
@@ -378,7 +379,7 @@ func matchSold(c cleanReturn, sold []soldLine, currency string) ([]returnRow, er
 	}
 	if len(excess) > 0 {
 		e := excess[0]
-		msg := fmt.Sprintf("Cannot return %d of %s: %d sold, %d already returned.", e.Requested, e.SKU, e.Sold, e.Returned)
+		msg := fmt.Sprintf("Cannot return %s of %s: %s sold, %s already returned.", e.Requested, e.SKU, e.Sold, e.Returned)
 		return nil, apperr.Conflict(apperr.CodeReturnExceedsSold, msg).WithDetails(map[string]any{"items": excess})
 	}
 	return out, nil
@@ -386,7 +387,7 @@ func matchSold(c cleanReturn, sold []soldLine, currency string) ([]returnRow, er
 
 // ------------------------------------------------------- unlinked returns
 
-const qReturnVariants = `SELECT v.id, v.product_id, v.sku::text, p.name FROM product_variants v JOIN products p ON p.id = v.product_id
+const qReturnVariants = `SELECT v.id, v.product_id, v.sku::text, p.name, p.allow_fraction FROM product_variants v JOIN products p ON p.id = v.product_id
 	WHERE v.id = ANY($1) AND v.deleted_at IS NULL AND p.deleted_at IS NULL`
 
 // unlinkedRows prices a return without a sale from the client's unit
@@ -449,8 +450,9 @@ func unlinkedRows(ctx context.Context, tx tenancy.TenantTx, c cleanReturn, curre
 		return nil, err
 	}
 	type variant struct {
-		productID int64
-		sku, name string
+		productID  int64
+		sku, name  string
+		fractional bool
 	}
 	byID := map[int64]variant{}
 	rows, err := tx.Query(ctx, qReturnVariants, ids)
@@ -460,7 +462,7 @@ func unlinkedRows(ctx context.Context, tx tenancy.TenantTx, c cleanReturn, curre
 	for rows.Next() {
 		var id int64
 		var v variant
-		if err := rows.Scan(&id, &v.productID, &v.sku, &v.name); err != nil {
+		if err := rows.Scan(&id, &v.productID, &v.sku, &v.name, &v.fractional); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -480,10 +482,13 @@ func unlinkedRows(ctx context.Context, tx tenancy.TenantTx, c cleanReturn, curre
 		case l.productID > 0 && v.productID != l.productID:
 			f[fmt.Sprintf("returnItems[%d].variantId", i)] = "The variant does not belong to this product."
 			continue
+		case !inventory.AllowedQty(l.qty, v.fractional):
+			f[fmt.Sprintf("returnItems[%d].quantity", i)] = inventory.WholeOnlyMessage
+			continue
 		}
 		pid, sku := v.productID, v.sku
 		out = append(out, returnRow{productID: &pid, variantID: ids[i], name: v.name, sku: &sku, qty: l.qty, unit: l.price,
-			subtotal: money.Round(l.price.Mul(decimal.NewFromInt(l.qty)), currency), reason: l.reason, condition: l.condition, line: i})
+			subtotal: money.Round(l.price.Mul(l.qty.Decimal()), currency), reason: l.reason, condition: l.condition, line: i})
 	}
 	return out, f.err()
 }
@@ -590,6 +595,9 @@ func prepareReturn(ctx context.Context, tx tenancy.TenantTx, p auth.Principal, c
 		if pr.rows, err = matchSold(c, sold, pr.currency); err != nil {
 			return pr, err
 		}
+		if err := checkReturnFractions(ctx, tx, c, pr.rows); err != nil {
+			return pr, err
+		}
 	} else {
 		if pr.custID, err = checkParties(ctx, tx, cleanSale{customerID: pr.custID, storeID: pr.storeID}, s); err != nil {
 			return pr, err
@@ -603,6 +611,32 @@ func prepareReturn(ctx context.Context, tx tenancy.TenantTx, p auth.Principal, c
 	}
 	pr.applied = decimal.Min(pr.total, saleDue)
 	return pr, nil
+}
+
+// checkReturnFractions refuses part units of a product sold in whole
+// units only (H3). Lines of a return without a sale are checked when they
+// are resolved (unlinkedRows).
+func checkReturnFractions(ctx context.Context, tx tenancy.TenantTx, c cleanReturn, rows []returnRow) error {
+	var ids []int64
+	for _, x := range rows {
+		if x.line >= 0 && x.line < len(c.lines) && !c.lines[x.line].qty.IsWhole() {
+			ids = append(ids, x.variantID)
+		}
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	frac, err := inventory.Fractional(ctx, tx, ids)
+	if err != nil {
+		return err
+	}
+	f := fieldErrs{}
+	for _, x := range rows {
+		if x.line >= 0 && x.line < len(c.lines) && !inventory.AllowedQty(c.lines[x.line].qty, frac[x.variantID]) {
+			f[fmt.Sprintf("returnItems[%d].quantity", x.line)] = inventory.WholeOnlyMessage
+		}
+	}
+	return f.err()
 }
 
 // needConditions: with conditions on, every line names one.
@@ -629,19 +663,20 @@ func (pol ReturnPolicy) markRestocked(rows []returnRow) {
 // returnDeltas are the stock movements of the restocked rows. A tracked
 // row moves only its units going back to sellable stock (quarantine is
 // outside inventories.qty).
-func returnDeltas(pr preparedReturn) map[inventory.Key]int {
-	d := map[inventory.Key]int{}
+func returnDeltas(pr preparedReturn) map[inventory.Key]qty.Q {
+	d := map[inventory.Key]qty.Q{}
 	for _, x := range pr.rows {
+		k := inventory.Key{Store: pr.storeID, Variant: x.variantID}
 		if x.tracked {
 			for _, b := range x.batches {
 				if b.bucket == bucketStock {
-					d[inventory.Key{Store: pr.storeID, Variant: x.variantID}] += b.qty
+					d[k] = d[k].Add(b.qty)
 				}
 			}
 			continue
 		}
 		if x.restocked {
-			d[inventory.Key{Store: pr.storeID, Variant: x.variantID}] += int(x.qty)
+			d[k] = d[k].Add(x.qty)
 		}
 	}
 	return d
@@ -657,7 +692,7 @@ type returnSettle struct {
 // writeReturn numbers and stores the return, lowers the sale's due (rule
 // A) and moves the restocked lines into stock. The caller has locked keys.
 func writeReturn(ctx context.Context, tx tenancy.TenantTx, p auth.Principal, c cleanReturn, pr preparedReturn, st returnSettle,
-	keys []inventory.Key, deltas map[inventory.Key]int) (int64, string, error) {
+	keys []inventory.Key, deltas map[inventory.Key]qty.Q) (int64, string, error) {
 	ref, err := nextReturnReference(ctx, tx)
 	if err != nil {
 		return 0, "", err

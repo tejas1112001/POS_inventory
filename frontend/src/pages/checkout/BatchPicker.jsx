@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { InlineAlert } from '@/components/feedback/InlineAlert';
 import BatchExpiry from '@/components/batches/BatchExpiry';
 import { api } from '@/services/api';
+import { addQty, fmtQty, qtyStep } from '@/lib/qty';
 
 // BatchPicker (industry P3 item 3, Q12): the cashier picks which batches a
 // line is sold from. Any cashier may; the sale line records the choice.
@@ -22,7 +23,7 @@ export default function BatchPicker({ line, storeId, onClose, onPick }) {
       .catch(setError);
   }, [line.variantId, storeId]);
 
-  const total = Object.values(qty).reduce((n, v) => n + (Number(v) || 0), 0);
+  const total = addQty(...Object.values(qty).map((v) => Number(v) || 0));
   const stockHere = (b) => b.stock.find((s) => String(s.storeId) === String(storeId))?.qty ?? 0;
 
   const save = () => {
@@ -38,7 +39,7 @@ export default function BatchPicker({ line, storeId, onClose, onPick }) {
         <DialogHeader>
           <DialogTitle>Choose batches: {line.name}</DialogTitle>
           <DialogDescription>
-            {line.quantity} in the cart. Units you do not assign here are taken earliest expiry first. Expired and recalled batches are not shown.
+            {fmtQty(line.quantity)} in the cart. Units you do not assign here are taken earliest expiry first. Expired and recalled batches are not shown.
           </DialogDescription>
         </DialogHeader>
         {error && <InlineAlert>{error.message}</InlineAlert>}
@@ -61,14 +62,14 @@ export default function BatchPicker({ line, storeId, onClose, onPick }) {
                   <td className="py-1">
                     <BatchExpiry batch={b} />
                   </td>
-                  <td className="py-1 text-right tabular-nums">{stockHere(b)}</td>
+                  <td className="py-1 text-right tabular-nums">{fmtQty(stockHere(b))}</td>
                   <td className="py-1 text-right">
                     <input
                       type="number"
                       min="0"
                       max={stockHere(b)}
-                      step="1"
-                      inputMode="numeric"
+                      step={qtyStep(line.allowFraction)}
+                      inputMode={line.allowFraction ? 'decimal' : 'numeric'}
                       aria-label={`Units from batch ${b.batchNo}`}
                       className="h-11 w-20 rounded-md border border-input bg-background px-2 text-right tabular-nums sm:h-8"
                       value={qty[b.id] ?? ''}
@@ -80,7 +81,7 @@ export default function BatchPicker({ line, storeId, onClose, onPick }) {
             </tbody>
           </table>
         )}
-        {total > line.quantity && <InlineAlert>The batches add up to {total}; the line has {line.quantity}.</InlineAlert>}
+        {total > line.quantity && <InlineAlert>The batches add up to {fmtQty(total)}; the line has {fmtQty(line.quantity)}.</InlineAlert>}
         <DialogFooter className="gap-2">
           <Button type="button" variant="outline" onClick={() => onPick([])}>
             Earliest expiry first

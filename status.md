@@ -11,12 +11,16 @@
 | M2 | Sweeps work on 3 shops at a time with per-shop time limits; nightly reconcile = one River job per shop (queue `tenant_maintenance`); checkpointed reconcile (tenant migration 00033, full check weekly, re-check before reporting) | `3fa12ae`, `df53a2e` | Done |
 | M1 | Lists out of the schemas: format checks instead of IN lists (tenant 00034/00035, platform 00016); override module keys from the registry; console reads `GET /platform/business-types` | `5c2b6ea` | Done, full suite green |
 | M4 | Purge of deleted shops `PURGE_AFTER_DAYS` (30) after finalising: files, schema, role dropped; `purged_at` tombstone + audit (platform 00017); `Storage.DeletePrefix` | `fb20852` | Done; targeted tests green |
-| H3 | Decimal quantities and units | — | Waiting on review §6 decision 2 (numeric columns vs whole base units) |
-| M3 | GST per store, invoice series per store and financial year | — | Waiting on review §6 decision 3 (multi-state and B2B in scope?) |
+| H3a | Decimal quantities: every quantity column `numeric(14,3)` (tenant 00036), `products.allowFraction`; Go `qty.Q` fixed-point type through inventory, sales, returns, exchanges, purchases, receipts, counts, adjustments, batches, reports, receipts; part units refused for whole-unit products everywhere; frontend checkout/POS/product forms take part units | (this commit) | Done, full suite green |
+| H3b | Units: `product_units` (tenant 00037), `units` on products; sale lines in another unit (`unitId`) with the unit copied on the line | (this commit) | Partly done: purchases, returns, receipts and the frontend units UI left (see REMAINING.md) |
+| H3c | Frontend units and decimal display on the remaining screens | — | Left (REMAINING.md) |
+| M3 | GSTIN and state per store (falls back to the shop's); CGST+SGST or IGST per sale from the store state and place of supply, copied on the sale; buyer and supplier GSTIN and state | — | Decided (multi-state + B2B); after H3 |
+| — | Price per store, several barcodes per variant, scale (weight/price) barcodes | — | Decided; after H3 |
 
 Notes:
 - `TestRestoreWritesToNoOtherSchema` was flaky (a backend's late statistics flush); fixed by ending idle backends before the snapshot. `TestPublicShopTenantStatusPlanAndRateLimit` failed once (rate window crossing a minute) and passed in the next full run.
-- Orphaned test containers from an interrupted run (`postgres:18.6` ×6, `versitygw`) may still be running; remove them with `docker rm -f` when convenient.
+- Orphaned test containers from an interrupted run were removed (2026-11-20).
+- `TestEveryProtectedRouteRejectsMissingAndForgedTokens` failed in long runs: the suite's Super Admin token expired. The helper now signs in again after 8 minutes (TOTP steps tracked so no code is reused).
 
 ---
 

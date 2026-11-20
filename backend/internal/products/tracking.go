@@ -13,6 +13,7 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend/internal/httpx"
 	"github.com/tejas1112001/POS_inventory/backend/internal/inventory"
 	"github.com/tejas1112001/POS_inventory/backend/internal/modules"
+	"github.com/tejas1112001/POS_inventory/backend/internal/qty"
 	"github.com/tejas1112001/POS_inventory/backend/internal/tenancy"
 )
 
@@ -22,10 +23,10 @@ import (
 // quarantine, in expired batches, and the nearest expiry still to come
 // among batches with stock.
 type BatchSummary struct {
-	Sellable      int     `json:"sellable"`
-	Unbatched     int     `json:"unbatched"`
-	Quarantined   int     `json:"quarantined"`
-	Expired       int     `json:"expired"`
+	Sellable      qty.Q   `json:"sellable"`
+	Unbatched     qty.Q   `json:"unbatched"`
+	Quarantined   qty.Q   `json:"quarantined"`
+	Expired       qty.Q   `json:"expired"`
 	NearestExpiry *string `json:"nearestExpiry"`
 }
 

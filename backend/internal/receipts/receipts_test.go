@@ -2,6 +2,7 @@ package receipts
 
 import (
 	"bytes"
+	"github.com/tejas1112001/POS_inventory/backend/internal/qty"
 	"image"
 	"image/color"
 	"image/jpeg"
@@ -47,8 +48,8 @@ func sampleView() View {
 		Reference: "POS-INV-000042", Date: "20 Oct 2026, 23:30", Cashier: "Ravi", Customer: "Kiran Patil",
 		CustomerEmail: "kiran@example.test",
 		Lines: []Line{
-			{Name: "Masala Chai 250g", Attributes: "Pack: 250g", SKU: "TEA-250", HSN: "0902", Qty: 2, UnitPrice: "₹120.50", TaxRate: "5%", TaxAmount: "₹12.05", Total: "₹253.05"},
-			{Name: "Cotton Shirt", Attributes: "Color: Blue, Size: M", SKU: "SHIRT-M", Qty: 1, UnitPrice: "₹1,499.00", Discount: "₹100.00", HasDiscount: true, TaxRate: "12%", TaxAmount: "₹167.88", Total: "₹1,566.88"},
+			{Name: "Masala Chai 250g", Attributes: "Pack: 250g", SKU: "TEA-250", HSN: "0902", Qty: qty.Int(2), UnitPrice: "₹120.50", TaxRate: "5%", TaxAmount: "₹12.05", Total: "₹253.05"},
+			{Name: "Cotton Shirt", Attributes: "Color: Blue, Size: M", SKU: "SHIRT-M", Qty: qty.Int(1), UnitPrice: "₹1,499.00", Discount: "₹100.00", HasDiscount: true, TaxRate: "12%", TaxAmount: "₹167.88", Total: "₹1,566.88"},
 		},
 		TaxRows:  []TaxRow{{Label: "CGST 2.5%", Taxable: "₹241.00", Amount: "₹6.03"}, {Label: "SGST 2.5%", Taxable: "₹241.00", Amount: "₹6.02"}},
 		Subtotal: "₹1,740.00", Discount: "₹100.00", HasDiscount: true, Tax: "₹179.93", Shipping: "₹40.00", HasShipping: true,
@@ -94,9 +95,9 @@ func TestRenderPDF(t *testing.T) {
 	h := sampleView()
 	h.BusinessName = "<script>alert(1)</script> {{.Secret}} \r\nBcc: x"
 	h.Customer = strings.Repeat("Very long customer name ", 20)
-	h.Lines = append(h.Lines, Line{Name: "क्षितिज ज्ञानेश्वर", Qty: 1, UnitPrice: "₹1.00", TaxRate: "0%", Total: "₹1.00"})
+	h.Lines = append(h.Lines, Line{Name: "क्षितिज ज्ञानेश्वर", Qty: qty.Int(1), UnitPrice: "₹1.00", TaxRate: "0%", Total: "₹1.00"})
 	for i := 0; i < 80; i++ {
-		h.Lines = append(h.Lines, Line{Name: "Item", Qty: 1, UnitPrice: "₹1.00", TaxRate: "0%", Total: "₹1.00"})
+		h.Lines = append(h.Lines, Line{Name: "Item", Qty: qty.Int(1), UnitPrice: "₹1.00", TaxRate: "0%", Total: "₹1.00"})
 	}
 	var jb bytes.Buffer
 	require.NoError(t, jpeg.Encode(&jb, image.NewRGBA(image.Rect(0, 0, 8, 8)), nil))

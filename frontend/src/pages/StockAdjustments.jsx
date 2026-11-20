@@ -318,7 +318,7 @@ function AdjustmentDialog({ stores, defaultStore, onClose, onSaved }) {
               <Button type="button" variant={form.type === 'Addition' ? 'default' : 'outline'} onClick={() => set('type')('Addition')}>
                 <Plus className="size-4" /> Add
               </Button>
-              <input type="number" min="1" step="1" className={cn(fieldCls, 'w-28')} value={form.quantity} onChange={(e) => set('quantity')(e.target.value)} aria-label="Quantity" />
+              <input type="number" min="0" step="any" inputMode="decimal" className={cn(fieldCls, 'w-28')} value={form.quantity} onChange={(e) => set('quantity')(e.target.value)} aria-label="Quantity" />
             </div>
             {fields.quantity && <p className="text-xs text-destructive">{fields.quantity}</p>}
           </Field>

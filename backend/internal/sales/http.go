@@ -25,6 +25,7 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend/internal/inventory"
 	"github.com/tejas1112001/POS_inventory/backend/internal/mailer"
 	"github.com/tejas1112001/POS_inventory/backend/internal/outbox"
+	"github.com/tejas1112001/POS_inventory/backend/internal/qty"
 	"github.com/tejas1112001/POS_inventory/backend/internal/rbac"
 	"github.com/tejas1112001/POS_inventory/backend/internal/receipts"
 	"github.com/tejas1112001/POS_inventory/backend/internal/tenancy"
@@ -300,7 +301,7 @@ const qInsertSale = `INSERT INTO sales (reference, date, status, payment_status,
 type saleExtra struct {
 	priced   *priced
 	keys     []inventory.Key
-	deltas   map[inventory.Key]int
+	deltas   map[inventory.Key]qty.Q
 	exchange *payLine
 }
 
@@ -395,9 +396,10 @@ func (a *API) insertSale(r *http.Request, tx tenancy.TenantTx, p auth.Principal,
 	}
 	keys, deltas := x.keys, x.deltas
 	if keys == nil {
-		deltas = map[inventory.Key]int{}
+		deltas = map[inventory.Key]qty.Q{}
 		for _, l := range pr.lines {
-			deltas[inventory.Key{Store: c.storeID, Variant: l.v.id}] -= int(l.qty)
+			k := inventory.Key{Store: c.storeID, Variant: l.v.id}
+			deltas[k] = deltas[k].Sub(l.qty)
 		}
 		// Lock stock first, then the counter: the counter row serialises
 		// checkouts, so it is held for the shortest time.
@@ -547,7 +549,7 @@ func lockSale(ctx context.Context, tx tenancy.TenantTx, id int64, p auth.Princip
 
 type oldItem struct {
 	variantID     *int64
-	qty           int
+	qty           qty.Q
 	unit, catalog decimal.Decimal
 }
 
@@ -654,11 +656,12 @@ func (a *API) update(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		prior := map[priorPrice]decimal.Decimal{}
-		deltas := map[inventory.Key]int{}
+		deltas := map[inventory.Key]qty.Q{}
 		for _, o := range items {
 			if o.variantID != nil {
 				prior[priorPrice{*o.variantID, o.unit.String()}] = o.catalog
-				deltas[inventory.Key{Store: old.storeID, Variant: *o.variantID}] += o.qty
+				k := inventory.Key{Store: old.storeID, Variant: *o.variantID}
+				deltas[k] = deltas[k].Add(o.qty)
 			}
 		}
 		byID, err := resolve(ctx, tx, c.lines)
@@ -673,7 +676,8 @@ func (a *API) update(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		for _, l := range pr.lines {
-			deltas[inventory.Key{Store: c.storeID, Variant: l.v.id}] -= int(l.qty)
+			k := inventory.Key{Store: c.storeID, Variant: l.v.id}
+			deltas[k] = deltas[k].Sub(l.qty)
 		}
 		if err := inventory.LockAndApply(ctx, tx, deltas, skuMap(pr), inventory.ReasonSaleEdit, inventory.Ref{Type: "sale", ID: id}, p.UserID); err != nil {
 			return err
@@ -824,10 +828,11 @@ func (a *API) void(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
-		deltas := map[inventory.Key]int{}
+		deltas := map[inventory.Key]qty.Q{}
 		for _, o := range items {
 			if o.variantID != nil {
-				deltas[inventory.Key{Store: old.storeID, Variant: *o.variantID}] += o.qty
+				k := inventory.Key{Store: old.storeID, Variant: *o.variantID}
+				deltas[k] = deltas[k].Add(o.qty)
 			}
 		}
 		// Industry P3 item 3: each unit goes back to the batch it came from.

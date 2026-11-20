@@ -24,6 +24,7 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend/internal/idempotency"
 	"github.com/tejas1112001/POS_inventory/backend/internal/inventory"
 	"github.com/tejas1112001/POS_inventory/backend/internal/money"
+	"github.com/tejas1112001/POS_inventory/backend/internal/qty"
 	"github.com/tejas1112001/POS_inventory/backend/internal/rbac"
 	"github.com/tejas1112001/POS_inventory/backend/internal/tenancy"
 )
@@ -66,7 +67,7 @@ type adjustmentIn struct {
 	ProductID money.Int `json:"productId"`
 	StoreID   money.Int `json:"storeId"`
 	Type      *string   `json:"type"`
-	Quantity  money.Int `json:"quantity"`
+	Quantity  qty.In    `json:"quantity"`
 	Reason    *string   `json:"reason"`
 	Note      *string   `json:"note"`
 }
@@ -74,7 +75,7 @@ type adjustmentIn struct {
 type clean struct {
 	variantID, productID, storeID int64
 	typ, reason, note             string
-	qty                           int
+	qty                           qty.Q
 }
 
 func validate(in adjustmentIn) (clean, error) {
@@ -95,10 +96,10 @@ func validate(in adjustmentIn) (clean, error) {
 	if c.typ != "Addition" && c.typ != "Subtraction" {
 		f["type"] = "Type must be Addition or Subtraction."
 	}
-	if !in.Quantity.Valid || in.Quantity.V <= 0 || in.Quantity.V > maxQty {
-		f["quantity"] = "Quantity must be a whole number above 0."
+	if !in.Quantity.Valid || !in.Quantity.V.IsPositive() || in.Quantity.V.Greater(qty.Int(maxQty)) {
+		f["quantity"] = "Quantity must be above 0."
 	}
-	c.qty = int(in.Quantity.V)
+	c.qty = in.Quantity.V
 	if in.Reason != nil {
 		if r := strings.TrimSpace(*in.Reason); r != "" {
 			c.reason = r
@@ -120,7 +121,7 @@ func validate(in adjustmentIn) (clean, error) {
 }
 
 const (
-	qVariant = `SELECT v.product_id, v.sku::text FROM product_variants v JOIN products p ON p.id = v.product_id
+	qVariant = `SELECT v.product_id, v.sku::text, p.allow_fraction FROM product_variants v JOIN products p ON p.id = v.product_id
 		WHERE v.id = $1 AND v.deleted_at IS NULL AND p.deleted_at IS NULL`
 	qInsert = `INSERT INTO stock_adjustments (type, quantity, reason, note, product_id, variant_id, store_id, qty_after, created_by)
 		VALUES ($1, $2, $3, NULLIF($4, ''), $5, $6, $7, $8, $9) RETURNING id`
@@ -161,7 +162,8 @@ func (a *API) create(w http.ResponseWriter, r *http.Request) {
 		f := map[string]string{}
 		var productID int64
 		var sku string
-		err := tx.QueryRow(ctx, qVariant, c.variantID).Scan(&productID, &sku)
+		var fractional bool
+		err := tx.QueryRow(ctx, qVariant, c.variantID).Scan(&productID, &sku, &fractional)
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
 			f["variantId"] = "Product variant not found."
@@ -169,6 +171,8 @@ func (a *API) create(w http.ResponseWriter, r *http.Request) {
 			return err
 		case c.productID > 0 && c.productID != productID:
 			f["variantId"] = "The variant does not belong to this product."
+		case !inventory.AllowedQty(c.qty, fractional):
+			f["quantity"] = inventory.WholeOnlyMessage
 		}
 		var storeOK bool
 		if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM stores WHERE id = $1 AND deleted_at IS NULL)`, c.storeID).Scan(&storeOK); err != nil {
@@ -183,14 +187,14 @@ func (a *API) create(w http.ResponseWriter, r *http.Request) {
 		k := inventory.Key{Store: c.storeID, Variant: c.variantID}
 		delta := c.qty
 		if c.typ == "Subtraction" {
-			delta = -c.qty
+			delta = c.qty.Neg()
 		}
-		deltas := map[inventory.Key]int{k: delta}
+		deltas := map[inventory.Key]qty.Q{k: delta}
 		keys, have, err := inventory.Lock(ctx, tx, deltas, map[int64]string{c.variantID: sku})
 		if err != nil {
 			return err
 		}
-		after := have[k] + delta
+		after := have[k].Add(delta)
 		var id int64
 		if err := tx.QueryRow(ctx, qInsert, c.typ, c.qty, c.reason, c.note, productID, c.variantID, c.storeID, after, p.UserID).Scan(&id); err != nil {
 			return err
@@ -249,13 +253,13 @@ type VariantRef struct {
 type AdjustmentJSON struct {
 	ID        int64      `json:"id"`
 	Type      string     `json:"type"`
-	Quantity  int        `json:"quantity"`
+	Quantity  qty.Q      `json:"quantity"`
 	Reason    string     `json:"reason"`
 	Note      *string    `json:"note"`
 	ProductID int64      `json:"product_id"`
 	VariantID int64      `json:"variant_id"`
 	StoreID   int64      `json:"store_id"`
-	QtyAfter  int        `json:"qtyAfter"`
+	QtyAfter  qty.Q      `json:"qtyAfter"`
 	CreatedBy int64      `json:"created_by"`
 	CreatedAt time.Time  `json:"createdAt"`
 	UpdatedAt time.Time  `json:"updatedAt"`

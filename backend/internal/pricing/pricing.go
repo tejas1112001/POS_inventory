@@ -11,6 +11,7 @@ import (
 	"github.com/shopspring/decimal"
 
 	"github.com/tejas1112001/POS_inventory/backend/internal/money"
+	"github.com/tejas1112001/POS_inventory/backend/internal/qty"
 )
 
 // GST split modes (settings.tax_split).
@@ -30,7 +31,7 @@ var (
 // Line is one cart line.
 type Line struct {
 	UnitPrice decimal.Decimal
-	Qty       int64
+	Qty       qty.Q
 	TaxRate   decimal.Decimal // percent, e.g. 18 for 18 %
 	Inclusive bool            // the unit price already contains the tax
 }
@@ -66,13 +67,13 @@ func Compute(lines []Line, cartDiscount, shipping decimal.Decimal, s Settings) (
 	q := Quote{Lines: make([]LineQuote, len(lines))}
 	gross := make([]decimal.Decimal, len(lines))
 	for i, l := range lines {
-		if l.Qty <= 0 {
+		if !l.Qty.IsPositive() {
 			return Quote{}, ErrQuantity
 		}
 		if l.UnitPrice.IsNegative() || l.TaxRate.IsNegative() {
 			return Quote{}, ErrNegative
 		}
-		gross[i] = l.UnitPrice.Mul(decimal.NewFromInt(l.Qty)).Round(exp)
+		gross[i] = l.UnitPrice.Mul(l.Qty.Decimal()).Round(exp)
 		q.Subtotal = q.Subtotal.Add(gross[i])
 	}
 	disc := cartDiscount.Round(exp)

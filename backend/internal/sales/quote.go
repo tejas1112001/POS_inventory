@@ -8,6 +8,7 @@ import (
 
 	"github.com/tejas1112001/POS_inventory/backend/internal/apperr"
 	"github.com/tejas1112001/POS_inventory/backend/internal/httpx"
+	"github.com/tejas1112001/POS_inventory/backend/internal/qty"
 	"github.com/tejas1112001/POS_inventory/backend/internal/tenancy"
 )
 
@@ -17,7 +18,7 @@ type quoteLine struct {
 	ProductID int64            `json:"productId"`
 	VariantID int64            `json:"variantId"`
 	SKU       string           `json:"sku"`
-	Quantity  int64            `json:"quantity"`
+	Quantity  qty.Q            `json:"quantity"`
 	UnitPrice decimal.Decimal  `json:"unitPrice"`
 	Discount  decimal.Decimal  `json:"discount"` // share of the cart discount
 	TaxRate   decimal.Decimal  `json:"taxRate"`
@@ -26,7 +27,7 @@ type quoteLine struct {
 	CGST      *decimal.Decimal `json:"cgst"`
 	SGST      *decimal.Decimal `json:"sgst"`
 	IGST      *decimal.Decimal `json:"igst"`
-	Available int64            `json:"available"` // units in stock at the store now
+	Available qty.Q            `json:"available"` // units in stock at the store now
 	// Industry P3 item 3 (A27): the batches the sale would take now, and
 	// the line's warnings. Empty for untracked products.
 	Batches  []ItemBatchJSON `json:"batches"`
@@ -100,14 +101,15 @@ func (a *API) quote(w http.ResponseWriter, r *http.Request) {
 		for _, l := range pr.lines {
 			ids = append(ids, l.v.id)
 		}
-		stock := map[int64]int64{}
+		stock := map[int64]qty.Q{}
 		rows, err := tx.Query(ctx, qQuoteStock, c.storeID, ids)
 		if err != nil {
 			return err
 		}
 		defer rows.Close()
 		for rows.Next() {
-			var id, n int64
+			var id int64
+			var n qty.Q
 			if err := rows.Scan(&id, &n); err != nil {
 				return err
 			}

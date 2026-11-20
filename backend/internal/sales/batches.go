@@ -9,6 +9,7 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend/internal/batches"
 	"github.com/tejas1112001/POS_inventory/backend/internal/inventory"
 	"github.com/tejas1112001/POS_inventory/backend/internal/modules"
+	"github.com/tejas1112001/POS_inventory/backend/internal/qty"
 	"github.com/tejas1112001/POS_inventory/backend/internal/tenancy"
 )
 
@@ -50,7 +51,7 @@ func allocateBatches(ctx context.Context, tx tenancy.TenantTx, store int64, pr p
 			}
 			continue
 		}
-		wants = append(wants, batches.Want{Index: i, Variant: l.v.id, SKU: l.v.sku, Qty: int(l.qty), Picks: l.picks})
+		wants = append(wants, batches.Want{Index: i, Variant: l.v.id, SKU: l.v.sku, Qty: l.qty, Picks: l.picks})
 	}
 	if len(wants) == 0 {
 		return out, nil
@@ -90,7 +91,7 @@ func insertSoldBatches(ctx context.Context, tx tenancy.TenantTx, itemIDs []int64
 		merged := map[int64]*row{}
 		for _, s := range sold {
 			if r, ok := merged[s.BatchID]; ok {
-				r.s.Qty += s.Qty
+				r.s.Qty = r.s.Qty.Add(s.Qty)
 				r.chosen = r.chosen || s.Chosen
 				continue
 			}
@@ -173,7 +174,7 @@ func voidBatches(ctx context.Context, tx tenancy.TenantTx, saleID, storeID int64
 	}
 	type rec struct {
 		variant, batch int64
-		qty            int
+		qty            qty.Q
 	}
 	var recs []rec
 	var ids []int64

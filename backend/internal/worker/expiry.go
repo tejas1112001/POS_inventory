@@ -5,11 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strconv"
 	"time"
 
 	"github.com/tejas1112001/POS_inventory/backend/internal/mailtmpl"
 	"github.com/tejas1112001/POS_inventory/backend/internal/outbox"
+	"github.com/tejas1112001/POS_inventory/backend/internal/qty"
 	"github.com/tejas1112001/POS_inventory/backend/internal/reports"
 	"github.com/tejas1112001/POS_inventory/backend/internal/tenancy"
 )
@@ -28,10 +28,10 @@ const (
 type expiryData struct {
 	Date        string                `json:"date"`
 	WindowDays  int                   `json:"windowDays"`
-	Expired     int                   `json:"expired"`
-	Expiring    int                   `json:"expiring"`
-	Quarantined int                   `json:"quarantined"`
-	Recalled    int                   `json:"recalled"`
+	Expired     qty.Q                 `json:"expired"`
+	Expiring    qty.Q                 `json:"expiring"`
+	Quarantined qty.Q                 `json:"quarantined"`
+	Recalled    qty.Q                 `json:"recalled"`
 	Count       int                   `json:"count"`
 	Items       []mailtmpl.ExpiryItem `json:"items"`
 }
@@ -93,7 +93,7 @@ func expiryDigestFor(ctx context.Context, tx tenancy.TenantTx, now time.Time) (i
 			exp = *x.Expiry
 		}
 		d.Items = append(d.Items, mailtmpl.ExpiryItem{Section: x.Section, Name: x.ProductName, Batch: batch, Expiry: exp,
-			Store: x.StoreName, Qty: strconv.Itoa(x.Quantity)})
+			Store: x.StoreName, Qty: x.Quantity.String()})
 	}
 	data := map[string]any{}
 	b, _ := json.Marshal(d)
@@ -144,7 +144,7 @@ func (m *Mailer) buildExpiryDigest(st *tenantState, r row, c *content) error {
 	}
 	var err error
 	c.rendered, err = mailtmpl.RenderExpiryDigest(mailtmpl.ExpiryDigest{BusinessName: st.biz.Name, Name: c.to.Name, Date: d.Date,
-		Link: m.tenantURL(st.t) + "/reports/expiry", Expired: d.Expired, Expiring: d.Expiring, Quarantined: d.Quarantined,
-		Recalled: d.Recalled, WindowDays: d.WindowDays, Count: d.Count, Items: d.Items})
+		Link: m.tenantURL(st.t) + "/reports/expiry", Expired: d.Expired.String(), Expiring: d.Expiring.String(), Quarantined: d.Quarantined.String(),
+		Recalled: d.Recalled.String(), WindowDays: d.WindowDays, Count: d.Count, Items: d.Items})
 	return err
 }

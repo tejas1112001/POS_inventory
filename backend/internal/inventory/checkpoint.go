@@ -45,7 +45,7 @@ const (
 const (
 	qMarks = `SELECT ledger, last_movement_id, taken_at FROM ledger_checkpoint_marks`
 
-	qStockSince = `SELECT coalesce(i.store_id, x.store_id), coalesce(i.variant_id, x.item_id), coalesce(i.qty, 0), coalesce(x.total, 0)::int
+	qStockSince = `SELECT coalesce(i.store_id, x.store_id), coalesce(i.variant_id, x.item_id), coalesce(i.qty, 0), coalesce(x.total, 0)
 		FROM inventories i
 		FULL JOIN (SELECT store_id, item_id, sum(total) AS total FROM (
 				SELECT store_id, item_id, qty AS total FROM ledger_checkpoints WHERE ledger = 'stock'
@@ -61,11 +61,11 @@ const (
 		FROM inventories i
 		JOIN product_variants v ON v.id = i.variant_id
 		JOIN products p ON p.id = v.product_id AND p.tracks_batches
-		LEFT JOIN (SELECT s.store_id, b.variant_id, sum(s.qty)::int AS total FROM batch_stock s JOIN batches b ON b.id = s.batch_id
+		LEFT JOIN (SELECT s.store_id, b.variant_id, sum(s.qty) AS total FROM batch_stock s JOIN batches b ON b.id = s.batch_id
 		           GROUP BY s.store_id, b.variant_id) bs ON bs.store_id = i.store_id AND bs.variant_id = i.variant_id
 		WHERE EXISTS (SELECT 1 FROM settings WHERE id = 1 AND 'batch_expiry' = ANY(modules)) AND i.qty <> coalesce(bs.total, 0)
 		UNION ALL
-		SELECT s.store_id, b.variant_id, s.qty, coalesce(x.total, 0)::int, 'batch_ledger', s.batch_id
+		SELECT s.store_id, b.variant_id, s.qty, coalesce(x.total, 0), 'batch_ledger', s.batch_id
 		FROM batch_stock s JOIN batches b ON b.id = s.batch_id
 		LEFT JOIN (SELECT store_id, item_id, sum(total) AS total FROM (
 				SELECT store_id, item_id, qty AS total FROM ledger_checkpoints WHERE ledger = 'batch_stock'
@@ -74,7 +74,7 @@ const (
 			) u GROUP BY store_id, item_id) x ON x.store_id = s.store_id AND x.item_id = s.batch_id
 		WHERE s.qty <> coalesce(x.total, 0)
 		UNION ALL
-		SELECT s.store_id, b.variant_id, s.quarantined_qty, coalesce(x.total, 0)::int, 'batch_quarantine', s.batch_id
+		SELECT s.store_id, b.variant_id, s.quarantined_qty, coalesce(x.total, 0), 'batch_quarantine', s.batch_id
 		FROM batch_stock s JOIN batches b ON b.id = s.batch_id
 		LEFT JOIN (SELECT store_id, item_id, sum(total) AS total FROM (
 				SELECT store_id, item_id, qty AS total FROM ledger_checkpoints WHERE ledger = 'batch_quarantine'
@@ -85,10 +85,10 @@ const (
 
 	// Whole-ledger re-checks of one key, stock and sum in one snapshot.
 	qRecheckStock = `SELECT coalesce((SELECT qty FROM inventories WHERE store_id = $1 AND variant_id = $2), 0),
-		coalesce((SELECT sum(delta) FROM stock_movements WHERE store_id = $1 AND variant_id = $2), 0)::int`
+		coalesce((SELECT sum(delta) FROM stock_movements WHERE store_id = $1 AND variant_id = $2), 0)`
 	qRecheckBatch = `SELECT coalesce((SELECT CASE WHEN $3 = 'quarantine' THEN quarantined_qty ELSE qty END
 			FROM batch_stock WHERE store_id = $1 AND batch_id = $2), 0),
-		coalesce((SELECT sum(delta) FROM batch_movements WHERE store_id = $1 AND batch_id = $2 AND bucket = $3), 0)::int`
+		coalesce((SELECT sum(delta) FROM batch_movements WHERE store_id = $1 AND batch_id = $2 AND bucket = $3), 0)`
 
 	qStockHigh = `SELECT coalesce(max(id), 0) FROM stock_movements WHERE created_at < now() - make_interval(secs => $1)`
 	qBatchHigh = `SELECT coalesce(max(id), 0) FROM batch_movements WHERE created_at < now() - make_interval(secs => $1)`

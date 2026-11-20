@@ -215,7 +215,7 @@ export default function ReceiveGoodsDialog({ purchase, onClose, onDone }) {
                               <input
                                 type="number"
                                 min="0"
-                                step="1"
+                                step="any"
                                 inputMode="numeric"
                                 className={`${smallCls} text-right tabular-nums`}
                                 aria-label={`Quantity ${j + 1}: ${i.product_name}`}
@@ -252,7 +252,7 @@ export default function ReceiveGoodsDialog({ purchase, onClose, onDone }) {
                         type="number"
                         min="0"
                         max={outstanding(i)}
-                        step="1"
+                        step="any"
                         inputMode="numeric"
                         aria-label={`Arrived now: ${i.product_name}`}
                         className={inputCls}

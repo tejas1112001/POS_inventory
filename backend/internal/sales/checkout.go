@@ -15,8 +15,10 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend/internal/apperr"
 	"github.com/tejas1112001/POS_inventory/backend/internal/auth"
 	"github.com/tejas1112001/POS_inventory/backend/internal/batches"
+	"github.com/tejas1112001/POS_inventory/backend/internal/inventory"
 	"github.com/tejas1112001/POS_inventory/backend/internal/money"
 	"github.com/tejas1112001/POS_inventory/backend/internal/pricing"
+	"github.com/tejas1112001/POS_inventory/backend/internal/qty"
 	"github.com/tejas1112001/POS_inventory/backend/internal/tenancy"
 )
 
@@ -31,9 +33,12 @@ const (
 type itemIn struct {
 	ProductID money.Int `json:"productId"`
 	VariantID money.Int `json:"variantId"`
-	Quantity  money.Int `json:"quantity"`
+	Quantity  qty.In    `json:"quantity"`
 	UnitPrice money.Dec `json:"unitPrice"`
 	Discount  money.Dec `json:"discount"`
+	// UnitID sells the line in another of the product's units (H3): the
+	// quantity is in that unit, the unit price stays per base unit.
+	UnitID money.Int `json:"unitId"`
 	// Batches the cashier chose (industry P3 item 3, A27, Q12); the rest
 	// of the line is filled earliest expiry first.
 	Batches []batchPickIn `json:"batches"`
@@ -90,7 +95,9 @@ type saleIn struct {
 
 type line struct {
 	productID, variantID int64 // variantID 0: the product's only variant
-	qty                  int64
+	qty                  qty.Q // in base units (converted from unit when set)
+	unitID               int64
+	unit                 *lineUnit
 	price                decimal.Decimal
 	priceSet             bool
 	picks                []batches.Pick // industry P3 item 3
@@ -99,7 +106,7 @@ type line struct {
 // batchPickIn is a batch the cashier chose for a line (A27).
 type batchPickIn struct {
 	BatchID  money.Int `json:"batchId"`
-	Quantity money.Int `json:"quantity"`
+	Quantity qty.In    `json:"quantity"`
 }
 
 // maxPicks bounds the batches named on one line.
@@ -160,9 +167,12 @@ func validate(in saleIn) (cleanSale, error) {
 	}
 	for i, it := range in.OrderItems {
 		k := fmt.Sprintf("orderItems[%d]", i)
-		l := line{productID: it.ProductID.V, variantID: it.VariantID.V, qty: it.Quantity.V}
-		if !it.Quantity.Valid || it.Quantity.V <= 0 || it.Quantity.V > maxQty {
-			f[k+".quantity"] = "Quantity must be a whole number above 0."
+		l := line{productID: it.ProductID.V, variantID: it.VariantID.V, qty: it.Quantity.V, unitID: it.UnitID.V}
+		if it.UnitID.Valid && it.UnitID.V <= 0 {
+			f[k+".unitId"] = "unitId is invalid."
+		}
+		if !it.Quantity.Valid || !it.Quantity.V.IsPositive() || it.Quantity.V.Greater(qty.Int(maxQty)) {
+			f[k+".quantity"] = "Quantity must be above 0."
 		}
 		if (!it.VariantID.Valid || it.VariantID.V <= 0) && (!it.ProductID.Valid || it.ProductID.V <= 0) {
 			f[k+".variantId"] = "variantId is required."
@@ -184,10 +194,10 @@ func validate(in saleIn) (cleanSale, error) {
 			if !b.BatchID.Valid || b.BatchID.V <= 0 {
 				f[bk+".batchId"] = "batchId is required."
 			}
-			if !b.Quantity.Valid || b.Quantity.V <= 0 || b.Quantity.V > maxQty {
-				f[bk+".quantity"] = "Quantity must be a whole number above 0."
+			if !b.Quantity.Valid || !b.Quantity.V.IsPositive() || b.Quantity.V.Greater(qty.Int(maxQty)) {
+				f[bk+".quantity"] = "Quantity must be above 0."
 			}
-			l.picks = append(l.picks, batches.Pick{BatchID: b.BatchID.V, Qty: int(b.Quantity.V)})
+			l.picks = append(l.picks, batches.Pick{BatchID: b.BatchID.V, Qty: b.Quantity.V})
 		}
 		c.lines = append(c.lines, l)
 	}
@@ -288,13 +298,14 @@ type variantRow struct {
 	taxType       *string
 	taxRate       *decimal.Decimal
 	mrp           *decimal.Decimal // the variant's MRP; a batch's MRP wins (lineMRP)
+	fractional    bool             // H3: sold in part units
 }
 
 const (
 	qSingleVariant = `SELECT p.id, min(v.id), count(v.id) FROM products p
 		LEFT JOIN product_variants v ON v.product_id = p.id AND v.deleted_at IS NULL
 		WHERE p.id = ANY($1) AND p.deleted_at IS NULL GROUP BY p.id`
-	qVariants = `SELECT v.id, v.product_id, v.sku::text, v.price, p.name, p.status, p.tax_type, p.tax_rate, v.mrp
+	qVariants = `SELECT v.id, v.product_id, v.sku::text, v.price, p.name, p.status, p.tax_type, p.tax_rate, v.mrp, p.allow_fraction
 		FROM product_variants v JOIN products p ON p.id = v.product_id
 		WHERE v.id = ANY($1) AND v.deleted_at IS NULL AND p.deleted_at IS NULL`
 )
@@ -358,7 +369,7 @@ func resolve(ctx context.Context, tx tenancy.TenantTx, lines []line) (map[int64]
 	byID := map[int64]variantRow{}
 	for rows.Next() {
 		var v variantRow
-		if err := rows.Scan(&v.id, &v.productID, &v.sku, &v.price, &v.productName, &v.status, &v.taxType, &v.taxRate, &v.mrp); err != nil {
+		if err := rows.Scan(&v.id, &v.productID, &v.sku, &v.price, &v.productName, &v.status, &v.taxType, &v.taxRate, &v.mrp, &v.fractional); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -368,12 +379,31 @@ func resolve(ctx context.Context, tx tenancy.TenantTx, lines []line) (map[int64]
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	for i, l := range lines {
+	units, err := saleUnits(ctx, tx, lines, byID)
+	if err != nil {
+		return nil, err
+	}
+	for i := range lines {
+		l := &lines[i]
 		if l.variantID <= 0 {
 			continue
 		}
 		k := fmt.Sprintf("orderItems[%d]", i)
 		v, ok := byID[l.variantID]
+		if ok && l.unitID > 0 {
+			u, found := units[unitKey{v.productID, l.unitID}]
+			if !found {
+				f[k+".unitId"] = "This product is not sold in that unit."
+				continue
+			}
+			base, err := l.qty.Times(u.factor)
+			if err != nil {
+				f[k+".quantity"] = "That quantity of this unit is not a whole thousandth of the base unit."
+				continue
+			}
+			u.qty, l.qty = l.qty, base
+			l.unit = &u
+		}
 		switch {
 		case !ok:
 			f[k+".variantId"] = "Product variant not found."
@@ -381,6 +411,14 @@ func resolve(ctx context.Context, tx tenancy.TenantTx, lines []line) (map[int64]
 			f[k+".variantId"] = "The variant does not belong to this product."
 		case v.status != "Active":
 			f[k+".productId"] = fmt.Sprintf("%s is inactive and cannot be sold.", v.productName)
+		case !inventory.AllowedQty(l.qty, v.fractional):
+			f[k+".quantity"] = inventory.WholeOnlyMessage
+		default:
+			for j, pk := range l.picks {
+				if !inventory.AllowedQty(pk.Qty, v.fractional) {
+					f[fmt.Sprintf("%s.batches[%d].quantity", k, j)] = inventory.WholeOnlyMessage
+				}
+			}
 		}
 	}
 	return byID, f.err()
@@ -566,8 +604,9 @@ func nextReference(ctx context.Context, tx tenancy.TenantTx, prefix string) (str
 // Black": attributes.Label in SQL) when the product has variant
 // dimensions (industry P1 item 4, DB8); NULL otherwise.
 const qInsertItem = `INSERT INTO order_items (sale_id, product_id, variant_id, product_name, sku, quantity, unit_price,
-		catalog_price, discount, tax_type, tax_rate, tax_amount, cgst, sgst, igst, subtotal, mrp, mrp_amount, hsn_code, variant_label)
-	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18,
+		catalog_price, discount, tax_type, tax_rate, tax_amount, cgst, sgst, igst, subtotal, mrp, mrp_amount, unit_name, unit_factor, unit_qty,
+		hsn_code, variant_label)
+	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21,
 		(SELECT hsn_code FROM products WHERE id = $2),
 		(SELECT string_agg(CASE WHEN d.k = 'size' AND coalesce(p.attributes ->> 'size_system', '') <> ''
 		          THEN (p.attributes ->> 'size_system') || ' ' ELSE '' END || (v.attributes ->> d.k), ' / ' ORDER BY d.ord)
@@ -583,8 +622,9 @@ func insertItems(ctx context.Context, tx tenancy.TenantTx, saleID int64, p price
 	b := &pgx.Batch{}
 	for i, l := range p.lines {
 		unitMRP, mrpAmount := lineMRP(l, sb.sold[i])
+		un, uf, uq := l.line.unit.columns()
 		b.Queue(qInsertItem, saleID, l.v.productID, l.v.id, l.v.productName, l.v.sku, l.qty, l.unit,
-			l.catalog, l.q.Discount, l.taxType, l.taxRate, l.q.Tax, l.q.CGST, l.q.SGST, l.q.IGST, l.q.Total, unitMRP, mrpAmount)
+			l.catalog, l.q.Discount, l.taxType, l.taxRate, l.q.Tax, l.q.CGST, l.q.SGST, l.q.IGST, l.q.Total, unitMRP, mrpAmount, un, uf, uq)
 	}
 	br := tx.SendBatch(ctx, b)
 	ids := make([]int64, len(p.lines))
@@ -606,7 +646,7 @@ func lineMRP(l pricedLine, sold []batches.Sold) (unit, amount *decimal.Decimal) 
 		if l.v.mrp == nil {
 			return nil, nil
 		}
-		a := l.v.mrp.Mul(decimal.NewFromInt(l.qty))
+		a := l.v.mrp.Mul(l.qty.Decimal())
 		return l.v.mrp, &a
 	}
 	total := decimal.Zero
@@ -624,7 +664,7 @@ func lineMRP(l pricedLine, sold []batches.Sold) (unit, amount *decimal.Decimal) 
 		} else if !unit.Equal(*m) {
 			same = false
 		}
-		total = total.Add(m.Mul(decimal.NewFromInt(int64(s.Qty))))
+		total = total.Add(m.Mul(s.Qty.Decimal()))
 	}
 	if !same {
 		unit = nil

@@ -12,6 +12,7 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend/internal/batches"
 	"github.com/tejas1112001/POS_inventory/backend/internal/inventory"
 	"github.com/tejas1112001/POS_inventory/backend/internal/modules"
+	"github.com/tejas1112001/POS_inventory/backend/internal/qty"
 	"github.com/tejas1112001/POS_inventory/backend/internal/tenancy"
 )
 
@@ -30,14 +31,14 @@ const (
 // rowBatch is where some units of a return row go.
 type rowBatch struct {
 	batchID int64
-	qty     int
+	qty     qty.Q
 	bucket  string
 }
 
 // retBatch is a batch a row can go back to.
 type retBatch struct {
 	id      int64
-	left    int // sold from it and not yet returned
+	left    qty.Q // sold from it and not yet returned
 	expiry  *time.Time
 	unknown bool
 	status  string
@@ -51,7 +52,7 @@ const (
 	// Latest expiry first (the reverse of the order they were sold in), so
 	// the unknown batch, sold last, comes back first.
 	qReturnSoldBatches = `SELECT ob.batch_id, ob.quantity - coalesce((SELECT sum(rb.quantity) FROM return_item_batches rb
-			JOIN return_items ri ON ri.id = rb.return_item_id WHERE ri.order_item_id = ob.order_item_id AND rb.batch_id = ob.batch_id), 0)::int,
+			JOIN return_items ri ON ri.id = rb.return_item_id WHERE ri.order_item_id = ob.order_item_id AND rb.batch_id = ob.batch_id), 0),
 			b.expiry_date, b.is_unknown, b.status
 		FROM order_item_batches ob JOIN batches b ON b.id = ob.batch_id
 		WHERE ob.order_item_id = $1
@@ -122,20 +123,20 @@ func planReturnBatches(ctx context.Context, tx tenancy.TenantTx, pol ReturnPolic
 			continue
 		}
 		good := pol.restocks(x.condition) && (pol.Conditions || x.condition == condResellable)
-		add := func(b retBatch, n int) {
+		add := func(b retBatch, n qty.Q) {
 			bucket := bucketQuarantine
 			if good && b.sellable(st) {
 				bucket = bucketStock
 			}
 			for i := range x.batches {
 				if x.batches[i].batchID == b.id && x.batches[i].bucket == bucket {
-					x.batches[i].qty += n
+					x.batches[i].qty = x.batches[i].qty.Add(n)
 					return
 				}
 			}
 			x.batches = append(x.batches, rowBatch{batchID: b.id, qty: n, bucket: bucket})
 		}
-		left := int(x.qty)
+		left := x.qty
 		switch {
 		case x.orderItemID != nil:
 			list, ok := sold[*x.orderItemID]
@@ -146,15 +147,15 @@ func planReturnBatches(ctx context.Context, tx tenancy.TenantTx, pol ReturnPolic
 				sold[*x.orderItemID] = list
 			}
 			for _, b := range list {
-				take := min(left, b.left)
-				if take <= 0 {
+				take := qty.Min(left, b.left)
+				if !take.IsPositive() {
 					continue
 				}
-				b.left -= take
-				left -= take
+				b.left = b.left.Sub(take)
+				left = left.Sub(take)
 				add(*b, take)
 			}
-			if left > 0 { // sold before tracking began: the unknown batch
+			if left.IsPositive() { // sold before tracking began: the unknown batch
 				id, err := inventory.UnknownBatch(ctx, tx, x.variantID, userID)
 				if err != nil {
 					return err
@@ -238,14 +239,14 @@ func quarantineKeys(pr preparedReturn) []inventory.Key {
 
 // returnLocks is what a return locks: its stock deltas, and the rows of
 // quarantined units (a positive placeholder locks without a check).
-func returnLocks(pr preparedReturn, deltas map[inventory.Key]int) map[inventory.Key]int {
-	out := make(map[inventory.Key]int, len(deltas))
+func returnLocks(pr preparedReturn, deltas map[inventory.Key]qty.Q) map[inventory.Key]qty.Q {
+	out := make(map[inventory.Key]qty.Q, len(deltas))
 	for k, d := range deltas {
 		out[k] = d
 	}
 	for _, k := range quarantineKeys(pr) {
-		if out[k] == 0 {
-			out[k] = 1
+		if out[k].IsZero() {
+			out[k] = qty.Int(1)
 		}
 	}
 	return out
@@ -264,11 +265,11 @@ func writeReturnBatches(ctx context.Context, tx tenancy.TenantTx, itemID int64, 
 // quarantineReturned puts the quarantined units in their batches, in batch
 // order. Their stock rows are already locked.
 func quarantineReturned(ctx context.Context, tx tenancy.TenantTx, pr preparedReturn, ref inventory.Ref, userID int64) error {
-	n := map[int64]int{}
+	n := map[int64]qty.Q{}
 	for _, x := range pr.rows {
 		for _, b := range x.batches {
 			if b.bucket == bucketQuarantine {
-				n[b.batchID] += b.qty
+				n[b.batchID] = n[b.batchID].Add(b.qty)
 			}
 		}
 	}

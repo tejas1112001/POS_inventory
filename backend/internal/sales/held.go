@@ -14,6 +14,7 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend/internal/audit"
 	"github.com/tejas1112001/POS_inventory/backend/internal/httpx"
 	"github.com/tejas1112001/POS_inventory/backend/internal/money"
+	"github.com/tejas1112001/POS_inventory/backend/internal/qty"
 	"github.com/tejas1112001/POS_inventory/backend/internal/tenancy"
 )
 
@@ -29,7 +30,7 @@ const MaxHeldPerUser = 20
 type HeldLine struct {
 	ProductID int64            `json:"productId"`
 	VariantID int64            `json:"variantId"`
-	Quantity  int64            `json:"quantity"`
+	Quantity  qty.Q            `json:"quantity"`
 	UnitPrice *decimal.Decimal `json:"unitPrice"`
 	Name      string           `json:"name"`
 	Label     string           `json:"label"`
@@ -46,7 +47,7 @@ type HeldCart struct {
 	Label        *string         `json:"label"`
 	Lines        []HeldLine      `json:"lines"`
 	Discount     decimal.Decimal `json:"discount"`
-	Items        int64           `json:"items"`    // units in the cart
+	Items        qty.Q           `json:"items"`    // units in the cart
 	Estimate     decimal.Decimal `json:"estimate"` // at the held prices, before tax: the checkout re-prices
 	CreatedAt    time.Time       `json:"createdAt"`
 	ExpiresAt    time.Time       `json:"expiresAt"`
@@ -71,9 +72,9 @@ func scanHeld(row interface{ Scan(...any) error }) (HeldCart, error) {
 		return h, err
 	}
 	for _, l := range h.Lines {
-		h.Items += l.Quantity
+		h.Items = h.Items.Add(l.Quantity)
 		if l.UnitPrice != nil {
-			h.Estimate = h.Estimate.Add(l.UnitPrice.Mul(decimal.NewFromInt(l.Quantity)))
+			h.Estimate = h.Estimate.Add(l.UnitPrice.Mul(l.Quantity.Decimal()))
 		}
 	}
 	h.Estimate = decimal.Max(h.Estimate.Sub(h.Discount), decimal.Zero)
@@ -114,7 +115,7 @@ func (a *API) listHeld(w http.ResponseWriter, r *http.Request) {
 type heldLineIn struct {
 	ProductID money.Int `json:"productId"`
 	VariantID money.Int `json:"variantId"`
-	Quantity  money.Int `json:"quantity"`
+	Quantity  qty.In    `json:"quantity"`
 	UnitPrice money.Dec `json:"unitPrice"`
 	Name      string    `json:"name"`
 	Label     string    `json:"label"`
@@ -163,8 +164,8 @@ func (a *API) hold(w http.ResponseWriter, r *http.Request) {
 		if !l.VariantID.Valid || l.VariantID.V <= 0 || !l.ProductID.Valid || l.ProductID.V <= 0 {
 			f[fmt.Sprintf("lines[%d].variantId", i)] = "productId and variantId are required."
 		}
-		if !l.Quantity.Valid || l.Quantity.V <= 0 || l.Quantity.V > maxQty {
-			f[fmt.Sprintf("lines[%d].quantity", i)] = "Quantity must be a whole number above 0."
+		if !l.Quantity.Valid || !l.Quantity.V.IsPositive() || l.Quantity.V.Greater(qty.Int(maxQty)) {
+			f[fmt.Sprintf("lines[%d].quantity", i)] = "Quantity must be above 0."
 		}
 		h := HeldLine{ProductID: l.ProductID.V, VariantID: l.VariantID.V, Quantity: l.Quantity.V, Name: clip(l.Name, 160), Label: clip(l.Label, 120)}
 		if l.UnitPrice.Valid {

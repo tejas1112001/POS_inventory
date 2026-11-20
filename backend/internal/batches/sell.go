@@ -10,6 +10,7 @@ import (
 	"github.com/shopspring/decimal"
 
 	"github.com/tejas1112001/POS_inventory/backend/internal/apperr"
+	"github.com/tejas1112001/POS_inventory/backend/internal/qty"
 	"github.com/tejas1112001/POS_inventory/backend/internal/tenancy"
 )
 
@@ -22,7 +23,7 @@ import (
 // Pick is a batch the cashier chose for a line.
 type Pick struct {
 	BatchID int64
-	Qty     int
+	Qty     qty.Q
 }
 
 // Want is one tracked sale line to fill.
@@ -30,7 +31,7 @@ type Want struct {
 	Index   int // the line's index in the sale
 	Variant int64
 	SKU     string
-	Qty     int
+	Qty     qty.Q
 	Picks   []Pick
 }
 
@@ -41,7 +42,7 @@ type Sold struct {
 	BatchNo string
 	Expiry  *time.Time
 	MRP     *decimal.Decimal
-	Qty     int
+	Qty     qty.Q
 	Chosen  bool
 	Unknown bool
 }
@@ -51,7 +52,7 @@ type Warning struct {
 	Index    int    `json:"index"`
 	Variant  int64  `json:"variantId"`
 	SKU      string `json:"sku"`
-	Quantity int    `json:"quantity"`
+	Quantity qty.Q  `json:"quantity"`
 	Message  string `json:"message"`
 }
 
@@ -66,7 +67,7 @@ type sellRow struct {
 	mrp     *decimal.Decimal
 	unknown bool
 	status  string
-	qty     int // left to sell in this request
+	qty     qty.Q // left to sell in this request
 }
 
 const (
@@ -122,7 +123,7 @@ type Unsellable struct {
 	BatchID  int64   `json:"batchId"`
 	BatchNo  string  `json:"batchNo"`
 	Expiry   *string `json:"expiry"`
-	Quantity int     `json:"quantity"`
+	Quantity qty.Q   `json:"quantity"`
 	Reason   string  `json:"reason"`
 }
 
@@ -182,23 +183,23 @@ func Allocate(ctx context.Context, tx tenancy.TenantTx, st Settings, store int64
 					WithDetails(map[string]any{"index": w.Index, "variantId": w.Variant, "batchId": r.id, "batchNo": r.no,
 						"expiry": day(r.expiry), "reason": why})
 			}
-			if p.Qty > r.qty {
-				return nil, nil, apperr.Conflict(apperr.CodeInsufficientStock, fmt.Sprintf("Batch %s of %s has %d left; %d asked.", r.no, w.SKU, r.qty, p.Qty)).
+			if p.Qty.Greater(r.qty) {
+				return nil, nil, apperr.Conflict(apperr.CodeInsufficientStock, fmt.Sprintf("Batch %s of %s has %s left; %s asked.", r.no, w.SKU, r.qty, p.Qty)).
 					WithDetails(map[string]any{"index": w.Index, "variantId": w.Variant, "batchId": r.id, "available": r.qty, "requested": p.Qty})
 			}
-			if p.Qty > rest {
+			if p.Qty.Greater(rest) {
 				return nil, nil, apperr.Invalid(fmt.Sprintf("orderItems[%d].batches", w.Index), "The batch quantities add up to more than the line.")
 			}
-			r.qty -= p.Qty
-			rest -= p.Qty
+			r.qty = r.qty.Sub(p.Qty)
+			rest = rest.Sub(p.Qty)
 			got = append(got, Sold{BatchID: r.id, BatchNo: r.no, Expiry: r.expiry, MRP: r.mrp, Qty: p.Qty, Chosen: true, Unknown: r.unknown})
 		}
-		if rest > 0 {
+		if rest.IsPositive() {
 			order := make([]*sellRow, 0, len(rs))
 			var bad []Unsellable
 			for _, r := range rs {
 				if why := st.whyNot(r); why != "" {
-					if r.qty > 0 {
+					if r.qty.IsPositive() {
 						bad = append(bad, Unsellable{BatchID: r.id, BatchNo: r.no, Expiry: day(r.expiry), Quantity: r.qty, Reason: why})
 					}
 					continue
@@ -215,26 +216,27 @@ func Allocate(ctx context.Context, tx tenancy.TenantTx, st Settings, store int64
 				}
 				return x.id < y.id
 			})
-			sellable := 0
+			var sellable qty.Q
 			for _, r := range order {
-				sellable += r.qty
+				sellable = sellable.Add(r.qty)
 			}
-			if sellable < rest {
-				msg := fmt.Sprintf("Not enough sellable stock of %s: %d can be sold, %d asked.", w.SKU, sellable+w.Qty-rest, w.Qty)
+			if sellable.Less(rest) {
+				avail := sellable.Add(w.Qty).Sub(rest)
+				msg := fmt.Sprintf("Not enough sellable stock of %s: %s can be sold, %s asked.", w.SKU, avail, w.Qty)
 				return nil, nil, apperr.Conflict(apperr.CodeInsufficientStock, msg).WithDetails(map[string]any{"items": []map[string]any{{
-					"index": w.Index, "variantId": w.Variant, "sku": w.SKU, "available": sellable + w.Qty - rest, "requested": w.Qty,
+					"index": w.Index, "variantId": w.Variant, "sku": w.SKU, "available": avail, "requested": w.Qty,
 					"unsellable": bad}}})
 			}
 			for _, r := range order {
-				if rest == 0 {
+				if rest.IsZero() {
 					break
 				}
-				take := min(rest, r.qty)
-				if take == 0 {
+				take := qty.Min(rest, r.qty)
+				if !take.IsPositive() {
 					continue
 				}
-				r.qty -= take
-				rest -= take
+				r.qty = r.qty.Sub(take)
+				rest = rest.Sub(take)
 				got = append(got, Sold{BatchID: r.id, BatchNo: r.no, Expiry: r.expiry, MRP: r.mrp, Qty: take, Unknown: r.unknown})
 			}
 		}

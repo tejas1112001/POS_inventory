@@ -14,6 +14,7 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend/internal/docdate"
 	"github.com/tejas1112001/POS_inventory/backend/internal/files"
 	"github.com/tejas1112001/POS_inventory/backend/internal/httpx"
+	"github.com/tejas1112001/POS_inventory/backend/internal/qty"
 	"github.com/tejas1112001/POS_inventory/backend/internal/tenancy"
 )
 
@@ -26,7 +27,7 @@ type ReturnItemJSON struct {
 	VariantID    int64            `json:"variant_id"`
 	ProductName  string           `json:"product_name"`
 	SKU          *string          `json:"sku"`
-	Quantity     int              `json:"quantity"`
+	Quantity     qty.Q            `json:"quantity"`
 	UnitPrice    decimal.Decimal  `json:"unitPrice"`
 	UnitPriceS   decimal.Decimal  `json:"unit_price"`
 	Discount     decimal.Decimal  `json:"discount"`
@@ -50,7 +51,7 @@ type ReturnBatchJSON struct {
 	BatchID  int64   `json:"batchId"`
 	BatchNo  string  `json:"batchNo"`
 	Expiry   *string `json:"expiry"`
-	Quantity int     `json:"quantity"`
+	Quantity qty.Q   `json:"quantity"`
 	Bucket   string  `json:"bucket"`
 	Unknown  bool    `json:"unknown"`
 }

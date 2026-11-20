@@ -29,6 +29,7 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend/internal/inventory"
 	"github.com/tejas1112001/POS_inventory/backend/internal/modules"
 	"github.com/tejas1112001/POS_inventory/backend/internal/money"
+	"github.com/tejas1112001/POS_inventory/backend/internal/qty"
 	"github.com/tejas1112001/POS_inventory/backend/internal/rbac"
 	"github.com/tejas1112001/POS_inventory/backend/internal/tenancy"
 )
@@ -130,7 +131,7 @@ type CountJSON struct {
 	Note         *string    `json:"note"`
 	Version      int        `json:"version"`
 	LineCount    int        `json:"lineCount"`
-	UnitsCounted int64      `json:"unitsCounted"`
+	UnitsCounted qty.Q      `json:"unitsCounted"`
 	CreatedBy    *NameRef   `json:"createdBy"`
 	CompletedBy  *NameRef   `json:"completedBy"`
 	CreatedAt    time.Time  `json:"createdAt"`
@@ -142,7 +143,7 @@ type CountJSON struct {
 	// UncountedBatches (drafts): batches completion will set to 0 (industry
 	// P3 item 6).
 	UncountedBatches []UncountedBatchJSON `json:"uncountedBatches,omitempty"`
-	UncountedTotal   *int                 `json:"uncountedTotal,omitempty"`
+	UncountedTotal   *int                 `json:"uncountedTotal,omitempty"` // variants, not units
 	Totals           *Totals              `json:"totals,omitempty"`
 }
 
@@ -158,13 +159,13 @@ type LineJSON struct {
 	SKU         string    `json:"sku"`
 	Barcode     string    `json:"barcode,omitempty"`
 	Label       string    `json:"label,omitempty"`
-	CountedQty  int       `json:"countedQty"`
+	CountedQty  qty.Q     `json:"countedQty"`
 	CountedAt   time.Time `json:"countedAt"`
 	CountedBy   *NameRef  `json:"countedBy"`
-	CurrentQty  int       `json:"currentQty"`
-	MovedSince  int       `json:"movedSince"`
-	Expected    *int      `json:"expected"`
-	Difference  int       `json:"difference"`
+	CurrentQty  qty.Q     `json:"currentQty"`
+	MovedSince  qty.Q     `json:"movedSince"`
+	Expected    *qty.Q    `json:"expected"`
+	Difference  qty.Q     `json:"difference"`
 	// The batch counted (industry P3 item 6, A32); null for a line with no
 	// batch. A product with batch lines is counted by batch, and its line
 	// with no batch counts the unknown batch.
@@ -184,15 +185,15 @@ type UncountedJSON struct {
 	ProductName string `json:"productName"`
 	SKU         string `json:"sku"`
 	Label       string `json:"label,omitempty"`
-	CurrentQty  int    `json:"currentQty"`
+	CurrentQty  qty.Q  `json:"currentQty"`
 }
 
 // Totals sum the lines' differences.
 type Totals struct {
-	Lines     int `json:"lines"`
-	Changed   int `json:"changed"`
-	UnitsUp   int `json:"unitsUp"`
-	UnitsDown int `json:"unitsDown"`
+	Lines     int   `json:"lines"`
+	Changed   int   `json:"changed"`
+	UnitsUp   qty.Q `json:"unitsUp"`
+	UnitsDown qty.Q `json:"unitsDown"`
 }
 
 const qCount = `SELECT c.id, c.reference, c.store_id, coalesce(s.name, ''), c.scope, c.status, c.note, c.version,
@@ -339,7 +340,7 @@ func loadLines(ctx context.Context, tx tenancy.TenantTx, countID, storeID int64,
 			dims           []string
 			by             *int64
 			byName         string
-			delta          *int
+			delta          *qty.Q
 		)
 		if err := rows.Scan(&l.ID, &l.VariantID, &l.ProductID, &l.ProductName, &l.SKU, &l.Barcode, &vAttrs, &pAttrs, &dims,
 			&l.CountedQty, &l.CountedAt, &by, &byName, &l.CurrentQty, &l.MovedSince, &l.Expected, &delta,
@@ -355,7 +356,7 @@ func loadLines(ctx context.Context, tx tenancy.TenantTx, countID, storeID int64,
 			l.Difference = *delta
 		case status == StatusCompleted:
 		default:
-			l.Difference = l.CountedQty - l.CurrentQty
+			l.Difference = l.CountedQty.Sub(l.CurrentQty)
 			l.Expected = nil
 		}
 		out = append(out, l)
@@ -413,12 +414,12 @@ func detail(ctx context.Context, tx tenancy.TenantTx, id int64) (CountJSON, erro
 	t := Totals{Lines: len(c.Lines)}
 	for _, l := range c.Lines {
 		switch {
-		case l.Difference > 0:
+		case l.Difference.IsPositive():
 			t.Changed++
-			t.UnitsUp += l.Difference
-		case l.Difference < 0:
+			t.UnitsUp = t.UnitsUp.Add(l.Difference)
+		case l.Difference.IsNegative():
 			t.Changed++
-			t.UnitsDown -= l.Difference
+			t.UnitsDown = t.UnitsDown.Sub(l.Difference)
 		}
 	}
 	if c.Status == StatusDraft {
@@ -432,7 +433,7 @@ func detail(ctx context.Context, tx tenancy.TenantTx, id int64) (CountJSON, erro
 		}
 		for _, b := range c.UncountedBatches {
 			t.Changed++
-			t.UnitsDown += b.CurrentQty
+			t.UnitsDown = t.UnitsDown.Add(b.CurrentQty)
 		}
 	}
 	c.Totals = &t
@@ -620,8 +621,8 @@ func deref(s *string) string {
 type LineIn struct {
 	VariantID money.Int `json:"variantId"`
 	Code      *string   `json:"code"`
-	Qty       money.Int `json:"qty"`
-	Add       money.Int `json:"add"`
+	Qty       qty.In    `json:"qty"`
+	Add       qty.In    `json:"add"`
 	// Industry P3 item 6 (A32): the batch counted, or a batch number and
 	// expiry found on the shelf (the batch is created).
 	BatchID money.Int `json:"batchId"`
@@ -696,7 +697,7 @@ const (
 		WHERE l.variant_id = ANY($1) AND c.store_id = $2 AND c.status = 'Draft' AND c.id <> $3 ORDER BY l.variant_id, c.id`
 	qCurrent = `SELECT variant_id, coalesce(batch_id, 0), counted_qty FROM stock_count_lines WHERE count_id = $1 AND variant_id = ANY($2)`
 	qUpsert  = `INSERT INTO stock_count_lines (count_id, variant_id, batch_id, counted_qty, counted_by)
-		SELECT $1, x.v, NULLIF(x.b, 0), x.q, NULLIF($5, 0) FROM unnest($2::bigint[], $3::bigint[], $4::int[]) AS x(v, b, q)
+		SELECT $1, x.v, NULLIF(x.b, 0), x.q, NULLIF($5, 0) FROM unnest($2::bigint[], $3::bigint[], $4::numeric[]) AS x(v, b, q)
 		ON CONFLICT (count_id, variant_id, (coalesce(batch_id, 0))) DO UPDATE
 		SET counted_qty = EXCLUDED.counted_qty, counted_at = now(), counted_by = EXCLUDED.counted_by`
 	qRemove      = `DELETE FROM stock_count_lines WHERE count_id = $1 AND variant_id = ANY($2) RETURNING variant_id`
@@ -709,7 +710,7 @@ const (
 type change struct {
 	field   string // for errors: lines[i] or a file row
 	variant int64
-	qty     int
+	qty     qty.Q
 	add     bool
 	// Industry P3 item 6: the batch (0: none), or a new one's number and expiry.
 	batch   int64
@@ -799,15 +800,19 @@ func apply(ctx context.Context, tx tenancy.TenantTx, d draft, in []change, codes
 	if err := resolveCountBatches(ctx, tx, in, uid); err != nil {
 		return nil, err
 	}
+	frac, err := inventory.Fractional(ctx, tx, ids)
+	if err != nil {
+		return nil, err
+	}
 	type lineKey struct{ v, b int64 }
-	cur := map[lineKey]int{}
+	cur := map[lineKey]qty.Q{}
 	rows, err = tx.Query(ctx, qCurrent, d.id, ids)
 	if err != nil {
 		return nil, err
 	}
 	for rows.Next() {
 		var k lineKey
-		var q int
+		var q qty.Q
 		if err := rows.Scan(&k.v, &k.b, &q); err != nil {
 			rows.Close()
 			return nil, err
@@ -824,13 +829,15 @@ func apply(ctx context.Context, tx tenancy.TenantTx, d draft, in []change, codes
 		k := lineKey{c.variant, c.batch}
 		q := c.qty
 		if c.add {
-			q += cur[k]
+			q = q.Add(cur[k])
 		}
 		switch {
-		case q < 0:
+		case q.IsNegative():
 			f[c.field] = "The count cannot go below 0."
-		case q > MaxQty:
+		case q.Greater(qty.Int(MaxQty)):
 			f[c.field] = fmt.Sprintf("At most %d.", MaxQty)
+		case !inventory.AllowedQty(q, frac[c.variant]):
+			f[c.field] = inventory.WholeOnlyMessage
 		}
 		cur[k] = q
 		if !seenKey[k] {
@@ -847,9 +854,9 @@ func apply(ctx context.Context, tx tenancy.TenantTx, d draft, in []change, codes
 		}
 		return keys[i].b < keys[j].b
 	})
-	vs, bs, qs := make([]int64, len(keys)), make([]int64, len(keys)), make([]int32, len(keys))
+	vs, bs, qs := make([]int64, len(keys)), make([]int64, len(keys)), make([]string, len(keys))
 	for i, k := range keys {
-		vs[i], bs[i], qs[i] = k.v, k.b, int32(cur[k]) //nolint:gosec // G115: at most MaxQty
+		vs[i], bs[i], qs[i] = k.v, k.b, cur[k].String()
 	}
 	if _, err := tx.Exec(ctx, qUpsert, d.id, vs, bs, qs, uid); err != nil {
 		return nil, err
@@ -898,16 +905,20 @@ func (a *API) update(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case l.Qty.Valid == l.Add.Valid:
 			f[key+".qty"] = "Give either qty (counted quantity) or add (to add to it)."
+		case l.Qty.Err != nil:
+			f[key+".qty"] = "A number with at most 3 decimals."
+		case l.Add.Err != nil:
+			f[key+".add"] = "A number with at most 3 decimals."
 		case l.Qty.Valid:
-			if l.Qty.V < 0 || l.Qty.V > MaxQty {
-				f[key+".qty"] = fmt.Sprintf("A whole number from 0 to %d.", MaxQty)
+			if l.Qty.V.IsNegative() || l.Qty.V.Greater(qty.Int(MaxQty)) {
+				f[key+".qty"] = fmt.Sprintf("A number from 0 to %d.", MaxQty)
 			}
-			c.qty = int(l.Qty.V)
+			c.qty = l.Qty.V
 		default:
-			if l.Add.V < -MaxQty || l.Add.V > MaxQty || l.Add.V == 0 {
-				f[key+".add"] = "A whole number other than 0."
+			if l.Add.V.Abs().Greater(qty.Int(MaxQty)) || l.Add.V.IsZero() {
+				f[key+".add"] = "A number other than 0."
 			}
-			c.qty, c.add = int(l.Add.V), true
+			c.qty, c.add = l.Add.V, true
 		}
 		hasNo := l.BatchNo != nil && strings.TrimSpace(*l.BatchNo) != ""
 		switch {
@@ -1014,7 +1025,7 @@ type versionIn struct {
 const (
 	qCountedLines = `SELECT id, variant_id, coalesce(batch_id, 0), counted_qty FROM stock_count_lines WHERE count_id = $1 ORDER BY variant_id, id`
 	qSetPosted    = `UPDATE stock_count_lines l SET expected_at_completion = x.e, delta = x.d
-		FROM unnest($2::bigint[], $3::int[], $4::int[]) AS x(id, e, d) WHERE l.count_id = $1 AND l.id = x.id`
+		FROM unnest($2::bigint[], $3::numeric[], $4::numeric[]) AS x(id, e, d) WHERE l.count_id = $1 AND l.id = x.id`
 	qFinish = `UPDATE stock_counts SET status = $2, completed_by = CASE WHEN $2 = 'Completed' THEN NULLIF($3, 0) END,
 		completed_at = CASE WHEN $2 = 'Completed' THEN now() END, version = version + 1, updated_at = now() WHERE id = $1`
 )
@@ -1074,8 +1085,9 @@ func (a *API) complete(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		var lineIDs []int64
-		var exp, deltas []int32
-		var changed, up, down, nlines int
+		var exp, deltas []string
+		var changed, nlines int
+		var up, down qty.Q
 		for _, v := range ids {
 			lines := byVar[v]
 			nlines += len(lines)
@@ -1087,14 +1099,14 @@ func (a *API) complete(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				return err
 			}
-			if u+dn > 0 {
+			if u.Add(dn).IsPositive() {
 				changed++
 			}
-			up, down = up+u, down+dn
+			up, down = up.Add(u), down.Add(dn)
 			for _, l := range lines {
 				lineIDs = append(lineIDs, l.id)
-				exp = append(exp, int32(e[l.id]))        //nolint:gosec // G115: quantities are bounded
-				deltas = append(deltas, int32(df[l.id])) //nolint:gosec // G115: quantities are bounded
+				exp = append(exp, e[l.id].String())
+				deltas = append(deltas, df[l.id].String())
 			}
 		}
 		if _, err := tx.Exec(ctx, qSetPosted, id, lineIDs, exp, deltas); err != nil {

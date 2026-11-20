@@ -80,9 +80,14 @@ func TestUnknownKeysAndBadInput(t *testing.T) {
 		require.True(t, ok, field)
 		require.Contains(t, e.Fields, field)
 	}
+	// H3: part units pass here; the product decides (resolve checks
+	// allow_fraction). More than 3 decimals never passes.
 	in, _ := strict(t, `{"storeId": 1, "orderItems": [{"variantId": 1, "quantity": 1.5}]}`)
 	_, err = validate(in)
-	require.Error(t, err, "fractional quantity")
+	require.NoError(t, err, "fractional quantity")
+	in, _ = strict(t, `{"storeId": 1, "orderItems": [{"variantId": 1, "quantity": 1.2345}]}`)
+	_, err = validate(in)
+	require.Error(t, err, "more than 3 decimals")
 }
 
 func TestPay(t *testing.T) {

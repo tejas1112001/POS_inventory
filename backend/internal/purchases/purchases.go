@@ -30,7 +30,9 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend/internal/docdate"
 	"github.com/tejas1112001/POS_inventory/backend/internal/httpx"
 	"github.com/tejas1112001/POS_inventory/backend/internal/idempotency"
+	"github.com/tejas1112001/POS_inventory/backend/internal/inventory"
 	"github.com/tejas1112001/POS_inventory/backend/internal/money"
+	"github.com/tejas1112001/POS_inventory/backend/internal/qty"
 	"github.com/tejas1112001/POS_inventory/backend/internal/rbac"
 	"github.com/tejas1112001/POS_inventory/backend/internal/settings"
 	"github.com/tejas1112001/POS_inventory/backend/internal/tenancy"
@@ -107,7 +109,7 @@ type itemIn struct {
 	ProductID money.Int `json:"productId"`
 	VariantID money.Int `json:"variantId"`
 	StoreID   money.Int `json:"storeId"`
-	Quantity  money.Int `json:"quantity"`
+	Quantity  qty.In    `json:"quantity"`
 	UnitPrice money.Dec `json:"unitPrice"`
 	Discount  money.Dec `json:"discount"`
 
@@ -147,8 +149,9 @@ type updateIn struct {
 }
 
 type line struct {
-	productID, variantID, storeID, qty int64
-	price, discount                    decimal.Decimal
+	productID, variantID, storeID int64
+	qty                           qty.Q
+	price, discount               decimal.Decimal
 }
 
 type clean struct {
@@ -240,8 +243,8 @@ func validate(in purchaseIn) (clean, error) {
 	for i, it := range in.PurchaseItems {
 		k := fmt.Sprintf("purchaseItems[%d]", i)
 		l := line{productID: it.ProductID.V, variantID: it.VariantID.V, storeID: it.StoreID.V, qty: it.Quantity.V}
-		if !it.Quantity.Valid || it.Quantity.V <= 0 || it.Quantity.V > maxQty {
-			f[k+".quantity"] = "Quantity must be a whole number above 0."
+		if !it.Quantity.Valid || !it.Quantity.V.IsPositive() || it.Quantity.V.Greater(qty.Int(maxQty)) {
+			f[k+".quantity"] = "Quantity must be above 0."
 		}
 		if (!it.VariantID.Valid || it.VariantID.V <= 0) && (!it.ProductID.Valid || it.ProductID.V <= 0) {
 			f[k+".variantId"] = "variantId is required."
@@ -270,15 +273,16 @@ func validate(in purchaseIn) (clean, error) {
 // --------------------------------------------------------------- resolve
 
 type variantRow struct {
-	productID int64
-	sku, name string
+	productID  int64
+	sku, name  string
+	fractional bool // H3: the product allows fractional quantities
 }
 
 const (
 	qSingleVariant = `SELECT p.id, min(v.id), count(v.id) FROM products p
 		LEFT JOIN product_variants v ON v.product_id = p.id AND v.deleted_at IS NULL
 		WHERE p.id = ANY($1) AND p.deleted_at IS NULL GROUP BY p.id`
-	qVariants = `SELECT v.id, v.product_id, v.sku::text, p.name FROM product_variants v JOIN products p ON p.id = v.product_id
+	qVariants = `SELECT v.id, v.product_id, v.sku::text, p.name, p.allow_fraction FROM product_variants v JOIN products p ON p.id = v.product_id
 		WHERE v.id = ANY($1) AND v.deleted_at IS NULL AND p.deleted_at IS NULL`
 	qStores = `SELECT id FROM stores WHERE id = ANY($1) AND deleted_at IS NULL AND status = 'Active'`
 )
@@ -351,7 +355,7 @@ func resolve(ctx context.Context, tx tenancy.TenantTx, c *clean) (map[int64]vari
 	for rows.Next() {
 		var id int64
 		var v variantRow
-		if err := rows.Scan(&id, &v.productID, &v.sku, &v.name); err != nil {
+		if err := rows.Scan(&id, &v.productID, &v.sku, &v.name, &v.fractional); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -387,6 +391,8 @@ func resolve(ctx context.Context, tx tenancy.TenantTx, c *clean) (map[int64]vari
 				f[k+".variantId"] = "Product variant not found."
 			case l.productID > 0 && v.productID != l.productID:
 				f[k+".variantId"] = "The variant does not belong to this product."
+			case !inventory.AllowedQty(l.qty, v.fractional):
+				f[k+".quantity"] = inventory.WholeOnlyMessage
 			}
 		}
 		if !activeStores[l.storeID] {
@@ -413,7 +419,7 @@ func price(c clean, byID map[int64]variantRow, currency string) (priced, error) 
 	f := map[string]string{}
 	var p priced
 	for i, l := range c.lines {
-		gross := money.Round(l.price.Mul(decimal.NewFromInt(l.qty)), currency)
+		gross := money.Round(l.price.Mul(l.qty.Decimal()), currency)
 		disc := money.Round(l.discount, currency)
 		if disc.GreaterThan(gross) {
 			f[fmt.Sprintf("purchaseItems[%d].discount", i)] = "Discount cannot be larger than the line amount."

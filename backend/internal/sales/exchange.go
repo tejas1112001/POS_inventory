@@ -22,6 +22,7 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend/internal/idempotency"
 	"github.com/tejas1112001/POS_inventory/backend/internal/inventory"
 	"github.com/tejas1112001/POS_inventory/backend/internal/money"
+	"github.com/tejas1112001/POS_inventory/backend/internal/qty"
 	"github.com/tejas1112001/POS_inventory/backend/internal/tenancy"
 )
 
@@ -188,25 +189,26 @@ func (a *API) exchange(w http.ResponseWriter, r *http.Request) {
 		// goods go out. Every row either touches is locked once, in order;
 		// the shortage check uses the net change.
 		retDeltas := returnDeltas(pr)
-		saleDeltas := map[inventory.Key]int{}
+		saleDeltas := map[inventory.Key]qty.Q{}
 		for _, l := range prc.lines {
-			saleDeltas[inventory.Key{Store: pr.storeID, Variant: l.v.id}] -= int(l.qty)
+			k := inventory.Key{Store: pr.storeID, Variant: l.v.id}
+			saleDeltas[k] = saleDeltas[k].Sub(l.qty)
 		}
-		lockDeltas := map[inventory.Key]int{}
+		lockDeltas := map[inventory.Key]qty.Q{}
 		for k, d := range retDeltas {
-			lockDeltas[k] += d
+			lockDeltas[k] = lockDeltas[k].Add(d)
 		}
 		for k, d := range saleDeltas {
-			lockDeltas[k] += d
+			lockDeltas[k] = lockDeltas[k].Add(d)
 		}
 		for _, k := range quarantineKeys(pr) {
 			if _, ok := lockDeltas[k]; !ok {
-				lockDeltas[k] = 1 // quarantined units: the stock row is locked, not changed
+				lockDeltas[k] = qty.Int(1) // quarantined units: the stock row is locked, not changed
 			}
 		}
 		for k, d := range lockDeltas {
-			if d == 0 {
-				lockDeltas[k] = 1 // in and out again: lock it, nothing to check
+			if d.IsZero() {
+				lockDeltas[k] = qty.Int(1) // in and out again: lock it, nothing to check
 			}
 		}
 		keys, _, err := inventory.Lock(ctx, tx, lockDeltas, skuMap(prc))

@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/tejas1112001/POS_inventory/backend/internal/qty"
 	"github.com/tejas1112001/POS_inventory/backend/internal/tenancy"
 )
 
@@ -65,32 +66,32 @@ const (
 // decrement that would go below zero returns ErrInsufficient and changes
 // nothing. Callers that move several items lock them in variant order first
 // (see LockRows) so concurrent sales cannot deadlock.
-func Move(ctx context.Context, tx tenancy.TenantTx, storeID, variantID int64, delta int, reason string, ref Ref, userID int64) (int, error) {
+func Move(ctx context.Context, tx tenancy.TenantTx, storeID, variantID int64, delta qty.Q, reason string, ref Ref, userID int64) (qty.Q, error) {
 	after, err := moveStock(ctx, tx, storeID, variantID, delta, reason, ref, userID)
-	if err != nil || delta == 0 {
+	if err != nil || delta.IsZero() {
 		return after, err
 	}
 	k := Key{Store: storeID, Variant: variantID}
-	return after, follow(ctx, tx, []Key{k}, map[Key]int{k: delta}, nil, reason, ref, userID)
+	return after, follow(ctx, tx, []Key{k}, map[Key]qty.Q{k: delta}, nil, reason, ref, userID)
 }
 
 // moveStock is Move without the batches.
-func moveStock(ctx context.Context, tx tenancy.TenantTx, storeID, variantID int64, delta int, reason string, ref Ref, userID int64) (int, error) {
-	if delta == 0 {
-		var q int
+func moveStock(ctx context.Context, tx tenancy.TenantTx, storeID, variantID int64, delta qty.Q, reason string, ref Ref, userID int64) (qty.Q, error) {
+	if delta.IsZero() {
+		var q qty.Q
 		err := tx.QueryRow(ctx, `SELECT coalesce((SELECT qty FROM inventories WHERE store_id = $1 AND variant_id = $2), 0)`, storeID, variantID).Scan(&q)
 		return q, err
 	}
-	var after int
+	var after qty.Q
 	err := tx.QueryRow(ctx, qMoveExisting, storeID, variantID, delta).Scan(&after)
 	if errors.Is(err, pgx.ErrNoRows) {
-		if delta < 0 {
-			return 0, ErrInsufficient
+		if delta.IsNegative() {
+			return qty.Zero, ErrInsufficient
 		}
 		err = tx.QueryRow(ctx, qMoveInsert, storeID, variantID, delta).Scan(&after)
 	}
 	if err != nil {
-		return 0, err
+		return qty.Zero, err
 	}
 	_, err = tx.Exec(ctx, qLedger, storeID, variantID, delta, after, reason, ref.Type, ref.ID, userID)
 	return after, err
@@ -98,11 +99,11 @@ func moveStock(ctx context.Context, tx tenancy.TenantTx, storeID, variantID int6
 
 // Set makes qty an absolute value (manual set, product edit) and records
 // the difference. qty must be >= 0.
-func Set(ctx context.Context, tx tenancy.TenantTx, storeID, variantID int64, qty, alert int, reason string, ref Ref, userID int64) (int64, error) {
-	if qty < 0 || alert < 0 {
+func Set(ctx context.Context, tx tenancy.TenantTx, storeID, variantID int64, q, alert qty.Q, reason string, ref Ref, userID int64) (int64, error) {
+	if q.IsNegative() || alert.IsNegative() {
 		return 0, errors.New("inventory: negative quantity")
 	}
-	var before int
+	var before qty.Q
 	err := tx.QueryRow(ctx, qLockQty, storeID, variantID).Scan(&before)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return 0, err
@@ -110,15 +111,15 @@ func Set(ctx context.Context, tx tenancy.TenantTx, storeID, variantID int64, qty
 	var id int64
 	if err := tx.QueryRow(ctx, `INSERT INTO inventories (store_id, variant_id, qty, quantity_alert) VALUES ($1, $2, $3, $4)
 		ON CONFLICT (store_id, variant_id) DO UPDATE SET qty = EXCLUDED.qty, quantity_alert = EXCLUDED.quantity_alert, updated_at = now()
-		RETURNING id`, storeID, variantID, qty, alert).Scan(&id); err != nil {
+		RETURNING id`, storeID, variantID, q, alert).Scan(&id); err != nil {
 		return 0, err
 	}
-	if delta := qty - before; delta != 0 {
-		if _, err := tx.Exec(ctx, qLedger, storeID, variantID, delta, qty, reason, ref.Type, ref.ID, userID); err != nil {
+	if delta := q.Sub(before); !delta.IsZero() {
+		if _, err := tx.Exec(ctx, qLedger, storeID, variantID, delta, q, reason, ref.Type, ref.ID, userID); err != nil {
 			return 0, err
 		}
 		k := Key{Store: storeID, Variant: variantID}
-		if err := follow(ctx, tx, []Key{k}, map[Key]int{k: delta}, nil, reason, ref, userID); err != nil {
+		if err := follow(ctx, tx, []Key{k}, map[Key]qty.Q{k: delta}, nil, reason, ref, userID); err != nil {
 			return 0, err
 		}
 	}
@@ -134,20 +135,20 @@ type Item struct {
 // LockRows locks inventory rows of one store in variant_id order and returns
 // current quantities (missing rows = 0). Deterministic order prevents
 // deadlocks between concurrent checkouts (PHASE1_DESIGN §4.4).
-func LockRows(ctx context.Context, tx tenancy.TenantTx, storeID int64, variantIDs []int64) (map[int64]int, error) {
+func LockRows(ctx context.Context, tx tenancy.TenantTx, storeID int64, variantIDs []int64) (map[int64]qty.Q, error) {
 	rows, err := tx.Query(ctx, `SELECT variant_id, qty FROM inventories
 		WHERE store_id = $1 AND variant_id = ANY($2) ORDER BY variant_id FOR UPDATE`, storeID, variantIDs)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	out := make(map[int64]int, len(variantIDs))
+	out := make(map[int64]qty.Q, len(variantIDs))
 	for _, v := range variantIDs {
-		out[v] = 0
+		out[v] = qty.Zero
 	}
 	for rows.Next() {
 		var v int64
-		var q int
+		var q qty.Q
 		if err := rows.Scan(&v, &q); err != nil {
 			return nil, err
 		}
@@ -159,7 +160,7 @@ func LockRows(ctx context.Context, tx tenancy.TenantTx, storeID int64, variantID
 // Mismatch is a ledger/stock disagreement found by Reconcile.
 type Mismatch struct {
 	StoreID, VariantID int64
-	Qty, LedgerSum     int
+	Qty, LedgerSum     qty.Q
 	// Industry P3 item 1: "" for the stock ledger; "batch_total" when a
 	// tracked product's stock differs from its batches' sum (LedgerSum is
 	// the batch sum); "batch_ledger" when a batch's stock differs from its
@@ -188,19 +189,19 @@ func reconcileBatches(ctx context.Context, tx tenancy.TenantTx) ([]Mismatch, err
 		FROM inventories i
 		JOIN product_variants v ON v.id = i.variant_id
 		JOIN products p ON p.id = v.product_id AND p.tracks_batches
-		LEFT JOIN (SELECT s.store_id, b.variant_id, sum(s.qty)::int AS total FROM batch_stock s JOIN batches b ON b.id = s.batch_id
+		LEFT JOIN (SELECT s.store_id, b.variant_id, sum(s.qty) AS total FROM batch_stock s JOIN batches b ON b.id = s.batch_id
 		           GROUP BY s.store_id, b.variant_id) bs ON bs.store_id = i.store_id AND bs.variant_id = i.variant_id
 		WHERE EXISTS (SELECT 1 FROM settings WHERE id = 1 AND 'batch_expiry' = ANY(modules)) AND i.qty <> coalesce(bs.total, 0)
 		UNION ALL
 		SELECT s.store_id, b.variant_id, s.qty, coalesce(m.total, 0), 'batch_ledger', s.batch_id
 		FROM batch_stock s JOIN batches b ON b.id = s.batch_id
-		LEFT JOIN (SELECT store_id, batch_id, sum(delta)::int AS total FROM batch_movements WHERE bucket = 'stock'
+		LEFT JOIN (SELECT store_id, batch_id, sum(delta) AS total FROM batch_movements WHERE bucket = 'stock'
 		           GROUP BY store_id, batch_id) m ON m.store_id = s.store_id AND m.batch_id = s.batch_id
 		WHERE s.qty <> coalesce(m.total, 0)
 		UNION ALL
 		SELECT s.store_id, b.variant_id, s.quarantined_qty, coalesce(m.total, 0), 'batch_quarantine', s.batch_id
 		FROM batch_stock s JOIN batches b ON b.id = s.batch_id
-		LEFT JOIN (SELECT store_id, batch_id, sum(delta)::int AS total FROM batch_movements WHERE bucket = 'quarantine'
+		LEFT JOIN (SELECT store_id, batch_id, sum(delta) AS total FROM batch_movements WHERE bucket = 'quarantine'
 		           GROUP BY store_id, batch_id) m ON m.store_id = s.store_id AND m.batch_id = s.batch_id
 		WHERE s.quarantined_qty <> coalesce(m.total, 0)`)
 	if err != nil {
@@ -222,7 +223,7 @@ func reconcileStock(ctx context.Context, tx tenancy.TenantTx) ([]Mismatch, error
 	rows, err := tx.Query(ctx, `SELECT coalesce(i.store_id, m.store_id), coalesce(i.variant_id, m.variant_id),
 			coalesce(i.qty, 0), coalesce(m.total, 0)
 		FROM inventories i
-		FULL JOIN (SELECT store_id, variant_id, sum(delta)::int AS total FROM stock_movements GROUP BY store_id, variant_id) m
+		FULL JOIN (SELECT store_id, variant_id, sum(delta) AS total FROM stock_movements GROUP BY store_id, variant_id) m
 		  ON m.store_id = i.store_id AND m.variant_id = i.variant_id
 		WHERE coalesce(i.qty, 0) <> coalesce(m.total, 0)`)
 	if err != nil {

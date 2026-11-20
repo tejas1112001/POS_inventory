@@ -14,6 +14,7 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend/internal/batches"
 	"github.com/tejas1112001/POS_inventory/backend/internal/inventory"
 	"github.com/tejas1112001/POS_inventory/backend/internal/modules"
+	"github.com/tejas1112001/POS_inventory/backend/internal/qty"
 	"github.com/tejas1112001/POS_inventory/backend/internal/tenancy"
 )
 
@@ -76,7 +77,7 @@ type PreviewBatch struct {
 	BatchNo string `json:"batchNo"`
 	Expiry  string `json:"expiry"`
 	Store   string `json:"store,omitempty"`
-	Qty     int    `json:"qty"`
+	Qty     qty.Q  `json:"qty"`
 	Skipped bool   `json:"skipped,omitempty"` // expired: its stock is not imported
 }
 
@@ -223,22 +224,22 @@ func checkBatchGroup(g *group, addErr func(int, string, string)) {
 // the preview's stock per store (expired rows left out).
 func batchStores(g *group, storeNames map[int64]string) ([]cleanInventory, []PreviewStock) {
 	var inv []cleanInventory
-	qty := map[int64]int{}
+	have := map[int64]qty.Q{}
 	for _, ir := range g.rows {
 		if ir.store == 0 {
 			continue
 		}
-		if _, ok := qty[ir.store]; !ok {
+		if _, ok := have[ir.store]; !ok {
 			inv = append(inv, cleanInventory{storeID: ir.store, alert: ir.alert})
-			qty[ir.store] = 0
+			have[ir.store] = qty.Zero
 		}
 		if !ir.b.expired {
-			qty[ir.store] += ir.qty
+			have[ir.store] = have[ir.store].Add(ir.qty)
 		}
 	}
 	stock := []PreviewStock{}
 	for _, c := range inv {
-		stock = append(stock, PreviewStock{Store: storeNames[c.storeID], Qty: qty[c.storeID]})
+		stock = append(stock, PreviewStock{Store: storeNames[c.storeID], Qty: have[c.storeID]})
 	}
 	return inv, stock
 }
@@ -253,7 +254,7 @@ func importBatches(ctx context.Context, tx tenancy.TenantTx, productID int64, g 
 	if _, err := tx.Exec(ctx, `UPDATE products SET tracks_batches = true, updated_at = now() WHERE id = $1`, productID); err != nil {
 		return nil, err
 	}
-	deltas := map[inventory.Key]int{}
+	deltas := map[inventory.Key]qty.Q{}
 	alloc := inventory.Allocation{}
 	out := []PreviewBatch{}
 	for _, ir := range g.rows {
@@ -271,9 +272,9 @@ func importBatches(ctx context.Context, tx tenancy.TenantTx, productID int64, g 
 		if err != nil {
 			return nil, err
 		}
-		if ir.qty > 0 && ir.store > 0 {
+		if ir.qty.IsPositive() && ir.store > 0 {
 			k := inventory.Key{Store: ir.store, Variant: vid}
-			deltas[k] += ir.qty
+			deltas[k] = deltas[k].Add(ir.qty)
 			alloc[k] = append(alloc[k], inventory.BatchQty{BatchID: id, Qty: ir.qty})
 		}
 	}

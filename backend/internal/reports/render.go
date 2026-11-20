@@ -19,6 +19,7 @@ import (
 
 	"github.com/tejas1112001/POS_inventory/backend/internal/money"
 	"github.com/tejas1112001/POS_inventory/backend/internal/pdffonts"
+	"github.com/tejas1112001/POS_inventory/backend/internal/qty"
 	"github.com/tejas1112001/POS_inventory/backend/internal/receipts"
 	"github.com/tejas1112001/POS_inventory/backend/internal/xlsx"
 )
@@ -71,9 +72,14 @@ func (t table) totals() []any {
 		}
 		switch c.kind {
 		case kindInt:
-			n := 0
+			var n qty.Q // quantities may have decimals (H3)
 			for _, r := range t.rows {
-				n += r[i].(int)
+				switch x := r[i].(type) {
+				case int:
+					n = n.Add(qty.Int(int64(x)))
+				case qty.Q:
+					n = n.Add(x)
+				}
 			}
 			out[i] = n
 		case kindMoney:
@@ -126,6 +132,8 @@ func writeXLSX(t table, currency string, loc *time.Location) ([]byte, error) {
 			return xlsx.Text(SafeText(x), text)
 		case int:
 			return xlsx.Num(float64(x), text)
+		case qty.Q:
+			return xlsx.Num(x.Float(), text)
 		case decimal.Decimal:
 			return xlsx.Num(x.InexactFloat64(), money)
 		case time.Time:
@@ -191,6 +199,8 @@ func writePDF(t table, f receipts.Formatter) ([]byte, error) {
 			return x
 		case int:
 			return strconv.Itoa(x)
+		case qty.Q:
+			return x.String()
 		case decimal.Decimal:
 			return f.Money(x)
 		case time.Time:

@@ -11,6 +11,7 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend/internal/auth"
 	"github.com/tejas1112001/POS_inventory/backend/internal/docdate"
 	"github.com/tejas1112001/POS_inventory/backend/internal/httpx"
+	"github.com/tejas1112001/POS_inventory/backend/internal/qty"
 	"github.com/tejas1112001/POS_inventory/backend/internal/settings"
 	"github.com/tejas1112001/POS_inventory/backend/internal/tenancy"
 )
@@ -81,7 +82,7 @@ type PeriodFigures struct {
 	Collected decimal.Decimal `json:"collected"` // payments received in the period (S10 item 5)
 	Discounts decimal.Decimal `json:"discounts"`
 	Orders    int             `json:"orders"`
-	ItemsSold int64           `json:"itemsSold"`
+	ItemsSold qty.Q           `json:"itemsSold"`
 }
 
 // SeriesPoint is one bar or point of the sales chart.

@@ -262,7 +262,7 @@ export default function AddSales() {
                               <input
                                 type="number"
                                 min="1"
-                                step="1"
+                                step="any"
                                 className={inputCls}
                                 value={l.quantity}
                                 onChange={(e) => setLine(l.key, { quantity: e.target.value })}

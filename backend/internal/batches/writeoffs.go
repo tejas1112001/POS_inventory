@@ -18,6 +18,7 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend/internal/idempotency"
 	"github.com/tejas1112001/POS_inventory/backend/internal/inventory"
 	"github.com/tejas1112001/POS_inventory/backend/internal/money"
+	"github.com/tejas1112001/POS_inventory/backend/internal/qty"
 	"github.com/tejas1112001/POS_inventory/backend/internal/tenancy"
 )
 
@@ -36,7 +37,7 @@ var writeOffReasons = []string{"expired", "damaged", "recalled", "returned_to_su
 
 type writeOffLineIn struct {
 	BatchID  money.Int `json:"batchId"`
-	Quantity money.Int `json:"quantity"`
+	Quantity qty.In    `json:"quantity"`
 	From     string    `json:"from"` // stock (default) or quarantine
 }
 
@@ -58,7 +59,7 @@ type WriteOffLineJSON struct {
 	ProductName string  `json:"productName"`
 	SKU         *string `json:"sku"`
 	From        string  `json:"from"`
-	Quantity    int     `json:"quantity"`
+	Quantity    qty.Q   `json:"quantity"`
 }
 
 // WriteOffJSON is a write-off.
@@ -72,13 +73,13 @@ type WriteOffJSON struct {
 	CreatedBy     *int64             `json:"createdBy"`
 	CreatedByName *string            `json:"createdByName"`
 	CreatedAt     time.Time          `json:"createdAt"`
-	Units         int                `json:"units"`
+	Units         qty.Q              `json:"units"`
 	Lines         []WriteOffLineJSON `json:"lines"`
 }
 
 type woLine struct {
 	batch, variant int64
-	qty            int
+	qty            qty.Q
 	from           string
 }
 
@@ -114,15 +115,15 @@ func validateWriteOff(in writeOffIn) ([]woLine, error) {
 		if !l.BatchID.Valid || l.BatchID.V <= 0 {
 			f[k+".batchId"] = "Choose the batch."
 		}
-		if !l.Quantity.Valid || l.Quantity.V < 1 || l.Quantity.V > maxMoveQty {
-			f[k+".quantity"] = "Quantity must be a whole number of at least 1."
+		if !l.Quantity.Valid || !l.Quantity.V.IsPositive() || l.Quantity.V.Greater(qty.Int(maxMoveQty)) {
+			f[k+".quantity"] = "Quantity must be more than 0."
 		}
 		dup := fmt.Sprintf("%d/%s", l.BatchID.V, from)
 		if seen[dup] {
 			f[k+".batchId"] = "This batch is already on the write-off."
 		}
 		seen[dup] = true
-		out = append(out, woLine{batch: l.BatchID.V, qty: int(l.Quantity.V), from: from})
+		out = append(out, woLine{batch: l.BatchID.V, qty: l.Quantity.V, from: from})
 	}
 	if len(f) > 0 {
 		return nil, apperr.Fields(f)
@@ -191,8 +192,17 @@ func (a *API) createWriteOff(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
-		deltas := map[inventory.Key]int{}
-		locks := map[inventory.Key]int{}
+		frac, err := inventory.Fractional(ctx, tx, vids)
+		if err != nil {
+			return err
+		}
+		for i, l := range lines {
+			if !inventory.AllowedQty(l.qty, frac[l.variant]) {
+				f[fmt.Sprintf("lines[%d].quantity", i)] = inventory.WholeOnlyMessage
+			}
+		}
+		deltas := map[inventory.Key]qty.Q{}
+		locks := map[inventory.Key]qty.Q{}
 		alloc := inventory.Allocation{}
 		for i, l := range lines {
 			if !tr[l.variant] {
@@ -201,19 +211,19 @@ func (a *API) createWriteOff(w http.ResponseWriter, r *http.Request) {
 			}
 			k := inventory.Key{Store: store, Variant: l.variant}
 			if l.from == bucketStock {
-				deltas[k] -= l.qty
-				locks[k] -= l.qty
+				deltas[k] = deltas[k].Sub(l.qty)
+				locks[k] = locks[k].Sub(l.qty)
 				alloc[k] = append(alloc[k], inventory.BatchQty{BatchID: l.batch, Qty: l.qty})
 			} else if _, ok := locks[k]; !ok {
-				locks[k] = 1 // quarantine only: the stock row is locked, not changed
+				locks[k] = qty.Int(1) // quarantine only: the stock row is locked, not changed
 			}
 		}
 		if len(f) > 0 {
 			return apperr.Fields(f)
 		}
 		for k, d := range locks {
-			if d == 0 {
-				locks[k] = 1
+			if d.IsZero() {
+				locks[k] = qty.Int(1)
 			}
 		}
 		// Stock rows first, then batch rows (§1.5).
@@ -234,9 +244,9 @@ func (a *API) createWriteOff(w http.ResponseWriter, r *http.Request) {
 			RETURNING id`, ref, store, in.Reason, strings.TrimSpace(in.Note), p.UserID).Scan(&id); err != nil {
 			return err
 		}
-		units := 0
+		var units qty.Q
 		for _, l := range lines {
-			units += l.qty
+			units = units.Add(l.qty)
 			if _, err := tx.Exec(ctx, `INSERT INTO write_off_lines (write_off_id, batch_id, variant_id, bucket, quantity) VALUES ($1, $2, $3, $4, $5)`,
 				id, l.batch, l.variant, l.from, l.qty); err != nil {
 				return err
@@ -252,7 +262,7 @@ func (a *API) createWriteOff(w http.ResponseWriter, r *http.Request) {
 			if l.from != bucketQuarantine {
 				continue
 			}
-			if err := inventory.Quarantine(ctx, tx, store, l.batch, -l.qty, inventory.ReasonWriteOff, iref, p.UserID); err != nil {
+			if err := inventory.Quarantine(ctx, tx, store, l.batch, l.qty.Neg(), inventory.ReasonWriteOff, iref, p.UserID); err != nil {
 				return err
 			}
 		}
@@ -324,7 +334,7 @@ func loadWriteOffs(ctx context.Context, tx tenancy.TenantTx, ids []int64) ([]Wri
 		}
 		if x := byID[wid]; x != nil {
 			x.Lines = append(x.Lines, l)
-			x.Units += l.Quantity
+			x.Units = x.Units.Add(l.Quantity)
 		}
 	}
 	rows.Close()

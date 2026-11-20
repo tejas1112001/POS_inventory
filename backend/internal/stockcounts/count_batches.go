@@ -10,6 +10,7 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend/internal/batches"
 	"github.com/tejas1112001/POS_inventory/backend/internal/inventory"
 	"github.com/tejas1112001/POS_inventory/backend/internal/modules"
+	"github.com/tejas1112001/POS_inventory/backend/internal/qty"
 	"github.com/tejas1112001/POS_inventory/backend/internal/tenancy"
 )
 
@@ -33,7 +34,7 @@ type UncountedBatchJSON struct {
 	VariantID   int64   `json:"variantId"`
 	ProductName string  `json:"productName"`
 	SKU         string  `json:"sku"`
-	CurrentQty  int     `json:"currentQty"`
+	CurrentQty  qty.Q   `json:"currentQty"`
 }
 
 const qUncountedBatches = `SELECT s.batch_id, b.batch_no::text, to_char(b.expiry_date, 'YYYY-MM-DD'), b.is_unknown, b.variant_id,
@@ -129,39 +130,39 @@ func resolveCountBatches(ctx context.Context, tx tenancy.TenantTx, in []change, 
 // countLine is one counted line at completion.
 type countLine struct {
 	id, batch int64
-	qty       int
+	qty       qty.Q
 }
 
 // postVariant posts one variant's count. It returns each line's expected
 // quantity and difference (by line id), and the units moved up and down.
-func postVariant(ctx context.Context, tx tenancy.TenantTx, storeID, variant int64, lines []countLine, have int, byBatch bool,
-	ref inventory.Ref, uid int64) (exp, diff map[int64]int, up, down int, err error) {
-	exp, diff = map[int64]int{}, map[int64]int{}
+func postVariant(ctx context.Context, tx tenancy.TenantTx, storeID, variant int64, lines []countLine, have qty.Q, byBatch bool,
+	ref inventory.Ref, uid int64) (exp, diff map[int64]qty.Q, up, down qty.Q, err error) {
+	exp, diff = map[int64]qty.Q{}, map[int64]qty.Q{}
 	if !byBatch {
-		total := 0
+		var total qty.Q
 		for _, l := range lines {
-			total += l.qty
+			total = total.Add(l.qty)
 		}
-		d := total - have
+		d := total.Sub(have)
 		for i, l := range lines {
 			exp[l.id] = have
 			if i == 0 {
 				diff[l.id] = d
 			}
 		}
-		if d != 0 {
+		if !d.IsZero() {
 			if _, err = inventory.Move(ctx, tx, storeID, variant, d, inventory.ReasonStockCount, ref, uid); err != nil {
 				return
 			}
 		}
-		if d > 0 {
+		if d.IsPositive() {
 			up = d
 		} else {
-			down = -d
+			down = d.Neg()
 		}
 		return
 	}
-	counted := map[int64]int{}
+	counted := map[int64]qty.Q{}
 	key := make([]int64, len(lines))
 	for i, l := range lines {
 		b := l.batch
@@ -171,9 +172,9 @@ func postVariant(ctx context.Context, tx tenancy.TenantTx, storeID, variant int6
 			}
 		}
 		key[i] = b
-		counted[b] += l.qty
+		counted[b] = counted[b].Add(l.qty)
 	}
-	var before map[int64]int
+	var before map[int64]qty.Q
 	if before, err = inventory.CountBatches(ctx, tx, storeID, variant, counted, inventory.ReasonStockCount, ref, uid); err != nil {
 		return
 	}
@@ -182,21 +183,21 @@ func postVariant(ctx context.Context, tx tenancy.TenantTx, storeID, variant int6
 		b := key[i]
 		exp[l.id] = before[b]
 		if !done[b] {
-			diff[l.id] = counted[b] - before[b]
+			diff[l.id] = counted[b].Sub(before[b])
 			done[b] = true
 		}
 	}
 	for b := range before {
 		if _, ok := counted[b]; !ok {
-			counted[b] = 0
+			counted[b] = qty.Zero
 		}
 	}
 	for b, q := range counted {
-		switch d := q - before[b]; {
-		case d > 0:
-			up += d
-		case d < 0:
-			down -= d
+		switch d := q.Sub(before[b]); {
+		case d.IsPositive():
+			up = up.Add(d)
+		case d.IsNegative():
+			down = down.Sub(d)
 		}
 	}
 	return

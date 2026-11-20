@@ -28,6 +28,7 @@ import SaleDone from './SaleDone';
 import CustomerPicker from './CustomerPicker';
 import ShortcutsHelp from './ShortcutsHelp';
 import BatchPicker from './BatchPicker';
+import { fmtQty } from '@/lib/qty';
 
 const FAV_KEY = 'pos.favourites';
 
@@ -451,7 +452,7 @@ export default function Checkout() {
                           <Input
                             autoFocus
                             type="text"
-                            inputMode="numeric"
+                            inputMode={l.allowFraction ? 'decimal' : 'numeric'}
                             defaultValue={l.quantity}
                             aria-label={`Quantity of ${lineName(l)}`}
                             className="h-9 w-14 text-center tabular-nums"
@@ -466,8 +467,8 @@ export default function Checkout() {
                             }}
                           />
                         ) : (
-                          <button type="button" onClick={() => setEditingQty(l.key)} className="h-9 min-w-10 rounded-md px-1 text-center text-sm font-semibold tabular-nums hover:bg-muted" aria-label={`Quantity ${l.quantity}. Tap to type a quantity`}>
-                            {l.quantity}
+                          <button type="button" onClick={() => setEditingQty(l.key)} className="h-9 min-w-10 rounded-md px-1 text-center text-sm font-semibold tabular-nums hover:bg-muted" aria-label={`Quantity ${fmtQty(l.quantity)}. Tap to type a quantity`}>
+                            {fmtQty(l.quantity)}
                           </button>
                         )}
                         <Button variant="outline" size="icon" className="size-9" aria-label={`One more ${lineName(l)}`} disabled={l.quantity >= l.maxQty} onClick={() => c.changeQuantity(l.key, 1)}>

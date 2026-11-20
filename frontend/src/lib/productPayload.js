@@ -22,6 +22,7 @@ export function productUpdatePayload(p, patch = {}, variantAttrs = null) {
     barcodeSymbology: p.barcodeSymbology ?? null,
     sellingType: p.sellingType ?? null,
     slug: p.slug ?? null,
+    allowFraction: p.allowFraction, // H3: kept as it is
     variants: (p.ProductVariants || []).map((v) => ({
       id: v.id,
       sku: v.sku,

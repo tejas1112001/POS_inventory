@@ -19,6 +19,7 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend/internal/files"
 	"github.com/tejas1112001/POS_inventory/backend/internal/httpx"
 	"github.com/tejas1112001/POS_inventory/backend/internal/plans"
+	"github.com/tejas1112001/POS_inventory/backend/internal/qty"
 	"github.com/tejas1112001/POS_inventory/backend/internal/rbac"
 	"github.com/tejas1112001/POS_inventory/backend/internal/settings"
 	"github.com/tejas1112001/POS_inventory/backend/internal/tenancy"
@@ -39,7 +40,7 @@ type storeJSON struct {
 	IsPublicEnabled bool    `json:"isPublicEnabled"`
 	// Only on the Stores page list (?includeInactive=true).
 	IsDefault  *bool     `json:"isDefault,omitempty"`
-	StockUnits *int64    `json:"stockUnits,omitempty"`
+	StockUnits *qty.Q    `json:"stockUnits,omitempty"`
 	CreatedBy  *int64    `json:"created_by"`
 	CreatedAt  time.Time `json:"createdAt"`
 	UpdatedAt  time.Time `json:"updatedAt"`
@@ -165,14 +166,15 @@ func addStoreExtras(ctx context.Context, tx tenancy.TenantTx, out []storeJSON) e
 	for i := range out {
 		ids[i] = out[i].ID
 	}
-	units := map[int64]int64{}
+	units := map[int64]qty.Q{}
 	rows, err := tx.Query(ctx, qStoreStock, ids)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var id, n int64
+		var id int64
+		var n qty.Q
 		if err := rows.Scan(&id, &n); err != nil {
 			return err
 		}

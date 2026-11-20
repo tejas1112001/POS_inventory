@@ -15,14 +15,15 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend/internal/httpx"
 	"github.com/tejas1112001/POS_inventory/backend/internal/inventory"
 	"github.com/tejas1112001/POS_inventory/backend/internal/money"
+	"github.com/tejas1112001/POS_inventory/backend/internal/qty"
 	"github.com/tejas1112001/POS_inventory/backend/internal/tenancy"
 )
 
 // inventoryRow is the old flat GET /api/inventory row.
 type inventoryRow struct {
 	ID            int64           `json:"id"`
-	Qty           int             `json:"qty"`
-	QuantityAlert int             `json:"quantityAlert"`
+	Qty           qty.Q           `json:"qty"`
+	QuantityAlert qty.Q           `json:"quantityAlert"`
 	UpdatedAt     time.Time       `json:"updatedAt"`
 	VariantID     int64           `json:"variantId"`
 	SKU           string          `json:"sku"`
@@ -52,11 +53,11 @@ const (
 		qInvFilter + ` ORDER BY i.updated_at DESC, i.id DESC LIMIT $4 OFFSET $5`
 )
 
-func stockStatus(qty, alert int) string {
+func stockStatus(q, alert qty.Q) string {
 	switch {
-	case qty <= 0:
+	case !q.IsPositive():
 		return "Out of Stock"
-	case qty <= alert:
+	case !q.Greater(alert):
 		return "Low Stock"
 	default:
 		return "In Stock"
@@ -112,8 +113,8 @@ func (a *API) listInventory(w http.ResponseWriter, r *http.Request) {
 type setInventoryIn struct {
 	VariantID     money.Int `json:"variantId"`
 	StoreID       money.Int `json:"storeId"`
-	Qty           money.Int `json:"qty"`
-	QuantityAlert money.Int `json:"quantityAlert"`
+	Qty           qty.In    `json:"qty"`
+	QuantityAlert qty.In    `json:"quantityAlert"`
 }
 
 // setInventory sets an absolute quantity (qty >= 0), writes the ledger and
@@ -131,10 +132,10 @@ func (a *API) setInventory(w http.ResponseWriter, r *http.Request) {
 	if !in.StoreID.Valid || in.StoreID.V <= 0 {
 		f.add("storeId", "storeId is required")
 	}
-	if !in.Qty.Valid || in.Qty.V < 0 || in.Qty.V > 1_000_000_000 {
+	if !in.Qty.Valid || in.Qty.V.IsNegative() || in.Qty.V.Greater(maxStock) {
 		f.add("qty", "qty must be between 0 and 1000000000")
 	}
-	if in.QuantityAlert.V < 0 || in.QuantityAlert.V > 1_000_000_000 {
+	if in.QuantityAlert.Err != nil || in.QuantityAlert.V.IsNegative() || in.QuantityAlert.V.Greater(maxStock) {
 		f.add("quantityAlert", "quantityAlert must not be negative")
 	}
 	if err := f.err(); err != nil {
@@ -153,19 +154,25 @@ func (a *API) setInventory(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			return apperr.Invalid("variantId", "Variant or store not found.")
 		}
-		var before int
+		if err := inventory.RequireAllowed(r.Context(), tx, "qty", in.VariantID.V, in.Qty.V); err != nil {
+			return err
+		}
+		if err := inventory.RequireAllowed(r.Context(), tx, "quantityAlert", in.VariantID.V, in.QuantityAlert.V); err != nil {
+			return err
+		}
+		var before qty.Q
 		if err := tx.QueryRow(r.Context(), `SELECT coalesce((SELECT qty FROM inventories WHERE store_id = $1 AND variant_id = $2), 0)`,
 			in.StoreID.V, in.VariantID.V).Scan(&before); err != nil {
 			return err
 		}
-		alert := int(in.QuantityAlert.V)
+		alert := in.QuantityAlert.V
 		if !in.QuantityAlert.Valid {
 			if err := tx.QueryRow(r.Context(), `SELECT coalesce((SELECT quantity_alert FROM inventories WHERE store_id = $1 AND variant_id = $2), 0)`,
 				in.StoreID.V, in.VariantID.V).Scan(&alert); err != nil {
 				return err
 			}
 		}
-		id, err := inventory.Set(r.Context(), tx, in.StoreID.V, in.VariantID.V, int(in.Qty.V), alert, inventory.ReasonManualSet,
+		id, err := inventory.Set(r.Context(), tx, in.StoreID.V, in.VariantID.V, in.Qty.V, alert, inventory.ReasonManualSet,
 			inventory.Ref{Type: "manual"}, uid)
 		if err != nil {
 			return err
@@ -191,8 +198,8 @@ type movementJSON struct {
 	VariantID int64     `json:"variantId"`
 	SKU       string    `json:"sku"`
 	Product   string    `json:"productName"`
-	Delta     int       `json:"delta"`
-	QtyAfter  int       `json:"qtyAfter"`
+	Delta     qty.Q     `json:"delta"`
+	QtyAfter  qty.Q     `json:"qtyAfter"`
 	Reason    string    `json:"reason"`
 	RefType   *string   `json:"refType"`
 	RefID     *int64    `json:"refId"`

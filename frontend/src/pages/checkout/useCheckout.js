@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '@/services/api';
 import { priceChanges } from '@/lib/checkout';
+import { addQty, fmtQty, parseQty } from '@/lib/qty';
 import { variantLabel, variantStock, variantsOf } from '@/components/pos/stock';
 
 const RENEW_MS = 60_000; // locks last 2 minutes; renew well before
@@ -21,7 +22,7 @@ export function cartBody(lines, { storeId, customerId, discount }) {
       quantity: l.quantity,
       unitPrice: l.unitPrice,
       // Batches the cashier chose (industry P3 item 3); dropped once they no longer fit the quantity.
-      ...(l.batches?.length && l.batches.reduce((n, b) => n + b.quantity, 0) <= l.quantity ? { batches: l.batches } : {}),
+      ...(l.batches?.length && addQty(...l.batches.map((b) => b.quantity)) <= l.quantity ? { batches: l.batches } : {}),
     })),
     storeId: Number(storeId),
     ...(customerId ? { customerId: Number(customerId) } : {}),
@@ -159,9 +160,9 @@ export default function useCheckout({ defaultCustomerId }) {
     (key, delta) => {
       const line = lines.find((l) => l.key === key);
       if (!line) return;
-      const quantity = line.quantity + delta;
+      const quantity = addQty(line.quantity, delta);
       if (delta > 0 && quantity > line.maxQty) {
-        setProblem(`Only ${line.maxQty} of "${lineName(line)}" in stock here.`);
+        setProblem(`Only ${fmtQty(line.maxQty)} of "${lineName(line)}" in stock here.`);
         return;
       }
       setProblem(null);
@@ -174,11 +175,16 @@ export default function useCheckout({ defaultCustomerId }) {
     (key, qty) => {
       const line = lines.find((l) => l.key === key);
       if (!line) return;
-      const n = Math.floor(Number(qty));
-      if (!Number.isFinite(n) || n < 1) return;
+      // H3: part units (1.25 kg) only for a product that allows them.
+      const n = parseQty(qty, { fractional: line.allowFraction });
+      if (n === null) {
+        if (!line.allowFraction && parseQty(qty, { fractional: true }) !== null) setProblem(`"${lineName(line)}" is sold in whole units only.`);
+        return;
+      }
+      if (n <= 0) return;
       if (n > line.maxQty) {
-        setProblem(`Only ${line.maxQty} of "${lineName(line)}" in stock here.`);
-        setLines((prev) => prev.map((l) => (l.key === key ? { ...l, quantity: Math.max(1, line.maxQty) } : l)));
+        setProblem(`Only ${fmtQty(line.maxQty)} of "${lineName(line)}" in stock here.`);
+        setLines((prev) => prev.map((l) => (l.key === key ? { ...l, quantity: line.allowFraction ? line.maxQty : Math.max(1, Math.floor(line.maxQty)) } : l)));
         return;
       }
       setProblem(null);
@@ -221,8 +227,9 @@ export default function useCheckout({ defaultCustomerId }) {
             image: fresh.image,
             price: Number(v.price),
             unitPrice: v.price,
-            quantity: 1,
+            quantity: fresh.allowFraction ? Math.min(1, available) : 1,
             maxQty: available,
+            allowFraction: !!fresh.allowFraction,
           },
         ]);
         return v.id;
@@ -262,7 +269,7 @@ export default function useCheckout({ defaultCustomerId }) {
             notes.push(`"${l.name || fresh.name}" is out of stock here.`);
             continue;
           }
-          if (l.quantity > stock) notes.push(`Only ${stock} of "${l.name || fresh.name}" left here.`);
+          if (l.quantity > stock) notes.push(`Only ${fmtQty(stock)} of "${l.name || fresh.name}" left here.`);
           next.push({
             key: v.id,
             productId: pid,
@@ -274,6 +281,7 @@ export default function useCheckout({ defaultCustomerId }) {
             unitPrice: l.unitPrice ?? v.price,
             quantity: Math.min(l.quantity, stock),
             maxQty: stock,
+            allowFraction: !!fresh.allowFraction,
           });
         }
       }

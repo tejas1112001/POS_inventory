@@ -23,6 +23,7 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend/internal/inventory"
 	"github.com/tejas1112001/POS_inventory/backend/internal/money"
 	"github.com/tejas1112001/POS_inventory/backend/internal/plans"
+	"github.com/tejas1112001/POS_inventory/backend/internal/qty"
 	"github.com/tejas1112001/POS_inventory/backend/internal/rbac"
 	"github.com/tejas1112001/POS_inventory/backend/internal/tenancy"
 )
@@ -149,7 +150,9 @@ type posProduct struct {
 	Image           *string          `json:"image"`
 	Category        string           `json:"category"`
 	Price           decimal.Decimal  `json:"price"`
-	Qty             int              `json:"qty"`
+	Qty             qty.Q            `json:"qty"`
+	AllowFraction   bool             `json:"allowFraction"`
+	Units           []UnitJSON       `json:"units,omitempty"` // H3: units it is sold in besides the base unit
 	Tax             *decimal.Decimal `json:"tax"`
 	TaxType         *string          `json:"taxType"`
 	IsLocked        bool             `json:"isLocked"`
@@ -169,8 +172,8 @@ type posVariant struct {
 }
 
 type posStock struct {
-	Qty           int   `json:"qty"`
-	QuantityAlert int   `json:"quantityAlert"`
+	Qty           qty.Q `json:"qty"`
+	QuantityAlert qty.Q `json:"quantityAlert"`
 	StoreID       int64 `json:"store_id"`
 }
 
@@ -185,7 +188,7 @@ func slimPOS(list []ProductJSON) []posProduct {
 			}
 			vs[j] = posVariant{ID: v.ID, SKU: v.SKU, ItemBarcode: v.ItemBarcode, Label: v.Label, Price: v.Price, Attributes: v.Attributes, Inventories: inv}
 		}
-		out[i] = posProduct{ID: p.ID, Name: p.Name, Image: p.Image, Category: p.Category, Price: p.Price, Qty: p.Qty,
+		out[i] = posProduct{ID: p.ID, Name: p.Name, Image: p.Image, Category: p.Category, Price: p.Price, Qty: p.Qty, AllowFraction: p.AllowFraction, Units: saleUnits(p.Units),
 			Tax: p.Tax, TaxType: p.TaxType, IsLocked: p.IsLocked, LockedAt: p.LockedAt, LockedBy: p.LockedBy, ProductVariants: vs}
 	}
 	return out
@@ -304,6 +307,12 @@ func (a *API) create(w http.ResponseWriter, r *http.Request) {
 		if err := trackingFor(r.Context(), tx, principal(r), id, in.TracksBatches, true, r.UserAgent()); err != nil {
 			return err
 		}
+		if err := fractionFor(r.Context(), tx, id, in.AllowFraction); err != nil {
+			return err
+		}
+		if err := unitsFor(r.Context(), tx, id, in.Units); err != nil {
+			return err
+		}
 		out, _, err = loadOne(r.Context(), tx, id, loadOpts{})
 		return err
 	})
@@ -376,6 +385,12 @@ func (a *API) update(w http.ResponseWriter, r *http.Request) {
 		if err := trackingFor(r.Context(), tx, principal(r), id, in.TracksBatches, false, r.UserAgent()); err != nil {
 			return err
 		}
+		if err := fractionFor(r.Context(), tx, id, in.AllowFraction); err != nil {
+			return err
+		}
+		if err := unitsFor(r.Context(), tx, id, in.Units); err != nil {
+			return err
+		}
 		var err error
 		out, _, err = loadOne(r.Context(), tx, id, loadOpts{})
 		return err
@@ -405,12 +420,12 @@ func (a *API) remove(w http.ResponseWriter, r *http.Request) {
 			}
 			return err
 		}
-		var stock int
+		var stock qty.Q
 		if err := tx.QueryRow(r.Context(), `SELECT coalesce(sum(i.qty), 0) FROM inventories i JOIN product_variants v ON v.id = i.variant_id
 			WHERE v.product_id = $1 AND v.deleted_at IS NULL`, id).Scan(&stock); err != nil {
 			return err
 		}
-		if stock > 0 {
+		if stock.IsPositive() {
 			return apperr.Conflict(apperr.CodeInvalidState, "A product that still has stock cannot be deleted. Set its stock to 0 first.")
 		}
 		if _, err := tx.Exec(r.Context(), `UPDATE products SET deleted_at = now(), status = 'Inactive' WHERE id = $1`, id); err != nil {

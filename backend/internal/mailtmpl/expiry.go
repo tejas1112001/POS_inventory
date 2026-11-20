@@ -1,7 +1,5 @@
 package mailtmpl
 
-import "strconv"
-
 // ExpiryDigestTemplate is the owner's daily expiry email (industry P3 item 7).
 const ExpiryDigestTemplate = "expiry_digest"
 
@@ -13,7 +11,7 @@ type ExpiryItem struct {
 // ExpiryDigest is the email data. Items holds at most the first 50.
 type ExpiryDigest struct {
 	BusinessName, Name, Date, Link           string
-	Expired, Expiring, Quarantined, Recalled int // units
+	Expired, Expiring, Quarantined, Recalled string // units, formatted (H3: may have decimals)
 	WindowDays, Count                        int
 	Items                                    []ExpiryItem
 }
@@ -41,7 +39,7 @@ func RenderExpiryDigest(d ExpiryDigest) (Rendered, error) {
 	}
 	d.Items = items
 	v := expiryView{ExpiryDigest: d, More: max(d.Count-len(items), 0)}
-	subj := "Expiry check at " + d.BusinessName + ": " + strconv.Itoa(d.Expired) + " expired, " + strconv.Itoa(d.Expiring) + " expiring soon"
+	subj := "Expiry check at " + d.BusinessName + ": " + oneLine(d.Expired, 20) + " expired, " + oneLine(d.Expiring, 20) + " expiring soon"
 	v.Title = subject(subj)
 	v.Footnote = "Sent every morning while stock is expired or expiring. Turn it off in Settings → Batches."
 	text, html, err := render("expiry", v)

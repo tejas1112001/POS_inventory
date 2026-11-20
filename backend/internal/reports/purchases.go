@@ -12,6 +12,7 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend/internal/apperr"
 	"github.com/tejas1112001/POS_inventory/backend/internal/docdate"
 	"github.com/tejas1112001/POS_inventory/backend/internal/httpx"
+	"github.com/tejas1112001/POS_inventory/backend/internal/qty"
 	"github.com/tejas1112001/POS_inventory/backend/internal/settings"
 	"github.com/tejas1112001/POS_inventory/backend/internal/tenancy"
 )
@@ -42,10 +43,10 @@ type PurchaseRow struct {
 	DueDate        time.Time       `json:"dueDate"`
 	Product        PurchaseProduct `json:"product"`
 	Category       string          `json:"category"`
-	PurchaseQty    int             `json:"purchaseQty"`
-	ReceivedQty    int             `json:"receivedQty"` // industry P1 item 8
+	PurchaseQty    qty.Q           `json:"purchaseQty"`
+	ReceivedQty    qty.Q           `json:"receivedQty"` // industry P1 item 8
 	PurchaseAmount decimal.Decimal `json:"purchaseAmount"`
-	StockQty       int             `json:"stockQty"`
+	StockQty       qty.Q           `json:"stockQty"`
 	PurchaseID     int64           `json:"purchaseId"`
 	Date           time.Time       `json:"date"`
 	Status         string          `json:"status"`

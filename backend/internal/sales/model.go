@@ -9,6 +9,7 @@ import (
 	"github.com/shopspring/decimal"
 
 	"github.com/tejas1112001/POS_inventory/backend/internal/batches"
+	"github.com/tejas1112001/POS_inventory/backend/internal/qty"
 	"github.com/tejas1112001/POS_inventory/backend/internal/tenancy"
 )
 
@@ -34,8 +35,8 @@ type ItemJSON struct {
 	Name         string           `json:"name"`
 	ProductName  string           `json:"product_name"`
 	SKU          *string          `json:"sku"`
-	Quantity     int              `json:"quantity"`
-	Qty          int              `json:"qty"`
+	Quantity     qty.Q            `json:"quantity"`
+	Qty          qty.Q            `json:"qty"`
 	UnitPrice    decimal.Decimal  `json:"unit_price"`
 	UnitPriceC   decimal.Decimal  `json:"unitPrice"`
 	Price        decimal.Decimal  `json:"price"`
@@ -48,7 +49,7 @@ type ItemJSON struct {
 	SGST         *decimal.Decimal `json:"sgst"`
 	IGST         *decimal.Decimal `json:"igst"`
 	Subtotal     decimal.Decimal  `json:"subtotal"`
-	ReturnedQty  int              `json:"returnedQty"` // returned so far, over all returns of the sale
+	ReturnedQty  qty.Q            `json:"returnedQty"` // returned so far, over all returns of the sale
 	CreatedAt    time.Time        `json:"createdAt"`
 	Product      NameRef          `json:"product"`
 	Variant      *VariantRef      `json:"variant"`
@@ -58,6 +59,12 @@ type ItemJSON struct {
 	// HSN is the product's HSN code at sale time (industry P1 item 10;
 	// null on older sales).
 	HSN *string `json:"hsn_code"`
+	// The unit the line was sold in (H3), when not the base unit: its name
+	// and size at sale time, and the quantity in it. Quantity is in base
+	// units either way.
+	UnitName   *string `json:"unitName"`
+	UnitFactor *qty.Q  `json:"unitFactor"`
+	UnitQty    *qty.Q  `json:"unitQty"`
 	// Batches the line was sold from, with the details at sale time, and
 	// its warnings (industry P3 item 3, A27). Empty for untracked lines.
 	Batches  []ItemBatchJSON `json:"batches"`
@@ -75,7 +82,7 @@ type ItemBatchJSON struct {
 	BatchNo  string           `json:"batchNo"`
 	Expiry   *string          `json:"expiry"`
 	MRP      *decimal.Decimal `json:"mrp"`
-	Quantity int              `json:"quantity"`
+	Quantity qty.Q            `json:"quantity"`
 	Chosen   bool             `json:"chosen"`
 	Unknown  bool             `json:"unknown"`
 }
@@ -150,6 +157,7 @@ const (
 			i.catalog_price, i.discount, i.tax_type, i.tax_rate, i.tax_amount, i.cgst, i.sgst, i.igst, i.subtotal,
 			i.created_at, v.attributes, i.mrp, i.mrp_amount,
 			coalesce((SELECT sum(r.quantity) FROM return_items r WHERE r.order_item_id = i.id), 0), i.variant_label, i.hsn_code,
+			i.unit_name, i.unit_factor, i.unit_qty,
 			coalesce((SELECT jsonb_agg(jsonb_build_object('batchId', ob.batch_id, 'batchNo', ob.batch_no, 'expiry', to_char(ob.expiry_date, 'YYYY-MM-DD'),
 				'mrp', ob.mrp, 'quantity', ob.quantity, 'chosen', ob.chosen, 'unknown', ob.is_unknown) ORDER BY ob.expiry_date NULLS LAST, ob.batch_id)
 				FROM order_item_batches ob WHERE ob.order_item_id = i.id), '[]'::jsonb)
@@ -200,7 +208,8 @@ func load(ctx context.Context, tx tenancy.TenantTx, ids []int64) ([]SaleJSON, er
 		var attrs []byte
 		if err := rows.Scan(&it.ID, &it.SaleID, &it.ProductID, &it.VariantID, &it.ProductName, &it.SKU, &it.Quantity, &it.UnitPrice,
 			&it.CatalogPrice, &it.Discount, &it.TaxType, &it.TaxRate, &it.TaxAmount, &it.CGST, &it.SGST, &it.IGST, &it.Subtotal,
-			&it.CreatedAt, &attrs, &it.MRP, &it.MRPAmount, &it.ReturnedQty, &it.VariantLabel, &it.HSN, &it.Batches); err != nil {
+			&it.CreatedAt, &attrs, &it.MRP, &it.MRPAmount, &it.ReturnedQty, &it.VariantLabel, &it.HSN,
+			&it.UnitName, &it.UnitFactor, &it.UnitQty, &it.Batches); err != nil {
 			rows.Close()
 			return nil, err
 		}

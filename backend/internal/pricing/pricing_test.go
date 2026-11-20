@@ -1,6 +1,7 @@
 package pricing
 
 import (
+	"github.com/tejas1112001/POS_inventory/backend/internal/qty"
 	"math/rand/v2"
 	"testing"
 
@@ -18,7 +19,7 @@ func eq(t *testing.T, want string, got decimal.Decimal, msg string) {
 var inr = Settings{Currency: "INR", Split: SplitCGSTSGST}
 
 func TestExclusiveTaxWithCGSTSGST(t *testing.T) {
-	q, err := Compute([]Line{{UnitPrice: d("100"), Qty: 2, TaxRate: d("18")}}, decimal.Zero, decimal.Zero, inr)
+	q, err := Compute([]Line{{UnitPrice: d("100"), Qty: qty.Int(2), TaxRate: d("18")}}, decimal.Zero, decimal.Zero, inr)
 	require.NoError(t, err)
 	eq(t, "200", q.Subtotal, "subtotal")
 	eq(t, "36", q.Tax, "tax")
@@ -29,7 +30,7 @@ func TestExclusiveTaxWithCGSTSGST(t *testing.T) {
 }
 
 func TestInclusiveTaxIsNotAddedAgain(t *testing.T) {
-	q, err := Compute([]Line{{UnitPrice: d("118"), Qty: 1, TaxRate: d("18"), Inclusive: true}}, decimal.Zero, decimal.Zero, inr)
+	q, err := Compute([]Line{{UnitPrice: d("118"), Qty: qty.Int(1), TaxRate: d("18"), Inclusive: true}}, decimal.Zero, decimal.Zero, inr)
 	require.NoError(t, err)
 	eq(t, "18", q.Tax, "tax inside the price")
 	eq(t, "118", q.Total, "total")
@@ -37,7 +38,7 @@ func TestInclusiveTaxIsNotAddedAgain(t *testing.T) {
 }
 
 func TestDiscountIsAllocatedBeforeTax(t *testing.T) {
-	q, err := Compute([]Line{{UnitPrice: d("100"), Qty: 1, TaxRate: d("10")}}, d("10"), decimal.Zero, inr)
+	q, err := Compute([]Line{{UnitPrice: d("100"), Qty: qty.Int(1), TaxRate: d("10")}}, d("10"), decimal.Zero, inr)
 	require.NoError(t, err)
 	eq(t, "90", q.Lines[0].Net, "net")
 	eq(t, "9", q.Tax, "tax on the discounted amount")
@@ -65,9 +66,9 @@ func TestProRataAndLargestRemainder(t *testing.T) {
 func TestCurrencyExponents(t *testing.T) {
 	jpy := Settings{Currency: "JPY", Split: SplitNone}
 	q, err := Compute([]Line{
-		{UnitPrice: d("333.3333"), Qty: 3},
-		{UnitPrice: d("1000"), Qty: 1},
-		{UnitPrice: d("1000"), Qty: 1},
+		{UnitPrice: d("333.3333"), Qty: qty.Int(3)},
+		{UnitPrice: d("1000"), Qty: qty.Int(1)},
+		{UnitPrice: d("1000"), Qty: qty.Int(1)},
 	}, d("100"), decimal.Zero, jpy)
 	require.NoError(t, err)
 	eq(t, "1000", q.Lines[0].Gross, "gross rounded to whole yen")
@@ -77,7 +78,7 @@ func TestCurrencyExponents(t *testing.T) {
 	require.Nil(t, q.Lines[0].CGST)
 
 	kwd := Settings{Currency: "KWD", Split: SplitIGST}
-	q, err = Compute([]Line{{UnitPrice: d("1.2345"), Qty: 1, TaxRate: d("5")}}, decimal.Zero, decimal.Zero, kwd)
+	q, err = Compute([]Line{{UnitPrice: d("1.2345"), Qty: qty.Int(1), TaxRate: d("5")}}, decimal.Zero, decimal.Zero, kwd)
 	require.NoError(t, err)
 	eq(t, "1.235", q.Subtotal, "three decimals, half-up")
 	eq(t, "0.062", q.Tax, "0.06175 -> 0.062")
@@ -85,7 +86,7 @@ func TestCurrencyExponents(t *testing.T) {
 }
 
 func TestHalfUpAndShipping(t *testing.T) {
-	q, err := Compute([]Line{{UnitPrice: d("0.10"), Qty: 1, TaxRate: d("5")}}, decimal.Zero, d("40"), inr)
+	q, err := Compute([]Line{{UnitPrice: d("0.10"), Qty: qty.Int(1), TaxRate: d("5")}}, decimal.Zero, d("40"), inr)
 	require.NoError(t, err)
 	eq(t, "0.01", q.Tax, "0.005 rounds up")
 	eq(t, "0.01", *q.Lines[0].CGST, "cgst rounds up")
@@ -95,14 +96,14 @@ func TestHalfUpAndShipping(t *testing.T) {
 }
 
 func TestErrors(t *testing.T) {
-	one := []Line{{UnitPrice: d("10"), Qty: 1}}
+	one := []Line{{UnitPrice: d("10"), Qty: qty.Int(1)}}
 	_, err := Compute(one, d("10.01"), decimal.Zero, inr)
 	require.ErrorIs(t, err, ErrDiscountTooLarge)
 	_, err = Compute(one, d("-1"), decimal.Zero, inr)
 	require.ErrorIs(t, err, ErrNegative)
-	_, err = Compute([]Line{{UnitPrice: d("10"), Qty: 0}}, decimal.Zero, decimal.Zero, inr)
+	_, err = Compute([]Line{{UnitPrice: d("10"), Qty: qty.Int(0)}}, decimal.Zero, decimal.Zero, inr)
 	require.ErrorIs(t, err, ErrQuantity)
-	_, err = Compute([]Line{{UnitPrice: d("-1"), Qty: 1}}, decimal.Zero, decimal.Zero, inr)
+	_, err = Compute([]Line{{UnitPrice: d("-1"), Qty: qty.Int(1)}}, decimal.Zero, decimal.Zero, inr)
 	require.ErrorIs(t, err, ErrNegative)
 	q, err := Compute(one, d("10"), decimal.Zero, inr)
 	require.NoError(t, err, "a 100 % discount is allowed by the engine (the cap is a permission rule)")
@@ -118,14 +119,14 @@ func TestRandomCartsAreConsistent(t *testing.T) {
 		for i := 0; i < 1+r.IntN(6); i++ {
 			lines = append(lines, Line{
 				UnitPrice: decimal.New(r.Int64N(1_000_000), -4),
-				Qty:       1 + r.Int64N(5),
+				Qty:       qty.Int(1 + r.Int64N(5)),
 				TaxRate:   []decimal.Decimal{d("0"), d("5"), d("12"), d("18"), d("28")}[r.IntN(5)],
 				Inclusive: r.IntN(2) == 0,
 			})
 		}
 		var sub decimal.Decimal
 		for _, l := range lines {
-			sub = sub.Add(l.UnitPrice.Mul(decimal.NewFromInt(l.Qty)).Round(2))
+			sub = sub.Add(l.UnitPrice.Mul(l.Qty.Decimal()).Round(2))
 		}
 		disc := sub.Mul(decimal.NewFromFloat(r.Float64())).Round(2)
 		q, err := Compute(lines, disc, decimal.Zero, inr)

@@ -19,14 +19,15 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend/internal/audit"
 	"github.com/tejas1112001/POS_inventory/backend/internal/inventory"
 	"github.com/tejas1112001/POS_inventory/backend/internal/money"
+	"github.com/tejas1112001/POS_inventory/backend/internal/qty"
 	"github.com/tejas1112001/POS_inventory/backend/internal/tenancy"
 )
 
 // inventoryIn is one store's stock in a product payload.
 type inventoryIn struct {
 	StoreID       money.Int `json:"storeId"`
-	Qty           money.Int `json:"qty"`
-	QuantityAlert money.Int `json:"quantityAlert"`
+	Qty           qty.In    `json:"qty"`
+	QuantityAlert qty.In    `json:"quantityAlert"`
 }
 
 // variantIn is one variant in a product payload. The edit form sends "_id".
@@ -46,9 +47,9 @@ type variantIn struct {
 	ManufacturedDate money.Date     `json:"manufacturedDate"`
 	Inventories      []inventoryIn  `json:"inventories"`
 	// The single-product edit path may send these instead of inventories.
-	Quantity      money.Int `json:"quantity"`
+	Quantity      qty.In    `json:"quantity"`
 	StoreID       money.Int `json:"storeId"`
-	QuantityAlert money.Int `json:"quantityAlert"`
+	QuantityAlert qty.In    `json:"quantityAlert"`
 }
 
 func (v variantIn) id() int64 {
@@ -85,8 +86,8 @@ type productIn struct {
 	ItemBarcode      *string    `json:"itemBarcode"`
 	Price            money.Dec  `json:"price"`
 	MRP              money.Dec  `json:"mrp"`
-	Quantity         money.Int  `json:"quantity"`
-	QuantityAlert    money.Int  `json:"quantityAlert"`
+	Quantity         qty.In     `json:"quantity"`
+	QuantityAlert    qty.In     `json:"quantityAlert"`
 	StoreID          money.Int  `json:"storeId"`
 	ExpiryDate       money.Date `json:"expiryDate"`
 	ManufacturedDate money.Date `json:"manufacturedDate"`
@@ -99,6 +100,10 @@ type productIn struct {
 	// Industry P3 item 1 (A25): null keeps the product as it is (a new
 	// product follows the shop default: tracking on with the module on).
 	TracksBatches *bool `json:"tracksBatches"`
+	// H3: null keeps the product as it is (a new product: whole units).
+	AllowFraction *bool `json:"allowFraction"`
+	// H3: the other units; null keeps them, [] removes them.
+	Units *[]unitIn `json:"units"`
 }
 
 var (
@@ -141,8 +146,8 @@ type cleanVariant struct {
 
 type cleanInventory struct {
 	storeID int64
-	qty     int
-	alert   int
+	qty     qty.Q
+	alert   qty.Q
 }
 
 type fieldErrs map[string]string
@@ -390,13 +395,13 @@ func validateVariant(f fieldErrs, prefix string, v variantIn) (cleanVariant, err
 			f.add(p+".storeId", "the same store is listed twice")
 		}
 		seen[inv.StoreID.V] = true
-		if inv.Qty.V < 0 || inv.Qty.V > 1_000_000_000 {
+		if inv.Qty.Err != nil || inv.Qty.V.IsNegative() || inv.Qty.V.Greater(maxStock) {
 			f.add(p+".qty", "qty must be between 0 and 1000000000")
 		}
-		if inv.QuantityAlert.V < 0 || inv.QuantityAlert.V > 1_000_000_000 {
+		if inv.QuantityAlert.Err != nil || inv.QuantityAlert.V.IsNegative() || inv.QuantityAlert.V.Greater(maxStock) {
 			f.add(p+".quantityAlert", "quantityAlert must not be negative")
 		}
-		cv.inventories = append(cv.inventories, cleanInventory{storeID: inv.StoreID.V, qty: int(inv.Qty.V), alert: int(inv.QuantityAlert.V)})
+		cv.inventories = append(cv.inventories, cleanInventory{storeID: inv.StoreID.V, qty: inv.Qty.V, alert: inv.QuantityAlert.V})
 	}
 	if len(f) > before {
 		return cv, errors.New("invalid variant")
@@ -599,11 +604,11 @@ func updateProduct(ctx context.Context, tx tenancy.TenantTx, id int64, c clean, 
 		if incoming[vid] {
 			continue
 		}
-		var stock int
+		var stock qty.Q
 		if err := tx.QueryRow(ctx, `SELECT coalesce(sum(qty), 0) FROM inventories WHERE variant_id = $1`, vid).Scan(&stock); err != nil {
 			return err
 		}
-		if stock > 0 {
+		if stock.IsPositive() {
 			return apperr.Conflict(apperr.CodeInvalidState, "A variant that still has stock cannot be removed. Set its stock to 0 first.")
 		}
 		if _, err := tx.Exec(ctx, `UPDATE product_variants SET deleted_at = now() WHERE id = $1`, vid); err != nil {

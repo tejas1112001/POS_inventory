@@ -14,14 +14,15 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend/internal/attributes"
 	"github.com/tejas1112001/POS_inventory/backend/internal/files"
 	"github.com/tejas1112001/POS_inventory/backend/internal/pricing"
+	"github.com/tejas1112001/POS_inventory/backend/internal/qty"
 	"github.com/tejas1112001/POS_inventory/backend/internal/tenancy"
 )
 
 // InventoryJSON keeps the old Inventory.toJSON() keys.
 type InventoryJSON struct {
 	ID            int64     `json:"id"`
-	Qty           int       `json:"qty"`
-	QuantityAlert int       `json:"quantityAlert"`
+	Qty           qty.Q     `json:"qty"`
+	QuantityAlert qty.Q     `json:"quantityAlert"`
 	VariantID     int64     `json:"variant_id"`
 	StoreID       int64     `json:"store_id"`
 	CreatedAt     time.Time `json:"createdAt"`
@@ -93,8 +94,12 @@ type ProductJSON struct {
 	ArticleNo   *string           `json:"articleNo"`
 	// Industry P3 item 1 (A25): batch tracking and, when tracked, the batch
 	// stock at a glance (for the store asked for, or every store).
-	TracksBatches bool          `json:"tracksBatches"`
-	BatchStock    *BatchSummary `json:"batchStock"`
+	TracksBatches bool `json:"tracksBatches"`
+	// H3: quantities may have up to 3 decimals (sold by weight or length).
+	AllowFraction bool `json:"allowFraction"`
+	// H3: other units it is sold or bought in (the base unit is Unit).
+	Units      []UnitJSON    `json:"units"`
+	BatchStock *BatchSummary `json:"batchStock"`
 
 	Category       string          `json:"category"`
 	CategoryIDC    *int64          `json:"categoryId"`
@@ -107,7 +112,7 @@ type ProductJSON struct {
 	CreatedByName  string          `json:"createdBy"`
 	CreatedByIDC   *int64          `json:"createdById"`
 	Price          decimal.Decimal `json:"price"`
-	Qty            int             `json:"qty"`
+	Qty            qty.Q           `json:"qty"`
 
 	imageID   *uuid.UUID
 	inclusive bool // the price includes tax (the product's tax type, else the shop default)
@@ -144,7 +149,7 @@ const (
 		EXISTS (SELECT 1 FROM store_products sp WHERE sp.product_id = p.id AND sp.is_featured AND ($2 = 0 OR sp.store_id = $2)),
 		EXISTS (SELECT 1 FROM store_products sp JOIN stores s ON s.id = sp.store_id AND s.deleted_at IS NULL
 		        WHERE sp.product_id = p.id AND sp.is_published),
-		p.attributes, p.variant_dims, p.article_no, p.tracks_batches,
+		p.attributes, p.variant_dims, p.article_no, p.tracks_batches, p.allow_fraction,
 		coalesce(p.tax_type = 'Inclusive', (SELECT prices_include_tax_default FROM settings WHERE id = 1), false),
 		CASE WHEN p.tracks_batches THEN (SELECT jsonb_build_object(
 			'sellable', coalesce(sum(s.qty) FILTER (WHERE bt.status = 'available' AND NOT coalesce(bt.expiry_date < ` + sqlShopToday + `, false)), 0),
@@ -188,7 +193,7 @@ func load(ctx context.Context, tx tenancy.TenantTx, ids []int64, o loadOpts) ([]
 			&p.TaxType, &p.Tax, &p.HSNCode, &p.DiscountType, &p.DiscountValue, &p.Warranties, &p.BarcodeSymbology,
 			&p.CategoryID, &p.SubCategoryID, &p.BrandID, &p.UnitID, &p.SupplierID, &p.CreatedByID, &p.CreatedAt, &p.UpdatedAt,
 			&p.Category, &p.Brand, &p.Unit, &p.CreatedByName, &p.IsPublished, &p.IsFeatured, &anyPublished,
-			&p.Attributes, &p.VariantDims, &p.ArticleNo, &p.TracksBatches, &p.inclusive, &p.BatchStock); err != nil {
+			&p.Attributes, &p.VariantDims, &p.ArticleNo, &p.TracksBatches, &p.AllowFraction, &p.inclusive, &p.BatchStock); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -199,6 +204,10 @@ func load(ctx context.Context, tx tenancy.TenantTx, ids []int64, o loadOpts) ([]
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	if err := loadUnits(ctx, tx, ids, byID); err != nil {
 		return nil, err
 	}
 
@@ -256,7 +265,7 @@ func load(ctx context.Context, tx tenancy.TenantTx, ids []int64, o loadOpts) ([]
 					p.ProductVariants[i].Inventories = append(p.ProductVariants[i].Inventories, inv)
 				}
 			}
-			p.Qty += inv.Qty
+			p.Qty = p.Qty.Add(inv.Qty)
 		}
 		rows.Close()
 		if err := rows.Err(); err != nil {

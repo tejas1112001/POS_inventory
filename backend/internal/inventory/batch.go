@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/tejas1112001/POS_inventory/backend/internal/apperr"
+	"github.com/tejas1112001/POS_inventory/backend/internal/qty"
 	"github.com/tejas1112001/POS_inventory/backend/internal/tenancy"
 )
 
@@ -47,7 +48,7 @@ const UnknownBatchNo = "UNBATCHED"
 // BatchQty is a quantity of one batch.
 type BatchQty struct {
 	BatchID int64
-	Qty     int // > 0; the sign comes from the key's delta
+	Qty     qty.Q // > 0; the sign comes from the key's delta
 }
 
 // Allocation names the batches of some keys' deltas. A key not listed, or
@@ -68,7 +69,7 @@ const (
 	qBatchTake = `WITH s AS (UPDATE batch_stock SET qty = qty - $3, updated_at = now()
 			WHERE store_id = $1 AND batch_id = $2 AND qty >= $3 RETURNING qty)
 		INSERT INTO batch_movements (store_id, batch_id, bucket, delta, qty_after, reason, ref_type, ref_id, user_id)
-		SELECT $1, $2, 'stock', -$3::int, s.qty, $4, NULLIF($5, ''), NULLIF($6, 0), NULLIF($7, 0) FROM s
+		SELECT $1, $2, 'stock', -$3::numeric, s.qty, $4, NULLIF($5, ''), NULLIF($6, 0), NULLIF($7, 0) FROM s
 		RETURNING qty_after`
 	// qBatchRows locks a variant's batch stock in a store (batch id order).
 	qBatchRows = `SELECT bs.batch_id, bs.qty, bs.quarantined_qty, b.expiry_date, b.is_unknown
@@ -84,7 +85,7 @@ const (
 	qQuarantineTake = `WITH s AS (UPDATE batch_stock SET quarantined_qty = quarantined_qty - $3, updated_at = now()
 			WHERE store_id = $1 AND batch_id = $2 AND quarantined_qty >= $3 RETURNING quarantined_qty)
 		INSERT INTO batch_movements (store_id, batch_id, bucket, delta, qty_after, reason, ref_type, ref_id, user_id)
-		SELECT $1, $2, 'quarantine', -$3::int, s.quarantined_qty, $4, NULLIF($5, ''), NULLIF($6, 0), NULLIF($7, 0) FROM s
+		SELECT $1, $2, 'quarantine', -$3::numeric, s.quarantined_qty, $4, NULLIF($5, ''), NULLIF($6, 0), NULLIF($7, 0) FROM s
 		RETURNING qty_after`
 	qUnknownInsert = `INSERT INTO batches (variant_id, batch_no, is_unknown, created_by) VALUES ($1, 'UNBATCHED', true, NULLIF($2, 0))
 		ON CONFLICT (variant_id) WHERE is_unknown DO NOTHING RETURNING id`
@@ -120,10 +121,10 @@ func tracked(ctx context.Context, tx tenancy.TenantTx, variants []int64) (map[in
 
 // follow keeps the batches of tracked keys in step with their stock
 // deltas. The inventories rows are already locked and moved.
-func follow(ctx context.Context, tx tenancy.TenantTx, keys []Key, deltas map[Key]int, alloc Allocation, reason string, ref Ref, userID int64) error {
+func follow(ctx context.Context, tx tenancy.TenantTx, keys []Key, deltas map[Key]qty.Q, alloc Allocation, reason string, ref Ref, userID int64) error {
 	vids := make([]int64, 0, len(keys))
 	for _, k := range keys {
-		if deltas[k] != 0 {
+		if !deltas[k].IsZero() {
 			vids = append(vids, k.Variant)
 		}
 	}
@@ -141,7 +142,7 @@ func follow(ctx context.Context, tx tenancy.TenantTx, keys []Key, deltas map[Key
 	}
 	for _, k := range keys {
 		d := deltas[k]
-		if d == 0 || !tr[k.Variant] {
+		if d.IsZero() || !tr[k.Variant] {
 			continue
 		}
 		if err := moveBatches(ctx, tx, k, d, alloc[k], reason, ref, userID); err != nil {
@@ -153,48 +154,48 @@ func follow(ctx context.Context, tx tenancy.TenantTx, keys []Key, deltas map[Key
 
 // moveBatches applies delta to one tracked (store, variant): first the named
 // batches, then the default rule for the rest.
-func moveBatches(ctx context.Context, tx tenancy.TenantTx, k Key, delta int, named []BatchQty, reason string, ref Ref, userID int64) error {
+func moveBatches(ctx context.Context, tx tenancy.TenantTx, k Key, delta qty.Q, named []BatchQty, reason string, ref Ref, userID int64) error {
 	rest := delta
 	for _, b := range named {
-		if b.Qty <= 0 {
-			return apperr.Invalid("batches", "Each batch quantity must be at least 1.")
+		if !b.Qty.IsPositive() {
+			return apperr.Invalid("batches", "Each batch quantity must be more than 0.")
 		}
 		step := b.Qty
-		if delta < 0 {
-			step = -b.Qty
+		if delta.IsNegative() {
+			step = b.Qty.Neg()
 		}
-		if (delta > 0 && rest-step < 0) || (delta < 0 && rest-step > 0) {
+		if left := rest.Sub(step); (delta.IsPositive() && left.IsNegative()) || (delta.IsNegative() && left.IsPositive()) {
 			return apperr.Invalid("batches", "The batch quantities add up to more than the line.")
 		}
 		if err := batchStep(ctx, tx, k.Store, b.BatchID, step, reason, ref, userID); err != nil {
 			return err
 		}
-		rest -= step
+		rest = rest.Sub(step)
 	}
 	switch {
-	case rest > 0:
+	case rest.IsPositive():
 		id, err := UnknownBatch(ctx, tx, k.Variant, userID)
 		if err != nil {
 			return err
 		}
 		return batchStep(ctx, tx, k.Store, id, rest, reason, ref, userID)
-	case rest < 0:
-		return takeEarliest(ctx, tx, k, -rest, reason, ref, userID)
+	case rest.IsNegative():
+		return takeEarliest(ctx, tx, k, rest.Neg(), reason, ref, userID)
 	}
 	return nil
 }
 
 // batchStep moves one batch's stock and writes its ledger row.
-func batchStep(ctx context.Context, tx tenancy.TenantTx, storeID, batchID int64, delta int, reason string, ref Ref, userID int64) error {
-	var after int
+func batchStep(ctx context.Context, tx tenancy.TenantTx, storeID, batchID int64, delta qty.Q, reason string, ref Ref, userID int64) error {
+	var after qty.Q
 	var err error
-	if delta > 0 {
+	if delta.IsPositive() {
 		err = tx.QueryRow(ctx, qBatchAdd, storeID, batchID, delta, reason, ref.Type, ref.ID, userID).Scan(&after)
 	} else {
-		err = tx.QueryRow(ctx, qBatchTake, storeID, batchID, -delta, reason, ref.Type, ref.ID, userID).Scan(&after)
+		err = tx.QueryRow(ctx, qBatchTake, storeID, batchID, delta.Neg(), reason, ref.Type, ref.ID, userID).Scan(&after)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return apperr.Conflict(apperr.CodeInsufficientStock, "Not enough stock in this batch.").
-				WithDetails(map[string]any{"batchId": batchID, "requested": -delta})
+				WithDetails(map[string]any{"batchId": batchID, "requested": delta.Neg()})
 		}
 	}
 	return err
@@ -203,7 +204,7 @@ func batchStep(ctx context.Context, tx tenancy.TenantTx, storeID, batchID int64,
 // batchRow is one locked batch_stock row.
 type batchRow struct {
 	batchID          int64
-	qty, quarantined int
+	qty, quarantined qty.Q
 	expiry           *time.Time
 	unknown          bool
 }
@@ -243,27 +244,27 @@ func earliestFirst(rs []batchRow) {
 // takeEarliest takes n units of a tracked variant out of a store, earliest
 // expiry first. Less batch stock than n breaks the §1.4 rule, which the
 // inventories check before it should make impossible.
-func takeEarliest(ctx context.Context, tx tenancy.TenantTx, k Key, n int, reason string, ref Ref, userID int64) error {
+func takeEarliest(ctx context.Context, tx tenancy.TenantTx, k Key, n qty.Q, reason string, ref Ref, userID int64) error {
 	rs, err := lockBatchRows(ctx, tx, k.Store, k.Variant)
 	if err != nil {
 		return err
 	}
 	earliestFirst(rs)
 	for _, r := range rs {
-		if n == 0 {
+		if n.IsZero() {
 			break
 		}
-		take := min(n, r.qty)
-		if take == 0 {
+		take := qty.Min(n, r.qty)
+		if !take.IsPositive() {
 			continue
 		}
-		if err := batchStep(ctx, tx, k.Store, r.batchID, -take, reason, ref, userID); err != nil {
+		if err := batchStep(ctx, tx, k.Store, r.batchID, take.Neg(), reason, ref, userID); err != nil {
 			return err
 		}
-		n -= take
+		n = n.Sub(take)
 	}
-	if n > 0 {
-		return fmt.Errorf("inventory: batch stock of variant %d in store %d is %d short of its stock", k.Variant, k.Store, n)
+	if n.IsPositive() {
+		return fmt.Errorf("inventory: batch stock of variant %d in store %d is %s short of its stock", k.Variant, k.Store, n)
 	}
 	return nil
 }
@@ -272,17 +273,17 @@ func takeEarliest(ctx context.Context, tx tenancy.TenantTx, k Key, n int, reason
 // quarantine in a store (industry P3 item 4), with its ledger row.
 // Quarantined units are outside inventories.qty (§1.4): the caller moves
 // the sellable side, having locked the stock row first (§1.5).
-func Quarantine(ctx context.Context, tx tenancy.TenantTx, storeID, batchID int64, delta int, reason string, ref Ref, userID int64) error {
-	var after int
+func Quarantine(ctx context.Context, tx tenancy.TenantTx, storeID, batchID int64, delta qty.Q, reason string, ref Ref, userID int64) error {
+	var after qty.Q
 	var err error
 	switch {
-	case delta > 0:
+	case delta.IsPositive():
 		err = tx.QueryRow(ctx, qQuarantineAdd, storeID, batchID, delta, reason, ref.Type, ref.ID, userID).Scan(&after)
-	case delta < 0:
-		err = tx.QueryRow(ctx, qQuarantineTake, storeID, batchID, -delta, reason, ref.Type, ref.ID, userID).Scan(&after)
+	case delta.IsNegative():
+		err = tx.QueryRow(ctx, qQuarantineTake, storeID, batchID, delta.Neg(), reason, ref.Type, ref.ID, userID).Scan(&after)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return apperr.Conflict(apperr.CodeInsufficientStock, "Not enough units of this batch in quarantine.").
-				WithDetails(map[string]any{"batchId": batchID, "requested": -delta})
+				WithDetails(map[string]any{"batchId": batchID, "requested": delta.Neg()})
 		}
 	}
 	return err
@@ -293,12 +294,12 @@ func Quarantine(ctx context.Context, tx tenancy.TenantTx, storeID, batchID int64
 // stock row moves by the total difference, so stock = batch sum still
 // holds (§1.4). The caller has locked the inventories row; the batch rows
 // are locked here, in batch order. It returns each batch's quantity before.
-func CountBatches(ctx context.Context, tx tenancy.TenantTx, storeID, variantID int64, counted map[int64]int, reason string, ref Ref, userID int64) (map[int64]int, error) {
+func CountBatches(ctx context.Context, tx tenancy.TenantTx, storeID, variantID int64, counted map[int64]qty.Q, reason string, ref Ref, userID int64) (map[int64]qty.Q, error) {
 	rs, err := lockBatchRows(ctx, tx, storeID, variantID)
 	if err != nil {
 		return nil, err
 	}
-	before := map[int64]int{}
+	before := map[int64]qty.Q{}
 	ids := make([]int64, 0, len(rs)+len(counted))
 	for _, r := range rs {
 		before[r.batchID] = r.qty
@@ -310,18 +311,18 @@ func CountBatches(ctx context.Context, tx tenancy.TenantTx, storeID, variantID i
 		}
 	}
 	sort.Slice(ids, func(a, b int) bool { return ids[a] < ids[b] })
-	total := 0
+	var total qty.Q
 	for _, id := range ids {
-		d := counted[id] - before[id]
-		if d == 0 {
+		d := counted[id].Sub(before[id])
+		if d.IsZero() {
 			continue
 		}
 		if err := batchStep(ctx, tx, storeID, id, d, reason, ref, userID); err != nil {
 			return nil, err
 		}
-		total += d
+		total = total.Add(d)
 	}
-	if total != 0 {
+	if !total.IsZero() {
 		if _, err := moveStock(ctx, tx, storeID, variantID, total, reason, ref, userID); err != nil {
 			return nil, err
 		}
@@ -340,7 +341,7 @@ func UnknownBatch(ctx context.Context, tx tenancy.TenantTx, variantID, userID in
 }
 
 // ApplyBatched is Apply with named batches for some keys.
-func ApplyBatched(ctx context.Context, tx tenancy.TenantTx, keys []Key, deltas map[Key]int, alloc Allocation, reason string, ref Ref, userID int64) error {
+func ApplyBatched(ctx context.Context, tx tenancy.TenantTx, keys []Key, deltas map[Key]qty.Q, alloc Allocation, reason string, ref Ref, userID int64) error {
 	if err := applyStock(ctx, tx, keys, deltas, reason, ref, userID); err != nil {
 		return err
 	}
@@ -352,7 +353,7 @@ func ApplyBatched(ctx context.Context, tx tenancy.TenantTx, keys []Key, deltas m
 // stockRow is one locked inventories row.
 type stockRow struct {
 	store, variant int64
-	qty            int
+	qty            qty.Q
 }
 
 // lockProductStock locks the inventories rows of the products' variants in
@@ -394,13 +395,13 @@ func StartTracking(ctx context.Context, tx tenancy.TenantTx, productIDs []int64,
 		if err != nil {
 			return err
 		}
-		sum := 0
+		var sum qty.Q
 		for _, r := range rs {
-			sum += r.qty
+			sum = sum.Add(r.qty)
 		}
 		k := Key{Store: s.store, Variant: s.variant}
-		switch d := s.qty - sum; {
-		case d > 0:
+		switch d := s.qty.Sub(sum); {
+		case d.IsPositive():
 			id, err := UnknownBatch(ctx, tx, s.variant, userID)
 			if err != nil {
 				return err
@@ -408,8 +409,8 @@ func StartTracking(ctx context.Context, tx tenancy.TenantTx, productIDs []int64,
 			if err := batchStep(ctx, tx, s.store, id, d, ReasonTrackingOn, ref, userID); err != nil {
 				return err
 			}
-		case d < 0:
-			if err := takeEarliest(ctx, tx, k, -d, ReasonTrackingOn, ref, userID); err != nil {
+		case d.IsNegative():
+			if err := takeEarliest(ctx, tx, k, d.Neg(), ReasonTrackingOn, ref, userID); err != nil {
 				return err
 			}
 		}
@@ -437,13 +438,13 @@ func StopTracking(ctx context.Context, tx tenancy.TenantTx, productIDs []int64, 
 			return err
 		}
 		for _, r := range rs {
-			if r.quarantined > 0 {
+			if r.quarantined.IsPositive() {
 				return apperr.Conflict(apperr.CodeInvalidState, "Some units of this product are in quarantine. Write them off or release them first.")
 			}
 		}
 		for _, r := range rs {
-			if r.qty > 0 {
-				if err := batchStep(ctx, tx, s.store, r.batchID, -r.qty, ReasonTrackingOff, ref, userID); err != nil {
+			if r.qty.IsPositive() {
+				if err := batchStep(ctx, tx, s.store, r.batchID, r.qty.Neg(), ReasonTrackingOff, ref, userID); err != nil {
 					return err
 				}
 			}

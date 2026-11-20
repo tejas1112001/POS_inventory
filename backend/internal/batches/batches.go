@@ -26,6 +26,7 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend/internal/inventory"
 	"github.com/tejas1112001/POS_inventory/backend/internal/modules"
 	"github.com/tejas1112001/POS_inventory/backend/internal/money"
+	"github.com/tejas1112001/POS_inventory/backend/internal/qty"
 	"github.com/tejas1112001/POS_inventory/backend/internal/rbac"
 	"github.com/tejas1112001/POS_inventory/backend/internal/tenancy"
 )
@@ -135,8 +136,8 @@ const sqlToday = `(now() AT TIME ZONE (SELECT timezone FROM settings WHERE id = 
 type StockJSON struct {
 	StoreID     int64  `json:"storeId"`
 	StoreName   string `json:"storeName"`
-	Qty         int    `json:"qty"`
-	Quarantined int    `json:"quarantined"`
+	Qty         qty.Q  `json:"qty"`
+	Quarantined qty.Q  `json:"quarantined"`
 }
 
 // BatchJSON is one batch.
@@ -158,8 +159,8 @@ type BatchJSON struct {
 	RecalledAt       *time.Time       `json:"recalledAt"`
 	RecallReason     *string          `json:"recallReason"`
 	Stock            []StockJSON      `json:"stock"`
-	TotalQty         int              `json:"totalQty"`
-	TotalQuarantined int              `json:"totalQuarantined"`
+	TotalQty         qty.Q            `json:"totalQty"`
+	TotalQuarantined qty.Q            `json:"totalQuarantined"`
 	CreatedAt        time.Time        `json:"createdAt"`
 	UpdatedAt        time.Time        `json:"updatedAt"`
 }
@@ -170,8 +171,8 @@ type MovementJSON struct {
 	StoreID   int64     `json:"storeId"`
 	StoreName string    `json:"storeName"`
 	Bucket    string    `json:"bucket"`
-	Delta     int       `json:"delta"`
-	QtyAfter  int       `json:"qtyAfter"`
+	Delta     qty.Q     `json:"delta"`
+	QtyAfter  qty.Q     `json:"qtyAfter"`
 	Reason    string    `json:"reason"`
 	RefType   *string   `json:"refType"`
 	RefID     *int64    `json:"refId"`
@@ -253,8 +254,8 @@ func withStock(ctx context.Context, tx tenancy.TenantTx, bs []BatchJSON, storeID
 		}
 		b := &bs[at[id]]
 		b.Stock = append(b.Stock, s)
-		b.TotalQty += s.Qty
-		b.TotalQuarantined += s.Quarantined
+		b.TotalQty = b.TotalQty.Add(s.Qty)
+		b.TotalQuarantined = b.TotalQuarantined.Add(s.Quarantined)
 	}
 	return rows.Err()
 }

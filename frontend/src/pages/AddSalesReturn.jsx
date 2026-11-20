@@ -506,7 +506,7 @@ export default function AddSalesReturn() {
                                   type="number"
                                   min="0"
                                   max={left(i)}
-                                  step="1"
+                                  step="any"
                                   className={inputCls}
                                   value={qty[i.id]?.quantity ?? ''}
                                   placeholder={`0–${left(i)}`}

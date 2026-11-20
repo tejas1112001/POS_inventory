@@ -19,6 +19,7 @@ import { ProductImage } from '@/components/shared/product-image';
 import { CategoryPill, ProductTile, VariantSheet } from '@/components/pos/catalog';
 import { lockedByOther as isLockedByOther, productStock, variantLabel, variantStock, variantsOf } from '@/components/pos/stock';
 import { formatCurrency } from '@/lib/format';
+import { addQty, fmtQty } from '@/lib/qty';
 import { cn } from '@/lib/utils';
 
 export default function POS() {
@@ -197,9 +198,9 @@ export default function POS() {
     setError(null);
     const line = lines.find((l) => l.key === key);
     if (!line) return;
-    const quantity = line.quantity + delta;
+    const quantity = addQty(line.quantity, delta);
     if (quantity > line.maxQty) {
-      setError(`Only ${line.maxQty} of "${line.name}${line.label ? ` (${line.label})` : ''}" in stock.`);
+      setError(`Only ${fmtQty(line.maxQty)} of "${line.name}${line.label ? ` (${line.label})` : ''}" in stock.`);
       return;
     }
     setLines((prev) => prev.map((l) => (l.key === key ? { ...l, quantity } : l)).filter((l) => l.quantity > 0));
@@ -387,7 +388,7 @@ export default function POS() {
                       <Button variant="outline" size="icon" className="size-9" aria-label="One less" onClick={() => changeQuantity(l.key, -1)}>
                         <Minus className="size-3.5" aria-hidden="true" />
                       </Button>
-                      <span className="w-8 text-center text-sm font-semibold tabular-nums" aria-label="Quantity">{l.quantity}</span>
+                      <span className="w-8 text-center text-sm font-semibold tabular-nums" aria-label="Quantity">{fmtQty(l.quantity)}</span>
                       <Button variant="outline" size="icon" className="size-9" aria-label="One more" disabled={l.quantity >= l.maxQty} onClick={() => changeQuantity(l.key, 1)}>
                         <Plus className="size-3.5" aria-hidden="true" />
                       </Button>

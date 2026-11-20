@@ -11,6 +11,7 @@ import (
 
 	"github.com/tejas1112001/POS_inventory/backend/internal/docdate"
 	"github.com/tejas1112001/POS_inventory/backend/internal/httpx"
+	"github.com/tejas1112001/POS_inventory/backend/internal/qty"
 	"github.com/tejas1112001/POS_inventory/backend/internal/settings"
 	"github.com/tejas1112001/POS_inventory/backend/internal/tenancy"
 )
@@ -47,9 +48,9 @@ type SalesRow struct {
 	Date           time.Time       `json:"date"`
 	Product        SalesProduct    `json:"product"`
 	Category       string          `json:"category"`
-	SoldQty        int             `json:"soldQty"`
+	SoldQty        qty.Q           `json:"soldQty"`
 	SoldAmount     decimal.Decimal `json:"soldAmount"`
-	StockQty       int             `json:"stockQty"`
+	StockQty       qty.Q           `json:"stockQty"`
 	SaleID         int64           `json:"saleId"`
 	Reference      string          `json:"reference"`
 	Status         string          `json:"status"`
@@ -61,7 +62,7 @@ type SalesRow struct {
 	UnitPrice      decimal.Decimal `json:"unitPrice"`
 	Discount       decimal.Decimal `json:"discount"`
 	Tax            decimal.Decimal `json:"tax"`
-	ReturnedQty    int             `json:"returnedQty"`
+	ReturnedQty    qty.Q           `json:"returnedQty"`
 	ReturnedAmount decimal.Decimal `json:"returnedAmount"`
 	NetAmount      decimal.Decimal `json:"netAmount"`
 }

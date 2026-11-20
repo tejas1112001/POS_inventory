@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/tejas1112001/POS_inventory/backend/internal/apperr"
+	"github.com/tejas1112001/POS_inventory/backend/internal/qty"
 	"github.com/tejas1112001/POS_inventory/backend/internal/tenancy"
 )
 
@@ -19,8 +20,8 @@ type Key struct{ Store, Variant int64 }
 type Shortage struct {
 	VariantID int64  `json:"variantId"`
 	SKU       string `json:"sku"`
-	Available int    `json:"available"`
-	Requested int    `json:"requested"`
+	Available qty.Q  `json:"available"`
+	Requested qty.Q  `json:"requested"`
 }
 
 // Lock locks every inventory row with a non-zero delta in (store, variant)
@@ -28,10 +29,10 @@ type Shortage struct {
 // order keeps concurrent documents deadlock-free (PHASE1_DESIGN §4.4). It
 // returns the keys to move, in lock order, and the quantities before the
 // change (missing rows count as 0). skus names variants in the error.
-func Lock(ctx context.Context, tx tenancy.TenantTx, deltas map[Key]int, skus map[int64]string) ([]Key, map[Key]int, error) {
+func Lock(ctx context.Context, tx tenancy.TenantTx, deltas map[Key]qty.Q, skus map[int64]string) ([]Key, map[Key]qty.Q, error) {
 	keys := make([]Key, 0, len(deltas))
 	for k, d := range deltas {
-		if d != 0 {
+		if !d.IsZero() {
 			keys = append(keys, k)
 		}
 	}
@@ -41,7 +42,7 @@ func Lock(ctx context.Context, tx tenancy.TenantTx, deltas map[Key]int, skus map
 		}
 		return keys[a].Variant < keys[b].Variant
 	})
-	have := map[Key]int{}
+	have := map[Key]qty.Q{}
 	for i := 0; i < len(keys); {
 		j := i
 		var vids []int64
@@ -59,12 +60,12 @@ func Lock(ctx context.Context, tx tenancy.TenantTx, deltas map[Key]int, skus map
 	}
 	var short []Shortage
 	for _, k := range keys {
-		if d := deltas[k]; d < 0 && have[k]+d < 0 {
-			short = append(short, Shortage{VariantID: k.Variant, SKU: skus[k.Variant], Available: have[k], Requested: -d})
+		if d := deltas[k]; d.IsNegative() && have[k].Add(d).IsNegative() {
+			short = append(short, Shortage{VariantID: k.Variant, SKU: skus[k.Variant], Available: have[k], Requested: d.Neg()})
 		}
 	}
 	if len(short) > 0 {
-		msg := fmt.Sprintf("Insufficient stock for %s. Available: %d, requested: %d.", short[0].SKU, short[0].Available, short[0].Requested)
+		msg := fmt.Sprintf("Insufficient stock for %s. Available: %s, requested: %s.", short[0].SKU, short[0].Available, short[0].Requested)
 		return nil, nil, apperr.Conflict(apperr.CodeInsufficientStock, msg).WithDetails(map[string]any{"items": short})
 	}
 	return keys, have, nil
@@ -75,16 +76,16 @@ func Lock(ctx context.Context, tx tenancy.TenantTx, deltas map[Key]int, skus map
 // performance work); a row that does not exist yet (only for an increase)
 // is then created by Move, as before. Batches of tracked products follow
 // (batch.go).
-func Apply(ctx context.Context, tx tenancy.TenantTx, keys []Key, deltas map[Key]int, reason string, ref Ref, userID int64) error {
+func Apply(ctx context.Context, tx tenancy.TenantTx, keys []Key, deltas map[Key]qty.Q, reason string, ref Ref, userID int64) error {
 	return ApplyBatched(ctx, tx, keys, deltas, nil, reason, ref, userID)
 }
 
 // applyStock is Apply without the batches.
-func applyStock(ctx context.Context, tx tenancy.TenantTx, keys []Key, deltas map[Key]int, reason string, ref Ref, userID int64) error {
+func applyStock(ctx context.Context, tx tenancy.TenantTx, keys []Key, deltas map[Key]qty.Q, reason string, ref Ref, userID int64) error {
 	b := &pgx.Batch{}
 	var moved []Key
 	for _, k := range keys {
-		if d := deltas[k]; d != 0 {
+		if d := deltas[k]; !d.IsZero() {
 			b.Queue(qMoveAndLedger, k.Store, k.Variant, d, reason, ref.Type, ref.ID, userID)
 			moved = append(moved, k)
 		}
@@ -95,10 +96,10 @@ func applyStock(ctx context.Context, tx tenancy.TenantTx, keys []Key, deltas map
 	br := tx.SendBatch(ctx, b)
 	var missing []Key
 	for _, k := range moved {
-		var after int
+		var after qty.Q
 		err := br.QueryRow().Scan(&after)
 		switch {
-		case errors.Is(err, pgx.ErrNoRows) && deltas[k] < 0:
+		case errors.Is(err, pgx.ErrNoRows) && deltas[k].IsNegative():
 			_ = br.Close()
 			return apperr.Conflict(apperr.CodeInsufficientStock, "Insufficient stock.")
 		case errors.Is(err, pgx.ErrNoRows):
@@ -120,7 +121,7 @@ func applyStock(ctx context.Context, tx tenancy.TenantTx, keys []Key, deltas map
 }
 
 // LockAndApply is Lock followed by Apply.
-func LockAndApply(ctx context.Context, tx tenancy.TenantTx, deltas map[Key]int, skus map[int64]string, reason string, ref Ref, userID int64) error {
+func LockAndApply(ctx context.Context, tx tenancy.TenantTx, deltas map[Key]qty.Q, skus map[int64]string, reason string, ref Ref, userID int64) error {
 	keys, _, err := Lock(ctx, tx, deltas, skus)
 	if err != nil {
 		return err

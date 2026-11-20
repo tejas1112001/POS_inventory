@@ -27,6 +27,8 @@ var (
 	saToken  string
 	saSecret []byte
 	saStepAt time.Time
+	saAt     time.Time // when saToken was issued: the suite outlives an access token
+	saLast   int64     // the last TOTP step used: the server refuses any step <= it
 )
 
 // superAdmin signs in the suite's Super Admin (bootstrap, password change,
@@ -57,20 +59,39 @@ func superAdmin(t *testing.T) string {
 		now := time.Now()
 		r = p("/auth/mfa/enroll/confirm", map[string]string{"challengeId": cid, "code": security.TOTPCode(saSecret, now.Add(-30*time.Second))}, "")
 		require.Equal(t, 200, r.Code, r.Raw)
-		saToken = r.Body["accessToken"].(string)
-		r = p("/auth/step-up", map[string]string{"code": security.TOTPCode(saSecret, now)}, saToken)
+		saToken, saAt = r.Body["accessToken"].(string), now
+		saLast = now.Unix()/security.TOTPPeriod - 1
+		r = p("/auth/step-up", map[string]string{"code": saCode()}, saToken)
 		require.Equal(t, 200, r.Code, r.Raw)
 		saStepAt = now
 	})
 	require.NotEmpty(t, saToken, "super admin sign-in failed earlier")
-	if time.Since(saStepAt) > 4*time.Minute { // step-up lasts 5 minutes; a later step's code is new
-		now := time.Now()
-		r := do(t, rq{method: "POST", host: adminHost, path: "/api/platform/auth/step-up", token: saToken,
-			body: map[string]string{"code": security.TOTPCode(saSecret, now)}})
+	if time.Since(saAt) > 8*time.Minute { // sign in again before the access token expires
+		r := do(t, rq{method: "POST", host: adminHost, path: "/api/platform/auth/login",
+			body: map[string]string{"email": "root@platform.test", "password": "iso-console-glacier-4242"}})
 		require.Equal(t, 200, r.Code, r.Raw)
-		saStepAt = now
+		r = do(t, rq{method: "POST", host: adminHost, path: "/api/platform/auth/mfa/verify",
+			body: map[string]string{"challengeId": r.Body["challengeId"].(string), "code": saCode()}})
+		require.Equal(t, 200, r.Code, r.Raw)
+		saToken, saAt, saStepAt = r.Body["accessToken"].(string), time.Now(), time.Time{}
+	}
+	if time.Since(saStepAt) > 4*time.Minute { // step-up lasts 5 minutes
+		r := do(t, rq{method: "POST", host: adminHost, path: "/api/platform/auth/step-up", token: saToken,
+			body: map[string]string{"code": saCode()}})
+		require.Equal(t, 200, r.Code, r.Raw)
+		saStepAt = time.Now()
 	}
 	return saToken
+}
+
+// saCode is a TOTP code for a step the server has not seen yet, waiting
+// for the next step when the current one was used.
+func saCode() string {
+	for time.Now().Unix()/security.TOTPPeriod <= saLast {
+		time.Sleep(time.Second)
+	}
+	saLast = time.Now().Unix() / security.TOTPPeriod
+	return security.TOTPCode(saSecret, time.Unix(saLast*security.TOTPPeriod, 0))
 }
 
 func console(t *testing.T, method, path string, body any) resp {

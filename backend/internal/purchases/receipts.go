@@ -25,6 +25,7 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend/internal/inventory"
 	"github.com/tejas1112001/POS_inventory/backend/internal/modules"
 	"github.com/tejas1112001/POS_inventory/backend/internal/money"
+	"github.com/tejas1112001/POS_inventory/backend/internal/qty"
 	"github.com/tejas1112001/POS_inventory/backend/internal/tenancy"
 )
 
@@ -33,7 +34,7 @@ const statusPartial = "Partially received"
 // want is one requested receipt line; nil wants everything outstanding.
 type want struct {
 	itemID  int64
-	qty     int
+	qty     qty.Q
 	field   string      // "lines[i]"
 	batches []batchWant // industry P3 item 2: tracked products only
 }
@@ -41,7 +42,7 @@ type want struct {
 // batchWant is one batch of a receipt line (A26).
 type batchWant struct {
 	arrival batches.Arrival
-	qty     int
+	qty     qty.Q
 	field   string // "lines[i].batches[j]"
 	id      int64  // resolved
 	near    bool
@@ -56,7 +57,7 @@ type receiveOpts struct {
 type received struct {
 	receiptID    int64
 	reference    string
-	units        int
+	units        qty.Q
 	full         bool             // every line is now fully received
 	nearAccepted []map[string]any // industry P3 item 2: batches accepted close to expiry
 }
@@ -73,7 +74,7 @@ const maxYearsAhead = 10
 func receive(ctx context.Context, tx tenancy.TenantTx, purchaseID, userID int64, lines []want, note string, opts receiveOpts) (received, error) {
 	type item struct {
 		store, variant   int64
-		qty, outstanding int
+		qty, outstanding qty.Q
 		cost             decimal.Decimal
 		w                *want
 	}
@@ -111,10 +112,10 @@ func receive(ctx context.Context, tx tenancy.TenantTx, purchaseID, userID int64,
 			switch {
 			case it == nil:
 				f[k+".purchaseItemId"] = "This line is not on the purchase."
-			case it.qty > 0:
+			case it.qty.IsPositive():
 				f[k+".purchaseItemId"] = "This line is listed twice."
-			case l.qty > it.outstanding:
-				f[k+".quantity"] = fmt.Sprintf("At most %d still to receive.", it.outstanding)
+			case l.qty.Greater(it.outstanding):
+				f[k+".quantity"] = fmt.Sprintf("At most %s still to receive.", it.outstanding)
 			default:
 				it.qty = l.qty
 				it.w = &lines[i]
@@ -123,16 +124,35 @@ func receive(ctx context.Context, tx tenancy.TenantTx, purchaseID, userID int64,
 		if err := apperr.Fields(f); err != nil {
 			return received{}, err
 		}
-	}
-	out := received{}
-	deltas := map[inventory.Key]int{}
-	for _, id := range order {
-		if it := items[id]; it.qty > 0 {
-			deltas[inventory.Key{Store: it.store, Variant: it.variant}] += it.qty
-			out.units += it.qty
+		var fv []int64
+		for _, l := range lines {
+			if it := items[l.itemID]; it != nil && !l.qty.IsWhole() {
+				fv = append(fv, it.variant)
+			}
+		}
+		frac, err := inventory.Fractional(ctx, tx, fv)
+		if err != nil {
+			return received{}, err
+		}
+		for i, l := range lines {
+			if it := items[l.itemID]; it != nil && !inventory.AllowedQty(l.qty, frac[it.variant]) {
+				f[fmt.Sprintf("lines[%d].quantity", i)] = inventory.WholeOnlyMessage
+			}
+		}
+		if err := apperr.Fields(f); err != nil {
+			return received{}, err
 		}
 	}
-	if out.units == 0 {
+	out := received{}
+	deltas := map[inventory.Key]qty.Q{}
+	for _, id := range order {
+		if it := items[id]; it.qty.IsPositive() {
+			k := inventory.Key{Store: it.store, Variant: it.variant}
+			deltas[k] = deltas[k].Add(it.qty)
+			out.units = out.units.Add(it.qty)
+		}
+	}
+	if out.units.IsZero() {
 		return received{}, apperr.Invalid("lines", "Nothing to receive.")
 	}
 	// Stock rows first, then batches (industry P3 §1.5: the same order as a
@@ -144,7 +164,7 @@ func receive(ctx context.Context, tx tenancy.TenantTx, purchaseID, userID int64,
 	// Industry P3 item 2: tracked products are received into named batches.
 	var vids []int64
 	for _, id := range order {
-		if it := items[id]; it.qty > 0 {
+		if it := items[id]; it.qty.IsPositive() {
 			vids = append(vids, it.variant)
 		}
 	}
@@ -155,7 +175,7 @@ func receive(ctx context.Context, tx tenancy.TenantTx, purchaseID, userID int64,
 	alloc := inventory.Allocation{}
 	if legacy {
 		for _, id := range order {
-			if it := items[id]; it.qty > 0 && tr[it.variant] {
+			if it := items[id]; it.qty.IsPositive() && tr[it.variant] {
 				return received{}, apperr.Conflict(apperr.CodeInvalidState,
 					"Some products on this purchase track batches. Receive the goods line by line and enter batch and expiry for each.")
 			}
@@ -171,7 +191,7 @@ func receive(ctx context.Context, tx tenancy.TenantTx, purchaseID, userID int64,
 		out.nearAccepted = nearOut
 		for _, id := range order {
 			it := items[id]
-			if it.qty == 0 || !tr[it.variant] {
+			if it.qty.IsZero() || !tr[it.variant] {
 				continue
 			}
 			k := inventory.Key{Store: it.store, Variant: it.variant}
@@ -191,7 +211,7 @@ func receive(ctx context.Context, tx tenancy.TenantTx, purchaseID, userID int64,
 	}
 	for _, id := range order {
 		it := items[id]
-		if it.qty <= 0 {
+		if !it.qty.IsPositive() {
 			continue
 		}
 		var riID int64
@@ -200,14 +220,14 @@ func receive(ctx context.Context, tx tenancy.TenantTx, purchaseID, userID int64,
 			return received{}, err
 		}
 		if it.w != nil && tr[it.variant] {
-			per := map[int64]int{}
+			per := map[int64]qty.Q{}
 			near := map[int64]bool{}
 			var ids []int64
 			for _, b := range it.w.batches {
 				if _, ok := per[b.id]; !ok {
 					ids = append(ids, b.id)
 				}
-				per[b.id] += b.qty
+				per[b.id] = per[b.id].Add(b.qty)
 				near[b.id] = near[b.id] || b.near
 			}
 			for _, bid := range ids {
@@ -266,10 +286,10 @@ func checkBatches(ctx context.Context, tx tenancy.TenantTx, lines []want, info f
 			f[l.field+".batches"] = "Enter the batch number and expiry for this product."
 			continue
 		}
-		sum := 0
+		var sum qty.Q
 		for j := range l.batches {
 			b := &l.batches[j]
-			sum += b.qty
+			sum = sum.Add(b.qty)
 			exp := b.arrival.Expiry
 			switch {
 			case st.Expired(exp):
@@ -283,7 +303,7 @@ func checkBatches(ctx context.Context, tx tenancy.TenantTx, lines []want, info f
 			}
 		}
 		if sum != l.qty {
-			f[l.field+".batches"] = fmt.Sprintf("The batch quantities add up to %d; the line receives %d.", sum, l.qty)
+			f[l.field+".batches"] = fmt.Sprintf("The batch quantities add up to %s; the line receives %s.", sum, l.qty)
 		}
 	}
 	if err := apperr.Fields(f); err != nil {
@@ -363,10 +383,10 @@ func parseBatches(in []batchIn, field string, f map[string]string) []batchWant {
 			v := b.MRP.D.Round(2)
 			w.arrival.MRP = &v
 		}
-		if !b.Quantity.Valid || b.Quantity.V <= 0 || b.Quantity.V > maxQty {
-			f[k+".quantity"] = "Quantity must be a whole number above 0."
+		if !b.Quantity.Valid || !b.Quantity.V.IsPositive() || b.Quantity.V.Greater(qty.Int(maxQty)) {
+			f[k+".quantity"] = "Quantity must be above 0."
 		}
-		w.qty = int(b.Quantity.V)
+		w.qty = b.Quantity.V
 		out = append(out, w)
 	}
 	return out
@@ -383,12 +403,12 @@ type batchIn struct {
 	Expiry   string    `json:"expiry"`
 	MfgDate  *string   `json:"mfgDate"`
 	MRP      money.Dec `json:"mrp"`
-	Quantity money.Int `json:"quantity"`
+	Quantity qty.In    `json:"quantity"`
 }
 
 type receiptLineIn struct {
 	PurchaseItemID money.Int `json:"purchaseItemId"`
-	Quantity       money.Int `json:"quantity"`
+	Quantity       qty.In    `json:"quantity"`
 	Batches        []batchIn `json:"batches"`
 }
 
@@ -407,7 +427,7 @@ type ReceiptBatchJSON struct {
 	BatchNo            string           `json:"batchNo"`
 	Expiry             *string          `json:"expiry"`
 	MRP                *decimal.Decimal `json:"mrp"`
-	Quantity           int              `json:"quantity"`
+	Quantity           qty.Q            `json:"quantity"`
 	NearExpiryAccepted bool             `json:"nearExpiryAccepted"`
 }
 
@@ -417,7 +437,7 @@ type ReceiptLineJSON struct {
 	VariantID      int64              `json:"variantId"`
 	ProductName    string             `json:"productName"`
 	SKU            *string            `json:"sku"`
-	Quantity       int                `json:"quantity"`
+	Quantity       qty.Q              `json:"quantity"`
 	Batches        []ReceiptBatchJSON `json:"batches"` // industry P3 item 2; empty for untracked products
 	rowID          int64
 }
@@ -577,10 +597,10 @@ func (a *API) createReceipt(w http.ResponseWriter, r *http.Request) {
 		if !l.PurchaseItemID.Valid || l.PurchaseItemID.V <= 0 {
 			f[k+".purchaseItemId"] = "purchaseItemId is required."
 		}
-		if !l.Quantity.Valid || l.Quantity.V <= 0 || l.Quantity.V > maxQty {
-			f[k+".quantity"] = "Quantity must be a whole number above 0."
+		if !l.Quantity.Valid || !l.Quantity.V.IsPositive() || l.Quantity.V.Greater(qty.Int(maxQty)) {
+			f[k+".quantity"] = "Quantity must be above 0."
 		}
-		lines = append(lines, want{itemID: l.PurchaseItemID.V, qty: int(l.Quantity.V), field: k, batches: parseBatches(l.Batches, k, f)})
+		lines = append(lines, want{itemID: l.PurchaseItemID.V, qty: l.Quantity.V, field: k, batches: parseBatches(l.Batches, k, f)})
 	}
 	note, _ := noteChoice(in.Note, f)
 	if err := apperr.Fields(f); err != nil {

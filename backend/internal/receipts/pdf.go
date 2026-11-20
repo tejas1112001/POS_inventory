@@ -3,7 +3,6 @@ package receipts
 import (
 	"bytes"
 	"errors"
-	"strconv"
 
 	"github.com/johnfercher/maroto/v2"
 	"github.com/johnfercher/maroto/v2/pkg/components/col"
@@ -163,7 +162,7 @@ func RenderPDF(v View, logo []byte) ([]byte, error) {
 		}
 		m.AddAutoRow(
 			text.NewCol(5, name, tp(8.5)),
-			text.NewCol(1, strconv.Itoa(l.Qty), tp(8.5, right)),
+			text.NewCol(1, l.Qty.String(), tp(8.5, right)),
 			text.NewCol(2, l.UnitPrice, tp(8.5, right)),
 			text.NewCol(1, disc, tp(8.5, right)),
 			text.NewCol(1, l.TaxRate, tp(8.5, right)),

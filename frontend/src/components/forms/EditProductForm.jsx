@@ -152,6 +152,7 @@ export default function EditProductForm({ product, onSaved, onCancel }) {
       quantity: primaryInventory?.qty ?? '',
       quantityAlert: primaryInventory?.quantityAlert ?? '',
       storeId: primaryInventory?.storeId || '',
+      allowFraction: String(!!product?.allowFraction),
     }),
     [product, primaryVariant, primaryInventory]
   );
@@ -188,6 +189,16 @@ export default function EditProductForm({ product, onSaved, onCancel }) {
         label: 'Unit',
         type: 'select',
         options: buildSelectOptions(options.units),
+      },
+      {
+        // H3: part units (1.25 kg). Turning it off is refused while stock is in part units.
+        name: 'allowFraction',
+        label: 'Sold in',
+        type: 'select',
+        options: [
+          { value: 'false', label: 'Whole units only' },
+          { value: 'true', label: 'Part units too (up to 3 decimals: kg, m, L)' },
+        ],
       },
       {
         name: 'sellingType',
@@ -314,6 +325,7 @@ export default function EditProductForm({ product, onSaved, onCancel }) {
       image: values.image || null,
       supplierId: product.supplierId || null,
       slug: values.slug || null,
+      allowFraction: values.allowFraction === 'true',
       variants: buildVariantsPayload(product, values),
     };
 

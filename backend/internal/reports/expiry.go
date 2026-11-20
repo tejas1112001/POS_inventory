@@ -11,6 +11,7 @@ import (
 
 	"github.com/tejas1112001/POS_inventory/backend/internal/apperr"
 	"github.com/tejas1112001/POS_inventory/backend/internal/httpx"
+	"github.com/tejas1112001/POS_inventory/backend/internal/qty"
 	"github.com/tejas1112001/POS_inventory/backend/internal/receipts"
 	"github.com/tejas1112001/POS_inventory/backend/internal/settings"
 	"github.com/tejas1112001/POS_inventory/backend/internal/tenancy"
@@ -44,7 +45,7 @@ type ExpiryRow struct {
 	SKU          string          `json:"sku"`
 	StoreID      int64           `json:"storeId"`
 	StoreName    string          `json:"storeName"`
-	Quantity     int             `json:"quantity"`
+	Quantity     qty.Q           `json:"quantity"`
 	CostValue    decimal.Decimal `json:"costValue"`
 	MRPValue     decimal.Decimal `json:"mrpValue"`
 }
@@ -52,7 +53,7 @@ type ExpiryRow struct {
 // ExpirySummary totals one section.
 type ExpirySummary struct {
 	Batches   int             `json:"batches"`
-	Units     int             `json:"units"`
+	Units     qty.Q           `json:"units"`
 	CostValue decimal.Decimal `json:"costValue"`
 	MRPValue  decimal.Decimal `json:"mrpValue"`
 }
@@ -143,7 +144,7 @@ func ExpiryRows(ctx context.Context, tx tenancy.TenantTx, store int64, window in
 		}
 		s := out.Summary[x.Section]
 		s.Batches++
-		s.Units += x.Quantity
+		s.Units = s.Units.Add(x.Quantity)
 		s.CostValue = s.CostValue.Add(x.CostValue)
 		s.MRPValue = s.MRPValue.Add(x.MRPValue)
 		out.Summary[x.Section] = s
@@ -213,22 +214,22 @@ func (a *API) expiryExport(w http.ResponseWriter, r *http.Request) {
 // DashboardBatches are the pharmacy tile's figures (units), shown with the
 // module on and batches:view.
 type DashboardBatches struct {
-	WindowDays  int `json:"windowDays"`
-	Expired     int `json:"expired"`
-	Expiring    int `json:"expiring"`
-	Quarantined int `json:"quarantined"`
-	Recalled    int `json:"recalled"`
-	Unbatched   int `json:"unbatched"`
+	WindowDays  int   `json:"windowDays"`
+	Expired     qty.Q `json:"expired"`
+	Expiring    qty.Q `json:"expiring"`
+	Quarantined qty.Q `json:"quarantined"`
+	Recalled    qty.Q `json:"recalled"`
+	Unbatched   qty.Q `json:"unbatched"`
 }
 
 const qDashBatches = `WITH t AS (SELECT (now() AT TIME ZONE (SELECT timezone FROM settings WHERE id = 1))::date AS today,
 		(SELECT near_expiry_days FROM settings WHERE id = 1) AS win)
 	SELECT t.win,
-		coalesce(sum(s.qty) FILTER (WHERE b.status = 'available' AND b.expiry_date < t.today), 0)::int,
-		coalesce(sum(s.qty) FILTER (WHERE b.status = 'available' AND b.expiry_date >= t.today AND b.expiry_date <= t.today + t.win), 0)::int,
-		coalesce(sum(s.quarantined_qty) FILTER (WHERE b.status = 'available'), 0)::int,
-		coalesce(sum(s.qty + s.quarantined_qty) FILTER (WHERE b.status = 'recalled'), 0)::int,
-		coalesce(sum(s.qty) FILTER (WHERE b.is_unknown), 0)::int
+		coalesce(sum(s.qty) FILTER (WHERE b.status = 'available' AND b.expiry_date < t.today), 0),
+		coalesce(sum(s.qty) FILTER (WHERE b.status = 'available' AND b.expiry_date >= t.today AND b.expiry_date <= t.today + t.win), 0),
+		coalesce(sum(s.quarantined_qty) FILTER (WHERE b.status = 'available'), 0),
+		coalesce(sum(s.qty + s.quarantined_qty) FILTER (WHERE b.status = 'recalled'), 0),
+		coalesce(sum(s.qty) FILTER (WHERE b.is_unknown), 0)
 	FROM t
 	LEFT JOIN batch_stock s ON ($1::bigint = 0 OR s.store_id = $1)
 		AND EXISTS (SELECT 1 FROM batches bb JOIN product_variants v ON v.id = bb.variant_id JOIN products p ON p.id = v.product_id

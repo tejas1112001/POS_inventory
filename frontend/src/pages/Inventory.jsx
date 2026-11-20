@@ -163,8 +163,8 @@ export default function Inventory() {
         onSubmit={save}
         submitLabel="Save stock"
       >
-        <TextField name="qty" label="Quantity" type="number" inputMode="numeric" min="0" step="1" required rules={{ min: { value: 0, message: 'Must be 0 or more.' } }} />
-        <TextField name="quantityAlert" label="Low-stock alert at" type="number" inputMode="numeric" min="0" step="1" hint="Below or at this number the product shows as low stock." />
+        <TextField name="qty" label="Quantity" type="number" inputMode="decimal" min="0" step="any" required rules={{ min: { value: 0, message: 'Must be 0 or more.' } }} />
+        <TextField name="quantityAlert" label="Low-stock alert at" type="number" inputMode="decimal" min="0" step="any" hint="Below or at this number the product shows as low stock." />
       </FormSheet>
     </div>
   );

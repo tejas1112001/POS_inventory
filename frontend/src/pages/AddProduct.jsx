@@ -15,6 +15,7 @@ import { api } from '../services/api';
 import { useShopSettings } from '../hooks/useShopSettings';
 import { formatCurrency } from '../lib/format';
 import { mrpBody, mrpWarning } from '../lib/mrp';
+import { qtyStep, roundQty } from '../lib/qty';
 import { checkWizard, formValues, stepClass } from '../lib/wizard';
 import {
   ArrowLeftIcon,
@@ -59,6 +60,8 @@ const AddProduct = () => {
   
   const navigate = useNavigate();  
   const [productType, setProductType] = useState('single');
+  // H3: sold in part units (kg, metres, litres): stock and sales take 3 decimals.
+  const [allowFraction, setAllowFraction] = useState(false);
   const [selectedImages, setSelectedImages] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [customFields, setCustomFields] = useState({
@@ -138,8 +141,8 @@ const AddProduct = () => {
           manufacturedDate: data.manufacturedDate || null,
           inventories: [{
             storeId: data.storeId,
-            qty: parseInt(data.quantity) || 0,
-            quantityAlert: parseInt(data.quantityAlert) || 0
+            qty: roundQty(data.quantity),
+            quantityAlert: roundQty(data.quantityAlert)
           }]
         }];
       } else if (data.productType === 'variable') {
@@ -159,8 +162,8 @@ const AddProduct = () => {
             manufacturedDate: data.manufacturedDate || null,
             inventories: [{
               storeId: data.storeId,
-              qty: parseInt(data[`variantQuantity${index}`]) || 0,
-              quantityAlert: parseInt(data.quantityAlert) || 0
+              qty: roundQty(data[`variantQuantity${index}`]),
+              quantityAlert: roundQty(data.quantityAlert)
             }]
           });
           index++;
@@ -186,6 +189,7 @@ const AddProduct = () => {
         sellingType: data.sellingType,
         image: data.image,
         variants: variants,
+        allowFraction,
         supplierId: data.supplierId,
         slug: data.slug
       };
@@ -506,6 +510,19 @@ const AddProduct = () => {
               </div>
             </div>
             
+            <label className="mb-4 flex items-start gap-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                className="mt-0.5 h-4 w-4"
+                checked={allowFraction}
+                onChange={(e) => setAllowFraction(e.target.checked)}
+              />
+              <span>
+                Sold in part units (by weight, length or volume)
+                <span className="block text-xs text-gray-500">Stock and sales take up to 3 decimals, for example 1.25 kg. Leave off for items sold by the piece.</span>
+              </span>
+            </label>
+
             {productType === 'single' ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
@@ -516,7 +533,7 @@ const AddProduct = () => {
                     name="quantity"
                     type="number" 
                     
-                    step="1" min="0"className="w-full px-3 py-2 border border-gray-600 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                    step={qtyStep(allowFraction)} min="0" className="w-full px-3 py-2 border border-gray-600 rounded-lg focus:ring-blue-500 focus:border-blue-500"
                     placeholder="Enter quantity"
                     required
                   />
@@ -609,7 +626,7 @@ const AddProduct = () => {
                     name="quantityAlert"
                     type="number" 
                     
-                    step="1" min="0"className="w-full px-3 py-2 border border-gray-600 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                    step={qtyStep(allowFraction)} min="0" className="w-full px-3 py-2 border border-gray-600 rounded-lg focus:ring-blue-500 focus:border-blue-500"
                     placeholder="Enter alert quantity"
                   />
                 </div>
@@ -673,7 +690,7 @@ const AddProduct = () => {
                           <div className="flex items-center">
                             <button type="button" className="px-2 py-1 bg-gray-200 rounded-l" aria-hidden="true" tabIndex={-1}>-</button>
                             <input name="variantQuantity1"
-                              type="number" 
+                              type="number" step={qtyStep(allowFraction)} min="0"
                               className="w-16 px-2 py-1 border-y border-gray-600 text-center"
                               placeholder="10"
                             />
@@ -732,7 +749,7 @@ const AddProduct = () => {
                           <div className="flex items-center">
                             <button type="button" className="px-2 py-1 bg-gray-200 rounded-l" aria-hidden="true" tabIndex={-1}>-</button>
                             <input name="variantQuantity2"
-                              type="number" 
+                              type="number" step={qtyStep(allowFraction)} min="0"
                               className="w-16 px-2 py-1 border-y border-gray-600 text-center"
                               placeholder="15"
                             />

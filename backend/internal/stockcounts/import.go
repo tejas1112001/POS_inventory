@@ -14,6 +14,7 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend/internal/audit"
 	"github.com/tejas1112001/POS_inventory/backend/internal/httpx"
 	"github.com/tejas1112001/POS_inventory/backend/internal/money"
+	"github.com/tejas1112001/POS_inventory/backend/internal/qty"
 	"github.com/tejas1112001/POS_inventory/backend/internal/tenancy"
 	"github.com/tejas1112001/POS_inventory/backend/internal/xlsx"
 )
@@ -134,9 +135,9 @@ func parseCount(rows [][]string) ([]change, map[int]string, []RowError) {
 			add("code", fmt.Sprintf("this code repeats row %d", seen[strings.ToLower(code)]))
 		}
 		seen[strings.ToLower(code)] = line
-		q, err := strconv.Atoi(qs)
-		if err != nil || q < 0 || q > MaxQty {
-			add("counted_qty", fmt.Sprintf("a whole number from 0 to %d", MaxQty))
+		q, err := qty.Parse(qs)
+		if err != nil || q.IsNegative() || q.Greater(qty.Int(MaxQty)) {
+			add("counted_qty", fmt.Sprintf("a number from 0 to %d", MaxQty))
 		}
 		codes[len(changes)] = code
 		changes = append(changes, change{field: "row " + strconv.Itoa(line), qty: q})

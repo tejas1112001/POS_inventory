@@ -12,6 +12,7 @@ import (
 
 	"github.com/tejas1112001/POS_inventory/backend/internal/apperr"
 	"github.com/tejas1112001/POS_inventory/backend/internal/httpx"
+	"github.com/tejas1112001/POS_inventory/backend/internal/qty"
 	"github.com/tejas1112001/POS_inventory/backend/internal/tenancy"
 )
 
@@ -38,8 +39,8 @@ type ItemJSON struct {
 	StoreID     int64   `json:"store_id"`
 	ProductName string  `json:"product_name"`
 	SKU         *string `json:"sku"`
-	Quantity    int     `json:"quantity"`
-	ReceivedQty int     `json:"received_qty"` // industry P1 item 8
+	Quantity    qty.Q   `json:"quantity"`
+	ReceivedQty qty.Q   `json:"received_qty"` // industry P1 item 8
 	// TracksBatches: receiving this line needs batch and expiry (industry
 	// P3 item 2; the product's flag and the module).
 	TracksBatches bool            `json:"tracksBatches"`

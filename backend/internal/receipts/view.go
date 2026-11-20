@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/shopspring/decimal"
 
+	"github.com/tejas1112001/POS_inventory/backend/internal/qty"
 	"github.com/tejas1112001/POS_inventory/backend/internal/settings"
 	"github.com/tejas1112001/POS_inventory/backend/internal/tenancy"
 )
@@ -31,7 +32,7 @@ type Line struct {
 	Name, Attributes, SKU, HSN                     string
 	Batch                                          string // industry P3 item 3: "Batch B1 · Exp 03/2027 · MRP 45.00"
 	MRP                                            string // one unit's MRP, when the shop shows MRP and Batch does not already
-	Qty                                            int
+	Qty                                            qty.Q
 	UnitPrice, Discount, TaxRate, TaxAmount, Total string
 	HasDiscount                                    bool
 }
@@ -291,14 +292,14 @@ func Load(ctx context.Context, tx tenancy.TenantTx, receiptID int64) (View, erro
 		var (
 			name                            string
 			sku                             *string
-			qty                             int
+			n                               qty.Q
 			unit, ldisc, rate, ltax, ltotal decimal.Decimal
 			cgst, sgst, igst                *decimal.Decimal
 			attrs                           []byte
 			label, hsn, batch               *string
 			mrp, mrpAmount                  *decimal.Decimal
 		)
-		if err := rows.Scan(&name, &sku, &qty, &unit, &ldisc, &rate, &ltax, &cgst, &sgst, &igst, &ltotal, &attrs, &label, &hsn, &batch,
+		if err := rows.Scan(&name, &sku, &n, &unit, &ldisc, &rate, &ltax, &cgst, &sgst, &igst, &ltotal, &attrs, &label, &hsn, &batch,
 			&mrp, &mrpAmount); err != nil {
 			return v, err
 		}
@@ -308,7 +309,7 @@ func Load(ctx context.Context, tx tenancy.TenantTx, receiptID int64) (View, erro
 		if label != nil && *label != "" {
 			attrText = *label
 		}
-		ln := Line{Name: name, Attributes: attrText, SKU: deref(sku), HSN: deref(hsn), Batch: deref(batch), Qty: qty,
+		ln := Line{Name: name, Attributes: attrText, SKU: deref(sku), HSN: deref(hsn), Batch: deref(batch), Qty: n,
 			UnitPrice: f.Money(unit), Discount: f.Money(ldisc), HasDiscount: ldisc.IsPositive(),
 			TaxRate: f.Percent(rate), TaxAmount: f.Money(ltax), Total: f.Money(ltotal)}
 		if b.ShowMRPOnReceipt {

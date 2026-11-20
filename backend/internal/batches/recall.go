@@ -13,6 +13,7 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend/internal/apperr"
 	"github.com/tejas1112001/POS_inventory/backend/internal/audit"
 	"github.com/tejas1112001/POS_inventory/backend/internal/httpx"
+	"github.com/tejas1112001/POS_inventory/backend/internal/qty"
 	"github.com/tejas1112001/POS_inventory/backend/internal/tenancy"
 )
 
@@ -108,7 +109,7 @@ type TraceSaleJSON struct {
 	CustomerID    *int64    `json:"customerId"`
 	CustomerName  *string   `json:"customerName"`
 	CustomerPhone *string   `json:"customerPhone"`
-	Quantity      int       `json:"quantity"`
+	Quantity      qty.Q     `json:"quantity"`
 }
 
 // TraceReturnJSON is one return into the batch.
@@ -117,7 +118,7 @@ type TraceReturnJSON struct {
 	Reference string    `json:"reference"`
 	Date      time.Time `json:"date"`
 	StoreName string    `json:"storeName"`
-	Quantity  int       `json:"quantity"`
+	Quantity  qty.Q     `json:"quantity"`
 	Bucket    string    `json:"bucket"`
 }
 
@@ -129,7 +130,7 @@ type TraceWriteOffJSON struct {
 	StoreName  string    `json:"storeName"`
 	Reason     string    `json:"reason"`
 	From       string    `json:"from"`
-	Quantity   int       `json:"quantity"`
+	Quantity   qty.Q     `json:"quantity"`
 }
 
 // TraceJSON is where a batch went (A31): for a supplier or regulator recall.
@@ -138,9 +139,9 @@ type TraceJSON struct {
 	Sales      []TraceSaleJSON     `json:"sales"`
 	Returns    []TraceReturnJSON   `json:"returns"`
 	WriteOffs  []TraceWriteOffJSON `json:"writeOffs"`
-	Sold       int                 `json:"sold"` // not counting void sales
-	Returned   int                 `json:"returned"`
-	WrittenOff int                 `json:"writtenOff"`
+	Sold       qty.Q               `json:"sold"` // not counting void sales
+	Returned   qty.Q               `json:"returned"`
+	WrittenOff qty.Q               `json:"writtenOff"`
 }
 
 const (
@@ -148,12 +149,12 @@ const (
 			CASE WHEN s.customer_id IS DISTINCT FROM (SELECT default_customer_id FROM settings WHERE id = 1) THEN s.customer_id END,
 			CASE WHEN s.customer_id IS DISTINCT FROM (SELECT default_customer_id FROM settings WHERE id = 1) THEN c.name END,
 			CASE WHEN s.customer_id IS DISTINCT FROM (SELECT default_customer_id FROM settings WHERE id = 1) THEN c.phone END,
-			sum(ob.quantity)::int
+			sum(ob.quantity)
 		FROM order_item_batches ob JOIN order_items i ON i.id = ob.order_item_id JOIN sales s ON s.id = i.sale_id
 		LEFT JOIN stores st ON st.id = s.store_id LEFT JOIN customers c ON c.id = s.customer_id
 		WHERE ob.batch_id = $1
 		GROUP BY s.id, st.name, c.name, c.phone ORDER BY s.date, s.id`
-	qTraceReturns = `SELECT r.id, r.reference, r.date, coalesce(st.name, ''), sum(rb.quantity)::int, rb.bucket
+	qTraceReturns = `SELECT r.id, r.reference, r.date, coalesce(st.name, ''), sum(rb.quantity), rb.bucket
 		FROM return_item_batches rb JOIN return_items ri ON ri.id = rb.return_item_id JOIN sale_returns r ON r.id = ri.sale_return_id
 		LEFT JOIN stores st ON st.id = r.store_id
 		WHERE rb.batch_id = $1 GROUP BY r.id, st.name, rb.bucket ORDER BY r.date, r.id`
@@ -188,7 +189,7 @@ func (a *API) trace(w http.ResponseWriter, r *http.Request) {
 				return err
 			}
 			if s.Status != "Void" {
-				out.Sold += s.Quantity
+				out.Sold = out.Sold.Add(s.Quantity)
 			}
 			out.Sales = append(out.Sales, s)
 		}
@@ -206,7 +207,7 @@ func (a *API) trace(w http.ResponseWriter, r *http.Request) {
 				rows.Close()
 				return err
 			}
-			out.Returned += x.Quantity
+			out.Returned = out.Returned.Add(x.Quantity)
 			out.Returns = append(out.Returns, x)
 		}
 		rows.Close()
@@ -223,7 +224,7 @@ func (a *API) trace(w http.ResponseWriter, r *http.Request) {
 				rows.Close()
 				return err
 			}
-			out.WrittenOff += x.Quantity
+			out.WrittenOff = out.WrittenOff.Add(x.Quantity)
 			out.WriteOffs = append(out.WriteOffs, x)
 		}
 		rows.Close()
