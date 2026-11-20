@@ -97,3 +97,31 @@ func TestOverridesAreEnforced(t *testing.T) {
 	require.Equal(t, 1, users)
 	require.Equal(t, 2, stores)
 }
+
+// TestUsageSnapshotRepairsConsoleBusinessType (ARCHITECTURE_REVIEW M5):
+// the console's copy of a shop's business type is repaired from the
+// shop's own settings by the usage snapshot, and other shops' copies are
+// left alone.
+func TestUsageSnapshotRepairsConsoleBusinessType(t *testing.T) {
+	ctx := context.Background()
+	a := admin(t)
+	var want, other string
+	require.NoError(t, a.QueryRow(ctx, `SELECT business_type FROM `+schema("b")+`.settings WHERE id = 1`).Scan(&want))
+	require.NoError(t, a.QueryRow(ctx, `SELECT business_type FROM platform.tenants WHERE id = $1`, tenants["c"].ID).Scan(&other))
+	wrong := "pharmacy"
+	if want == wrong {
+		wrong = "clothing"
+	}
+	// A failed best-effort copy leaves the console wrong.
+	_, err := a.Exec(ctx, `UPDATE platform.tenants SET business_type = $2 WHERE id = $1`, tenants["b"].ID, wrong)
+	require.NoError(t, err)
+
+	_, err = theApp.Worker().Maintenance().SnapshotUsage(ctx)
+	require.NoError(t, err)
+
+	var got, otherNow string
+	require.NoError(t, a.QueryRow(ctx, `SELECT business_type FROM platform.tenants WHERE id = $1`, tenants["b"].ID).Scan(&got))
+	require.Equal(t, want, got)
+	require.NoError(t, a.QueryRow(ctx, `SELECT business_type FROM platform.tenants WHERE id = $1`, tenants["c"].ID).Scan(&otherNow))
+	require.Equal(t, other, otherNow)
+}
