@@ -1,3 +1,25 @@
+# Architecture review fixes (ARCHITECTURE_REVIEW.md)
+
+2026-11-20, on request ("do the required items immediately"). All commits are local on `main`, **not pushed**.
+
+| Item | What | Commit | State |
+|---|---|---|---|
+| H1 | `pos_tenant` group role holds USAGE on `extensions`; migrations no longer rewrite that ACL per shop (no "tuple concurrently updated"); 55P03 lock timeouts retried | `41e1379`, `bd0d7c0` | Done, full suite green |
+| H4 | Bounded LRU caches (registry, auth, permissions, modules, plans, reports, import reports); per-client limit on uncached host lookups (60/min); cache metrics | `41e99ff` | Done, full suite green |
+| — | `backend-go/` renamed to `backend/` (module path too) | `0f0668c` | Done, full suite green |
+| M5 | Usage snapshot repairs the console's copy of the business type from the shop's settings | `7ce9ff8` | Done |
+| M2 | Sweeps work on 3 shops at a time with per-shop time limits; nightly reconcile = one River job per shop (queue `tenant_maintenance`); checkpointed reconcile (tenant migration 00033, full check weekly, re-check before reporting) | `3fa12ae`, `df53a2e` | Done |
+| M1 | Lists out of the schemas: format checks instead of IN lists (tenant 00034/00035, platform 00016); override module keys from the registry; console reads `GET /platform/business-types` | `5c2b6ea` | Done; full suite running |
+| M4 | Purge of deleted shops `PURGE_AFTER_DAYS` (30) after finalising: files, schema, role dropped; `purged_at` tombstone + audit (platform 00017); `Storage.DeletePrefix` | `fb20852` | Done; targeted tests green |
+| H3 | Decimal quantities and units | — | Next |
+| M3 | GST per store, invoice series per store and financial year | — | Later |
+
+Notes:
+- Known flaky tests seen in a full run (not caused by these changes): `TestRestoreWritesToNoOtherSchema` (statistics timing) and `TestPublicShopTenantStatusPlanAndRateLimit` (rate window crossing a minute).
+- Orphaned test containers from an interrupted run (`postgres:18.6` ×6, `versitygw`) may still be running; remove them with `docker rm -f` when convenient.
+
+---
+
 # MRP on every variant
 
 2026-11-20, on request. Tenant migration 00032; API_CONTRACT §5.7 (M1–M6).
