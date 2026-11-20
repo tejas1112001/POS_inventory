@@ -26,6 +26,7 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/httpx"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/inventory"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/plans"
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/pricing"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/tenancy"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/xlsx"
 )
@@ -41,7 +42,7 @@ const (
 )
 
 // importColumns are the retail template's columns (unchanged since C-19).
-var importColumns = []string{"name", "sku", "price", "cost", "barcode", "category", "sub_category", "brand", "unit",
+var importColumns = []string{"name", "sku", "price", "cost", "mrp", "barcode", "category", "sub_category", "brand", "unit",
 	"tax_type", "tax_rate", "hsn_code", "store", "opening_qty", "quantity_alert", "status"}
 
 // Template types (A12). Clothing and footwear columns follow the design
@@ -51,22 +52,22 @@ const templateRetail = "retail"
 var templateColumns = map[string][]string{
 	templateRetail: importColumns,
 	"clothing": {"article_no", "name", "department", "collection", "season", "size", "colour", "sku", "barcode", "price", "cost",
-		"category", "brand", "tax_type", "tax_rate", "hsn_code", "opening_qty", "quantity_alert"},
+		"mrp", "category", "brand", "tax_type", "tax_rate", "hsn_code", "opening_qty", "quantity_alert"},
 	"footwear": {"article_no", "name", "department", "size_system", "size", "colour", "sku", "barcode", "price", "cost",
-		"category", "brand", "tax_type", "tax_rate", "hsn_code", "opening_qty", "quantity_alert"},
+		"mrp", "category", "brand", "tax_type", "tax_rate", "hsn_code", "opening_qty", "quantity_alert"},
 	// Industry P3 item 8 (A35): one row per batch.
 	templatePharmacy: {"name", "sku", "barcode", "category", "brand", "hsn_code", "tax_type", "tax_rate", "price", "cost",
 		"batch_no", "expiry", "mfg_date", "mrp", "store", "opening_qty", "quantity_alert"},
 }
 
 var templateExample = map[string]map[string]string{
-	templateRetail: {"name": "Assam Tea 250g", "sku": "TEA-250", "price": "180", "cost": "120", "barcode": "8901234567890",
+	templateRetail: {"name": "Assam Tea 250g", "sku": "TEA-250", "price": "180", "cost": "120", "mrp": "190", "barcode": "8901234567890",
 		"tax_type": "Inclusive", "tax_rate": "5", "hsn_code": "0902", "store": "main", "opening_qty": "10", "quantity_alert": "2", "status": "Active"},
 	"clothing": {"article_no": "TSH-01", "name": "Crew neck tee", "department": "Men", "collection": "Basics", "season": "Spring/Summer",
-		"size": "M", "colour": "Blue", "sku": "TSH-01-M-BLUE", "price": "499", "cost": "250", "tax_type": "Inclusive", "tax_rate": "5",
+		"size": "M", "colour": "Blue", "sku": "TSH-01-M-BLUE", "price": "499", "cost": "250", "mrp": "599", "tax_type": "Inclusive", "tax_rate": "5",
 		"hsn_code": "6109", "opening_qty": "10", "quantity_alert": "2"},
 	"footwear": {"article_no": "RUN-01", "name": "Running shoe", "department": "Men", "size_system": "UK", "size": "8", "colour": "Black",
-		"sku": "RUN-01-8-BLACK", "price": "2999", "cost": "1500", "tax_type": "Inclusive", "tax_rate": "12", "hsn_code": "6404",
+		"sku": "RUN-01-8-BLACK", "price": "2999", "cost": "1500", "mrp": "3499", "tax_type": "Inclusive", "tax_rate": "12", "hsn_code": "6404",
 		"opening_qty": "6", "quantity_alert": "1"},
 	templatePharmacy: {"name": "Paracetamol 500mg (10 tablets)", "sku": "PARA-500", "barcode": "8901234567891", "hsn_code": "3004",
 		"tax_type": "Inclusive", "tax_rate": "12", "price": "30", "cost": "18", "batch_no": "PCM2401", "expiry": "03/2027",
@@ -94,7 +95,7 @@ var columnHelp = map[string]string{
 	"batch_no":       "Batch (lot) number printed on the pack, up to 40 characters. Rows with the same SKU are batches of one product.",
 	"expiry":         "Expiry date: YYYY-MM-DD, or MM/YYYY as printed on the pack (the last day of that month). Expired rows are not imported.",
 	"mfg_date":       "Manufacturing date: YYYY-MM-DD or MM/YYYY. Optional.",
-	"mrp":            "Maximum retail price printed on this batch. Optional.",
+	"mrp":            "Maximum retail price printed on the pack, tax included. Optional. A price above it is imported with a warning. In the pharmacy template it is this batch's MRP.",
 }
 
 // codeColumns hold codes that Excel turns into numbers ("8.90123E+12").
@@ -114,6 +115,7 @@ type importRow struct {
 	line                                              int
 	vals                                              map[string]string
 	price, cost, taxRate                              decimal.Decimal
+	mrp                                               *decimal.Decimal // the variant's MRP (not the pharmacy template: there it is the batch's)
 	hasTax                                            bool
 	qty, alert                                        int
 	categoryID, subCategoryID, brandID, unitID, store int64
@@ -128,14 +130,15 @@ type PreviewStock struct {
 
 // PreviewVariant is one option the import would create.
 type PreviewVariant struct {
-	Row        int             `json:"row"`
-	SKU        string          `json:"sku"`
-	Barcode    string          `json:"barcode,omitempty"`
-	Price      decimal.Decimal `json:"price"`
-	Label      string          `json:"label,omitempty"`
-	Attributes map[string]any  `json:"attributes"`
-	Stock      []PreviewStock  `json:"stock"`
-	Batches    []PreviewBatch  `json:"batches,omitempty"` // pharmacy template
+	Row        int              `json:"row"`
+	SKU        string           `json:"sku"`
+	Barcode    string           `json:"barcode,omitempty"`
+	Price      decimal.Decimal  `json:"price"`
+	MRP        *decimal.Decimal `json:"mrp,omitempty"`
+	Label      string           `json:"label,omitempty"`
+	Attributes map[string]any   `json:"attributes"`
+	Stock      []PreviewStock   `json:"stock"`
+	Batches    []PreviewBatch   `json:"batches,omitempty"` // pharmacy template
 }
 
 // PreviewProduct is one product the import would create (A13 dry run).
@@ -596,6 +599,15 @@ func (a *API) runImport(ctx context.Context, t tenancy.Tenant, uid int64, raw []
 					addErr(line, "cost", "must be a number >= 0")
 				}
 			}
+			if s := v["mrp"]; s != "" && !ph.file { // pharmacy: the batch's MRP (checkBatchRow)
+				m, err := decimal.NewFromString(s)
+				if err != nil || m.IsNegative() || m.GreaterThan(maxPrice) {
+					addErr(line, "mrp", "must be a number >= 0")
+				} else {
+					m = m.Round(2)
+					ir.mrp = &m
+				}
+			}
 			if s := v["tax_rate"]; s != "" {
 				ir.taxRate, err = decimal.NewFromString(s)
 				ir.hasTax = true
@@ -696,6 +708,10 @@ func (a *API) runImport(ctx context.Context, t tenancy.Tenant, uid int64, raw []
 			return err
 		}
 		storeNames := lookups.storeNames
+		var includeTax bool // the shop default, for products without a tax type
+		if err := tx.QueryRow(ctx, `SELECT prices_include_tax_default FROM settings WHERE id = 1`).Scan(&includeTax); err != nil {
+			return err
+		}
 		var tracked []int64 // other templates with the module on (design §0)
 		for _, k := range order {
 			g := groups[k]
@@ -738,14 +754,22 @@ func (a *API) runImport(ctx context.Context, t tenancy.Tenant, uid int64, raw []
 				variantRows = g.rows[:1] // one variant; the rows are its batches
 			}
 			for i, ir := range variantRows {
-				cv := cleanVariant{sku: ir.vals["sku"], price: ir.price, cost: ir.cost, attributes: []byte("{}")}
+				cv := cleanVariant{sku: ir.vals["sku"], price: ir.price, cost: ir.cost, mrp: ir.mrp, attributes: []byte("{}")}
+				// The product's tax comes from its first row.
+				inclusive := includeTax
+				if c.taxType != nil {
+					inclusive = *c.taxType == "Inclusive"
+				}
+				if pricing.AboveMRP(ir.price, first.taxRate, inclusive, ir.mrp) {
+					warn(ir.line, "mrp", "The price with tax is above the MRP. The product is imported; check the price.")
+				}
 				if len(g.checked.Dims) > 0 {
 					cv.attrMap = g.checked.Variants[i]
 				}
 				if b := ir.vals["barcode"]; b != "" {
 					cv.barcode = &b
 				}
-				pv := PreviewVariant{Row: ir.line, SKU: cv.sku, Price: ir.price, Attributes: map[string]any{}, Stock: []PreviewStock{}}
+				pv := PreviewVariant{Row: ir.line, SKU: cv.sku, Price: ir.price, MRP: ir.mrp, Attributes: map[string]any{}, Stock: []PreviewStock{}}
 				if cv.barcode != nil {
 					pv.Barcode = *cv.barcode
 				}

@@ -22,40 +22,42 @@ import (
 
 // Variant is a public variant: no barcode, cost, weight or stock count.
 type Variant struct {
-	ID          int64           `json:"id"`
-	SKU         string          `json:"sku"`
-	Price       decimal.Decimal `json:"price"`
-	Attributes  json.RawMessage `json:"attributes"`
-	InStock     bool            `json:"inStock"`
-	StockStatus string          `json:"stockStatus"`
+	ID          int64            `json:"id"`
+	SKU         string           `json:"sku"`
+	Price       decimal.Decimal  `json:"price"`
+	MRP         *decimal.Decimal `json:"mrp"` // printed maximum retail price, tax included
+	Attributes  json.RawMessage  `json:"attributes"`
+	InStock     bool             `json:"inStock"`
+	StockStatus string           `json:"stockStatus"`
 }
 
 // Product is the public product allow-list (THREAT_MODEL §3.10).
 type Product struct {
-	ID            int64           `json:"id"`
-	Name          string          `json:"name"`
-	Description   string          `json:"description"`
-	Image         string          `json:"image"`
-	Slug          string          `json:"slug"`
-	ProductType   string          `json:"productType"`
-	Category      string          `json:"category"`
-	CategoryID    *int64          `json:"categoryId"`
-	Brand         string          `json:"brand"`
-	BrandID       *int64          `json:"brandId"`
-	Unit          string          `json:"unit"`
-	Price         decimal.Decimal `json:"price"`
-	FinalPrice    decimal.Decimal `json:"finalPrice"`
-	HasDiscount   bool            `json:"hasDiscount"`
-	DiscountType  *string         `json:"discountType"`
-	DiscountValue decimal.Decimal `json:"discountValue"`
-	TaxType       *string         `json:"taxType"`
-	Tax           decimal.Decimal `json:"tax"`
-	Warranties    string          `json:"warranties"`
-	IsPublished   bool            `json:"isPublished"`
-	IsFeatured    bool            `json:"isFeatured"`
-	InStock       bool            `json:"inStock"`
-	StockStatus   string          `json:"stockStatus"`
-	Variants      []Variant       `json:"variants"`
+	ID            int64            `json:"id"`
+	Name          string           `json:"name"`
+	Description   string           `json:"description"`
+	Image         string           `json:"image"`
+	Slug          string           `json:"slug"`
+	ProductType   string           `json:"productType"`
+	Category      string           `json:"category"`
+	CategoryID    *int64           `json:"categoryId"`
+	Brand         string           `json:"brand"`
+	BrandID       *int64           `json:"brandId"`
+	Unit          string           `json:"unit"`
+	Price         decimal.Decimal  `json:"price"`
+	FinalPrice    decimal.Decimal  `json:"finalPrice"`
+	MRP           *decimal.Decimal `json:"mrp"` // the first variant's, like price
+	HasDiscount   bool             `json:"hasDiscount"`
+	DiscountType  *string          `json:"discountType"`
+	DiscountValue decimal.Decimal  `json:"discountValue"`
+	TaxType       *string          `json:"taxType"`
+	Tax           decimal.Decimal  `json:"tax"`
+	Warranties    string           `json:"warranties"`
+	IsPublished   bool             `json:"isPublished"`
+	IsFeatured    bool             `json:"isFeatured"`
+	InStock       bool             `json:"inStock"`
+	StockStatus   string           `json:"stockStatus"`
+	Variants      []Variant        `json:"variants"`
 }
 
 func stockStatus(in bool) string {
@@ -116,7 +118,7 @@ const (
 		LEFT JOIN brands b ON b.id = p.brand_id AND b.deleted_at IS NULL
 		LEFT JOIN units u ON u.id = p.unit_id AND u.deleted_at IS NULL
 		WHERE p.id = ANY($2) AND p.deleted_at IS NULL AND p.status = 'Active'`
-	qVariants = `SELECT v.id, v.product_id, v.sku::text, v.price, v.attributes, coalesce(i.qty, 0) > 0
+	qVariants = `SELECT v.id, v.product_id, v.sku::text, v.price, v.attributes, coalesce(i.qty, 0) > 0, v.mrp
 		FROM product_variants v LEFT JOIN inventories i ON i.variant_id = v.id AND i.store_id = $1
 		WHERE v.product_id = ANY($2) AND v.deleted_at IS NULL ORDER BY v.product_id, v.id`
 )
@@ -155,7 +157,7 @@ func load(ctx context.Context, tx tenancy.TenantTx, storeID int64, ids []int64, 
 	for rows.Next() {
 		var v Variant
 		var pid int64
-		if err := rows.Scan(&v.ID, &pid, &v.SKU, &v.Price, &v.Attributes, &v.InStock); err != nil {
+		if err := rows.Scan(&v.ID, &pid, &v.SKU, &v.Price, &v.Attributes, &v.InStock, &v.MRP); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -173,7 +175,7 @@ func load(ctx context.Context, tx tenancy.TenantTx, storeID int64, ids []int64, 
 		if p == nil || len(p.Variants) == 0 {
 			continue
 		}
-		p.Price = p.Variants[0].Price
+		p.Price, p.MRP = p.Variants[0].Price, p.Variants[0].MRP
 		p.FinalPrice, p.HasDiscount = finalPrice(p.Price, p.DiscountType, p.DiscountValue, currency)
 		for _, v := range p.Variants {
 			p.InStock = p.InStock || v.InStock

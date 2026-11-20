@@ -12,13 +12,14 @@ const (
 	FieldName        = "name"
 	FieldVariant     = "variant"
 	FieldPrice       = "price"
+	FieldMRP         = "mrp" // "MRP ₹550", printed when the variant (or the batch) has one
 	FieldSKU         = "sku"
 	FieldBarcode     = "barcode"
 	FieldBarcodeText = "barcodeText" // the digits under the bars
 )
 
 // AllFields is every field, in print order.
-var AllFields = []string{FieldName, FieldVariant, FieldPrice, FieldBarcode, FieldBarcodeText, FieldSKU}
+var AllFields = []string{FieldName, FieldVariant, FieldPrice, FieldMRP, FieldBarcode, FieldBarcodeText, FieldSKU}
 
 // Layout is a label sheet or roll (DB10, A11). Sizes are in millimetres.
 type Layout struct {
@@ -50,7 +51,7 @@ var Presets = []Layout{
 }
 
 func defaultFields() []string {
-	return []string{FieldName, FieldVariant, FieldPrice, FieldBarcode, FieldBarcodeText, FieldSKU}
+	return []string{FieldName, FieldVariant, FieldPrice, FieldMRP, FieldBarcode, FieldBarcodeText, FieldSKU}
 }
 
 // MaxCustomLayouts is how many layouts a shop may add.

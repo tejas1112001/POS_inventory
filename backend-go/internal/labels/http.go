@@ -391,7 +391,7 @@ type pdfIn struct {
 	Test bool `json:"test"`
 }
 
-const qLabelVariants = `SELECT v.id, p.name, v.sku, v.item_barcode, v.price, v.attributes, p.attributes, p.variant_dims
+const qLabelVariants = `SELECT v.id, p.name, v.sku, v.item_barcode, v.price, v.attributes, p.attributes, p.variant_dims, v.mrp
 	FROM product_variants v JOIN products p ON p.id = v.product_id
 	WHERE v.id = ANY($1::bigint[]) AND v.deleted_at IS NULL AND p.deleted_at IS NULL`
 
@@ -451,14 +451,15 @@ func (a *API) pdf(w http.ResponseWriter, r *http.Request) {
 			for i := range lay.PerPage() {
 				code, _ := InternalCode(int64(i + 1))
 				items = append(items, Label{Name: "Test label " + strconv.Itoa(i+1), Variant: "M / Blue",
-					Price: fm.Money(decimal.NewFromInt(499)), SKU: "TEST-" + strconv.Itoa(i+1), Code: code})
+					Price: fm.Money(decimal.NewFromInt(499)), MRP: "MRP " + fm.Money(decimal.NewFromInt(550)),
+					SKU: "TEST-" + strconv.Itoa(i+1), Code: code})
 			}
 		} else {
 			byID, err := labelData(r.Context(), tx, ids, fm)
 			if err != nil {
 				return err
 			}
-			batchText, err := labelBatches(r.Context(), tx, in.Items)
+			batchText, err := labelBatches(r.Context(), tx, in.Items, fm)
 			if err != nil {
 				return err
 			}
@@ -468,7 +469,11 @@ func (a *API) pdf(w http.ResponseWriter, r *http.Request) {
 					return apperr.NotFound()
 				}
 				if it.BatchID > 0 {
-					l.Batch = batchText[it.BatchID]
+					bt := batchText[it.BatchID]
+					l.Batch = bt.text
+					if bt.mrp != "" { // the batch's MRP wins over the variant's
+						l.MRP = bt.mrp
+					}
 				}
 				for range it.Copies {
 					items = append(items, l)
@@ -490,16 +495,20 @@ func (a *API) pdf(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(pdf)
 }
 
-// labelBatches returns "B <no> EXP <MM/YYYY>" for the items' batches; a
-// batch of another variant is not found, and batches need the module.
-func labelBatches(ctx context.Context, tx tenancy.TenantTx, items []pdfItem) (map[int64]string, error) {
+// batchLabel is a batch's label text and MRP ("MRP ₹45.00"; empty: none).
+type batchLabel struct{ text, mrp string }
+
+// labelBatches returns "B <no> EXP <MM/YYYY>" and the MRP for the items'
+// batches; a batch of another variant is not found, and batches need the
+// module.
+func labelBatches(ctx context.Context, tx tenancy.TenantTx, items []pdfItem, fm receipts.Formatter) (map[int64]batchLabel, error) {
 	var ids []int64
 	for _, it := range items {
 		if it.BatchID > 0 {
 			ids = append(ids, it.BatchID)
 		}
 	}
-	out := map[int64]string{}
+	out := map[int64]batchLabel{}
 	if len(ids) == 0 {
 		return out, nil
 	}
@@ -510,7 +519,8 @@ func labelBatches(ctx context.Context, tx tenancy.TenantTx, items []pdfItem) (ma
 	if !on {
 		return nil, modules.ErrOff(modules.BatchExpiry)
 	}
-	rows, err := tx.Query(ctx, `SELECT id, variant_id, batch_no::text, coalesce(to_char(expiry_date, 'MM/YYYY'), '') FROM batches WHERE id = ANY($1)`, ids)
+	rows, err := tx.Query(ctx, `SELECT id, variant_id, batch_no::text, coalesce(to_char(expiry_date, 'MM/YYYY'), ''), mrp
+		FROM batches WHERE id = ANY($1)`, ids)
 	if err != nil {
 		return nil, err
 	}
@@ -519,14 +529,19 @@ func labelBatches(ctx context.Context, tx tenancy.TenantTx, items []pdfItem) (ma
 	for rows.Next() {
 		var id, vid int64
 		var no, exp string
-		if err := rows.Scan(&id, &vid, &no, &exp); err != nil {
+		var mrp *decimal.Decimal
+		if err := rows.Scan(&id, &vid, &no, &exp, &mrp); err != nil {
 			return nil, err
 		}
 		variant[id] = vid
-		out[id] = "B " + no
+		b := batchLabel{text: "B " + no}
 		if exp != "" {
-			out[id] += " EXP " + exp
+			b.text += " EXP " + exp
 		}
+		if mrp != nil {
+			b.mrp = "MRP " + fm.Money(*mrp)
+		}
+		out[id] = b
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -556,11 +571,15 @@ func labelData(ctx context.Context, tx tenancy.TenantTx, ids []int64, fm receipt
 			vAttrs      map[string]any
 			pAttrs      map[string]string
 			variantDims []string
+			mrp         *decimal.Decimal
 		)
-		if err := rows.Scan(&id, &name, &sku, &code, &price, &vAttrs, &pAttrs, &variantDims); err != nil {
+		if err := rows.Scan(&id, &name, &sku, &code, &price, &vAttrs, &pAttrs, &variantDims, &mrp); err != nil {
 			return nil, err
 		}
 		l := Label{Name: name, SKU: sku, Price: fm.Money(price), Code: sku}
+		if mrp != nil {
+			l.MRP = "MRP " + fm.Money(*mrp)
+		}
 		if code != nil && *code != "" {
 			l.Code = *code
 		}

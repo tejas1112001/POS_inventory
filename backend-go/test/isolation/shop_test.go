@@ -73,7 +73,10 @@ func shopWindow(t *testing.T) *window {
 		return p.Body["id"].(float64)
 	}
 	w.plain = mk("SHOP-PLAIN", 2, func(b map[string]any) { b["categoryId"] = jsonID(w.category); b["slug"] = "shop-plain-tea" })
-	w.discounted = mk("SHOP-DISC", 0, func(b map[string]any) { b["discountType"] = "Percentage"; b["discountValue"] = "10" })
+	w.discounted = mk("SHOP-DISC", 0, func(b map[string]any) {
+		b["discountType"], b["discountValue"] = "Percentage", "10"
+		b["variants"].([]map[string]any)[0]["mrp"] = 150 // the printed MRP is public
+	})
 	vp := createProduct(t, "c", tok, map[string]any{"name": "Shop Cheap Sampler", "productType": "variable", "variants": []map[string]any{
 		{"sku": "SHOP-CHEAP-S", "price": "10", "attributes": map[string]any{"size": "S"}, "inventories": []map[string]any{{"storeId": w.id, "qty": 1}}},
 		{"sku": "SHOP-CHEAP-L", "price": "15", "attributes": map[string]any{"size": "L"}}}})
@@ -124,6 +127,8 @@ func TestPublicShopShowsOnlyPublishedProducts(t *testing.T) {
 	require.Equal(t, true, d["hasDiscount"])
 	require.Equal(t, 120.5, num(d["price"]))
 	require.Equal(t, 108.45, num(d["finalPrice"]))
+	require.Equal(t, 150.0, num(d["mrp"]))
+	require.Equal(t, 150.0, num(d["variants"].([]any)[0].(map[string]any)["mrp"]))
 	require.Equal(t, false, d["inStock"])
 	require.Equal(t, "Out of Stock", d["stockStatus"])
 	p := byName["Product SHOP-PLAIN"]

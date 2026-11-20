@@ -28,8 +28,9 @@ import (
 
 const templatePharmacy = "pharmacy"
 
-// pharmacyColumns are the batch columns.
-var pharmacyColumns = []string{"batch_no", "expiry", "mfg_date", "mrp"}
+// pharmacyColumns are the batch columns. mrp is a general column (the
+// variant's MRP) that the pharmacy template reads as the batch's.
+var pharmacyColumns = []string{"batch_no", "expiry", "mfg_date"}
 
 func isPharmacyColumn(c string) bool {
 	for _, p := range pharmacyColumns {

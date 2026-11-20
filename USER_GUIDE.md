@@ -462,6 +462,7 @@ This is the main checkout interface for serving customers.
 - The receipt shows store info, itemised list, subtotal, tax, discount, total, and payment method.
 - With **Settings → Shop → Receipt text → Show MRP on receipts** on, each item with an MRP shows it, and the total shows "You saved (against MRP)". It is off by default.
 - In the cart, a line charged more than its MRP (tax and discount included) is marked "Above MRP". The sale is still allowed.
+- MRP also appears in the product import templates (`mrp` column), on barcode labels (the **MRP** field in label layouts), in the online shop, and as an "Above MRP" flag in the product list.
 - Click **Print** to print the receipt.
 - Cart is cleared and the POS resets for the next transaction.
 

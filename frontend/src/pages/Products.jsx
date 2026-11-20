@@ -101,7 +101,18 @@ export default function Products() {
     },
     { id: 'category', header: 'Category', card: 'meta', className: 'hidden md:table-cell', cell: (r) => r.category || '—' },
     { id: 'brand', header: 'Brand', card: 'hidden', className: 'hidden xl:table-cell', cell: (r) => r.brand || '—' },
-    { id: 'price', header: 'Price', card: 'meta', align: 'right', cell: (r) => <span className="tabular-nums">{priceText(r)}</span> },
+    {
+      id: 'price',
+      header: 'Price',
+      card: 'meta',
+      align: 'right',
+      cell: (r) => (
+        <span className="tabular-nums">
+          {priceText(r)}
+          {variantsOf(r).some((v) => v.aboveMrp) && <span className="block text-xs font-medium text-warning-fg">Above MRP</span>}
+        </span>
+      ),
+    },
     { id: 'stock', header: 'In stock', card: 'meta', align: 'right', cell: (r) => <span className="tabular-nums">{formatNumber(stockOf(r), 0)}</span> },
     { id: 'status', header: 'Status', card: 'meta', cell: (r) => <StatusBadge value={r.status} /> },
   ];

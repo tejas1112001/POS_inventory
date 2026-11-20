@@ -394,6 +394,7 @@ export default function PublicShopPage({ slug, homeSlug = null, onMissing }) {
                       <span className="text-xs sm:text-sm font-bold text-emerald-400">
                         {formatCurrency(p.finalPrice)}
                       </span>
+                      {p.mrp != null && <span className="block text-[10px] text-slate-400">MRP {formatCurrency(p.mrp)}</span>}
                     </div>
                     <span
                       className={`text-[9px] px-2 py-0.5 rounded-full font-medium ${
@@ -461,6 +462,9 @@ export default function PublicShopPage({ slug, homeSlug = null, onMissing }) {
                       <span className="text-sm text-slate-500 line-through">
                         {formatCurrency(selectedProduct.price)}
                       </span>
+                    )}
+                    {selectedProduct.mrp != null && (
+                      <span className="text-xs text-slate-400">MRP {formatCurrency(selectedProduct.mrp)} (incl. of all taxes)</span>
                     )}
                   </div>
 

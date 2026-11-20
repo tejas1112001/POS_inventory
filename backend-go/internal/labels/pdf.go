@@ -24,6 +24,7 @@ const MaxLabels = 2000
 // Label is one printed label.
 type Label struct {
 	Name, Variant, Price, SKU, Code string
+	MRP                             string // "MRP ₹550"; empty when there is none
 	Batch                           string // industry P3 item 2: "B <no> EXP <MM/YYYY>", printed on the variant/price line
 }
 
@@ -83,7 +84,7 @@ func bands(lay Layout) []band {
 		out = append(out, band{kind: "name", y: y, h: line, font: font, bold: true})
 		y += line
 	}
-	if lay.Has(FieldVariant) || lay.Has(FieldPrice) {
+	if lay.Has(FieldVariant) || lay.Has(FieldPrice) || lay.Has(FieldMRP) {
 		out = append(out, band{kind: "line", y: y, h: line, font: font})
 		y += line
 	}
@@ -122,7 +123,7 @@ func (b band) text(lay Layout, l Label) string {
 	case "name":
 		return l.Name
 	case "line":
-		return join(pick(FieldVariant, l.Variant), pick(FieldPrice, l.Price), l.Batch)
+		return join(pick(FieldVariant, l.Variant), pick(FieldPrice, l.Price), pick(FieldMRP, l.MRP), l.Batch)
 	case "under":
 		sku := pick(FieldSKU, l.SKU)
 		if lay.Has(FieldBarcode) && sku == l.Code {

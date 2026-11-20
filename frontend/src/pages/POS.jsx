@@ -9,6 +9,7 @@ import PriceChangedDialog from '../components/PriceChangedDialog';
 import { useShopSettings } from '../hooks/useShopSettings';
 import { usePos } from '../hooks/usePos';
 import { isRetryable, newIdempotencyKey, priceChanges } from '../lib/checkout';
+import { aboveMrp } from '../lib/mrp';
 import { api } from '../services/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -234,6 +235,8 @@ export default function POS() {
             label: variantsOf(locked).length > 1 ? variantLabel(fresh) : '',
             price: Number(fresh.price),
             unitPrice: fresh.price,
+            mrp: fresh.mrp ?? null,
+            aboveMrp: Boolean(fresh.aboveMrp),
             quantity: 1,
             maxQty: available,
             tax: locked.tax,
@@ -312,7 +315,15 @@ export default function POS() {
 
   const acceptNewPrices = () => {
     const byVariant = new Map((changedPrices || []).map((c) => [c.variantId, c.unitPrice]));
-    setLines((prev) => prev.map((l) => (byVariant.has(l.variantId) ? { ...l, unitPrice: byVariant.get(l.variantId), price: Number(byVariant.get(l.variantId)) } : l)));
+    setLines((prev) =>
+      prev.map((l) => {
+        if (!byVariant.has(l.variantId)) return l;
+        const price = Number(byVariant.get(l.variantId));
+        const taxRate = Number(String(l.tax ?? '').match(/(\d+(\.\d+)?)/)?.[1] || 0);
+        const above = aboveMrp({ price, mrp: l.mrp, taxRate, taxType: l.taxType, pricesIncludeTax: settings?.pricesIncludeTax });
+        return { ...l, unitPrice: byVariant.get(l.variantId), price, aboveMrp: above };
+      })
+    );
     setChangedPrices(null);
   };
 
@@ -357,7 +368,10 @@ export default function POS() {
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium">{l.name}</p>
                       {l.label && <p className="truncate text-xs text-muted-foreground">{l.label}</p>}
-                      <p className="text-xs text-muted-foreground tabular-nums">{formatCurrency(l.price)} each</p>
+                      <p className="text-xs text-muted-foreground tabular-nums">
+                        {formatCurrency(l.price)} each{l.mrp != null ? ` · MRP ${formatCurrency(l.mrp)}` : ''}
+                      </p>
+                      {l.aboveMrp && <p className="mt-0.5 text-xs font-medium text-warning-fg">Price with tax is above MRP. The sale is still allowed.</p>}
                       {l.maxQty <= 0 ? (
                         <p className="mt-0.5 text-xs font-medium text-danger-fg">Not in stock at this store</p>
                       ) : (

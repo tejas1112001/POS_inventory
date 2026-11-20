@@ -121,7 +121,7 @@ export default function ImportProduct({ showForm, setShowForm, onImportComplete 
           <div className="space-y-1 text-muted-foreground">
             <p>
               One row per product or option. Rows with the same article number (or, without one, the same name) become options of one product. Required
-              columns: name, sku, price. Categories, brands, units and stores must already exist. Existing SKUs or barcodes are not changed.
+              columns: name, sku, price. MRP (optional) is the printed maximum retail price, tax included. Categories, brands, units and stores must already exist. Existing SKUs or barcodes are not changed.
             </p>
             <p>All rows are imported or none: any error stops the whole file. At most 5,000 rows, 5 MB.</p>
           </div>
@@ -168,7 +168,7 @@ export default function ImportProduct({ showForm, setShowForm, onImportComplete 
 
           {result?.warnings?.length > 0 && (
             <div role="status" className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
-              {result.warnings.length} batch row{result.warnings.length === 1 ? '' : 's'} to note:
+              {result.warnings.length} row{result.warnings.length === 1 ? '' : 's'} to note:
               <ul className="mt-1 max-h-40 list-none space-y-0.5 overflow-y-auto text-xs">
                 {result.warnings.map((r, i) => (
                   <li key={`${r.row}-${i}`}>
@@ -211,6 +211,7 @@ export default function ImportProduct({ showForm, setShowForm, onImportComplete 
                             <th scope="col" className="py-1 pr-3 font-medium">SKU</th>
                             <th scope="col" className="py-1 pr-3 font-medium">Barcode</th>
                             <th scope="col" className="py-1 pr-3 text-right font-medium">Price</th>
+                            <th scope="col" className="py-1 pr-3 text-right font-medium">MRP</th>
                             <th scope="col" className="py-1 font-medium">Opening stock</th>
                           </tr>
                         </thead>
@@ -222,6 +223,7 @@ export default function ImportProduct({ showForm, setShowForm, onImportComplete 
                               <td className="py-0.5 pr-3 font-mono">{v.sku}</td>
                               <td className="py-0.5 pr-3 font-mono">{v.barcode || '—'}</td>
                               <td className="py-0.5 pr-3 text-right tabular-nums">{formatCurrency(v.price)}</td>
+                              <td className="py-0.5 pr-3 text-right tabular-nums">{v.mrp != null ? formatCurrency(v.mrp) : '—'}</td>
                               <td className="py-0.5">{stockText(v) || '—'}</td>
                             </tr>
                           ))}
@@ -229,7 +231,7 @@ export default function ImportProduct({ showForm, setShowForm, onImportComplete 
                             (v.batches || []).map((b) => (
                               <tr key={`b-${b.row}`} className={b.skipped ? 'text-muted-foreground line-through' : ''}>
                                 <td className="py-0.5 pr-3 tabular-nums">{b.row}</td>
-                                <td className="py-0.5 pr-3" colSpan={4}>
+                                <td className="py-0.5 pr-3" colSpan={5}>
                                   Batch {b.batchNo} · Exp {b.expiry}
                                   {b.skipped ? ' · expired, not imported' : ''}
                                 </td>

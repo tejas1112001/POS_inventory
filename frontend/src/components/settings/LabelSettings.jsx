@@ -15,6 +15,7 @@ const FIELDS = [
   ['name', 'Product name'],
   ['variant', 'Option (size / colour)'],
   ['price', 'Price'],
+  ['mrp', 'MRP (when the product has one)'],
   ['barcode', 'Barcode bars'],
   ['barcodeText', 'Barcode digits'],
   ['sku', 'SKU'],

@@ -8,7 +8,9 @@
 | 2 | Price above MRP: warning only (product forms, product page, cart via the quote, sale lines); never refused | Done, committed |
 | 3 | Shop setting "Show MRP on receipts" (off by default): line MRP and "You saved (against MRP)" on the PDF and screen receipt | Done, committed |
 
-Notes: sale lines keep MRP at sale time (`order_items.mrp`, `mrp_amount`); a batch's MRP wins over the variant's. The comparison includes tax (and, at the till, the discount share). Not done: an `mrp` column in the retail/clothing/footwear import templates, and the old checkout screen (only the new checkout shows the warning).
+| 4 | MRP elsewhere: `mrp` column in the retail/clothing/footwear import templates (warning row when above), label field `mrp`, online shop, old POS screen, product list flag (API_CONTRACT M7–M9) | Done, committed |
+
+Notes: sale lines keep MRP at sale time (`order_items.mrp`, `mrp_amount`); a batch's MRP wins over the variant's. The comparison includes tax (and, at the till, the discount share). The old POS screen compares the unit price with tax (it has no server quote).
 
 ---
 

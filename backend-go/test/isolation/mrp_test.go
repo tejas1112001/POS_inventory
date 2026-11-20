@@ -130,3 +130,58 @@ func TestVariantMRP(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, strings.HasPrefix(string(pdf), "%PDF-"))
 }
+
+// The import templates take an MRP column (the variant's MRP; in the
+// pharmacy template it stays the batch's), with a warning for a price
+// above it; labels can print it.
+func TestImportAndLabelMRP(t *testing.T) {
+	l := billingTenant(t, "mrp-imp")
+	tok, _ := ownerLogin(t, l)
+	host := tenants[l].Host
+
+	tpl := get(t, host, "/api/products/import/template", tok)
+	require.Equal(t, 200, tpl.Code, tpl.Raw)
+	require.Contains(t, strings.SplitN(tpl.Raw, "\n", 2)[0], ",mrp,")
+
+	// 100 + 18 % = 118 is at its MRP; 120 + 18 % = 141.60 is above 130: warned, still imported.
+	file := workbook(t,
+		[]string{"name", "sku", "price", "mrp", "tax_type", "tax_rate"},
+		[]string{"MRP tea", "MRPI-1", "100", "118", "Exclusive", "18"},
+		[]string{"MRP coffee", "MRPI-2", "120", "130", "Exclusive", "18"},
+		[]string{"No MRP", "MRPI-3", "50", "", "", ""},
+	)
+	bad := uploadFile(t, l, tok, "bad.xlsx", workbook(t, []string{"name", "sku", "price", "mrp"}, []string{"X", "MRPI-X", "1", "-5"}), true)
+	require.Equal(t, 400, bad.Code, bad.Raw)
+	require.Contains(t, bad.Raw, `"mrp"`)
+
+	dry := uploadFile(t, l, tok, "mrp.xlsx", file, true)
+	require.Equal(t, 200, dry.Code, dry.Raw)
+	pv := dry.Body["preview"].([]any)
+	require.EqualValues(t, 118, num(pv[0].(map[string]any)["variants"].([]any)[0].(map[string]any)["mrp"]))
+	warnings := dry.Body["warnings"].([]any)
+	require.Len(t, warnings, 1, dry.Raw)
+	require.EqualValues(t, 3, num(warnings[0].(map[string]any)["row"]), "the coffee row")
+	require.Equal(t, "mrp", warnings[0].(map[string]any)["field"])
+
+	r := uploadFile(t, l, tok, "mrp.xlsx", file, false)
+	require.Equal(t, 200, r.Code, r.Raw)
+	require.EqualValues(t, 3, r.Body["created"])
+	byName := map[string]map[string]any{}
+	for _, p := range list(t, get(t, host, "/api/products", tok)) {
+		byName[p["name"].(string)] = p["ProductVariants"].([]any)[0].(map[string]any)
+	}
+	require.EqualValues(t, 118, num(byName["MRP tea"]["mrp"]))
+	require.Equal(t, false, byName["MRP tea"]["aboveMrp"])
+	require.Equal(t, true, byName["MRP coffee"]["aboveMrp"])
+	require.Nil(t, byName["No MRP"]["mrp"])
+
+	// Labels: the MRP field is offered and a sheet with it prints.
+	setModules(t, l, "clothing")
+	lay := get(t, host, "/api/settings/labels", tok)
+	require.Equal(t, 200, lay.Code, lay.Raw)
+	require.Contains(t, fmt.Sprint(lay.Body["presets"].([]any)[0].(map[string]any)["fields"]), "mrp")
+	pdf := do(t, rq{method: "POST", host: host, path: "/api/labels/pdf", token: tok, body: map[string]any{
+		"layoutId": "a4-3x8", "items": []map[string]any{{"variantId": byName["MRP tea"]["id"], "copies": 2},
+			{"variantId": byName["No MRP"]["id"], "copies": 1}}}})
+	isPDF(t, pdf)
+}

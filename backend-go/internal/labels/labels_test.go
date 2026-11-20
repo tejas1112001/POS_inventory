@@ -171,3 +171,17 @@ func TestRender(t *testing.T) {
 	_, err = Render(Presets[0], make([]Label, MaxLabels+1))
 	require.Error(t, err)
 }
+
+// The MRP field prints "MRP ₹…" on the price line, only in layouts that
+// choose it and only for labels that have one.
+func TestMRPField(t *testing.T) {
+	l := Label{Variant: "M", Price: "₹499.00", MRP: "MRP ₹550.00", Batch: "B X1 EXP 03/2027"}
+	line := band{kind: "line"}
+	require.Equal(t, "M   ₹499.00   MRP ₹550.00   B X1 EXP 03/2027", line.text(Presets[0], l))
+	require.Equal(t, "₹499.00", line.text(Presets[2], Label{Price: "₹499.00", MRP: "MRP ₹550.00"}), "the small roll leaves MRP out")
+	require.Equal(t, "M   ₹499.00", line.text(Presets[0], Label{Variant: "M", Price: "₹499.00"}), "no MRP, nothing printed")
+	only := Layout{Fields: []string{FieldMRP}}
+	require.Len(t, bands(only), 1, "MRP alone still gets the line")
+	require.Empty(t, (&Layout{ID: "mrp-only", Name: "MRP", PageWidth: 50, PageHeight: 25, LabelWidth: 50, LabelHeight: 25,
+		Columns: 1, Rows: 1, Fields: []string{"mrp"}}).Validate("l"), "mrp is a known field")
+}
