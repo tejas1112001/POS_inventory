@@ -153,6 +153,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger, opts ...Opti
 	})
 	a.registry = tenancy.NewRegistry(a.sessions, a.listener.TTL(tenancy.RegistryTTL, tenancy.RegistryTTLDegraded))
 	a.listener.On(tenancy.ChanTenantChanged, func(string) { a.registry.Flush() })
+	a.metrics.Registry.MustRegister(registryCacheCollector(a.registry))
 	a.listener.OnReconnect(a.registry.Flush)
 
 	latest, err := migrate.LatestPlatformVersion()
@@ -252,8 +253,9 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger, opts ...Opti
 		HSTS:           cfg.HSTSEnabled,
 		RequestTimeout: cfg.RequestTimeout,
 		CORSDevOrigins: cfg.CORSDevOrigins,
-		TenantResolver: tenancy.Resolve(a.registry, network, cfg.BaseDomain),
-		Platform:       func(r chi.Router) { platformHTTP.Mount(r) },
+		TenantResolver: tenancy.Resolve(a.registry, network, cfg.BaseDomain,
+			tenancy.NewLookupLimiter(tenancy.UncachedLookupsPerMinute, network, func() { a.metrics.RateLimited.WithLabelValues("tenant_lookup").Inc() })),
+		Platform: func(r chi.Router) { platformHTTP.Mount(r) },
 		TenantRoot: func(r chi.Router) {
 			r.Get("/files/t/{id}", a.catalog.PublicFile)
 			r.Head("/files/t/{id}", a.catalog.PublicFile)

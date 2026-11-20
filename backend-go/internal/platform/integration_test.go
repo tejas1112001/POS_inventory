@@ -175,7 +175,7 @@ func newEnvWith(t *testing.T, mod func(*platform.Config)) *env {
 		Logger: slog.New(slog.DiscardHandler), Network: n, Health: httpx.NewHealth(time.Second), RequestTimeout: 10 * time.Second,
 		Platform:       func(r chi.Router) { ph.Mount(r) },
 		Tenant:         func(r chi.Router) {},
-		TenantResolver: tenancy.Resolve(e.registry, n, "pos.test"),
+		TenantResolver: tenancy.Resolve(e.registry, n, "pos.test", nil),
 	})
 	if shared == nil {
 		shared = e

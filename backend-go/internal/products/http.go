@@ -35,6 +35,11 @@ type Deps struct {
 	MaxRows  int
 }
 
+// maxImportReports bounds the reports kept in memory (each is an Excel
+// file of up to maxImportRows rows; ARCHITECTURE_REVIEW H4). The oldest
+// unread report makes room; its user can run the import again.
+const maxImportReports = 200
+
 // API holds the handlers.
 type API struct {
 	d Deps
@@ -43,7 +48,9 @@ type API struct {
 }
 
 // New creates the API.
-func New(d Deps) *API { return &API{d: d, reports: tenancy.NewTTLCache[string, importReport]()} }
+func New(d Deps) *API {
+	return &API{d: d, reports: tenancy.NewTTLCache[string, importReport](maxImportReports)}
+}
 
 func tenant(r *http.Request) tenancy.Tenant {
 	t, _ := tenancy.TenantFrom(r.Context())

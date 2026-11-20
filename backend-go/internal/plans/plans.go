@@ -37,6 +37,13 @@ const (
 	FeaturePublicShop    = "public_shop"
 )
 
+// Cache sizes (ARCHITECTURE_REVIEW H4): plans are few; override sets are
+// one per shop.
+const (
+	maxPlans        = 1_000
+	maxOverrideSets = 50_000
+)
+
 // Service reads plan limits and features with a small cache.
 type Service struct {
 	sessions *tenancy.Sessions
@@ -48,8 +55,8 @@ type Service struct {
 
 // NewService creates the service.
 func NewService(s *tenancy.Sessions) *Service {
-	return &Service{sessions: s, cache: tenancy.NewTTLCache[int64, Limits](),
-		features: tenancy.NewTTLCache[int64, map[string]bool](), ovr: tenancy.NewTTLCache[string, overrideSet](), ttl: time.Minute}
+	return &Service{sessions: s, cache: tenancy.NewTTLCache[int64, Limits](maxPlans),
+		features: tenancy.NewTTLCache[int64, map[string]bool](maxPlans), ovr: tenancy.NewTTLCache[string, overrideSet](maxOverrideSets), ttl: time.Minute}
 }
 
 // Has reports whether a plan includes a feature. Plan 0 (no plan) has

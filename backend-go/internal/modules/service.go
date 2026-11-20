@@ -20,6 +20,9 @@ import (
 // half a minute, and the instance that wrote it forgets at once.
 const cacheTTL = 30 * time.Second
 
+// cacheMax bounds the cache: one entry per shop (ARCHITECTURE_REVIEW H4).
+const cacheMax = 50_000
+
 // Shop is a tenant's business type and switched-on modules.
 type Shop struct {
 	BusinessType string
@@ -35,7 +38,7 @@ type Service struct {
 
 // NewService creates the service.
 func NewService(s *tenancy.Sessions, p *plans.Service) *Service {
-	return &Service{sessions: s, plans: p, cache: tenancy.NewTTLCache[string, Shop]()}
+	return &Service{sessions: s, plans: p, cache: tenancy.NewTTLCache[string, Shop](cacheMax)}
 }
 
 const qShop = `SELECT business_type, modules FROM settings WHERE id = 1`

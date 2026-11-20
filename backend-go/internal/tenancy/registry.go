@@ -38,6 +38,15 @@ const (
 	RegistryTTLDegraded = 5 * time.Second
 )
 
+// Cache sizes (ARCHITECTURE_REVIEW H4). A shop takes up to two entries
+// (by slug and by ID). Misses (unknown, deleted and old slugs) have their
+// own smaller cache, so a flood of random subdomains evicts only other
+// misses, never a live shop.
+const (
+	RegistryMaxEntries = 50_000
+	RegistryMaxMisses  = 10_000
+)
+
 type regEntry struct {
 	t     Tenant
 	found bool
@@ -47,7 +56,8 @@ type regEntry struct {
 // misses, so unknown and deleted slugs take the same code path and time.
 type Registry struct {
 	sessions *Sessions
-	cache    *TTLCache[string, regEntry]
+	cache    *TTLCache[string, regEntry] // found tenants and redirects
+	misses   *TTLCache[string, regEntry] // not found
 	sf       singleflight.Group
 	ttl      func() time.Duration
 }
@@ -57,7 +67,8 @@ func NewRegistry(s *Sessions, ttl func() time.Duration) *Registry {
 	if ttl == nil {
 		ttl = func() time.Duration { return RegistryTTL }
 	}
-	return &Registry{sessions: s, cache: NewTTLCache[string, regEntry](), ttl: ttl}
+	return &Registry{sessions: s, cache: NewTTLCache[string, regEntry](RegistryMaxEntries),
+		misses: NewTTLCache[string, regEntry](RegistryMaxMisses), ttl: ttl}
 }
 
 // BySlug resolves a host label. Unknown, reserved, malformed, deleted,
@@ -92,7 +103,7 @@ func (r *Registry) ByID(ctx context.Context, id string) (Tenant, error) {
 }
 
 func (r *Registry) lookup(ctx context.Context, key string, kind lookupKind, arg string) (Tenant, error) {
-	if e, ok := r.cache.Get(key); ok {
+	if e, ok := r.cached(key); ok {
 		return entryResult(e)
 	}
 	v, err, _ := r.sf.Do(key, func() (any, error) {
@@ -100,13 +111,43 @@ func (r *Registry) lookup(ctx context.Context, key string, kind lookupKind, arg 
 		if err != nil {
 			return regEntry{}, err
 		}
-		r.cache.Set(key, e, r.ttl())
+		r.store(key, e)
 		return e, nil
 	})
 	if err != nil {
 		return Tenant{}, err
 	}
 	return entryResult(v.(regEntry))
+}
+
+// cached returns a cached result, found or not.
+func (r *Registry) cached(key string) (regEntry, bool) {
+	if e, ok := r.cache.Get(key); ok {
+		return e, true
+	}
+	return r.misses.Get(key)
+}
+
+// store caches a result in the cache its kind belongs to.
+func (r *Registry) store(key string, e regEntry) {
+	if e.found {
+		r.misses.Delete(key)
+		r.cache.Set(key, e, r.ttl())
+		return
+	}
+	r.cache.Delete(key)
+	r.misses.Set(key, e, r.ttl())
+}
+
+// SlugCached reports whether a host label's lookup would be answered from
+// the cache (no database query). The lookup limiter counts only the
+// others.
+func (r *Registry) SlugCached(slug string) bool {
+	if ReservedSlugs[slug] || !validSlug(slug) {
+		return true // refused without a query
+	}
+	_, ok := r.cached("slug:" + slug)
+	return ok
 }
 
 func entryResult(e regEntry) (Tenant, error) {
@@ -165,7 +206,7 @@ func (r *Registry) RedirectSlug(ctx context.Context, old string) (string, bool) 
 		return "", false
 	}
 	key := "redirect:" + old
-	if e, ok := r.cache.Get(key); ok {
+	if e, ok := r.cached(key); ok {
 		return e.t.Slug, e.found
 	}
 	var e regEntry
@@ -179,13 +220,21 @@ func (r *Registry) RedirectSlug(ctx context.Context, old string) (string, bool) 
 	default:
 		return "", false // transient error: no redirect, not cached
 	}
-	r.cache.Set(key, e, r.ttl())
+	r.store(key, e)
 	return e.t.Slug, e.found
 }
 
 // Flush drops every cached entry (on tenant_changed and after a listener
 // reconnect).
-func (r *Registry) Flush() { r.cache.Flush() }
+func (r *Registry) Flush() {
+	r.cache.Flush()
+	r.misses.Flush()
+}
+
+// CacheStats are the registry caches' sizes and evictions (metrics).
+func (r *Registry) CacheStats() (entries, misses int, evicted uint64) {
+	return r.cache.Len(), r.misses.Len(), r.cache.Evicted() + r.misses.Evicted()
+}
 
 func validSlug(s string) bool {
 	if len(s) < 3 || len(s) > 30 {

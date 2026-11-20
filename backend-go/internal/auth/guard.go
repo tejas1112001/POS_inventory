@@ -28,6 +28,13 @@ const (
 	DegradedTTL    = 5 * time.Second
 )
 
+// Cache sizes (ARCHITECTURE_REVIEW H4): signed-in users and roles across
+// every shop this instance serves. The least recently used make room.
+const (
+	MaxAuthStates     = 100_000
+	MaxPermissionSets = 20_000
+)
+
 // Principal is the signed-in tenant user of a request. Permissions come
 // from the user's CURRENT role, never from a token claim.
 type Principal struct {
@@ -75,8 +82,8 @@ func NewStates(s *tenancy.Sessions, healthy func() bool, log *slog.Logger) *Stat
 	if log == nil {
 		log = slog.Default()
 	}
-	return &States{sessions: s, authCache: tenancy.NewTTLCache[string, authState](),
-		permCache: tenancy.NewTTLCache[string, map[string]bool](), healthy: healthy, log: log}
+	return &States{sessions: s, authCache: tenancy.NewTTLCache[string, authState](MaxAuthStates),
+		permCache: tenancy.NewTTLCache[string, map[string]bool](MaxPermissionSets), healthy: healthy, log: log}
 }
 
 func (st *States) ttl(normal time.Duration) time.Duration {

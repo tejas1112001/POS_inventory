@@ -38,6 +38,11 @@ type Deps struct {
 	DashboardTTL time.Duration
 }
 
+// maxDashboards bounds the dashboard cache. Its key includes the date
+// range from the query, so without a bound a user could fill memory by
+// varying it (ARCHITECTURE_REVIEW H4).
+const maxDashboards = 20_000
+
 // API holds the handlers.
 type API struct {
 	d     Deps
@@ -49,7 +54,7 @@ func New(d Deps) *API {
 	if d.Now == nil {
 		d.Now = time.Now
 	}
-	return &API{d: d, dashC: tenancy.NewTTLCache[string, Dashboard]()}
+	return &API{d: d, dashC: tenancy.NewTTLCache[string, Dashboard](maxDashboards)}
 }
 
 // Mount registers the report routes.

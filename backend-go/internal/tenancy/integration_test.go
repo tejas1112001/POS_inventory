@@ -584,7 +584,7 @@ func TestResolveMiddlewareGeneric404(t *testing.T) {
 	h := httpx.NewRouter(httpx.RouterDeps{
 		Logger: slog.New(slog.DiscardHandler), Network: httpx.Network{BaseDomain: "pos.test"},
 		Health: httpx.NewHealth(time.Second), RequestTimeout: time.Second,
-		TenantResolver: tenancy.Resolve(reg, httpx.Network{BaseDomain: "pos.test"}, "pos.test"),
+		TenantResolver: tenancy.Resolve(reg, httpx.Network{BaseDomain: "pos.test"}, "pos.test", nil),
 		Tenant: func(r chi.Router) {
 			r.Get("/whoami", func(w http.ResponseWriter, r *http.Request) {
 				tn, _ := tenancy.TenantFrom(r.Context())
@@ -608,4 +608,46 @@ func TestResolveMiddlewareGeneric404(t *testing.T) {
 		require.Equal(t, 404, code, slug)
 		require.Equal(t, ref, body, "identical body for %s", slug)
 	}
+}
+
+// TestUncachedLookupsAreLimitedPerClient (ARCHITECTURE_REVIEW H4): one
+// client sending new subdomains is refused with 429 after the limit,
+// without a registry query, while cached shops keep working for it and
+// other clients are not affected. Misses never evict a live shop.
+func TestUncachedLookupsAreLimitedPerClient(t *testing.T) {
+	ctx := context.Background()
+	s := sessions(tdb.AppPool(t, 2), nil)
+	reg := tenancy.NewRegistry(s, nil)
+	live := newTenant(t, "active", "")
+	limited := 0
+	lim := tenancy.NewLookupLimiter(3, httpx.Network{BaseDomain: "pos.test"}, func() { limited++ })
+
+	h := httpx.NewRouter(httpx.RouterDeps{
+		Logger: slog.New(slog.DiscardHandler), Network: httpx.Network{BaseDomain: "pos.test"},
+		Health: httpx.NewHealth(time.Second), RequestTimeout: time.Second,
+		TenantResolver: tenancy.Resolve(reg, httpx.Network{BaseDomain: "pos.test"}, "pos.test", lim),
+		Tenant: func(r chi.Router) {
+			r.Get("/whoami", func(w http.ResponseWriter, r *http.Request) { httpx.WriteJSON(w, 200, map[string]string{}) })
+		},
+	})
+	get := func(slug, ip string) int {
+		req := httptest.NewRequestWithContext(ctx, "GET", "http://"+slug+".pos.test/api/whoami", nil)
+		req.RemoteAddr = ip + ":40000"
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec.Code
+	}
+	const attacker, other = "203.0.113.7", "198.51.100.9"
+	require.Equal(t, 200, get(live.Slug, attacker)) // 1 uncached lookup, now cached
+	require.Equal(t, 404, get("random-aaa", attacker))
+	require.Equal(t, 404, get("random-bbb", attacker))
+	require.Equal(t, 429, get("random-ccc", attacker), "fourth uncached lookup in a minute")
+	require.Equal(t, 1, limited)
+	require.Equal(t, 404, get("random-aaa", attacker), "a cached miss costs no lookup")
+	require.Equal(t, 200, get(live.Slug, attacker), "a cached shop still works for the same client")
+	require.Equal(t, 404, get("random-ccc", other), "other clients have their own budget")
+
+	found, misses, _ := reg.CacheStats()
+	require.Equal(t, 1, found)
+	require.Equal(t, 3, misses)
 }
