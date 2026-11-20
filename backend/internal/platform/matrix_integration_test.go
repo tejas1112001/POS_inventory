@@ -73,6 +73,7 @@ var consoleMatrix = map[string]consoleSpec{
 	// Overrides (S9 security note): read with tenants:view; change only as
 	// super_admin (tenants:override) with step-up.
 	"GET /override-keys":                        {roles: roles(sa, ba, sup)},
+	"GET /business-types":                       {roles: roles(sa, ba, sup)},
 	"GET /tenants/{id}/overrides":               {roles: roles(sa, ba, sup)},
 	"POST /tenants/{id}/overrides":              {roles: roles(sa), stepUp: true},
 	"POST /tenants/{id}/overrides/{oid}/revoke": {roles: roles(sa), stepUp: true},

@@ -43,7 +43,21 @@ type BusinessType struct {
 	Description string `json:"description"`
 }
 
-// ValidType reports whether s is a known business type.
+// TypeChoices lists the type keys for an error message: "retail,
+// clothing, footwear or pharmacy".
+func TypeChoices() string {
+	keys := make([]string, len(BusinessTypes))
+	for i, b := range BusinessTypes {
+		keys[i] = b.Key
+	}
+	if len(keys) < 2 {
+		return strings.Join(keys, "")
+	}
+	return strings.Join(keys[:len(keys)-1], ", ") + " or " + keys[len(keys)-1]
+}
+
+// ValidType reports whether s is a known business type. The database only
+// checks the format (ARCHITECTURE_REVIEW M1): a new type is added here.
 func ValidType(s string) bool {
 	for _, b := range BusinessTypes {
 		if b.Key == s {
@@ -78,8 +92,9 @@ type Module struct {
 	Routes []string `json:"-"`
 }
 
-// Registry is the Phase 1 module list, in display order. Later phases
-// append (and widen the settings_modules_check constraint).
+// Registry is the module list, in display order. A new module is added
+// here only: the database checks the key's format, not the list
+// (ARCHITECTURE_REVIEW M1), and the console override key follows.
 var Registry = []Module{
 	{
 		Key: ProductAttributes, Label: "Sizes, colours and attributes",

@@ -75,7 +75,7 @@ func (a *API) putBusiness(w http.ResponseWriter, r *http.Request) {
 	if in.BusinessType != nil {
 		v := strings.ToLower(strings.TrimSpace(*in.BusinessType))
 		if !modules.ValidType(v) {
-			httpx.WriteError(w, r, apperr.Invalid("businessType", "Use retail, clothing, footwear or pharmacy."))
+			httpx.WriteError(w, r, apperr.Invalid("businessType", "Use "+modules.TypeChoices()+"."))
 			return
 		}
 		in.BusinessType = &v

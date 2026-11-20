@@ -132,7 +132,7 @@ func (o *Orchestrator) validate(req *Request) error {
 		req.BusinessType = modules.Retail
 	}
 	if !modules.ValidType(req.BusinessType) {
-		fields["businessType"] = "use retail, clothing, footwear or pharmacy"
+		fields["businessType"] = "use " + modules.TypeChoices()
 	}
 
 	switch {

@@ -16,6 +16,7 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend/internal/apperr"
 	"github.com/tejas1112001/POS_inventory/backend/internal/httpx"
 	"github.com/tejas1112001/POS_inventory/backend/internal/mailtmpl"
+	"github.com/tejas1112001/POS_inventory/backend/internal/modules"
 	"github.com/tejas1112001/POS_inventory/backend/internal/tenancy"
 )
 
@@ -39,11 +40,21 @@ var overrideKeys = map[string]overrideKey{
 	"public_shop":        {Label: "Online shop", Flag: true},
 	"csv_import":         {Label: "CSV import", Flag: true},
 	"new_checkout":       {Label: "New checkout", Flag: true},
-	// Industry Phase 1 modules (E2): false turns the module off for one shop.
-	"product_attributes": {Label: "Module: sizes, colours and attributes", Flag: true},
-	"barcode_labels":     {Label: "Module: barcode labels", Flag: true},
-	"stock_counts":       {Label: "Module: stock counts", Flag: true},
-	"batch_expiry":       {Label: "Module: batches and expiry", Flag: true}, // industry P3 (DB37)
+	// Every module adds a flag (industry P1 E2): false turns it off for one
+	// shop. See init.
+}
+
+// overrideOrder is the display order: limits and features, then modules.
+var overrideOrder = []string{"max_stores", "max_users", "max_products", "max_emails_per_day", "max_storage_mb",
+	"public_shop", "csv_import", "new_checkout"}
+
+// The module flags come from the module registry, so a new module needs
+// no change here or in the database (ARCHITECTURE_REVIEW M1).
+func init() {
+	for _, m := range modules.Registry {
+		overrideKeys[m.Feature] = overrideKey{Label: "Module: " + strings.ToLower(m.Label[:1]) + m.Label[1:], Flag: true}
+		overrideOrder = append(overrideOrder, m.Feature)
+	}
 }
 
 const (
@@ -89,12 +100,10 @@ type OverrideKeyView struct {
 	Cap   int64  `json:"cap,omitempty"`
 }
 
-// OverrideKeys returns the fixed list, in a stable order.
+// OverrideKeys returns the known keys, in a stable order.
 func OverrideKeys() []OverrideKeyView {
-	order := []string{"max_stores", "max_users", "max_products", "max_emails_per_day", "max_storage_mb", "public_shop", "csv_import", "new_checkout",
-		"product_attributes", "barcode_labels", "stock_counts", "batch_expiry"}
-	out := make([]OverrideKeyView, 0, len(order))
-	for _, k := range order {
+	out := make([]OverrideKeyView, 0, len(overrideOrder))
+	for _, k := range overrideOrder {
 		d := overrideKeys[k]
 		out = append(out, OverrideKeyView{Key: k, Label: d.Label, Flag: d.Flag, Cap: d.Cap})
 	}
@@ -330,6 +339,7 @@ func overrideCounts(ctx context.Context, tx tenancy.PlatformTx, views []TenantVi
 
 func (h *HTTP) mountOverrides(p chi.Router) {
 	p.With(h.need(PermTenantsView)).Get("/override-keys", h.overrideKeys)
+	p.With(h.need(PermTenantsView)).Get("/business-types", h.businessTypes)
 	p.With(h.need(PermTenantsView)).Get("/tenants/{id}/overrides", h.listOverrides)
 	p.With(h.need(PermTenantsOverride), h.stepUpRequired).Post("/tenants/{id}/overrides", h.addOverride)
 	p.With(h.need(PermTenantsOverride), h.stepUpRequired).Post("/tenants/{id}/overrides/{oid}/revoke", h.revokeOverride)
@@ -337,6 +347,12 @@ func (h *HTTP) mountOverrides(p chi.Router) {
 
 func (h *HTTP) overrideKeys(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, OverrideKeys())
+}
+
+// businessTypes lists the shop presets for the console's filter and
+// create form (ARCHITECTURE_REVIEW M1: the list lives in the code only).
+func (h *HTTP) businessTypes(w http.ResponseWriter, r *http.Request) {
+	httpx.WriteJSON(w, http.StatusOK, modules.BusinessTypes)
 }
 
 func (h *HTTP) listOverrides(w http.ResponseWriter, r *http.Request) {

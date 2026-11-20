@@ -16,14 +16,10 @@ const SORTS = [
 ];
 const SAVED_KEY = 'console.tenantViews';
 
-// Industry business types (industry P1 item 1); "" = all, for the filter.
-const BUSINESS_TYPES = [
-  ['', 'All'],
-  ['retail', 'Retail'],
-  ['clothing', 'Clothing'],
-  ['footwear', 'Footwear'],
-  ['pharmacy', 'Pharmacy'],
-];
+// Industry business types (industry P1 item 1) come from the server
+// (GET /business-types, ARCHITECTURE_REVIEW M1); retail is the fallback
+// until they load.
+const DEFAULT_TYPES = [{ key: 'retail', label: 'Retail' }];
 
 // Saved views (search, status, sort) are kept in this browser only.
 function readViews() {
@@ -53,6 +49,14 @@ export default function Tenants() {
   const [search, setSearch] = useState('');
   const [data, setData] = useState({ rows: [], total: 0, totalPages: 0, loading: true, error: '' });
   const [creating, setCreating] = useState(false);
+  const [types, setTypes] = useState(DEFAULT_TYPES);
+
+  useEffect(() => {
+    api
+      .get('/business-types')
+      .then((t) => Array.isArray(t) && t.length && setTypes(t))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     const t = setTimeout(() => setFilters((f) => (f.q === search.trim() ? f : { ...f, q: search.trim(), page: 1 })), 300);
@@ -98,7 +102,7 @@ export default function Tenants() {
           ))}
         </select>
         <select className="select" aria-label="Business type" value={filters.businessType} onChange={(e) => setFilters((f) => ({ ...f, businessType: e.target.value, page: 1 }))}>
-          {BUSINESS_TYPES.map(([v, l]) => (
+          {[['', 'All'], ...types.map((t) => [t.key, t.label])].map(([v, l]) => (
             <option key={v} value={v}>
               {v ? l : 'All business types'}
             </option>
@@ -165,7 +169,7 @@ export default function Tenants() {
             ),
           },
           { key: 'plan', label: 'Plan' },
-          { key: 'businessType', label: 'Type', render: (r) => BUSINESS_TYPES.find(([v]) => v === r.businessType)?.[1] || r.businessType },
+          { key: 'businessType', label: 'Type', render: (r) => types.find((t) => t.key === r.businessType)?.label || r.businessType },
           { key: 'ownerEmail', label: 'Owner' },
           { key: 'lastActivityAt', label: 'Last activity', render: (r) => formatDateTime(r.lastActivityAt, '—'), className: 'nowrap' },
           { key: 'storageBytes', label: 'Storage', render: (r) => bytes(r.storageBytes), className: 'nowrap' },
@@ -184,12 +188,12 @@ export default function Tenants() {
           }}
         />
       )}
-      {creating && <CreateTenant onClose={() => setCreating(false)} onCreated={(id) => navigate(`/tenants/${id}`)} />}
+      {creating && <CreateTenant types={types} onClose={() => setCreating(false)} onCreated={(id) => navigate(`/tenants/${id}`)} />}
     </div>
   );
 }
 
-function CreateTenant({ onClose, onCreated }) {
+function CreateTenant({ types, onClose, onCreated }) {
   const { can } = useSession();
   const [form, setForm] = useState({ name: '', slug: '', ownerEmail: '', ownerName: '', planCode: '', currency: 'INR', locale: 'en-IN', timezone: 'Asia/Kolkata', businessType: 'retail' });
   const [plans, setPlans] = useState([]);
@@ -247,7 +251,7 @@ function CreateTenant({ onClose, onCreated }) {
             onChange={set('businessType')}
             error={fields.businessType}
             hint="Switches on the type's modules and gives the owner its onboarding checklist. The owner can change it later."
-            options={BUSINESS_TYPES.filter(([v]) => v).map(([value, label]) => ({ value, label }))}
+            options={types.map((t) => ({ value: t.key, label: t.label }))}
           />
         </div>
         <p className="small muted">The owner gets a welcome email with a link to set a password.</p>

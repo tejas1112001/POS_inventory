@@ -72,12 +72,14 @@ func TestModulesDefaultsForAnExistingShop(t *testing.T) {
 	}
 	require.Equal(t, all[:3], strList(m.Body["recommended"].(map[string]any)["clothing"]))
 
-	// The column CHECK refuses an unknown module, and the type CHECK an
-	// unknown type.
-	_, err := admin(t).Exec(ctx, `UPDATE `+schema(l)+`.settings SET modules = '{batches}'`)
+	// The lists live in the code (ARCHITECTURE_REVIEW M1): the database
+	// checks only the format of a module key and a type.
+	_, err := admin(t).Exec(ctx, `UPDATE `+schema(l)+`.settings SET modules = '{Bad-Key}'`)
 	require.ErrorContains(t, err, "settings_modules_check")
-	_, err = admin(t).Exec(ctx, `UPDATE `+schema(l)+`.settings SET business_type = 'bakery'`)
-	require.ErrorContains(t, err, "settings_business_type_check")
+	_, err = admin(t).Exec(ctx, `UPDATE `+schema(l)+`.settings SET modules = '{stock_counts,NULL}'`)
+	require.ErrorContains(t, err, "settings_modules_check")
+	_, err = admin(t).Exec(ctx, `UPDATE `+schema(l)+`.settings SET business_type = 'Bakery!'`)
+	require.ErrorContains(t, err, "settings_business_type_check") // the API refuses unknown ones (TestBusinessTypeChange)
 	var bt string
 	require.NoError(t, admin(t).QueryRow(ctx, `SELECT business_type FROM platform.tenants WHERE id = $1`, tenants[l].ID).Scan(&bt))
 	require.Equal(t, "retail", bt)
