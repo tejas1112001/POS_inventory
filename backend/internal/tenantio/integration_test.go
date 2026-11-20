@@ -166,7 +166,8 @@ func TestExportHoldsOneTenantAndNoCredentials(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, latest, m.SchemaVersion)
 	require.Equal(t, migrate.ExportSettings, m.Settings)
-	require.ElementsMatch(t, []string{"auth_tokens", "goose_db_version", "held_carts", "idempotency_keys", "pos_locks", "refresh_tokens"}, m.Excluded)
+	require.ElementsMatch(t, []string{"auth_tokens", "goose_db_version", "held_carts", "idempotency_keys", "ledger_checkpoint_marks", "ledger_checkpoints",
+		"pos_locks", "refresh_tokens"}, m.Excluded)
 	var names []string
 	for _, e := range m.Tables {
 		names = append(names, e.Name)
