@@ -287,13 +287,14 @@ type variantRow struct {
 	status        string
 	taxType       *string
 	taxRate       *decimal.Decimal
+	mrp           *decimal.Decimal // the variant's MRP; a batch's MRP wins (lineMRP)
 }
 
 const (
 	qSingleVariant = `SELECT p.id, min(v.id), count(v.id) FROM products p
 		LEFT JOIN product_variants v ON v.product_id = p.id AND v.deleted_at IS NULL
 		WHERE p.id = ANY($1) AND p.deleted_at IS NULL GROUP BY p.id`
-	qVariants = `SELECT v.id, v.product_id, v.sku::text, v.price, p.name, p.status, p.tax_type, p.tax_rate
+	qVariants = `SELECT v.id, v.product_id, v.sku::text, v.price, p.name, p.status, p.tax_type, p.tax_rate, v.mrp
 		FROM product_variants v JOIN products p ON p.id = v.product_id
 		WHERE v.id = ANY($1) AND v.deleted_at IS NULL AND p.deleted_at IS NULL`
 )
@@ -357,7 +358,7 @@ func resolve(ctx context.Context, tx tenancy.TenantTx, lines []line) (map[int64]
 	byID := map[int64]variantRow{}
 	for rows.Next() {
 		var v variantRow
-		if err := rows.Scan(&v.id, &v.productID, &v.sku, &v.price, &v.productName, &v.status, &v.taxType, &v.taxRate); err != nil {
+		if err := rows.Scan(&v.id, &v.productID, &v.sku, &v.price, &v.productName, &v.status, &v.taxType, &v.taxRate, &v.mrp); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -565,8 +566,8 @@ func nextReference(ctx context.Context, tx tenancy.TenantTx, prefix string) (str
 // Black": attributes.Label in SQL) when the product has variant
 // dimensions (industry P1 item 4, DB8); NULL otherwise.
 const qInsertItem = `INSERT INTO order_items (sale_id, product_id, variant_id, product_name, sku, quantity, unit_price,
-		catalog_price, discount, tax_type, tax_rate, tax_amount, cgst, sgst, igst, subtotal, hsn_code, variant_label)
-	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
+		catalog_price, discount, tax_type, tax_rate, tax_amount, cgst, sgst, igst, subtotal, mrp, mrp_amount, hsn_code, variant_label)
+	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18,
 		(SELECT hsn_code FROM products WHERE id = $2),
 		(SELECT string_agg(CASE WHEN d.k = 'size' AND coalesce(p.attributes ->> 'size_system', '') <> ''
 		          THEN (p.attributes ->> 'size_system') || ' ' ELSE '' END || (v.attributes ->> d.k), ' / ' ORDER BY d.ord)
@@ -576,12 +577,14 @@ const qInsertItem = `INSERT INTO order_items (sale_id, product_id, variant_id, p
 	RETURNING id`
 
 // insertItems writes the order lines in one batch (one round trip) and
-// returns their IDs in line order.
-func insertItems(ctx context.Context, tx tenancy.TenantTx, saleID int64, p priced) ([]int64, error) {
+// returns their IDs in line order. Each line keeps its MRP at sale time,
+// from the batches it is sold from (sb) or the variant.
+func insertItems(ctx context.Context, tx tenancy.TenantTx, saleID int64, p priced, sb saleBatches) ([]int64, error) {
 	b := &pgx.Batch{}
-	for _, l := range p.lines {
+	for i, l := range p.lines {
+		unitMRP, mrpAmount := lineMRP(l, sb.sold[i])
 		b.Queue(qInsertItem, saleID, l.v.productID, l.v.id, l.v.productName, l.v.sku, l.qty, l.unit,
-			l.catalog, l.q.Discount, l.taxType, l.taxRate, l.q.Tax, l.q.CGST, l.q.SGST, l.q.IGST, l.q.Total)
+			l.catalog, l.q.Discount, l.taxType, l.taxRate, l.q.Tax, l.q.CGST, l.q.SGST, l.q.IGST, l.q.Total, unitMRP, mrpAmount)
 	}
 	br := tx.SendBatch(ctx, b)
 	ids := make([]int64, len(p.lines))
@@ -592,6 +595,52 @@ func insertItems(ctx context.Context, tx tenancy.TenantTx, saleID int64, p price
 		}
 	}
 	return ids, br.Close()
+}
+
+// lineMRP is a line's MRP: one unit's (nil when unknown or when its
+// batches carry different MRPs) and the whole line's, summed over its
+// batches (nil when any unit has none). A batch's MRP wins over the
+// variant's.
+func lineMRP(l pricedLine, sold []batches.Sold) (unit, amount *decimal.Decimal) {
+	if len(sold) == 0 {
+		if l.v.mrp == nil {
+			return nil, nil
+		}
+		a := l.v.mrp.Mul(decimal.NewFromInt(l.qty))
+		return l.v.mrp, &a
+	}
+	total := decimal.Zero
+	same := true
+	for _, s := range sold {
+		m := s.MRP
+		if m == nil {
+			m = l.v.mrp
+		}
+		if m == nil {
+			return nil, nil
+		}
+		if unit == nil {
+			unit = m
+		} else if !unit.Equal(*m) {
+			same = false
+		}
+		total = total.Add(m.Mul(decimal.NewFromInt(int64(s.Qty))))
+	}
+	if !same {
+		unit = nil
+	}
+	return unit, &total
+}
+
+// aboveMRP reports whether a line costs the customer more than its MRP
+// (tax and the discount share included). Warned about, never refused.
+func aboveMRP(total decimal.Decimal, mrpAmount *decimal.Decimal) bool {
+	return mrpAmount != nil && total.GreaterThan(*mrpAmount)
+}
+
+// mrpWarning is the line warning for a line above its MRP.
+func mrpWarning(total, mrpAmount decimal.Decimal) string {
+	return fmt.Sprintf("Charged %s, above the MRP of %s.", total.StringFixed(2), mrpAmount.StringFixed(2))
 }
 
 func skuMap(p priced) map[int64]string {

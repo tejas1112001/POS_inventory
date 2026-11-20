@@ -1,5 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { api } from '../../services/api';
+import { toast } from '../../../shared/toast/store';
+import { useShopSettings } from '../../hooks/useShopSettings';
+import { formatCurrency } from '../../lib/format';
+import { mrpBody, mrpWarning } from '../../lib/mrp';
 import EntityForm from './EntityForm';
 
 const buildSelectOptions = (items = [], labelKey = 'name') => {
@@ -55,6 +59,7 @@ const buildVariantsPayload = (product, values) => {
       sku: values.sku || variants[0].sku,
       itemBarcode: values.itemBarcode || variants[0].itemBarcode,
       price: values.price === '' ? variants[0].price : Number(values.price),
+      mrp: mrpBody(values.mrp), // other variants leave mrp out: the server keeps theirs
     };
 
     if (updatedInventory) {
@@ -83,6 +88,8 @@ export default function EditProductForm({ product, onSaved, onCancel }) {
   });
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
+  const { settings } = useShopSettings();
+  const pricesIncludeTax = settings?.pricesIncludeTax;
 
   useEffect(() => {
     let isActive = true;
@@ -141,6 +148,7 @@ export default function EditProductForm({ product, onSaved, onCancel }) {
       sku: primaryVariant?.sku || '',
       itemBarcode: primaryVariant?.itemBarcode || '',
       price: primaryVariant?.price ?? '',
+      mrp: primaryVariant?.mrp ?? '',
       quantity: primaryInventory?.qty ?? '',
       quantityAlert: primaryInventory?.quantityAlert ?? '',
       storeId: primaryInventory?.storeId || '',
@@ -256,6 +264,13 @@ export default function EditProductForm({ product, onSaved, onCancel }) {
         type: 'number',
       },
       {
+        name: 'mrp',
+        label: 'MRP',
+        type: 'number',
+        placeholder: 'Printed maximum retail price, tax included (optional)',
+        warn: (v) => mrpWarning({ price: v.price, mrp: v.mrp, taxRate: v.tax, taxType: v.taxType, pricesIncludeTax }, formatCurrency),
+      },
+      {
         name: 'storeId',
         label: 'Store',
         type: 'select',
@@ -273,7 +288,7 @@ export default function EditProductForm({ product, onSaved, onCancel }) {
         type: 'number',
       },
     ];
-  }, [options, isSingle]);
+  }, [options, isSingle, pricesIncludeTax]);
 
   const handleSubmit = (values) => {
     if (!product?.id) {
@@ -302,7 +317,12 @@ export default function EditProductForm({ product, onSaved, onCancel }) {
       variants: buildVariantsPayload(product, values),
     };
 
-    return api.put(`/api/products/${product.id}`, payload);
+    return api.put(`/api/products/${product.id}`, payload).then((saved) => {
+      if ((saved?.ProductVariants || []).some((v) => v.aboveMrp)) {
+        toast.warning('The price with tax is above the MRP. The product is saved and can be sold; check the price.');
+      }
+      return saved;
+    });
   };
 
   if (!product) {

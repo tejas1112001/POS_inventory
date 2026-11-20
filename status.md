@@ -1,3 +1,17 @@
+# MRP on every variant
+
+2026-11-20, on request. Tenant migration 00032; API_CONTRACT §5.7 (M1–M6).
+
+| Part | What | State |
+|---|---|---|
+| 1 | `product_variants.mrp` (optional, tax included); product forms, variant matrix and product page show it | Done, committed |
+| 2 | Price above MRP: warning only (product forms, product page, cart via the quote, sale lines); never refused | Done, committed |
+| 3 | Shop setting "Show MRP on receipts" (off by default): line MRP and "You saved (against MRP)" on the PDF and screen receipt | Done, committed |
+
+Notes: sale lines keep MRP at sale time (`order_items.mrp`, `mrp_amount`); a batch's MRP wins over the variant's. The comparison includes tax (and, at the till, the discount share). Not done: an `mrp` column in the retail/clothing/footwear import templates, and the old checkout screen (only the new checkout shows the warning).
+
+---
+
 # Super Admin console MFA switch (temporary)
 
 2026-11-20: MFA for the Super Admin console is **off** on request (`PLATFORM_MFA_DISABLED=true` in `backend-go/deploy/.env`, git-ignored). Code default stays on. To turn it back on: set it to `false` (or remove the line) and restart the app container. Authenticators already set up are kept and work again as soon as it is on; users who signed in while it was off are asked to enrol at their next sign-in.

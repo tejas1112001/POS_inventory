@@ -404,7 +404,13 @@ export default function Checkout() {
                         {l.label && <p className="truncate text-xs text-slate-600 dark:text-slate-300">{l.label}</p>}
                         <p className="text-xs text-slate-600 tabular-nums dark:text-slate-300">
                           {formatCurrency(l.price)} each{ql && Number(ql.taxRate) > 0 ? ` · tax ${Number(ql.taxRate)}%` : ''}
+                          {ql?.mrp != null ? ` · MRP ${formatCurrency(ql.mrp)}` : ''}
                         </p>
+                        {ql?.aboveMrp && (
+                          <p className="mt-0.5 text-xs font-medium text-warning-fg">
+                            Above MRP: {formatCurrency(ql.total)} for MRP {formatCurrency(ql.mrpAmount)}. The sale is still allowed.
+                          </p>
+                        )}
                         {ql?.batches?.length > 0 && (
                           <div className="mt-0.5 text-xs text-slate-600 dark:text-slate-300">
                             {ql.batches.map((b) => (

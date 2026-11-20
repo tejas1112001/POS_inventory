@@ -147,6 +147,7 @@ export default function ProductDetail() {
                 {many && <th scope="col" className="px-4 py-2 font-medium">Option</th>}
                 <th scope="col" className="px-4 py-2 font-medium">SKU</th>
                 <th scope="col" className="px-3 py-2 text-right font-medium">Price</th>
+                <th scope="col" className="px-3 py-2 text-right font-medium">MRP</th>
                 {hasPermission('products', 'edit') && <th scope="col" className="hidden px-3 py-2 text-right font-medium md:table-cell">Cost</th>}
                 {storeIds.map((sid) => (
                   <th key={sid} scope="col" className="px-3 py-2 text-right font-medium">
@@ -162,6 +163,10 @@ export default function ProductDetail() {
                   {many && <td className="px-4 py-2 font-medium">{variantLabel(v)}</td>}
                   <td className="px-4 py-2 text-muted-foreground">{v.sku}</td>
                   <td className="px-3 py-2 text-right tabular-nums">{formatCurrency(v.price)}</td>
+                  <td className={cn('px-3 py-2 text-right tabular-nums', v.aboveMrp && 'font-medium text-warning-fg')}>
+                    {v.mrp != null ? formatCurrency(v.mrp) : '—'}
+                    {v.aboveMrp && <span className="block text-xs">Price is above MRP</span>}
+                  </td>
                   {hasPermission('products', 'edit') && <td className="hidden px-3 py-2 text-right tabular-nums md:table-cell">{formatCurrency(v.cost)}</td>}
                   {storeIds.map((sid) => {
                     const i = inv(v, sid);

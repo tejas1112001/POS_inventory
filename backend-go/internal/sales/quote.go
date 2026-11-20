@@ -31,6 +31,11 @@ type quoteLine struct {
 	// the line's warnings. Empty for untracked products.
 	Batches  []ItemBatchJSON `json:"batches"`
 	Warnings []string        `json:"warnings"`
+	// MRP of one unit (null when unknown or the batches differ) and of the
+	// line; AboveMRP: the line total is above it (a warning only).
+	MRP       *decimal.Decimal `json:"mrp"`
+	MRPAmount *decimal.Decimal `json:"mrpAmount"`
+	AboveMRP  bool             `json:"aboveMrp"`
 }
 
 type quoteJSON struct {
@@ -124,10 +129,15 @@ func (a *API) quote(w http.ResponseWriter, r *http.Request) {
 		out = quoteJSON{BatchProblem: problem, Currency: s.currency, Subtotal: q.Subtotal, Discount: q.Discount, Tax: q.Tax,
 			Shipping: q.Shipping, Total: q.Total, Lines: make([]quoteLine, 0, len(pr.lines))}
 		for i, l := range pr.lines {
-			out.Lines = append(out.Lines, quoteLine{Index: i, ProductID: l.v.productID, VariantID: l.v.id, SKU: l.v.sku,
+			ql := quoteLine{Index: i, ProductID: l.v.productID, VariantID: l.v.id, SKU: l.v.sku,
 				Quantity: l.qty, UnitPrice: l.unit, Discount: l.q.Discount, TaxRate: l.taxRate, Tax: l.q.Tax,
 				Total: l.q.Total, CGST: l.q.CGST, SGST: l.q.SGST, IGST: l.q.IGST, Available: stock[l.v.id],
-				Batches: soldJSON(sb.sold[i]), Warnings: lineWarnings(sb.sold[i])})
+				Batches: soldJSON(sb.sold[i]), Warnings: lineWarnings(sb.sold[i])}
+			ql.MRP, ql.MRPAmount = lineMRP(l, sb.sold[i])
+			if ql.AboveMRP = aboveMRP(l.q.Total, ql.MRPAmount); ql.AboveMRP {
+				ql.Warnings = append(ql.Warnings, mrpWarning(l.q.Total, *ql.MRPAmount))
+			}
+			out.Lines = append(out.Lines, ql)
 		}
 		return nil
 	})

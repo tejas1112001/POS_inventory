@@ -109,6 +109,10 @@ function ReceiptBody({ sale, store, settings, businessName, taxLabel, logoUrl, n
   const storeLine = [store?.name || sale.Store?.name, store?.address, store?.phone].filter(Boolean).join(', ');
   const voided = sale.status === 'Void';
   const tendered = sale.tendered != null && n(sale.tendered) > 0;
+  // MRP and the saving against it, only when the shop shows MRP (as on the PDF).
+  const showMrp = Boolean(settings?.showMrpOnReceipt);
+  const withMrp = items.filter((i) => i.mrpAmount != null);
+  const saving = showMrp ? withMrp.reduce((s, i) => s + n(i.mrpAmount) - n(i.subtotal), 0) : 0;
 
   return (
     <div ref={bodyRef} className={cn('rc', narrow && 'rc-narrow')}>
@@ -179,6 +183,9 @@ function ReceiptBody({ sale, store, settings, businessName, taxLabel, logoUrl, n
                       {i.batches.length > 1 ? ` × ${b.quantity}` : ''}
                     </span>
                   ))}
+                  {showMrp && i.mrp != null && !(i.batches || []).some((b) => b.mrp != null) && (
+                    <span className="rc-sku">MRP {formatCurrency(i.mrp)}</span>
+                  )}
                 </td>
                 <td className="rc-qty">{i.quantity}</td>
                 <td>{formatCurrency(i.unit_price)}</td>
@@ -223,6 +230,12 @@ function ReceiptBody({ sale, store, settings, businessName, taxLabel, logoUrl, n
           <span>Total</span>
           <span>{formatCurrency(sale.total)}</span>
         </div>
+        {saving >= 0.005 && (
+          <div className="rc-grand">
+            <span>You saved (against MRP)</span>
+            <span>{formatCurrency(saving)}</span>
+          </div>
+        )}
         {payments.map((p) => (
           <div key={p.id} className="rc-muted">
             <span>

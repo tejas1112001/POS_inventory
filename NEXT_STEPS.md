@@ -14,7 +14,7 @@ Each needs the owner's go-ahead or answers from outside. Source: design §9.
 | Topic | Waiting on |
 |---|---|
 | Pack / strip / tablet conversion | Phase 3b (Q8), after the pharmacy answers §11 |
-| MRP control (block sales above MRP, discount rules) | A legal review. Phase 3 only records MRP (Q9) |
+| MRP control (block sales above MRP, discount rules) | A legal review. MRP is recorded per batch (Phase 3, Q9) and per variant (migration 00032); selling above it is only warned about |
 | Prescriptions, scheduled drugs (H / H1 / X), registers, pharmacist sign-off on dispensing | Answers from the pharmacist and the lawyer (§11, D6) |
 | Drug licence number on the invoice | The same review. A free-text receipt footer works meanwhile |
 | Supplier returns with debit notes | Later (Phase 1 Q2). For now, write off with reason "returned to supplier" |

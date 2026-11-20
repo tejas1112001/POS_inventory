@@ -5,6 +5,9 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { InlineAlert } from '@/components/feedback/InlineAlert';
 import { api } from '@/services/api';
 import { useModules } from '@/hooks/useModules';
+import { useShopSettings } from '@/hooks/useShopSettings';
+import { formatCurrency } from '@/lib/format';
+import { mrpWarning } from '@/lib/mrp';
 import { toast } from '../../../shared/toast/store';
 
 const inputCls =
@@ -21,6 +24,9 @@ export default function VariantMatrixDialog({ product, defs, onClose, onCreated 
   const [pattern, setPattern] = useState('');
   const [price, setPrice] = useState(first ? String(first.price) : '');
   const [cost, setCost] = useState(first ? String(first.cost) : '');
+  const [mrp, setMrp] = useState(first?.mrp != null ? String(first.mrp) : '');
+  const { settings } = useShopSettings();
+  const mrpWarn = mrpWarning({ price, mrp, taxRate: product.tax, taxType: product.taxType, pricesIncludeTax: settings?.pricesIncludeTax }, formatCurrency);
   const [preview, setPreview] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -35,6 +41,7 @@ export default function VariantMatrixDialog({ product, defs, onClose, onCreated 
     skuPattern: pattern.trim() || undefined,
     price: price === '' ? undefined : Number(price),
     cost: cost === '' ? undefined : Number(cost),
+    mrp: mrp === '' ? undefined : Number(mrp),
     generateBarcodes: canBarcode && barcodes ? true : undefined,
   });
   const toggle = (k, c) => {
@@ -116,6 +123,11 @@ export default function VariantMatrixDialog({ product, defs, onClose, onCreated 
               Cost
               <input type="number" min="0" step="0.01" className={inputCls} value={cost} onChange={(e) => setCost(e.target.value)} />
             </label>
+            <label className="grid gap-1.5 text-sm font-medium">
+              MRP
+              <input type="number" min="0" step="0.01" className={inputCls} value={mrp} placeholder="Optional" onChange={(e) => setMrp(e.target.value)} />
+            </label>
+            {mrpWarn && <p className="text-xs text-warning-fg sm:col-span-3">{mrpWarn}</p>}
           </div>
           {canBarcode && (
             <label className="flex items-center gap-2 text-sm">

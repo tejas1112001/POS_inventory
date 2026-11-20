@@ -142,3 +142,13 @@ func TestRandomCartsAreConsistent(t *testing.T) {
 		require.True(t, total.Equal(q.Total))
 	}
 }
+
+func TestAboveMRP(t *testing.T) {
+	m := d("118")
+	require.False(t, AboveMRP(d("100"), d("18"), false, &m), "exclusive 100 + 18% = 118 is at MRP")
+	require.True(t, AboveMRP(d("100.01"), d("18"), false, &m), "exclusive 100.01 + 18% is above MRP")
+	require.False(t, AboveMRP(d("118"), d("18"), true, &m), "inclusive 118 is at MRP")
+	require.True(t, AboveMRP(d("118.01"), d("18"), true, &m), "inclusive 118.01 is above MRP")
+	require.False(t, AboveMRP(d("1000"), d("18"), true, nil), "no MRP")
+	eq(t, "59", TaxInclusive(d("50"), d("18"), false), "tax added")
+}

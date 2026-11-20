@@ -150,3 +150,22 @@ func split(tax decimal.Decimal, mode string, exp int32) (cgst, sgst, igst *decim
 		return nil, nil, nil
 	}
 }
+
+// MRP (maximum retail price) is the most one unit may cost the customer,
+// tax included. Selling above it is warned about, never refused.
+
+// TaxInclusive is one unit's price with its tax: the price itself when it
+// already includes the tax, else price × (1 + rate/100).
+func TaxInclusive(price, rate decimal.Decimal, inclusive bool) decimal.Decimal {
+	if inclusive {
+		return price
+	}
+	return price.Add(price.Mul(rate).Div(hundred))
+}
+
+// AboveMRP reports whether one unit at price costs more than mrp once tax
+// is added. A nil mrp is never exceeded. Compared at 2 decimals, as MRP is
+// stored.
+func AboveMRP(price, rate decimal.Decimal, inclusive bool, mrp *decimal.Decimal) bool {
+	return mrp != nil && TaxInclusive(price, rate, inclusive).Round(2).GreaterThan(*mrp)
+}

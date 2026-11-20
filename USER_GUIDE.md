@@ -305,6 +305,7 @@ A single product has one SKU, one price, and one inventory per store.
    - Choose **Product Type** = `Single Product`.
    - Enter **Quantity** (initial stock at the selected store).
    - Enter **Price**.
+   - Enter **MRP** (optional): the maximum retail price printed on the pack, tax included. If the price with tax is above the MRP, the form warns you; you can still save and sell.
    - Select **Tax Type** (Exclusive/Inclusive) and **Tax** rate (IGST 8%, GST 5%, SGST 4%).
    - Set **Discount Type** (Percentage/Fixed) and **Discount Value**.
    - Set **Quantity Alert** — triggers a low-stock indicator when stock falls to this number.
@@ -325,6 +326,7 @@ A variable product has multiple variants, each with its own SKU, price, and stoc
    - **SKU** — unique identifier (e.g., `FD001-RED`).
    - **Quantity** — initial stock for this variant.
    - **Price** — selling price for this variant.
+   - **MRP** — optional printed maximum retail price, tax included (warned about when the price is above it).
 4. Add more rows as needed (e.g., `Color / Blue / FD001-BLUE`).
 5. Click **Save**.
 
@@ -458,6 +460,8 @@ This is the main checkout interface for serving customers.
 **8. Receipt**
 - A receipt modal appears automatically after payment.
 - The receipt shows store info, itemised list, subtotal, tax, discount, total, and payment method.
+- With **Settings → Shop → Receipt text → Show MRP on receipts** on, each item with an MRP shows it, and the total shows "You saved (against MRP)". It is off by default.
+- In the cart, a line charged more than its MRP (tax and discount included) is marked "Above MRP". The sale is still allowed.
 - Click **Print** to print the receipt.
 - Cart is cleared and the POS resets for the next transaction.
 

@@ -38,7 +38,7 @@ const MAX_LOGO = 2 * 1024 * 1024;
 const FIELDS = [
   'businessName', 'legalName', 'address', 'phone', 'email', 'currency', 'locale', 'timezone', 'taxLabel',
   'taxRegistrationNo', 'taxSplit', 'pricesIncludeTax', 'maxDiscountPct', 'invoicePrefix', 'receiptHeader', 'receiptFooter',
-  'homePage', 'shopStoreId', 'newCheckout', 'lowStockEmail', 'receiptPaper',
+  'homePage', 'shopStoreId', 'newCheckout', 'lowStockEmail', 'receiptPaper', 'showMrpOnReceipt',
 ];
 
 const RECEIPT_PAPERS = [
@@ -63,7 +63,7 @@ function withCurrent(values, current) {
 
 function fromSettings(s) {
   const out = {};
-  for (const k of FIELDS) out[k] = s?.[k] ?? (k === 'pricesIncludeTax' || k === 'newCheckout' ? false : '');
+  for (const k of FIELDS) out[k] = s?.[k] ?? (k === 'pricesIncludeTax' || k === 'newCheckout' || k === 'showMrpOnReceipt' ? false : '');
   out.maxDiscountPct = s?.maxDiscountPct != null ? String(s.maxDiscountPct) : '';
   out.lowStockEmail = s?.lowStockEmail ?? true;
   out.homePage = s?.homePage || 'login';
@@ -242,6 +242,16 @@ export default function ShopSettings({ canEdit }) {
           <TextArea id="receiptHeader" label="Header" hint="Shown above the shop name." value={form.receiptHeader} onChange={set('receiptHeader')} error={fields.receiptHeader} disabled={dis} maxLength={500} />
           <TextArea id="receiptFooter" label="Footer" hint="For example a return policy or a thank-you note." value={form.receiptFooter} onChange={set('receiptFooter')} error={fields.receiptFooter} disabled={dis} maxLength={500} />
           <SelectField id="receiptPaper" label="Receipt paper" hint="What Print uses by default. Each computer can still pick another size on the receipt; emailed PDFs stay A4." value={form.receiptPaper || 'a4'} onChange={set('receiptPaper')} error={fields.receiptPaper} disabled={dis} options={RECEIPT_PAPERS} />
+          <div className="pt-6">
+            <CheckField
+              id="showMrpOnReceipt"
+              label="Show MRP on receipts"
+              hint="Each item with an MRP shows it, and the total shows what the customer saved against MRP. PDFs already made for earlier sales stay as they were."
+              checked={form.showMrpOnReceipt}
+              onChange={set('showMrpOnReceipt')}
+              disabled={dis}
+            />
+          </div>
         </div>
       </SectionCard>
 

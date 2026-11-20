@@ -13,6 +13,7 @@ import (
 
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/attributes"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/files"
+	"github.com/tejas1112001/POS_inventory/backend-go/internal/pricing"
 	"github.com/tejas1112001/POS_inventory/backend-go/internal/tenancy"
 )
 
@@ -29,20 +30,25 @@ type InventoryJSON struct {
 
 // VariantJSON keeps the old ProductVariant.toJSON() keys.
 type VariantJSON struct {
-	ID               int64           `json:"id"`
-	SKU              string          `json:"sku"`
-	ItemBarcode      *string         `json:"itemBarcode"`
-	Price            decimal.Decimal `json:"price"`
-	Cost             decimal.Decimal `json:"cost"`
-	Weight           decimal.Decimal `json:"weight"`
-	Attributes       map[string]any  `json:"attributes"`
-	ExpiryDate       *string         `json:"expiryDate"`
-	ManufacturedDate *string         `json:"manufacturedDate"`
-	ProductID        int64           `json:"product_id"`
-	CreatedBy        *int64          `json:"created_by"`
-	CreatedAt        time.Time       `json:"createdAt"`
-	UpdatedAt        time.Time       `json:"updatedAt"`
-	Inventories      []InventoryJSON `json:"Inventories"`
+	ID          int64           `json:"id"`
+	SKU         string          `json:"sku"`
+	ItemBarcode *string         `json:"itemBarcode"`
+	Price       decimal.Decimal `json:"price"`
+	Cost        decimal.Decimal `json:"cost"`
+	Weight      decimal.Decimal `json:"weight"`
+	// MRP is the printed maximum retail price, tax included (null: none).
+	// AboveMRP: the price with its tax is above it (a warning, never
+	// refused).
+	MRP              *decimal.Decimal `json:"mrp"`
+	AboveMRP         bool             `json:"aboveMrp"`
+	Attributes       map[string]any   `json:"attributes"`
+	ExpiryDate       *string          `json:"expiryDate"`
+	ManufacturedDate *string          `json:"manufacturedDate"`
+	ProductID        int64            `json:"product_id"`
+	CreatedBy        *int64           `json:"created_by"`
+	CreatedAt        time.Time        `json:"createdAt"`
+	UpdatedAt        time.Time        `json:"updatedAt"`
+	Inventories      []InventoryJSON  `json:"Inventories"`
 	// Label is "M / Blue" (or "UK 8 / Black") when the product has variant
 	// dimensions (industry P1 item 4); left out otherwise.
 	Label string `json:"label,omitempty"`
@@ -103,7 +109,8 @@ type ProductJSON struct {
 	Price          decimal.Decimal `json:"price"`
 	Qty            int             `json:"qty"`
 
-	imageID *uuid.UUID
+	imageID   *uuid.UUID
+	inclusive bool // the price includes tax (the product's tax type, else the shop default)
 }
 
 // ImageURL is public while the product is published in a store, otherwise
@@ -138,6 +145,7 @@ const (
 		EXISTS (SELECT 1 FROM store_products sp JOIN stores s ON s.id = sp.store_id AND s.deleted_at IS NULL
 		        WHERE sp.product_id = p.id AND sp.is_published),
 		p.attributes, p.variant_dims, p.article_no, p.tracks_batches,
+		coalesce(p.tax_type = 'Inclusive', (SELECT prices_include_tax_default FROM settings WHERE id = 1), false),
 		CASE WHEN p.tracks_batches THEN (SELECT jsonb_build_object(
 			'sellable', coalesce(sum(s.qty) FILTER (WHERE bt.status = 'available' AND NOT coalesce(bt.expiry_date < ` + sqlShopToday + `, false)), 0),
 			'unbatched', coalesce(sum(s.qty) FILTER (WHERE bt.is_unknown), 0),
@@ -153,7 +161,7 @@ const (
 		LEFT JOIN users u ON u.id = p.created_by
 		WHERE p.id = ANY($1) AND p.deleted_at IS NULL`
 	qLoadVariants = `SELECT id, sku::text, item_barcode, price, cost, weight, attributes, to_char(expiry_date, 'YYYY-MM-DD'),
-		to_char(manufactured_date, 'YYYY-MM-DD'), product_id, created_by, created_at, updated_at
+		to_char(manufactured_date, 'YYYY-MM-DD'), product_id, created_by, created_at, updated_at, mrp
 		FROM product_variants WHERE product_id = ANY($1) AND deleted_at IS NULL ORDER BY id`
 	qLoadInventories = `SELECT i.id, i.qty, i.quantity_alert, i.variant_id, i.store_id, i.created_at, i.updated_at
 		FROM inventories i JOIN stores s ON s.id = i.store_id AND s.deleted_at IS NULL
@@ -180,7 +188,7 @@ func load(ctx context.Context, tx tenancy.TenantTx, ids []int64, o loadOpts) ([]
 			&p.TaxType, &p.Tax, &p.HSNCode, &p.DiscountType, &p.DiscountValue, &p.Warranties, &p.BarcodeSymbology,
 			&p.CategoryID, &p.SubCategoryID, &p.BrandID, &p.UnitID, &p.SupplierID, &p.CreatedByID, &p.CreatedAt, &p.UpdatedAt,
 			&p.Category, &p.Brand, &p.Unit, &p.CreatedByName, &p.IsPublished, &p.IsFeatured, &anyPublished,
-			&p.Attributes, &p.VariantDims, &p.ArticleNo, &p.TracksBatches, &p.BatchStock); err != nil {
+			&p.Attributes, &p.VariantDims, &p.ArticleNo, &p.TracksBatches, &p.inclusive, &p.BatchStock); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -203,7 +211,7 @@ func load(ctx context.Context, tx tenancy.TenantTx, ids []int64, o loadOpts) ([]
 	for rows.Next() {
 		var v VariantJSON
 		if err := rows.Scan(&v.ID, &v.SKU, &v.ItemBarcode, &v.Price, &v.Cost, &v.Weight, &v.Attributes, &v.ExpiryDate,
-			&v.ManufacturedDate, &v.ProductID, &v.CreatedBy, &v.CreatedAt, &v.UpdatedAt); err != nil {
+			&v.ManufacturedDate, &v.ProductID, &v.CreatedBy, &v.CreatedAt, &v.UpdatedAt, &v.MRP); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -213,6 +221,11 @@ func load(ctx context.Context, tx tenancy.TenantTx, ids []int64, o loadOpts) ([]
 		v.Inventories = []InventoryJSON{}
 		if p := byID[v.ProductID]; p != nil {
 			v.Label = attributes.Label(p.VariantDims, p.Attributes, v.Attributes)
+			rate := decimal.Zero
+			if p.Tax != nil {
+				rate = *p.Tax
+			}
+			v.AboveMRP = pricing.AboveMRP(v.Price, rate, p.inclusive, v.MRP)
 			p.ProductVariants = append(p.ProductVariants, v)
 			variantOwner[v.ID] = p
 			variantIDs = append(variantIDs, v.ID)

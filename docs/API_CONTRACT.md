@@ -510,6 +510,19 @@ Daily digest: with `expiryDigest` on and the module on, the hourly job queues on
 | A35 | GET | `/api/products/import/template?type=pharmacy&format=csv\|xlsx` | `products:import` | Columns `name, sku, barcode, category, brand, hsn_code, tax_type, tax_rate, price, cost, batch_no, expiry, mfg_date, mrp, store, opening_qty, quantity_alert`; the Help sheet explains each. Batch and date columns are formatted as text in the .xlsx |
 | A35 | POST | `/api/products/import[?dryRun=true]` | as before | A file with `batch_no` or `expiry` columns is a pharmacy file (module off → 403 `MODULE_OFF`; with `article_no` or attribute columns → 400). One row per batch: rows with the same SKU are batches of one single product, and must agree on name, price, cost, tax, barcode and the other product columns. `expiry` is required (`YYYY-MM-DD`, `MM/YYYY` = the month's last day, or an Excel date); `mfg_date` optional (`MM/YYYY` = the first day), before the expiry and not in the future; `mrp` ≥ 0. A batch number has one expiry and appears once per store. An empty `store` is the first store. Expired rows are warnings: the product is created but that row's stock and batch are not imported. Rows expiring within the near-expiry days are imported and listed as warnings. The answer gains `warnings[{row, field, message}]` (all templates; empty when none), and in a dry run each pharmacy variant gains `batches[{row, batchNo, expiry, store, qty, skipped}]`. Products track batches; the stock goes into the named batches (ledger reason `import`). With the module on, products from the other templates also track batches, their opening stock in the unknown batch (design §0) |
 
+### 5.7 MRP on every variant (tenant migration 00032)
+
+MRP is the printed maximum retail price, tax included. Selling above it is warned about, never refused (MRP control still waits on the legal review, `NEXT_STEPS.md`). A batch's MRP (00025) wins over the variant's for tracked products.
+
+| # | Method | Path | Guard | Notes |
+|---|---|---|---|---|
+| M1 | POST/PUT | `/api/products` (and `/{id}`) | as before | Each variant (and the old top-level single form) takes `mrp` (number ≥ 0, rounded to 2 places; null clears). Left out on an update: the variant keeps its MRP. Bad value → 400 `variants[i].mrp`. A change writes audit `product.mrp_change` (before, after) |
+| M2 | GET | product responses (list, detail, barcode, create/update) | as before | Variants gain `mrp` (null when none) and `aboveMrp`: the price with tax (the product's tax type, else the shop's `pricesIncludeTax`) is above the MRP |
+| M3 | POST | `/api/products/{id}/variants/matrix` | as before | Body gains optional `mrp`, given to every new variant |
+| M4 | POST | `/api/sales/quote` | as before | Lines gain `mrp` (one unit; null when unknown or the batches carry different MRPs), `mrpAmount` (the line's MRP, summed over its batches; null when any unit has none) and `aboveMrp` (the line total, tax and discount share included, is above `mrpAmount`); such a line also gets the warning "Charged X, above the MRP of Y." |
+| M5 | GET | sale responses | as before | Items gain `mrp`, `mrpAmount` and `aboveMrp`, copied at sale time (DB `order_items.mrp`, `mrp_amount`); older lines have null. The warning is in `warnings[]` too |
+| M6 | GET/PUT | `/api/settings` | as before | `showMrpOnReceipt` (default false). On: receipts (PDF and screen) show each line's MRP (unless its batch text already does) and "You saved (against MRP)" = sum of `mrpAmount` − sum of line totals over lines with an MRP, when positive. Stored PDFs keep what they showed when made |
+
 ---
 
 ## 6. Frontend changes (minimal set, Phase 2)

@@ -154,6 +154,9 @@ func RenderPDF(v View, logo []byte) ([]byte, error) {
 		if l.Batch != "" {
 			name += " · " + l.Batch
 		}
+		if l.MRP != "" {
+			name += " · MRP " + l.MRP
+		}
 		disc := ""
 		if l.HasDiscount {
 			disc = l.Discount
@@ -188,6 +191,9 @@ func RenderPDF(v View, logo []byte) ([]byte, error) {
 		total("Shipping", v.Shipping)
 	}
 	total("Total", v.Total, bold)
+	if v.HasSaving {
+		total("You saved (against MRP)", v.Saving, bold)
+	}
 	for _, p := range v.Payments {
 		label := p.Method
 		if p.Reference != "" {

@@ -459,7 +459,7 @@ func (a *API) insertSale(r *http.Request, tx tenancy.TenantTx, p auth.Principal,
 	if err := spendCredit(ctx, tx, s, cust, id, p.UserID, creditPayments(st.rows)); err != nil {
 		return 0, 0, "", err
 	}
-	itemIDs, err := insertItems(ctx, tx, id, pr)
+	itemIDs, err := insertItems(ctx, tx, id, pr, sb)
 	if err != nil {
 		return 0, 0, "", err
 	}
@@ -681,7 +681,8 @@ func (a *API) update(w http.ResponseWriter, r *http.Request) {
 		if _, err := tx.Exec(ctx, `DELETE FROM order_items WHERE sale_id = $1`, id); err != nil {
 			return err
 		}
-		if _, err := insertItems(ctx, tx, id, pr); err != nil {
+		// An edit never has tracked lines (refuseIfBatched): the MRP is the variant's.
+		if _, err := insertItems(ctx, tx, id, pr, saleBatches{}); err != nil {
 			return err
 		}
 		status := c.status

@@ -44,6 +44,7 @@ type matrixIn struct {
 	SKUPattern       string           `json:"skuPattern"`
 	Price            money.Dec        `json:"price"`
 	Cost             money.Dec        `json:"cost"`
+	MRP              money.Dec        `json:"mrp"`
 	GenerateBarcodes bool             `json:"generateBarcodes"`
 }
 
@@ -85,6 +86,9 @@ func (a *API) matrix(w http.ResponseWriter, r *http.Request) {
 	}
 	if in.Cost.Valid && (in.Cost.D.IsNegative() || in.Cost.D.GreaterThan(maxPrice)) {
 		f.add("cost", "cost must not be negative")
+	}
+	if in.MRP.Valid && (in.MRP.D.IsNegative() || in.MRP.D.GreaterThan(maxPrice)) {
+		f.add("mrp", "MRP must be between 0 and 99999999999999")
 	}
 	in.SKUPattern = strings.TrimSpace(in.SKUPattern)
 	if len(in.SKUPattern) > maxSKUPattern {
@@ -302,10 +306,15 @@ func buildMatrix(ctx context.Context, tx tenancy.TenantTx, id int64, in matrixIn
 	if in.Cost.Valid {
 		cost = in.Cost.D
 	}
+	var mrp *decimal.Decimal
+	if in.MRP.Valid {
+		m := in.MRP.D.Round(2)
+		mrp = &m
+	}
 	var created []int64
 	for _, p := range out.Planned {
 		b, _ := json.Marshal(p.Attributes)
-		cv := cleanVariant{sku: p.SKU, price: in.Price.D, cost: cost, attributes: b}
+		cv := cleanVariant{sku: p.SKU, price: in.Price.D, cost: cost, mrp: mrp, attributes: b}
 		for _, s := range stores {
 			cv.inventories = append(cv.inventories, cleanInventory{storeID: s})
 		}

@@ -156,6 +156,9 @@ export default function EntityForm({
             );
           }
 
+          // field.warn(formData) returns a warning shown under the input
+          // (saving is still allowed).
+          const warning = typeof field.warn === 'function' ? field.warn(formData) : '';
           return (
             <div key={field.name}>
               <label htmlFor={`ef-${field.name}`} className="block text-sm font-medium text-gray-700 mb-1">
@@ -171,7 +174,13 @@ export default function EntityForm({
                 value={value}
                 onChange={(e) => handleChange(field.name, e.target.value)}
                 required={isRequired}
+                aria-describedby={warning ? `ef-${field.name}-warn` : undefined}
               />
+              {warning && (
+                <p id={`ef-${field.name}-warn`} className="mt-1 text-xs text-amber-700">
+                  {warning}
+                </p>
+              )}
             </div>
           );
         })}

@@ -30,6 +30,7 @@ var (
 type Line struct {
 	Name, Attributes, SKU, HSN                     string
 	Batch                                          string // industry P3 item 3: "Batch B1 · Exp 03/2027 · MRP 45.00"
+	MRP                                            string // one unit's MRP, when the shop shows MRP and Batch does not already
 	Qty                                            int
 	UnitPrice, Discount, TaxRate, TaxAmount, Total string
 	HasDiscount                                    bool
@@ -78,7 +79,11 @@ type View struct {
 
 	Subtotal, Discount, Tax, Shipping, Total, Paid, Tendered, Change, Due string
 	HasDiscount, HasShipping, HasTendered, HasDue                         bool
-	PaymentMethod, PaymentStatus                                          string
+	// Saving is what the customer saved against MRP (lines with an MRP
+	// only), shown when the shop shows MRP and it is positive.
+	Saving                       string
+	HasSaving                    bool
+	PaymentMethod, PaymentStatus string
 	// S10 item 5: each payment of the sale ("Cash", "₹500.00"), and when
 	// the balance is due.
 	Payments []PaymentLine
@@ -115,7 +120,8 @@ const (
 			 FROM (SELECT CASE WHEN ob.is_unknown THEN 'No batch' ELSE 'Batch ' || ob.batch_no END
 					|| coalesce(' · Exp ' || to_char(ob.expiry_date, 'MM/YYYY'), '') || coalesce(' · MRP ' || to_char(ob.mrp, 'FM9999999990.00'), '') AS t,
 					ob.quantity, ob.expiry_date AS e, ob.batch_id AS b, count(*) OVER () AS n
-				FROM order_item_batches ob WHERE ob.order_item_id = i.id) x)
+				FROM order_item_batches ob WHERE ob.order_item_id = i.id) x),
+			i.mrp, i.mrp_amount
 		FROM order_items i LEFT JOIN product_variants v ON v.id = i.variant_id
 		WHERE i.sale_id = $1 ORDER BY i.id`
 	qLogo = `SELECT storage_key FROM files WHERE id = $1`
@@ -280,6 +286,7 @@ func Load(ctx context.Context, tx tenancy.TenantTx, receiptID int64) (View, erro
 	defer rows.Close()
 	accs := map[string]*taxAcc{}
 	var order []string
+	var mrpTotal, mrpPaid decimal.Decimal
 	for rows.Next() {
 		var (
 			name                            string
@@ -289,8 +296,10 @@ func Load(ctx context.Context, tx tenancy.TenantTx, receiptID int64) (View, erro
 			cgst, sgst, igst                *decimal.Decimal
 			attrs                           []byte
 			label, hsn, batch               *string
+			mrp, mrpAmount                  *decimal.Decimal
 		)
-		if err := rows.Scan(&name, &sku, &qty, &unit, &ldisc, &rate, &ltax, &cgst, &sgst, &igst, &ltotal, &attrs, &label, &hsn, &batch); err != nil {
+		if err := rows.Scan(&name, &sku, &qty, &unit, &ldisc, &rate, &ltax, &cgst, &sgst, &igst, &ltotal, &attrs, &label, &hsn, &batch,
+			&mrp, &mrpAmount); err != nil {
 			return v, err
 		}
 		// The sale-time label ("M / Blue", industry P1 item 4) wins over
@@ -299,9 +308,19 @@ func Load(ctx context.Context, tx tenancy.TenantTx, receiptID int64) (View, erro
 		if label != nil && *label != "" {
 			attrText = *label
 		}
-		v.Lines = append(v.Lines, Line{Name: name, Attributes: attrText, SKU: deref(sku), HSN: deref(hsn), Batch: deref(batch), Qty: qty,
+		ln := Line{Name: name, Attributes: attrText, SKU: deref(sku), HSN: deref(hsn), Batch: deref(batch), Qty: qty,
 			UnitPrice: f.Money(unit), Discount: f.Money(ldisc), HasDiscount: ldisc.IsPositive(),
-			TaxRate: f.Percent(rate), TaxAmount: f.Money(ltax), Total: f.Money(ltotal)})
+			TaxRate: f.Percent(rate), TaxAmount: f.Money(ltax), Total: f.Money(ltotal)}
+		if b.ShowMRPOnReceipt {
+			// A batch line already names its batch's MRP.
+			if mrp != nil && !strings.Contains(ln.Batch, "MRP") {
+				ln.MRP = f.Money(*mrp)
+			}
+			if mrpAmount != nil {
+				mrpTotal, mrpPaid = mrpTotal.Add(*mrpAmount), mrpPaid.Add(ltotal)
+			}
+		}
+		v.Lines = append(v.Lines, ln)
 		if !rate.IsPositive() {
 			continue
 		}
@@ -326,6 +345,9 @@ func Load(ctx context.Context, tx tenancy.TenantTx, receiptID int64) (View, erro
 	}
 	if err := rows.Err(); err != nil {
 		return v, err
+	}
+	if s := mrpTotal.Sub(mrpPaid); s.IsPositive() {
+		v.Saving, v.HasSaving = f.Money(s), true
 	}
 	half := decimal.NewFromInt(2)
 	for _, k := range order {

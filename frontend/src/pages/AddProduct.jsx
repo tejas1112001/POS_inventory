@@ -12,6 +12,9 @@ import StoreModal from '../components/forms/StoreModal';
 import { usePos } from '../hooks/usePos';
 import { usePermission } from '../hooks/usePermission';
 import { api } from '../services/api';
+import { useShopSettings } from '../hooks/useShopSettings';
+import { formatCurrency } from '../lib/format';
+import { mrpBody, mrpWarning } from '../lib/mrp';
 import { checkWizard, formValues, stepClass } from '../lib/wizard';
 import {
   ArrowLeftIcon,
@@ -37,6 +40,22 @@ const AddProduct = () => {
   const { hasPermission } = usePermission();
   const [showSupplierModal, setShowSupplierModal] = useState(false);
   const { currentStep, goNext, goBack, goToStep } = useFormWizard(4);
+  const { settings } = useShopSettings();
+  // Warnings for a price above its MRP, by row ('single', 1, 2). Saving is
+  // still allowed: MRP is only warned about.
+  const [mrpWarn, setMrpWarn] = useState({});
+  const checkMrp = (form) => {
+    const val = (n) => form.elements.namedItem(n)?.value ?? '';
+    const tax = { taxType: val('taxType'), taxRate: val('tax'), pricesIncludeTax: settings?.pricesIncludeTax };
+    const w = {};
+    const single = mrpWarning({ price: val('price'), mrp: val('mrp'), ...tax }, formatCurrency);
+    if (single) w.single = single;
+    for (const i of [1, 2]) {
+      const m = mrpWarning({ price: val(`variantPrice${i}`), mrp: val(`variantMrp${i}`), ...tax }, formatCurrency);
+      if (m) w[i] = m;
+    }
+    setMrpWarn(w);
+  };
   
   const navigate = useNavigate();  
   const [productType, setProductType] = useState('single');
@@ -111,6 +130,7 @@ const AddProduct = () => {
           sku: data.sku,
           itemBarcode: data.itemBarcode || '',
           price: parseFloat(data.price) || 0,
+          mrp: mrpBody(data.mrp),
           cost: 0,
           weight: 0,
           attributes: {},
@@ -129,6 +149,7 @@ const AddProduct = () => {
             sku: data[`variantSKU${index}`],
             itemBarcode: '',
             price: parseFloat(data[`variantPrice${index}`]) || 0,
+            mrp: mrpBody(data[`variantMrp${index}`]),
             cost: 0,
             weight: 0,
             attributes: {
@@ -177,8 +198,11 @@ const AddProduct = () => {
         productData.quantityAlert = data.quantityAlert;
       }
       
-      await api.post('/api/products', productData);
+      const saved = await api.post('/api/products', productData);
       toast.success('Product added.');
+      if ((saved?.ProductVariants || []).some((v) => v.aboveMrp)) {
+        toast.warning('The price with tax is above the MRP. The product is saved and can be sold; check the price.');
+      }
       navigate('/products');
     } catch (error) {
       console.error('Error creating product:', error);
@@ -218,7 +242,7 @@ const AddProduct = () => {
     <FormPageLayout>
       <PageHeader />
 
-      <form className="flex min-h-0 flex-1 flex-col" onSubmit={handleSubmit} noValidate>
+      <form className="flex min-h-0 flex-1 flex-col" onSubmit={handleSubmit} onInput={(e) => checkMrp(e.currentTarget)} onChange={(e) => checkMrp(e.currentTarget)} noValidate>
         <FormCard>
           <FormBody>
             <FormStepper
@@ -511,6 +535,21 @@ const AddProduct = () => {
                     required
                   />
                 </div>
+
+                <div>
+                  <label htmlFor="mrp" className="block text-sm font-medium text-gray-700 mb-1">
+                    MRP
+                  </label>
+                  <input
+                    id="mrp"
+                    name="mrp"
+                    type="number"
+                    step="0.01" min="0" className="w-full px-3 py-2 border border-gray-600 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Printed maximum retail price, tax included (optional)"
+                    aria-describedby="mrpWarn"
+                  />
+                  {mrpWarn.single && <p id="mrpWarn" className="mt-1 text-xs text-amber-700">{mrpWarn.single}</p>}
+                </div>
                 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -603,6 +642,7 @@ const AddProduct = () => {
                         <th>SKU</th>
                         <th>Quantity</th>
                         <th>Price</th>
+                        <th>MRP</th>
                         <th>Actions</th>
                       </tr>
                     </thead>
@@ -647,6 +687,15 @@ const AddProduct = () => {
                             step="0.01" min="0"className="w-full px-2 py-1 border border-gray-600 rounded focus:ring-blue-500 focus:border-blue-500"
                             placeholder="7.99"
                           />
+                        </td>
+                        <td className="px-4 py-3">
+                          <input name="variantMrp1"
+                            type="number"
+                            step="0.01" min="0" className="w-full px-2 py-1 border border-gray-600 rounded focus:ring-blue-500 focus:border-blue-500"
+                            placeholder="Optional"
+                            aria-describedby="variantMrpWarn1"
+                          />
+                          {mrpWarn[1] && <p id="variantMrpWarn1" className="mt-1 text-xs text-amber-700">{mrpWarn[1]}</p>}
                         </td>
                         <td className="px-4 py-3 flex space-x-2">
                           <button className="p-1 text-black hover:bg-blue-50 rounded">
@@ -697,6 +746,15 @@ const AddProduct = () => {
                             step="0.01" min="0"className="w-full px-2 py-1 border border-gray-600 rounded focus:ring-blue-500 focus:border-blue-500"
                             placeholder="7.99"
                           />
+                        </td>
+                        <td className="px-4 py-3">
+                          <input name="variantMrp2"
+                            type="number"
+                            step="0.01" min="0" className="w-full px-2 py-1 border border-gray-600 rounded focus:ring-blue-500 focus:border-blue-500"
+                            placeholder="Optional"
+                            aria-describedby="variantMrpWarn2"
+                          />
+                          {mrpWarn[2] && <p id="variantMrpWarn2" className="mt-1 text-xs text-amber-700">{mrpWarn[2]}</p>}
                         </td>
                         <td className="px-4 py-3 flex space-x-2">
                           <button className="p-1 text-black hover:bg-blue-50 rounded">
