@@ -235,6 +235,24 @@ func TestTenantRolesHoldNothingOutsideTheirSchema(t *testing.T) {
 		return out
 	}
 	letters := []string{"a", "b", "c"}
+
+	// pos_tenant, which every tenant role joins, holds USAGE on extensions
+	// and nothing else: no attributes, no memberships, no object owned, no
+	// privilege on any schema, table or sequence.
+	var gSuper, gLogin, gCreateRole, gCreateDB, gBypass bool
+	require.NoError(t, c.QueryRow(ctx, `SELECT rolsuper, rolcanlogin, rolcreaterole, rolcreatedb, rolbypassrls
+		FROM pg_roles WHERE rolname = 'pos_tenant'`).Scan(&gSuper, &gLogin, &gCreateRole, &gCreateDB, &gBypass))
+	require.False(t, gSuper || gLogin || gCreateRole || gCreateDB || gBypass, "pos_tenant has a role attribute")
+	require.Empty(t, strs(`SELECT r.rolname::text FROM pg_auth_members m JOIN pg_roles r ON r.oid = m.roleid
+		JOIN pg_roles u ON u.oid = m.member WHERE u.rolname = 'pos_tenant'`), "pos_tenant is a member of another role")
+	require.Equal(t, []string{"extensions:USAGE"}, strs(`SELECT n.nspname::text || ':' || a.privilege_type
+		FROM pg_namespace n CROSS JOIN LATERAL aclexplode(n.nspacl) a
+		WHERE a.grantee = (SELECT oid FROM pg_roles WHERE rolname = 'pos_tenant') ORDER BY 1`))
+	require.Empty(t, strs(`SELECT c.oid::regclass::text FROM pg_class c CROSS JOIN LATERAL aclexplode(c.relacl) a
+		WHERE a.grantee = (SELECT oid FROM pg_roles WHERE rolname = 'pos_tenant')`), "pos_tenant holds a table or sequence privilege")
+	require.Empty(t, strs(`SELECT c.oid::regclass::text FROM pg_class c WHERE c.relowner = (SELECT oid FROM pg_roles WHERE rolname = 'pos_tenant')`),
+		"pos_tenant owns a relation")
+
 	for _, owner := range letters {
 		role := schema(owner) + "_rw"
 
@@ -243,8 +261,11 @@ func TestTenantRolesHoldNothingOutsideTheirSchema(t *testing.T) {
 		require.NoError(t, c.QueryRow(ctx, `SELECT rolsuper, rolcreaterole, rolcreatedb, rolbypassrls, rolcanlogin, rolreplication
 			FROM pg_roles WHERE rolname = $1`, role).Scan(&super, &createRole, &createDB, &bypass, &login, &repl))
 		require.False(t, super || createRole || createDB || bypass || login || repl, "%s has a role attribute", role)
-		require.Empty(t, strs(`SELECT r.rolname::text FROM pg_auth_members m JOIN pg_roles r ON r.oid = m.roleid
-			JOIN pg_roles u ON u.oid = m.member WHERE u.rolname = $1`, role), "%s is a member of another role", role)
+		// The one exception is the pos_tenant group (USAGE on extensions,
+		// checked below), joined without SET.
+		require.Equal(t, []string{"pos_tenant:false"}, strs(`SELECT r.rolname::text || ':' || m.set_option::text FROM pg_auth_members m
+			JOIN pg_roles r ON r.oid = m.roleid JOIN pg_roles u ON u.oid = m.member WHERE u.rolname = $1`, role),
+			"%s is a member of another role", role)
 		// Its members can SET ROLE to it but never inherit its privileges,
 		// and no member is another tenant's role.
 		for _, row := range strs(`SELECT u.rolname::text || ':' || m.inherit_option::text FROM pg_auth_members m
