@@ -21,12 +21,14 @@ var (
 		"users", "warehouses", "write_off_lines", "write_offs",
 	}
 	Excluded = map[string]string{
-		"refresh_tokens":   "live sessions",
-		"auth_tokens":      "invite and password-reset links",
-		"pos_locks":        "transient",
-		"held_carts":       "transient: parked checkout carts, 7 days",
-		"idempotency_keys": "transient",
-		"goose_db_version": "migration bookkeeping; a restore runs the migrations itself",
+		"refresh_tokens":          "live sessions",
+		"auth_tokens":             "invite and password-reset links",
+		"pos_locks":               "transient",
+		"held_carts":              "transient: parked checkout carts, 7 days",
+		"idempotency_keys":        "transient",
+		"goose_db_version":        "migration bookkeeping; a restore runs the migrations itself",
+		"ledger_checkpoints":      "derived: rebuilt by the next full stock reconcile",
+		"ledger_checkpoint_marks": "derived: rebuilt by the next full stock reconcile",
 	}
 )
 

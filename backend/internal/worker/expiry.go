@@ -39,15 +39,16 @@ type expiryData struct {
 // ExpiryDigests queues the day's expiry email for every shop that is due.
 // It returns how many emails were queued.
 func (m *Maintenance) ExpiryDigests(ctx context.Context, now time.Time) (int, error) {
-	queued := 0
-	err := m.eachTenant(ctx, "expiry_digest", func(t tenancy.Tenant) error {
-		return m.Jobs.InTenantTx(ctx, t, tenancy.TxOptions{Access: tenancy.ReadWrite}, func(tx tenancy.TenantTx) error {
-			n, err := expiryDigestFor(ctx, tx, now)
-			queued += n
+	queued, err := m.eachTenant(ctx, "expiry_digest", func(ctx context.Context, t tenancy.Tenant) (int64, error) {
+		var n int
+		err := m.Jobs.InTenantTx(ctx, t, tenancy.TxOptions{Access: tenancy.ReadWrite}, func(tx tenancy.TenantTx) error {
+			var err error
+			n, err = expiryDigestFor(ctx, tx, now)
 			return err
 		})
+		return int64(n), err
 	})
-	return queued, err
+	return int(queued), err
 }
 
 func expiryDigestFor(ctx context.Context, tx tenancy.TenantTx, now time.Time) (int, error) {

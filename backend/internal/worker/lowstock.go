@@ -53,15 +53,16 @@ type lowStockData struct {
 // LowStockEmails queues the day's email for every shop that is due. It
 // returns how many emails were queued.
 func (m *Maintenance) LowStockEmails(ctx context.Context, now time.Time) (int, error) {
-	queued := 0
-	err := m.eachTenant(ctx, "low_stock_email", func(t tenancy.Tenant) error {
-		return m.Jobs.InTenantTx(ctx, t, tenancy.TxOptions{Access: tenancy.ReadWrite}, func(tx tenancy.TenantTx) error {
-			n, err := lowStockFor(ctx, tx, now)
-			queued += n
+	queued, err := m.eachTenant(ctx, "low_stock_email", func(ctx context.Context, t tenancy.Tenant) (int64, error) {
+		var n int
+		err := m.Jobs.InTenantTx(ctx, t, tenancy.TxOptions{Access: tenancy.ReadWrite}, func(tx tenancy.TenantTx) error {
+			var err error
+			n, err = lowStockFor(ctx, tx, now)
 			return err
 		})
+		return int64(n), err
 	})
-	return queued, err
+	return int(queued), err
 }
 
 func lowStockFor(ctx context.Context, tx tenancy.TenantTx, now time.Time) (int, error) {

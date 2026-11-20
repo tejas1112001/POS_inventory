@@ -39,14 +39,13 @@ const (
 // SnapshotUsage refreshes every live tenant's usage row; it returns how many
 // tenants were written.
 func (m *Maintenance) SnapshotUsage(ctx context.Context) (int, error) {
-	n := 0
-	err := m.eachTenant(ctx, JobUsageSnapshot, func(t tenancy.Tenant) error {
+	n, err := m.eachTenant(ctx, JobUsageSnapshot, func(ctx context.Context, t tenancy.Tenant) (int64, error) {
 		var c [6]int64
 		var businessType *string
 		if err := m.Jobs.InTenantTx(ctx, t, tenancy.TxOptions{Access: tenancy.ReadOnly}, func(tx tenancy.TenantTx) error {
 			return tx.QueryRow(ctx, qUsageCounts).Scan(&c[0], &c[1], &c[2], &c[3], &c[4], &c[5], &businessType)
 		}); err != nil {
-			return err
+			return 0, err
 		}
 		if err := m.Jobs.InPlatformTx(ctx, tenancy.TxOptions{Access: tenancy.ReadWrite}, func(tx tenancy.PlatformTx) error {
 			if _, err := tx.Exec(ctx, qUsageUpsert, t.ID, c[0], c[1], c[2], c[3], c[4], c[5]); err != nil {
@@ -62,10 +61,9 @@ func (m *Maintenance) SnapshotUsage(ctx context.Context) (int, error) {
 			}
 			return err
 		}); err != nil {
-			return err
+			return 0, err
 		}
-		n++
-		return nil
+		return 1, nil
 	})
-	return n, err
+	return int(n), err
 }

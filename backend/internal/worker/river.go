@@ -27,6 +27,8 @@ const (
 	QueueReceipts    = "receipts"
 	QueueMaintenance = "maintenance"
 	QueueExports     = "exports"
+	// QueueTenantMaintenance runs per-shop maintenance jobs.
+	QueueTenantMaintenance = "tenant_maintenance"
 )
 
 // activeStates makes a job unique while it waits or runs, but not after it
@@ -92,6 +94,22 @@ func (ExportArgs) Kind() string { return "tenant_export" }
 // (or, for a final export, by the sweep).
 func (ExportArgs) InsertOpts() river.InsertOpts {
 	return river.InsertOpts{Queue: QueueExports, UniqueOpts: unique(), MaxAttempts: 1}
+}
+
+// ReconcileTenantArgs checks one shop's stock against its ledgers
+// (ARCHITECTURE_REVIEW M2). The nightly ledger_reconcile job queues one per
+// live shop, so shops run in parallel, each with its own time limit and
+// retries, and the work no longer has to fit one job's 30 minutes.
+type ReconcileTenantArgs struct {
+	TenantID string `json:"tenant_id"`
+}
+
+// Kind implements river.JobArgs.
+func (ReconcileTenantArgs) Kind() string { return "ledger_reconcile_tenant" }
+
+// InsertOpts implements river.JobArgsWithInsertOpts.
+func (ReconcileTenantArgs) InsertOpts() river.InsertOpts {
+	return river.InsertOpts{Queue: QueueTenantMaintenance, UniqueOpts: unique(), MaxAttempts: 3}
 }
 
 // maintenanceArgs is one periodic job.
@@ -194,6 +212,25 @@ func (k *exportWorker) Work(ctx context.Context, job *river.Job[ExportArgs]) err
 // Timeout is below the export's stale limit (6 h).
 func (k *exportWorker) Timeout(*river.Job[ExportArgs]) time.Duration { return 3 * time.Hour }
 
+type reconcileTenantWorker struct {
+	river.WorkerDefaults[ReconcileTenantArgs]
+	w *Worker
+}
+
+func (k *reconcileTenantWorker) Work(ctx context.Context, job *river.Job[ReconcileTenantArgs]) error {
+	t, err := k.w.cfg.Registry.ByID(ctx, job.Args.TenantID)
+	if err != nil {
+		return nil // tenant gone or not active: nothing to check
+	}
+	_, err = k.w.maint.ReconcileTenant(ctx, t)
+	return k.w.observe("ledger_reconcile_tenant", err)
+}
+
+// Timeout is a little above the reconcile's own limit.
+func (k *reconcileTenantWorker) Timeout(*river.Job[ReconcileTenantArgs]) time.Duration {
+	return ReconcileTimeout + time.Minute
+}
+
 type maintenanceWorker struct {
 	river.WorkerDefaults[maintenanceArgs]
 	w *Worker
@@ -216,7 +253,10 @@ func (k *maintenanceWorker) Work(ctx context.Context, job *river.Job[maintenance
 			k.w.cfg.Log.InfoContext(ctx, "old idempotency keys removed", slog.Int64("rows", n))
 		}
 	case JobLedgerReconcile:
-		_, err = m.ReconcileLedgers(ctx)
+		var n int
+		if n, err = k.w.QueueReconciles(ctx); n > 0 {
+			k.w.cfg.Log.InfoContext(ctx, "stock reconcile queued", slog.Int("tenants", n))
+		}
 	case JobUsageSnapshot:
 		_, err = m.SnapshotUsage(ctx)
 	case JobBillingLifecycle, JobBillingReminders:
@@ -349,6 +389,7 @@ func New(cfg Config) (*Worker, error) {
 	river.AddWorker(workers, &renderWorker{w: w})
 	river.AddWorker(workers, &maintenanceWorker{w: w})
 	river.AddWorker(workers, &exportWorker{w: w})
+	river.AddWorker(workers, &reconcileTenantWorker{w: w})
 
 	rc := &river.Config{
 		Schema:  "river",
@@ -357,11 +398,12 @@ func New(cfg Config) (*Worker, error) {
 	}
 	if cfg.RunJobs {
 		rc.Queues = map[string]river.QueueConfig{
-			QueueMail:          {MaxWorkers: 10}, // tenants in parallel; each job handles one tenant
-			QueueReceipts:      {MaxWorkers: 2},  // PDF rendering is CPU-heavy: leave the API threads free (Phase 3 load test)
-			QueueMaintenance:   {MaxWorkers: 2},
-			QueueExports:       {MaxWorkers: 1}, // one export at a time per node: they are long, streamed reads
-			river.QueueDefault: {MaxWorkers: 1},
+			QueueMail:              {MaxWorkers: 10}, // tenants in parallel; each job handles one tenant
+			QueueReceipts:          {MaxWorkers: 2},  // PDF rendering is CPU-heavy: leave the API threads free (Phase 3 load test)
+			QueueMaintenance:       {MaxWorkers: 2},
+			QueueExports:           {MaxWorkers: 1}, // one export at a time per node: they are long, streamed reads
+			QueueTenantMaintenance: {MaxWorkers: 2}, // per-shop reconciles; the jobs pool has 10 connections
+			river.QueueDefault:     {MaxWorkers: 1},
 		}
 		periodic := func(job string, s river.PeriodicSchedule, onStart bool) *river.PeriodicJob {
 			return river.NewPeriodicJob(s, func() (river.JobArgs, *river.InsertOpts) {
@@ -564,6 +606,25 @@ func (w *Worker) NightlyExports(ctx context.Context) error {
 		return err
 	}
 	return w.SweepExports(ctx)
+}
+
+// QueueReconciles queues one stock reconcile per live shop (duplicates of
+// a job still waiting collapse) and returns how many shops it covered.
+func (w *Worker) QueueReconciles(ctx context.Context) (int, error) {
+	ids, err := w.maint.TenantIDs(ctx)
+	if err != nil || len(ids) == 0 {
+		return 0, err
+	}
+	params := make([]river.InsertManyParams, len(ids))
+	for i, id := range ids {
+		params[i] = river.InsertManyParams{Args: ReconcileTenantArgs{TenantID: id}}
+	}
+	for start := 0; start < len(params); start += 500 {
+		if _, err := w.client.InsertMany(ctx, params[start:min(start+500, len(params))]); err != nil {
+			return start, err
+		}
+	}
+	return len(ids), nil
 }
 
 // Maintenance exposes the periodic jobs (tests, posctl).

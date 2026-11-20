@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -14,8 +15,11 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend/internal/tenancy"
 )
 
-// Maintenance runs the periodic jobs. Each walks the active tenants and
-// works in one tenant session at a time.
+// Maintenance runs the periodic jobs. Each walks the active tenants a few
+// at a time (TenantParallelism), each tenant in its own session with its
+// own time limit, so one slow or broken shop never holds up the rest
+// (ARCHITECTURE_REVIEW M2). The stock reconcile, the heaviest, runs as
+// one job per shop instead (ReconcileTenant).
 type Maintenance struct {
 	Jobs    *tenancy.Sessions
 	Metrics *obs.Metrics
@@ -51,96 +55,150 @@ func (m *Maintenance) tenants(ctx context.Context) ([]tenancy.Tenant, error) {
 	return out, err
 }
 
-// eachTenant runs fn per tenant; one tenant's failure does not stop the
-// others, and the errors are joined.
-func (m *Maintenance) eachTenant(ctx context.Context, job string, fn func(tenancy.Tenant) error) error {
+// TenantParallelism is how many tenants one maintenance job works on at
+// once. The jobs pool has 10 connections shared with mail and receipts.
+const TenantParallelism = 3
+
+// TenantJobTimeout limits one tenant's share of a sweep.
+const TenantJobTimeout = 2 * time.Minute
+
+// eachTenant runs fn for every live tenant, TenantParallelism at a time,
+// each under TenantJobTimeout, and returns the sum of what fn returned. One
+// tenant's failure does not stop the others; the errors are joined.
+func (m *Maintenance) eachTenant(ctx context.Context, job string, fn func(context.Context, tenancy.Tenant) (int64, error)) (int64, error) {
 	ts, err := m.tenants(ctx)
 	if err != nil {
-		return err
+		return 0, err
 	}
-	var errs []error
+	var (
+		mu    sync.Mutex
+		total int64
+		errs  []error
+		wg    sync.WaitGroup
+		sem   = make(chan struct{}, TenantParallelism)
+	)
+loop:
 	for _, t := range ts {
-		if ctx.Err() != nil {
-			return ctx.Err()
+		select {
+		case <-ctx.Done():
+			break loop
+		case sem <- struct{}{}:
 		}
-		if err := fn(t); err != nil {
-			m.Log.WarnContext(ctx, "maintenance failed for tenant", slog.String("job", job), slog.String("tenant_id", t.ID), slog.Any("err", err))
-			errs = append(errs, err)
-		}
+		wg.Go(func() {
+			defer func() { <-sem }()
+			tctx, cancel := context.WithTimeout(ctx, TenantJobTimeout)
+			defer cancel()
+			n, err := fn(tctx, t)
+			mu.Lock()
+			defer mu.Unlock()
+			total += n
+			if err != nil {
+				m.Log.WarnContext(ctx, "maintenance failed for tenant", slog.String("job", job), slog.String("tenant_id", t.ID), slog.Any("err", err))
+				errs = append(errs, err)
+			}
+		})
 	}
-	return errors.Join(errs...)
+	wg.Wait()
+	if ctx.Err() != nil {
+		errs = append(errs, ctx.Err())
+	}
+	return total, errors.Join(errs...)
 }
 
 // SweepPOSLocks deletes POS locks that expired more than a minute ago
 // (they are already ignored; this keeps the table small).
 func (m *Maintenance) SweepPOSLocks(ctx context.Context) (int64, error) {
-	var total int64
-	err := m.eachTenant(ctx, "pos_lock_sweep", func(t tenancy.Tenant) error {
-		return m.Jobs.InTenantTx(ctx, t, tenancy.TxOptions{Access: tenancy.ReadWrite}, func(tx tenancy.TenantTx) error {
+	return m.eachTenant(ctx, "pos_lock_sweep", func(ctx context.Context, t tenancy.Tenant) (int64, error) {
+		var n int64
+		err := m.Jobs.InTenantTx(ctx, t, tenancy.TxOptions{Access: tenancy.ReadWrite}, func(tx tenancy.TenantTx) error {
 			tag, err := tx.Exec(ctx, `DELETE FROM pos_locks WHERE expires_at < now() - interval '1 minute'`)
-			total += tag.RowsAffected()
+			n += tag.RowsAffected()
 			if err != nil {
 				return err
 			}
 			// Held carts past their 7 days (S10 item 7).
 			tag, err = tx.Exec(ctx, `DELETE FROM held_carts WHERE expires_at < now()`)
-			total += tag.RowsAffected()
+			n += tag.RowsAffected()
 			return err
 		})
+		return n, err
 	})
-	return total, err
 }
 
 // CleanupIdempotencyKeys deletes keys older than 24 hours (S2).
 func (m *Maintenance) CleanupIdempotencyKeys(ctx context.Context) (int64, error) {
-	var total int64
-	err := m.eachTenant(ctx, "idempotency_cleanup", func(t tenancy.Tenant) error {
-		return m.Jobs.InTenantTx(ctx, t, tenancy.TxOptions{Access: tenancy.ReadWrite}, func(tx tenancy.TenantTx) error {
+	return m.eachTenant(ctx, "idempotency_cleanup", func(ctx context.Context, t tenancy.Tenant) (int64, error) {
+		var n int64
+		err := m.Jobs.InTenantTx(ctx, t, tenancy.TxOptions{Access: tenancy.ReadWrite}, func(tx tenancy.TenantTx) error {
 			tag, err := tx.Exec(ctx, `DELETE FROM idempotency_keys WHERE created_at < now() - interval '24 hours'`)
-			total += tag.RowsAffected()
+			n = tag.RowsAffected()
 			return err
 		})
+		return n, err
 	})
-	return total, err
 }
 
 // maxReported caps the mismatches written to one audit entry.
 const maxReported = 20
 
-// ReconcileLedgers compares every inventory row with its stock ledger
-// (S1). Mismatches are logged, counted and written to that tenant's audit
-// log as a system entry; nothing is changed automatically.
+// ReconcileTimeout limits one shop's stock reconcile (a full check adds
+// up its whole ledgers).
+const ReconcileTimeout = 10 * time.Minute
+
+// ReconcileLedgers checks every live tenant's stock against its ledgers
+// (S1), a few at a time. Production runs one job per shop instead
+// (TenantIDs + ReconcileTenant); this is for posctl and tests.
 func (m *Maintenance) ReconcileLedgers(ctx context.Context) (int, error) {
-	var total int
-	err := m.eachTenant(ctx, "ledger_reconcile", func(t tenancy.Tenant) error {
-		var found []inventory.Mismatch
-		if err := m.Jobs.InTenantTx(ctx, t, tenancy.TxOptions{Access: tenancy.ReadOnly, StatementTimeout: 2 * time.Minute}, func(tx tenancy.TenantTx) error {
-			var err error
-			found, err = inventory.Reconcile(ctx, tx)
-			return err
-		}); err != nil {
-			return err
-		}
-		if len(found) == 0 {
-			return nil
-		}
-		total += len(found)
-		m.Metrics.LedgerMismatch.Add(float64(len(found)))
-		m.Log.WarnContext(ctx, "stock ledger mismatch", slog.String("tenant_id", t.ID), slog.Int("rows", len(found)))
-		items := make([]map[string]any, 0, min(len(found), maxReported))
-		for _, f := range found[:min(len(found), maxReported)] {
-			it := map[string]any{"store_id": f.StoreID, "variant_id": f.VariantID, "qty": f.Qty, "ledger_sum": f.LedgerSum}
-			if f.Kind != "" { // industry P3: batch checks
-				it["kind"], it["batch_id"] = f.Kind, f.BatchID
-			}
-			items = append(items, it)
-		}
-		return m.Jobs.InTenantTx(ctx, t, tenancy.TxOptions{Access: tenancy.ReadWrite}, func(tx tenancy.TenantTx) error {
-			return audit.Write(ctx, tx, audit.Entry{ActorType: audit.ActorSystem, Action: "stock.ledger_mismatch",
-				Entity: "inventory", After: map[string]any{"rows": len(found), "items": items}})
-		})
+	n, err := m.eachTenant(ctx, "ledger_reconcile", func(ctx context.Context, t tenancy.Tenant) (int64, error) {
+		found, err := m.ReconcileTenant(ctx, t)
+		return int64(found), err
 	})
-	return total, err
+	return int(n), err
+}
+
+// TenantIDs lists the live tenants (the per-shop job dispatcher).
+func (m *Maintenance) TenantIDs(ctx context.Context) ([]string, error) {
+	ts, err := m.tenants(ctx)
+	ids := make([]string, len(ts))
+	for i, t := range ts {
+		ids[i] = t.ID
+	}
+	return ids, err
+}
+
+// ReconcileTenant compares one shop's stock with its ledgers, from
+// checkpoints when recent (inventory.ReconcileCheckpointed). Mismatches
+// are logged, counted and written to the shop's audit log as a system
+// entry; nothing is changed automatically. It returns how many were found.
+func (m *Maintenance) ReconcileTenant(ctx context.Context, t tenancy.Tenant) (int, error) {
+	ctx, cancel := context.WithTimeout(ctx, ReconcileTimeout)
+	defer cancel()
+	var res inventory.ReconcileResult
+	if err := m.Jobs.InTenantTx(ctx, t, tenancy.TxOptions{Access: tenancy.ReadWrite, StatementTimeout: ReconcileTimeout}, func(tx tenancy.TenantTx) error {
+		var err error
+		res, err = inventory.ReconcileCheckpointed(ctx, tx, time.Now())
+		return err
+	}); err != nil {
+		return 0, err
+	}
+	found := res.Mismatches
+	if len(found) == 0 {
+		return 0, nil
+	}
+	m.Metrics.LedgerMismatch.Add(float64(len(found)))
+	m.Log.WarnContext(ctx, "stock ledger mismatch", slog.String("tenant_id", t.ID), slog.Int("rows", len(found)), slog.Bool("full", res.Full))
+	items := make([]map[string]any, 0, min(len(found), maxReported))
+	for _, f := range found[:min(len(found), maxReported)] {
+		it := map[string]any{"store_id": f.StoreID, "variant_id": f.VariantID, "qty": f.Qty, "ledger_sum": f.LedgerSum}
+		if f.Kind != "" { // industry P3: batch checks
+			it["kind"], it["batch_id"] = f.Kind, f.BatchID
+		}
+		items = append(items, it)
+	}
+	return len(found), m.Jobs.InTenantTx(ctx, t, tenancy.TxOptions{Access: tenancy.ReadWrite}, func(tx tenancy.TenantTx) error {
+		return audit.Write(ctx, tx, audit.Entry{ActorType: audit.ActorSystem, Action: "stock.ledger_mismatch",
+			Entity: "inventory", After: map[string]any{"rows": len(found), "items": items}})
+	})
 }
 
 // SweepMail queues delivery for every tenant whose dispatch mark is due,
