@@ -122,9 +122,14 @@ type Config struct {
 	ExportAgeIdentity     secrets.Secret `env:"EXPORT_AGE_IDENTITY"`
 	// Deletion timeline (BILLING_DESIGN §3): read-only or suspended by
 	// billing for ReadOnlyDays → pending_deletion (final export); eligible
-	// for deletion RetentionDays after day 0. Nothing is dropped by a job.
+	// for deletion RetentionDays after day 0.
 	ReadOnlyDays  int `env:"READ_ONLY_DAYS" envDefault:"30"`
 	RetentionDays int `env:"RETENTION_DAYS" envDefault:"90"`
+	// PurgeAfterDays: a shop whose deletion a Super Admin finalised is
+	// purged (schema, role and files dropped; ARCHITECTURE_REVIEW M4) this
+	// many days later. 0 turns the purge off. It needs
+	// DATABASE_MIGRATOR_URL on the worker.
+	PurgeAfterDays int `env:"PURGE_AFTER_DAYS" envDefault:"30"`
 
 	LogLevel  string `env:"LOG_LEVEL" envDefault:"info"`
 	LogFormat string `env:"LOG_FORMAT" envDefault:"json"`
@@ -467,6 +472,9 @@ func (c *Config) validateExports(add func(string, ...any)) {
 	}
 	if c.ReadOnlyDays < 7 || c.ReadOnlyDays > 365 {
 		add("READ_ONLY_DAYS must be between 7 and 365")
+	}
+	if c.PurgeAfterDays < 0 || c.PurgeAfterDays > 3650 {
+		add("PURGE_AFTER_DAYS must be between 0 (off) and 3650")
 	}
 	if c.RetentionDays <= c.ReadOnlyDays || c.RetentionDays > 3650 {
 		add("RETENTION_DAYS must be more than READ_ONLY_DAYS and at most 3650")

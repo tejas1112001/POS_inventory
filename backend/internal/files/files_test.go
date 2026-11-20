@@ -148,3 +148,27 @@ func TestURLs(t *testing.T) {
 	require.True(t, sameFile("/files/t/01000000-0000-0000-0000-000000000000", id), "either URL form")
 	require.False(t, sameFile("https://evil.example/files/t/01000000-0000-0000-0000-000000000000", id))
 }
+
+func TestFSDeletePrefix(t *testing.T) {
+	ctx := context.Background()
+	s, err := NewFSStorage(t.TempDir())
+	require.NoError(t, err)
+	for _, k := range []string{"tenants/purgeme01/images/a.png", "tenants/purgeme01/receipts/2026/r.pdf", "tenants/purgeme012/images/b.png"} {
+		require.NoError(t, s.Put(ctx, k, "application/octet-stream", []byte("x")))
+	}
+	n, err := s.DeletePrefix(ctx, "tenants/purgeme01/")
+	require.NoError(t, err)
+	require.Equal(t, 2, n)
+	_, _, err = s.Get(ctx, "tenants/purgeme01/images/a.png")
+	require.ErrorIs(t, err, ErrNotFound)
+	rc, _, err := s.Get(ctx, "tenants/purgeme012/images/b.png")
+	require.NoError(t, err)
+	_ = rc.Close()
+	n, err = s.DeletePrefix(ctx, "tenants/purgeme01/")
+	require.NoError(t, err, "nothing left is not an error")
+	require.Zero(t, n)
+	for _, bad := range []string{"", "/", "tenants/", "tenants", "tenants/../x/", "tenants/x"} {
+		_, err = s.DeletePrefix(ctx, bad)
+		require.Error(t, err, bad)
+	}
+}

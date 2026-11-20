@@ -21,7 +21,9 @@ import (
 // come and its final export has passed a restore test. Effect: status
 // deleted (the host stops resolving, so every login and session ends; the
 // worker also revokes the shop's refresh tokens), the provider
-// subscription is cancelled at once. The schema and files are not dropped.
+// subscription is cancelled at once. The schema, role and files are
+// dropped PURGE_AFTER_DAYS later by the purge job (tenantio.Purger,
+// ARCHITECTURE_REVIEW M4), which sets purged_at.
 
 // DeletionView is the deletion panel of a tenant.
 type DeletionView struct {
@@ -29,6 +31,7 @@ type DeletionView struct {
 	RequestedAt     *time.Time `json:"requestedAt"`
 	DeletionDate    *time.Time `json:"deletionDate"`
 	DeletedAt       *time.Time `json:"deletedAt"`
+	PurgedAt        *time.Time `json:"purgedAt"`
 	FinalExportID   *string    `json:"finalExportId"`
 	FinalExport     *string    `json:"finalExportStatus"`
 	FinalExportAt   *time.Time `json:"finalExportAt"`
@@ -42,7 +45,7 @@ type DeletionView struct {
 }
 
 const (
-	qDeletionTenant = `SELECT t.status, t.slug::text, t.deletion_requested_at, t.purge_after, t.deleted_at, t.deleted_by
+	qDeletionTenant = `SELECT t.status, t.slug::text, t.deletion_requested_at, t.purge_after, t.deleted_at, t.deleted_by, t.purged_at
 		FROM platform.tenants t WHERE t.id = $1`
 	qDeletionTenantLock = qDeletionTenant + ` FOR UPDATE`
 	// The newest final export since the deletion started, and its newest
@@ -65,7 +68,7 @@ func (s *Service) deletionView(ctx context.Context, tx tenancy.PlatformTx, id st
 	} else {
 		row = tx.QueryRow(ctx, qDeletionTenant, id)
 	}
-	err := row.Scan(&v.Status, &slug, &v.RequestedAt, &v.DeletionDate, &v.DeletedAt, &v.DeletedByUserID)
+	err := row.Scan(&v.Status, &slug, &v.RequestedAt, &v.DeletionDate, &v.DeletedAt, &v.DeletedByUserID, &v.PurgedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return v, "", apperr.NotFound()
 	}

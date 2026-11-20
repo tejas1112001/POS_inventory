@@ -74,6 +74,28 @@ func TestS3StorageAgainstVersityGateway(t *testing.T) {
 	_, _, err = s.Get(ctx, fkey)
 	require.ErrorIs(t, err, ErrNotFound, "an aborted upload leaves no object")
 
+	// DeletePrefix (deleted-shop purge, ARCHITECTURE_REVIEW M4): every
+	// object under one shop's prefix, nothing else; the whole store or a
+	// top-level folder is refused.
+	for _, k := range []string{"tenants/purgeme01/images/a.png", "tenants/purgeme01/receipts/2026/r.pdf", "tenants/purgeme012/images/b.png"} {
+		require.NoError(t, s.Put(ctx, k, "application/octet-stream", []byte("x")))
+	}
+	removed, err := s.DeletePrefix(ctx, "tenants/purgeme01/")
+	require.NoError(t, err)
+	require.Equal(t, 2, removed)
+	_, _, err = s.Get(ctx, "tenants/purgeme01/receipts/2026/r.pdf")
+	require.ErrorIs(t, err, ErrNotFound)
+	rc, _, err = s.Get(ctx, "tenants/purgeme012/images/b.png")
+	require.NoError(t, err, "a longer ID with the same start is another shop")
+	_ = rc.Close()
+	removed, err = s.DeletePrefix(ctx, "tenants/purgeme01/")
+	require.NoError(t, err)
+	require.Zero(t, removed)
+	for _, bad := range []string{"", "/", "tenants/", "tenants", "tenants/../x/"} {
+		_, err = s.DeletePrefix(ctx, bad)
+		require.Error(t, err, bad)
+	}
+
 	_, err = NewS3Storage(ctx, S3Config{Endpoint: endpoint, Bucket: "posd-test", AccessKey: secrets.Secret("testaccess"),
 		SecretKey: secrets.Secret("wrong-secret"), Region: "us-east-1"})
 	require.Error(t, err, "bad credentials fail at startup")

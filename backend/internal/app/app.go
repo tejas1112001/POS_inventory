@@ -394,8 +394,13 @@ func (a *App) newWorker(cfg *config.Config, log *slog.Logger, env *secrets.Envel
 		exporter = &tenantio.Exporter{Sessions: jobs, DSN: cfg.DatabaseJobsURL, Storage: storage,
 			Recipient: cfg.ExportAgeRecipient, ManifestKey: []byte(cfg.ExportManifestKey.Reveal()), Log: log}
 	}
+	purger := &tenantio.Purger{Sessions: jobs, MigratorDSN: cfg.DatabaseMigratorURL, Storage: storage,
+		After: time.Duration(cfg.PurgeAfterDays) * 24 * time.Hour, Log: log}
+	if cfg.PurgeAfterDays > 0 && cfg.DatabaseMigratorURL.IsZero() && cfg.Mode != "api" {
+		log.Warn("PURGE_AFTER_DAYS is set but DATABASE_MIGRATOR_URL is not: deleted shops are not purged")
+	}
 	w, err := worker.New(worker.Config{
-		Billing: &jobsBilling, Exporter: exporter,
+		Billing: &jobsBilling, Exporter: exporter, Purger: purger,
 		Pool: a.jobsPool, Registry: a.registry, Receipts: rcpt, Log: log,
 		RunJobs: cfg.Mode != "api", SweepInterval: a.opts.sweepInterval,
 		Mail: worker.MailConfig{

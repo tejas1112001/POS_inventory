@@ -140,6 +140,7 @@ const (
 	JobNightlyExports     = "nightly_exports"
 	JobLowStockEmail      = "low_stock_email"
 	JobExpiryDigest       = "expiry_digest"
+	JobTenantPurge        = "tenant_purge"
 )
 
 // ---------------------------------------------------------------- workers
@@ -298,6 +299,11 @@ func (k *maintenanceWorker) Work(ctx context.Context, job *river.Job[maintenance
 		if err == nil {
 			_, err = m.EndDeletedSessions(ctx)
 		}
+	case JobTenantPurge:
+		var n int
+		if n, err = k.w.cfg.Purger.Run(ctx); n > 0 {
+			k.w.cfg.Log.InfoContext(ctx, "deleted tenants purged", slog.Int("tenants", n))
+		}
 	case JobExportSweep:
 		err = k.w.SweepExports(ctx)
 	case JobNightlyExports:
@@ -358,6 +364,9 @@ type Config struct {
 	// Exporter runs tenant exports; nil or not enabled when exports are
 	// not configured.
 	Exporter *tenantio.Exporter
+	// Purger drops deleted shops after the retention window
+	// (ARCHITECTURE_REVIEW M4); nil or not enabled when off.
+	Purger *tenantio.Purger
 }
 
 // Worker owns the River client and the job implementations.
@@ -424,6 +433,9 @@ func New(cfg Config) (*Worker, error) {
 			periodic(JobNightlyExports, dailyAt{hour: 19, minute: 30}, false),   // 01:00 in India
 			periodic(JobLowStockEmail, river.PeriodicInterval(time.Hour), true), // from 08:00 shop time, once a day
 			periodic(JobExpiryDigest, river.PeriodicInterval(time.Hour), false), // likewise, when turned on
+		}
+		if cfg.Purger.Enabled() {
+			rc.PeriodicJobs = append(rc.PeriodicJobs, periodic(JobTenantPurge, dailyAt{hour: 22, minute: 0}, false)) // 03:30 in India
 		}
 	}
 	client, err := river.NewClient(riverpgxv5.New(cfg.Pool), rc)

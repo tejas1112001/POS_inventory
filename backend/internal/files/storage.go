@@ -33,6 +33,16 @@ type Storage interface {
 	PutStream(ctx context.Context, key, contentType string, r io.Reader) (int64, error)
 	Get(ctx context.Context, key string) (io.ReadCloser, int64, error)
 	Delete(ctx context.Context, key string) error
+	// DeletePrefix removes every object under prefix ("tenants/<id>/",
+	// the deleted-shop purge) and returns how many it removed.
+	DeletePrefix(ctx context.Context, prefix string) (int, error)
+}
+
+// validPrefix accepts "a/b/" and deeper: a valid key with a trailing
+// slash, never the whole store or one top-level folder.
+func validPrefix(prefix string) bool {
+	k, ok := strings.CutSuffix(prefix, "/")
+	return ok && validKey(k) && strings.Contains(k, "/")
 }
 
 func validKey(key string) bool {
@@ -141,6 +151,28 @@ func (s *FSStorage) Delete(_ context.Context, key string) error {
 	return err
 }
 
+// DeletePrefix removes the directory prefix names.
+func (s *FSStorage) DeletePrefix(_ context.Context, prefix string) (int, error) {
+	if !validPrefix(prefix) {
+		return 0, fmt.Errorf("files: invalid prefix")
+	}
+	dir := strings.TrimSuffix(prefix, "/")
+	n := 0
+	err := fs.WalkDir(s.root.FS(), dir, func(_ string, d fs.DirEntry, err error) error {
+		if err == nil && !d.IsDir() {
+			n++
+		}
+		return err
+	})
+	if errors.Is(err, fs.ErrNotExist) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	return n, s.root.RemoveAll(dir)
+}
+
 // ------------------------------------------------------------------- S3
 
 // S3Config configures the S3 driver (any S3-compatible service).
@@ -237,4 +269,40 @@ func (s *S3Storage) Delete(ctx context.Context, key string) error {
 		return nil
 	}
 	return s.c.RemoveObject(ctx, s.bucket, key, minio.RemoveObjectOptions{})
+}
+
+// DeletePrefix lists the objects under prefix and removes them in batches.
+func (s *S3Storage) DeletePrefix(ctx context.Context, prefix string) (int, error) {
+	if !validPrefix(prefix) {
+		return 0, fmt.Errorf("files: invalid prefix")
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	listed := s.c.ListObjects(ctx, s.bucket, minio.ListObjectsOptions{Prefix: prefix, Recursive: true})
+	toRemove := make(chan minio.ObjectInfo)
+	n := 0
+	var listErr error
+	go func() {
+		defer close(toRemove)
+		for o := range listed {
+			if o.Err != nil {
+				listErr = o.Err
+				return
+			}
+			select {
+			case toRemove <- o:
+				n++
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+	var errs []error
+	for e := range s.c.RemoveObjects(ctx, s.bucket, toRemove, minio.RemoveObjectsOptions{}) {
+		errs = append(errs, fmt.Errorf("%s: %w", e.ObjectName, e.Err))
+	}
+	if listErr != nil {
+		errs = append(errs, listErr)
+	}
+	return n - len(errs), errors.Join(errs...)
 }

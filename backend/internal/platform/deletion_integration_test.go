@@ -4,6 +4,7 @@ package platform_test
 
 import (
 	"context"
+	"log/slog"
 	"testing"
 	"time"
 
@@ -11,14 +12,18 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tejas1112001/POS_inventory/backend/internal/billing"
+	"github.com/tejas1112001/POS_inventory/backend/internal/files"
 	"github.com/tejas1112001/POS_inventory/backend/internal/security"
+	"github.com/tejas1112001/POS_inventory/backend/internal/tenantio"
 )
 
 // TestFinaliseDeletion (S10 item 4): a tenant pending deletion is
 // finalised only after its deletion date, with a final export whose
 // restore test passed, by a super admin with step-up, a reason and the
 // slug typed. It cancels the provider subscription at once and marks the
-// tenant deleted; nothing is dropped. Warnings go out 14/7/1 days before.
+// tenant deleted; nothing is dropped then. Warnings go out 14/7/1 days
+// before. The purge job drops the schema, role and files after the
+// retention window (ARCHITECTURE_REVIEW M4).
 func TestFinaliseDeletion(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t)
@@ -134,4 +139,50 @@ func TestFinaliseDeletion(t *testing.T) {
 	var otherAfter string
 	require.NoError(t, admin.QueryRow(ctx, `SELECT row_to_json(t)::text FROM platform.tenants t WHERE id = $1`, other).Scan(&otherAfter))
 	require.Equal(t, otherBefore, otherAfter, "other tenant untouched")
+
+	// Purge (M4): not before the window; then the schema, role and files
+	// go, the row stays as the tombstone, audited, and only once.
+	st, err := files.NewFSStorage(t.TempDir())
+	require.NoError(t, err)
+	require.NoError(t, st.Put(ctx, "tenants/"+id+"/images/a.png", "image/png", []byte("x")))
+	require.NoError(t, st.Put(ctx, "tenants/"+id+"/receipts/r.pdf", "application/pdf", []byte("x")))
+	require.NoError(t, st.Put(ctx, "tenants/"+other+"/images/b.png", "image/png", []byte("y")))
+	pg := &tenantio.Purger{Sessions: e.sessions, MigratorDSN: tdb.MigratorDSN, Storage: st, After: 30 * 24 * time.Hour,
+		Log: slog.New(slog.DiscardHandler)}
+	require.True(t, pg.Enabled())
+	ids, err := pg.Due(ctx)
+	require.NoError(t, err)
+	require.NotContains(t, ids, id, "inside the retention window")
+	_, err = admin.Exec(ctx, `UPDATE platform.tenants SET deleted_at = now() - interval '31 days' WHERE id = $1`, id)
+	require.NoError(t, err)
+	ids, err = pg.Due(ctx)
+	require.NoError(t, err)
+	require.Contains(t, ids, id)
+	require.NotContains(t, ids, other)
+	require.NoError(t, pg.Purge(ctx, id))
+	var schemaGone, roleGone bool
+	require.NoError(t, admin.QueryRow(ctx, `SELECT NOT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 't_' || $1),
+		NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 't_' || $1 || '_rw')`, id).Scan(&schemaGone, &roleGone))
+	require.True(t, schemaGone)
+	require.True(t, roleGone)
+	_, _, err = st.Get(ctx, "tenants/"+id+"/images/a.png")
+	require.ErrorIs(t, err, files.ErrNotFound)
+	_, _, err = st.Get(ctx, "tenants/"+id+"/receipts/r.pdf")
+	require.ErrorIs(t, err, files.ErrNotFound)
+	rc, _, err := st.Get(ctx, "tenants/"+other+"/images/b.png")
+	require.NoError(t, err, "another shop's files stay")
+	_ = rc.Close()
+	var otherSchema bool
+	require.NoError(t, admin.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 't_' || $1)`, other).Scan(&otherSchema))
+	require.True(t, otherSchema)
+	v = call("GET", "/tenants/"+id+"/deletion", nil)
+	require.Equal(t, 200, v.Code, v.Raw)
+	require.Equal(t, "deleted", v.Body["status"])
+	require.NotNil(t, v.Body["purgedAt"])
+	require.ErrorIs(t, pg.Purge(ctx, id), tenantio.ErrNotPurgeable)
+	ids, err = pg.Due(ctx)
+	require.NoError(t, err)
+	require.NotContains(t, ids, id)
+	require.NoError(t, admin.QueryRow(ctx, `SELECT count(*) FROM platform.platform_audit_log WHERE target_tenant = $1 AND action = 'tenant.purge'`, id).Scan(&audits))
+	require.Equal(t, 1, audits)
 }
