@@ -112,6 +112,9 @@ type itemIn struct {
 	Quantity  qty.In    `json:"quantity"`
 	UnitPrice money.Dec `json:"unitPrice"`
 	Discount  money.Dec `json:"discount"`
+	// UnitID buys the line in another of the product's units (H3): the
+	// quantity is in that unit, the unit price stays per base unit.
+	UnitID money.Int `json:"unitId"`
 
 	// Accepted and ignored: line amounts are computed here.
 	Subtotal json.RawMessage `json:"subtotal"`
@@ -150,8 +153,10 @@ type updateIn struct {
 
 type line struct {
 	productID, variantID, storeID int64
-	qty                           qty.Q
+	qty                           qty.Q // base units (resolve converts a unit line)
 	price, discount               decimal.Decimal
+	unitID                        int64
+	unit                          *lineUnit
 }
 
 type clean struct {
@@ -242,7 +247,10 @@ func validate(in purchaseIn) (clean, error) {
 	}
 	for i, it := range in.PurchaseItems {
 		k := fmt.Sprintf("purchaseItems[%d]", i)
-		l := line{productID: it.ProductID.V, variantID: it.VariantID.V, storeID: it.StoreID.V, qty: it.Quantity.V}
+		l := line{productID: it.ProductID.V, variantID: it.VariantID.V, storeID: it.StoreID.V, qty: it.Quantity.V, unitID: it.UnitID.V}
+		if it.UnitID.Valid && it.UnitID.V <= 0 {
+			f[k+".unitId"] = "unitId is invalid."
+		}
 		if !it.Quantity.Valid || !it.Quantity.V.IsPositive() || it.Quantity.V.Greater(qty.Int(maxQty)) {
 			f[k+".quantity"] = "Quantity must be above 0."
 		}
@@ -382,10 +390,33 @@ func resolve(ctx context.Context, tx tenancy.TenantTx, c *clean) (map[int64]vari
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	for i, l := range c.lines {
+	units, err := purchaseUnits(ctx, tx, c.lines, byID)
+	if err != nil {
+		return nil, err
+	}
+	for i := range c.lines {
+		l := &c.lines[i]
 		k := fmt.Sprintf("purchaseItems[%d]", i)
 		if l.variantID > 0 {
 			v, ok := byID[l.variantID]
+			if ok && l.unitID > 0 {
+				u, found := units[unitKey{v.productID, l.unitID}]
+				if !found {
+					f[k+".unitId"] = "This product is not bought in that unit."
+					continue
+				}
+				base, err := l.qty.Times(u.factor)
+				if err != nil {
+					f[k+".quantity"] = "That quantity of this unit is not a whole thousandth of the base unit."
+					continue
+				}
+				if base.Greater(qty.Int(maxQty)) {
+					f[k+".quantity"] = fmt.Sprintf("At most %d base units on one line.", maxQty)
+					continue
+				}
+				u.qty, l.qty = l.qty, base
+				l.unit = &u
+			}
 			switch {
 			case !ok:
 				f[k+".variantId"] = "Product variant not found."
@@ -460,8 +491,8 @@ const (
 			CASE WHEN $3 = 'Received' THEN now() END, CASE WHEN $3 = 'Received' THEN $13::bigint END, $13)
 		RETURNING id`
 	qInsertItem = `INSERT INTO purchase_items (purchase_id, product_id, variant_id, store_id, product_name, sku, quantity,
-			unit_price, discount, subtotal)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`
+			unit_price, discount, subtotal, unit_name, unit_factor, unit_qty)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`
 )
 
 func isUniqueViolation(err error) bool {
@@ -559,8 +590,9 @@ func (a *API) create(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		for _, l := range pr.lines {
+			un, uf, uq := l.unit.columns()
 			if _, err := tx.Exec(ctx, qInsertItem, id, l.v.productID, l.variantID, l.storeID, l.v.name, l.v.sku, l.qty,
-				l.price, l.discount, l.subtotal); err != nil {
+				l.price, l.discount, l.subtotal, un, uf, uq); err != nil {
 				return err
 			}
 		}

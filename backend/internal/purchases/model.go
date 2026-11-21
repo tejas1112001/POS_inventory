@@ -49,9 +49,15 @@ type ItemJSON struct {
 	UnitPriceS    decimal.Decimal `json:"unit_price"`
 	Discount      decimal.Decimal `json:"discount"`
 	Subtotal      decimal.Decimal `json:"subtotal"`
-	CreatedAt     time.Time       `json:"createdAt"`
-	Product       NameRef         `json:"product"`
-	Store         *NameRef        `json:"store"`
+	// The unit the line was bought in (H3), when not the base unit: its
+	// name and size at purchase time, and the quantity in it. Quantity,
+	// received_qty and unitPrice are in base units either way.
+	UnitName   *string   `json:"unitName"`
+	UnitFactor *qty.Q    `json:"unitFactor"`
+	UnitQty    *qty.Q    `json:"unitQty"`
+	CreatedAt  time.Time `json:"createdAt"`
+	Product    NameRef   `json:"product"`
+	Store      *NameRef  `json:"store"`
 }
 
 // PurchaseJSON keeps the old field names and adds paymentStatus and the
@@ -90,7 +96,8 @@ const (
 		WHERE p.id = ANY($1)`
 	qLoadItems = `SELECT i.id, i.purchase_id, i.product_id, i.variant_id, i.store_id, i.product_name, i.sku, i.quantity,
 			i.unit_price, i.discount, i.subtotal, i.created_at, st.name, i.received_qty, v.item_barcode,
-			coalesce(pr.tracks_batches, false) AND EXISTS (SELECT 1 FROM settings WHERE id = 1 AND 'batch_expiry' = ANY(modules))
+			coalesce(pr.tracks_batches, false) AND EXISTS (SELECT 1 FROM settings WHERE id = 1 AND 'batch_expiry' = ANY(modules)),
+			i.unit_name, i.unit_factor, i.unit_qty
 		FROM purchase_items i LEFT JOIN stores st ON st.id = i.store_id
 		LEFT JOIN product_variants v ON v.id = i.variant_id
 		LEFT JOIN products pr ON pr.id = i.product_id
@@ -137,7 +144,8 @@ func load(ctx context.Context, tx tenancy.TenantTx, ids []int64) ([]PurchaseJSON
 		var it ItemJSON
 		var store *string
 		if err := rows.Scan(&it.ID, &it.PurchaseID, &it.ProductID, &it.VariantID, &it.StoreID, &it.ProductName, &it.SKU,
-			&it.Quantity, &it.UnitPrice, &it.Discount, &it.Subtotal, &it.CreatedAt, &store, &it.ReceivedQty, &it.Barcode, &it.TracksBatches); err != nil {
+			&it.Quantity, &it.UnitPrice, &it.Discount, &it.Subtotal, &it.CreatedAt, &store, &it.ReceivedQty, &it.Barcode, &it.TracksBatches,
+			&it.UnitName, &it.UnitFactor, &it.UnitQty); err != nil {
 			rows.Close()
 			return nil, err
 		}
