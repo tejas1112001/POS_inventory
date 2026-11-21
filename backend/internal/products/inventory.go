@@ -48,7 +48,8 @@ const (
 			OR ($3 = 'Low Stock' AND i.qty > 0 AND i.qty <= i.quantity_alert)
 			OR ($3 = 'In Stock' AND i.qty > i.quantity_alert AND i.qty > 0))`
 	qInvCount = `SELECT count(*)` + qInvFilter
-	qInvList  = `SELECT i.id, i.qty, i.quantity_alert, i.updated_at, v.id, v.sku::text, v.attributes, v.price, p.id, p.name,
+	qInvList  = `SELECT i.id, i.qty, i.quantity_alert, i.updated_at, v.id, v.sku::text, v.attributes,
+		coalesce((SELECT pr.price FROM store_prices pr WHERE pr.variant_id = v.id AND pr.store_id = i.store_id), v.price), p.id, p.name,
 		p.image_file_id, EXISTS (SELECT 1 FROM store_products sp WHERE sp.product_id = p.id AND sp.is_published), s.id, s.name` +
 		qInvFilter + ` ORDER BY i.updated_at DESC, i.id DESC LIMIT $4 OFFSET $5`
 )

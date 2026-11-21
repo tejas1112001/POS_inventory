@@ -28,7 +28,8 @@ type showcaseProduct struct {
 }
 
 const qShowcaseProducts = `SELECT p.id, p.name, coalesce(c.name::text, ''), coalesce(b.name::text, ''),
-	coalesce((SELECT v.price FROM product_variants v WHERE v.product_id = p.id AND v.deleted_at IS NULL ORDER BY v.id LIMIT 1), 0),
+	coalesce((SELECT coalesce(pr.price, v.price) FROM product_variants v LEFT JOIN store_prices pr ON pr.variant_id = v.id AND pr.store_id = $1
+		WHERE v.product_id = p.id AND v.deleted_at IS NULL ORDER BY v.id LIMIT 1), 0),
 	p.image_file_id, coalesce(sp.is_published, false), coalesce(sp.is_featured, false),
 	EXISTS (SELECT 1 FROM store_products x WHERE x.product_id = p.id AND x.is_published)
 	FROM products p

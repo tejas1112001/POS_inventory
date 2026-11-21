@@ -393,7 +393,7 @@ func (a *API) insertSale(r *http.Request, tx tenancy.TenantTx, p auth.Principal,
 	if x.priced != nil {
 		pr = *x.priced
 	} else {
-		byID, err := resolve(ctx, tx, c.lines)
+		byID, err := resolve(ctx, tx, c.lines, c.storeID)
 		if err != nil {
 			return 0, 0, "", err
 		}
@@ -689,7 +689,7 @@ func (a *API) update(w http.ResponseWriter, r *http.Request) {
 				deltas[k] = deltas[k].Add(o.qty)
 			}
 		}
-		byID, err := resolve(ctx, tx, c.lines)
+		byID, err := resolve(ctx, tx, c.lines, c.storeID)
 		if err != nil {
 			return err
 		}

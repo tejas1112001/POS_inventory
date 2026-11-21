@@ -608,6 +608,7 @@ func (a *API) Mount(rt *rbac.Router) {
 	rt.Handle(http.MethodPut, "/products/{id}", req("products", "edit").Uploads(), a.update)
 	rt.Handle(http.MethodDelete, "/products/{id}", req("products", "delete"), a.remove)
 	rt.Handle(http.MethodPut, "/products/{id}/lock", req("pos", "create"), a.lock)
+	rt.Handle(http.MethodPut, "/products/{id}/store-prices", req("products", "edit"), a.putStorePrices)
 	rt.Handle(http.MethodPost, "/product-variants", req("products", "edit"), a.addVariant)
 	rt.Handle(http.MethodPost, "/products/{id}/variants/matrix", req("products", "edit").InModule(attributes.Module), a.matrix)
 

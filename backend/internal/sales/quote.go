@@ -107,7 +107,7 @@ func (a *API) quote(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		s.split = tc.split
-		byID, err := resolve(ctx, tx, c.lines)
+		byID, err := resolve(ctx, tx, c.lines, c.storeID)
 		if err != nil {
 			return err
 		}

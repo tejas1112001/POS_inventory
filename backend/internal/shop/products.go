@@ -94,8 +94,9 @@ const qPublished = `SELECT p.id, p.name, p.created_at, sp.is_featured,
 			ELSE fv.price END AS final
 	FROM products p
 	JOIN store_products sp ON sp.product_id = p.id AND sp.store_id = $1 AND sp.is_published
-	JOIN LATERAL (SELECT v.price FROM product_variants v WHERE v.product_id = p.id AND v.deleted_at IS NULL
-		ORDER BY v.id LIMIT 1) fv ON true
+	JOIN LATERAL (SELECT coalesce(pr.price, v.price) AS price FROM product_variants v
+		LEFT JOIN store_prices pr ON pr.variant_id = v.id AND pr.store_id = $1
+		WHERE v.product_id = p.id AND v.deleted_at IS NULL ORDER BY v.id LIMIT 1) fv ON true
 	WHERE p.deleted_at IS NULL AND p.status = 'Active'
 		AND ($2 = '' OR p.name ILIKE $2) AND ($3 = 0 OR p.category_id = $3) AND ($4 = 0 OR p.brand_id = $4)
 		AND (NOT $5 OR sp.is_featured)`
@@ -118,8 +119,10 @@ const (
 		LEFT JOIN brands b ON b.id = p.brand_id AND b.deleted_at IS NULL
 		LEFT JOIN units u ON u.id = p.unit_id AND u.deleted_at IS NULL
 		WHERE p.id = ANY($2) AND p.deleted_at IS NULL AND p.status = 'Active'`
-	qVariants = `SELECT v.id, v.product_id, v.sku::text, v.price, v.attributes, coalesce(i.qty, 0) > 0, v.mrp
+	// The store's own price (store_prices) when it has one.
+	qVariants = `SELECT v.id, v.product_id, v.sku::text, coalesce(pr.price, v.price), v.attributes, coalesce(i.qty, 0) > 0, v.mrp
 		FROM product_variants v LEFT JOIN inventories i ON i.variant_id = v.id AND i.store_id = $1
+		LEFT JOIN store_prices pr ON pr.variant_id = v.id AND pr.store_id = $1
 		WHERE v.product_id = ANY($2) AND v.deleted_at IS NULL ORDER BY v.product_id, v.id`
 )
 

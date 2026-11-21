@@ -163,7 +163,7 @@ func (a *API) exchange(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		s.split = tc.split
-		byID, err := resolve(ctx, tx, cs.lines)
+		byID, err := resolve(ctx, tx, cs.lines, cs.storeID)
 		if err != nil {
 			return renameSaleFields(err)
 		}

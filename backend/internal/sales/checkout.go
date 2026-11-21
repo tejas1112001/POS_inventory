@@ -318,14 +318,17 @@ const (
 	qSingleVariant = `SELECT p.id, min(v.id), count(v.id) FROM products p
 		LEFT JOIN product_variants v ON v.product_id = p.id AND v.deleted_at IS NULL
 		WHERE p.id = ANY($1) AND p.deleted_at IS NULL GROUP BY p.id`
-	qVariants = `SELECT v.id, v.product_id, v.sku::text, v.price, p.name, p.status, p.tax_type, p.tax_rate, v.mrp, p.allow_fraction
+	// The price is the store's (store_prices) when it has one, else the variant's.
+	qVariants = `SELECT v.id, v.product_id, v.sku::text, coalesce(sp.price, v.price), p.name, p.status, p.tax_type, p.tax_rate, v.mrp, p.allow_fraction
 		FROM product_variants v JOIN products p ON p.id = v.product_id
+		LEFT JOIN store_prices sp ON sp.variant_id = v.id AND sp.store_id = $2
 		WHERE v.id = ANY($1) AND v.deleted_at IS NULL AND p.deleted_at IS NULL`
 )
 
 // resolve fills each line's variant (a line with only productId must name a
-// single-variant product) and returns the catalog rows by variant ID.
-func resolve(ctx context.Context, tx tenancy.TenantTx, lines []line) (map[int64]variantRow, error) {
+// single-variant product) and returns the catalog rows by variant ID, with
+// the store's price.
+func resolve(ctx context.Context, tx tenancy.TenantTx, lines []line, storeID int64) (map[int64]variantRow, error) {
 	f := fieldErrs{}
 	var productOnly, ids []int64
 	for _, l := range lines {
@@ -375,7 +378,7 @@ func resolve(ctx context.Context, tx tenancy.TenantTx, lines []line) (map[int64]
 			}
 		}
 	}
-	rows, err := tx.Query(ctx, qVariants, ids)
+	rows, err := tx.Query(ctx, qVariants, ids, storeID)
 	if err != nil {
 		return nil, err
 	}

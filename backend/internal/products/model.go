@@ -50,6 +50,11 @@ type VariantJSON struct {
 	CreatedAt        time.Time        `json:"createdAt"`
 	UpdatedAt        time.Time        `json:"updatedAt"`
 	Inventories      []InventoryJSON  `json:"Inventories"`
+	// StorePrices are the stores where the variant sells at its own price
+	// (store_prices). With a store asked for (POS, the lock), Price is
+	// already that store's and BasePrice the variant's own.
+	StorePrices []StorePriceJSON `json:"storePrices"`
+	BasePrice   *decimal.Decimal `json:"basePrice,omitempty"`
 	// Label is "M / Blue" (or "UK 8 / Black") when the product has variant
 	// dimensions (industry P1 item 4); left out otherwise.
 	Label string `json:"label,omitempty"`
@@ -165,9 +170,14 @@ const (
 		LEFT JOIN units un ON un.id = p.unit_id
 		LEFT JOIN users u ON u.id = p.created_by
 		WHERE p.id = ANY($1) AND p.deleted_at IS NULL`
-	qLoadVariants = `SELECT id, sku::text, item_barcode, price, cost, weight, attributes, to_char(expiry_date, 'YYYY-MM-DD'),
-		to_char(manufactured_date, 'YYYY-MM-DD'), product_id, created_by, created_at, updated_at, mrp
-		FROM product_variants WHERE product_id = ANY($1) AND deleted_at IS NULL ORDER BY id`
+	qLoadVariants = `SELECT v.id, v.sku::text, v.item_barcode, coalesce(sp.price, v.price), v.cost, v.weight, v.attributes,
+		to_char(v.expiry_date, 'YYYY-MM-DD'), to_char(v.manufactured_date, 'YYYY-MM-DD'), v.product_id, v.created_by, v.created_at,
+		v.updated_at, v.mrp, CASE WHEN sp.price IS NOT NULL THEN v.price END
+		FROM product_variants v LEFT JOIN store_prices sp ON sp.variant_id = v.id AND sp.store_id = $2
+		WHERE v.product_id = ANY($1) AND v.deleted_at IS NULL ORDER BY v.id`
+	qLoadStorePrices = `SELECT sp.variant_id, sp.store_id, s.name, sp.price FROM store_prices sp
+		JOIN stores s ON s.id = sp.store_id AND s.deleted_at IS NULL
+		WHERE sp.variant_id = ANY($1) ORDER BY sp.variant_id, sp.store_id`
 	qLoadInventories = `SELECT i.id, i.qty, i.quantity_alert, i.variant_id, i.store_id, i.created_at, i.updated_at
 		FROM inventories i JOIN stores s ON s.id = i.store_id AND s.deleted_at IS NULL
 		WHERE i.variant_id = ANY($1) AND ($2 = 0 OR i.store_id = $2) ORDER BY i.store_id`
@@ -213,14 +223,14 @@ func load(ctx context.Context, tx tenancy.TenantTx, ids []int64, o loadOpts) ([]
 
 	variantOwner := map[int64]*ProductJSON{}
 	var variantIDs []int64
-	rows, err = tx.Query(ctx, qLoadVariants, ids)
+	rows, err = tx.Query(ctx, qLoadVariants, ids, o.storeID)
 	if err != nil {
 		return nil, err
 	}
 	for rows.Next() {
 		var v VariantJSON
 		if err := rows.Scan(&v.ID, &v.SKU, &v.ItemBarcode, &v.Price, &v.Cost, &v.Weight, &v.Attributes, &v.ExpiryDate,
-			&v.ManufacturedDate, &v.ProductID, &v.CreatedBy, &v.CreatedAt, &v.UpdatedAt, &v.MRP); err != nil {
+			&v.ManufacturedDate, &v.ProductID, &v.CreatedBy, &v.CreatedAt, &v.UpdatedAt, &v.MRP, &v.BasePrice); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -228,6 +238,7 @@ func load(ctx context.Context, tx tenancy.TenantTx, ids []int64, o loadOpts) ([]
 			v.Attributes = map[string]any{}
 		}
 		v.Inventories = []InventoryJSON{}
+		v.StorePrices = []StorePriceJSON{}
 		if p := byID[v.ProductID]; p != nil {
 			v.Label = attributes.Label(p.VariantDims, p.Attributes, v.Attributes)
 			rate := decimal.Zero
@@ -242,6 +253,10 @@ func load(ctx context.Context, tx tenancy.TenantTx, ids []int64, o loadOpts) ([]
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	if err := loadStorePrices(ctx, tx, variantIDs, variantOwner); err != nil {
 		return nil, err
 	}
 
@@ -319,3 +334,39 @@ func loadOne(ctx context.Context, tx tenancy.TenantTx, id int64, o loadOpts) (Pr
 
 // imageID is the type of a file reference column.
 type imageID = uuid.UUID
+
+// StorePriceJSON is a variant's price in one store.
+type StorePriceJSON struct {
+	StoreID   int64           `json:"storeId"`
+	StoreName string          `json:"storeName"`
+	Price     decimal.Decimal `json:"price"`
+}
+
+// loadStorePrices fills each variant's StorePrices.
+func loadStorePrices(ctx context.Context, tx tenancy.TenantTx, variantIDs []int64, owner map[int64]*ProductJSON) error {
+	if len(variantIDs) == 0 {
+		return nil
+	}
+	rows, err := tx.Query(ctx, qLoadStorePrices, variantIDs)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var vid int64
+		var sp StorePriceJSON
+		if err := rows.Scan(&vid, &sp.StoreID, &sp.StoreName, &sp.Price); err != nil {
+			return err
+		}
+		p := owner[vid]
+		if p == nil {
+			continue
+		}
+		for i := range p.ProductVariants {
+			if p.ProductVariants[i].ID == vid {
+				p.ProductVariants[i].StorePrices = append(p.ProductVariants[i].StorePrices, sp)
+			}
+		}
+	}
+	return rows.Err()
+}
