@@ -4,6 +4,7 @@ package isolation
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -447,5 +448,65 @@ func TestReturnAndHeldUnits(t *testing.T) {
 	require.Equal(t, 400, h.Code, h.Raw)
 	require.Equal(t, "lines[0].unitId", errField(h))
 
+	require.Empty(t, reconcile(t, "a"))
+}
+
+// H3: the product import's allow_fraction column. A product marked yes
+// takes opening stock and a low-stock level with decimals and is sold in
+// part units; the others stay whole. Every row of a product agrees.
+func TestImportFractions(t *testing.T) {
+	tok, _ := ownerLogin(t, "a")
+	store := storeIDs(t, "a", tok)[0]
+	var slug string
+	require.NoError(t, admin(t).QueryRow(context.Background(), `SELECT slug::text FROM `+schema("a")+`.stores WHERE id = $1`, int64(store)).Scan(&slug))
+	hdr := []string{"name", "sku", "price", "store", "opening_qty", "quantity_alert", "allow_fraction"}
+
+	bad := workbook(t, hdr,
+		[]string{"Whole H3I", "IMP-W", "10", slug, "2.5", "", ""},
+		[]string{"Odd H3I", "IMP-O", "10", slug, "1", "", "maybe"},
+		[]string{"Mixed H3I", "IMP-M1", "10", slug, "1.5", "", "yes"},
+		[]string{"Mixed H3I", "IMP-M2", "10", slug, "1", "", "no"},
+		[]string{"Fine H3I", "IMP-F", "10", slug, "1.2345", "", "yes"},
+	)
+	r := uploadFile(t, "a", tok, "bad.xlsx", bad, true)
+	require.Equal(t, 400, r.Code, r.Raw)
+	got := map[string]bool{}
+	for _, e := range r.Body["errors"].([]any) {
+		m := e.(map[string]any)
+		got[fmt.Sprintf("%v@%v", m["row"], m["field"])] = true
+	}
+	for _, want := range []string{"2@opening_qty", "3@allow_fraction", "5@allow_fraction", "6@opening_qty"} {
+		require.True(t, got[want], "missing %s in %s", want, r.Raw)
+	}
+	require.False(t, got["4@opening_qty"], "1.5 is fine for a part-unit product")
+
+	good := workbook(t, hdr,
+		[]string{"Loose rice H3I", "IMP-RICE", "60", slug, "12.5", "1.25", "Yes"},
+		[]string{"Pen H3I", "IMP-PEN", "10", slug, "20", "", ""},
+	)
+	r = uploadFile(t, "a", tok, "good.xlsx", good, true)
+	require.Equal(t, 200, r.Code, r.Raw)
+	pv := r.Body["preview"].([]any)
+	require.Equal(t, true, pv[0].(map[string]any)["allowFraction"])
+	require.Nil(t, pv[1].(map[string]any)["allowFraction"])
+	r = uploadFile(t, "a", tok, "good.xlsx", good, false)
+	require.Equal(t, 200, r.Code, r.Raw)
+	require.EqualValues(t, 2, r.Body["created"])
+
+	check := func(sku string) (bool, string, string) {
+		var allow bool
+		var q, alert string
+		require.NoError(t, admin(t).QueryRow(context.Background(), `SELECT p.allow_fraction, i.qty::text, i.quantity_alert::text
+			FROM `+schema("a")+`.product_variants v JOIN `+schema("a")+`.products p ON p.id = v.product_id
+			JOIN `+schema("a")+`.inventories i ON i.variant_id = v.id AND i.store_id = $2 WHERE v.sku = $1`, sku, int64(store)).Scan(&allow, &q, &alert))
+		return allow, q, alert
+	}
+	allow, q, alert := check("IMP-RICE")
+	require.True(t, allow)
+	require.Equal(t, "12.500", q)
+	require.Equal(t, "1.250", alert)
+	allow, q, _ = check("IMP-PEN")
+	require.False(t, allow)
+	require.Equal(t, "20.000", q)
 	require.Empty(t, reconcile(t, "a"))
 }

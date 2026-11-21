@@ -22,9 +22,10 @@ Done:
   - Returns without a sale and the new goods of an exchange: a unit choice per line (the product's sale units now); the refund and the price stay per base unit.
   - Decided 2026-11-21: the old POS screen stays in base units. Selling in units needs the new checkout (Settings: new checkout, off by default; all dev shops have it off).
 - **Decimal quantities on the remaining screens** (2026-11-21). Stock counts kept a counted 2.5 as 2 (`Math.floor`); they now keep 3 decimals. The old Add Sale, Add Purchase and return/exchange quantity inputs take decimals (`step="any"`, above 0). Quantities worked out in the browser (still to receive, still returnable, report totals, scan +1) use `addQty`/`roundQty`/`fmtQty`, so no float noise (1.2000000000000002). The server already sends quantities in their shortest form and checks `allowFraction` per product.
+- **Imports with decimal quantities** (2026-11-21). Every product template has an optional `allow_fraction` column (yes/no, empty = no). A product marked yes is sold in part units and takes `opening_qty` / `quantity_alert` with up to 3 decimals; the others stay whole. Every row of a product (sizes, colours, pharmacy batches) must say the same. The dry-run preview shows `allowFraction`. Test: `TestImportFractions`.
 
 Left:
-1. **Imports.** Product CSV import (`opening_qty`, `quantity_alert`) still takes whole numbers only, because imported products start as whole-unit. Add an `allow_fraction` column if shops need it.
+(nothing left in H3)
 
 Design notes to keep:
 - Prices on sale **and purchase** lines stay **per base unit**: a unit's price is the base price times its factor, and `unit_price × quantity` still equals the line amount.

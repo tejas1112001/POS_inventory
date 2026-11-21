@@ -89,7 +89,7 @@ func TestIndustryImport(t *testing.T) {
 	require.Contains(t, x.Header.Get("Content-Type"), "spreadsheetml")
 	tpl := sheetRows(t, x.Raw)
 	require.Equal(t, []string{"article_no", "name", "department", "collection", "season", "size", "colour", "sku", "barcode", "price", "cost",
-		"mrp", "category", "brand", "tax_type", "tax_rate", "hsn_code", "opening_qty", "quantity_alert"}, tpl[0])
+		"mrp", "category", "brand", "tax_type", "tax_rate", "hsn_code", "opening_qty", "quantity_alert", "allow_fraction"}, tpl[0])
 	require.Equal(t, "TSH-01", tpl[1][0])
 	c := get(t, host, "/api/products/import/template?type=clothing", tok)
 	require.Equal(t, 200, c.Code)

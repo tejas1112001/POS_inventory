@@ -44,7 +44,7 @@ const (
 
 // importColumns are the retail template's columns (unchanged since C-19).
 var importColumns = []string{"name", "sku", "price", "cost", "mrp", "barcode", "category", "sub_category", "brand", "unit",
-	"tax_type", "tax_rate", "hsn_code", "store", "opening_qty", "quantity_alert", "status"}
+	"tax_type", "tax_rate", "hsn_code", "store", "opening_qty", "quantity_alert", "status", "allow_fraction"}
 
 // Template types (A12). Clothing and footwear columns follow the design
 // note §6; attribute columns are kept only where the shop defines them.
@@ -53,12 +53,12 @@ const templateRetail = "retail"
 var templateColumns = map[string][]string{
 	templateRetail: importColumns,
 	"clothing": {"article_no", "name", "department", "collection", "season", "size", "colour", "sku", "barcode", "price", "cost",
-		"mrp", "category", "brand", "tax_type", "tax_rate", "hsn_code", "opening_qty", "quantity_alert"},
+		"mrp", "category", "brand", "tax_type", "tax_rate", "hsn_code", "opening_qty", "quantity_alert", "allow_fraction"},
 	"footwear": {"article_no", "name", "department", "size_system", "size", "colour", "sku", "barcode", "price", "cost",
-		"mrp", "category", "brand", "tax_type", "tax_rate", "hsn_code", "opening_qty", "quantity_alert"},
+		"mrp", "category", "brand", "tax_type", "tax_rate", "hsn_code", "opening_qty", "quantity_alert", "allow_fraction"},
 	// Industry P3 item 8 (A35): one row per batch.
 	templatePharmacy: {"name", "sku", "barcode", "category", "brand", "hsn_code", "tax_type", "tax_rate", "price", "cost",
-		"batch_no", "expiry", "mfg_date", "mrp", "store", "opening_qty", "quantity_alert"},
+		"batch_no", "expiry", "mfg_date", "mrp", "store", "opening_qty", "quantity_alert", "allow_fraction"},
 }
 
 var templateExample = map[string]map[string]string{
@@ -90,8 +90,9 @@ var columnHelp = map[string]string{
 	"tax_rate":       "Tax rate in percent, 0 to 100. Optional.",
 	"hsn_code":       "HSN code, 2 to 8 digits. Optional.",
 	"store":          "The store's slug (Settings → Stores). Needed with opening_qty in the general template; clothing and footwear use the first store when empty.",
-	"opening_qty":    "Stock you have now, a whole number. Optional.",
-	"quantity_alert": "Low-stock level, a whole number. Optional.",
+	"opening_qty":    "Stock you have now: a whole number, or up to 3 decimals when allow_fraction is yes. Optional.",
+	"quantity_alert": "Low-stock level: a whole number, or up to 3 decimals when allow_fraction is yes. Optional.",
+	"allow_fraction": "yes when the product is sold in part units (by weight, length or volume: 1.25 kg). Optional (no). The same on every row of a product.",
 	"status":         "Active or Inactive. Optional (Active).",
 	"batch_no":       "Batch (lot) number printed on the pack, up to 40 characters. Rows with the same SKU are batches of one product.",
 	"expiry":         "Expiry date: YYYY-MM-DD, or MM/YYYY as printed on the pack (the last day of that month). Expired rows are not imported.",
@@ -119,6 +120,7 @@ type importRow struct {
 	mrp                                               *decimal.Decimal // the variant's MRP (not the pharmacy template: there it is the batch's)
 	hasTax                                            bool
 	qty, alert                                        qty.Q
+	fraction                                          bool // allow_fraction (H3)
 	categoryID, subCategoryID, brandID, unitID, store int64
 	b                                                 batchFields // pharmacy template
 }
@@ -150,7 +152,9 @@ type PreviewProduct struct {
 	ArticleNo   string            `json:"articleNo,omitempty"`
 	Attributes  map[string]string `json:"attributes"`
 	VariantDims []string          `json:"variantDims"`
-	Variants    []PreviewVariant  `json:"variants"`
+	// AllowFraction: sold in part units (the allow_fraction column, H3).
+	AllowFraction bool             `json:"allowFraction,omitempty"`
+	Variants      []PreviewVariant `json:"variants"`
 }
 
 type importResult struct {
@@ -625,15 +629,25 @@ func (a *API) runImport(ctx context.Context, t tenancy.Tenant, uid int64, raw []
 			if s := v["status"]; s != "" && s != "Active" && s != "Inactive" {
 				addErr(line, "status", "must be Active or Inactive")
 			}
+			switch strings.ToLower(v["allow_fraction"]) {
+			case "", "no", "n", "false", "0":
+			case "yes", "y", "true", "1":
+				ir.fraction = true
+			default:
+				addErr(line, "allow_fraction", "must be yes or no")
+			}
 			for _, n := range []struct {
 				col string
 				out *qty.Q
 			}{{"opening_qty", &ir.qty}, {"quantity_alert", &ir.alert}} {
 				if s := v[n.col]; s != "" {
-					// Imported products sell in whole units (H3).
+					// H3: whole units unless the row's product is sold in part units.
 					q, err := qty.Parse(s)
-					if err != nil || q.IsNegative() || q.Greater(maxStock) || !q.IsWhole() {
-						addErr(line, n.col, "must be a whole number >= 0")
+					switch {
+					case err != nil || q.IsNegative() || q.Greater(maxStock):
+						addErr(line, n.col, "must be a number >= 0 with at most 3 decimals")
+					case !ir.fraction && !q.IsWhole():
+						addErr(line, n.col, "must be a whole number >= 0 (set allow_fraction to yes for part units)")
 					}
 					*n.out = q
 				}
@@ -697,6 +711,12 @@ func (a *API) runImport(ctx context.Context, t tenancy.Tenant, uid int64, raw []
 			g.rows = append(g.rows, ir)
 		}
 		for _, k := range order {
+			// allow_fraction is the product's: every row of it says the same.
+			for _, ir := range groups[k].rows[1:] {
+				if f := groups[k].rows[0]; ir.fraction != f.fraction {
+					addErr(ir.line, "allow_fraction", fmt.Sprintf("must be the same on every row of a product (row %d)", f.line))
+				}
+			}
 			if ph.file {
 				checkBatchGroup(groups[k], addErr)
 			} else {
@@ -750,7 +770,7 @@ func (a *API) runImport(ctx context.Context, t tenancy.Tenant, uid int64, raw []
 				c.attrsIn, c.dimsIn = &attrs, &dims
 			}
 			pp := PreviewProduct{Row: first.line, Action: "create", Name: c.name, ArticleNo: g.article,
-				Attributes: g.checked.Attributes, VariantDims: g.checked.Dims}
+				Attributes: g.checked.Attributes, VariantDims: g.checked.Dims, AllowFraction: first.fraction}
 			variantRows := g.rows
 			if ph.file {
 				variantRows = g.rows[:1] // one variant; the rows are its batches
@@ -792,6 +812,12 @@ func (a *API) runImport(ctx context.Context, t tenancy.Tenant, uid int64, raw []
 			pid, err := createProductWith(ctx, tx, c, nil, uid, inventory.ReasonImport, "product.import_create")
 			if err != nil {
 				return err
+			}
+			if first.fraction { // before the batches, which may hold part units
+				yes := true
+				if err := fractionFor(ctx, tx, pid, &yes); err != nil {
+					return err
+				}
 			}
 			switch {
 			case ph.file:
