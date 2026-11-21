@@ -48,6 +48,5 @@ Design note `docs/M3_GST_DESIGN.md`, approved 2026-11-21 (§11 as recommended). 
 
 ## Housekeeping
 
-- `golangci-lint` reports a pre-existing `ineffassign` at `backend/test/isolation/batch_import_test.go:139` (`store2`).
 - `TestBillingReconcile` failed once on a sandbox provider answer (`provider answered 400 BAD_REQUEST_ERROR`). It is unrelated to this work; check it if it repeats.
 - Platform MFA is still switched off (`PLATFORM_MFA_DISABLED=true`) and must be turned back on before production.

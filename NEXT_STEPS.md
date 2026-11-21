@@ -1,10 +1,10 @@
 # Next steps after industry Phase 3
 
-Last updated: 2026-11-18. Phase 3 (pharmacy, items 1–8) is merged into `main` (`aea9af7`). The `industry/phase1` and `industry/phase3` branches are deleted.
+Last updated: 2026-11-21. Phase 3 (pharmacy, items 1–8) is merged into `main` (`aea9af7`). The `industry/phase1` and `industry/phase3` branches are deleted.
 
 ## 1. Checks for the owner
 
-- [ ] **Browser check of Phase 3.** The dev database has no shops. Create a pharmacy shop in the console, then follow the "How to check" steps for Industry P3 items 1–8 in `docs/UI_CHECKLIST.md`.
+- [ ] **Browser check of Phase 3.** The dev database has 9 shops; create a pharmacy shop in the console (or switch one to pharmacy), then follow the "How to check" steps for Industry P3 items 1–8 in `docs/UI_CHECKLIST.md`.
 - [ ] **Questions for the pharmacy.** Answer design §11 in `docs/INDUSTRY_PHASE3_PHARMACY_DESIGN.md`. Several deferred topics below wait on it.
 
 ## 2. Deferred in the design
@@ -30,4 +30,4 @@ Each needs the owner's go-ahead or answers from outside. Source: design §9.
 ## 4. Housekeeping
 
 - [x] **Dependabot and `go-backend/phase2`:** branches deleted on 2026-11-18. Dependabot opens fresh pull requests on its next run; merge them after a full test run.
-- [ ] **Landing branches:** `landing_dev` holds the unmerged marketing site; `landing_main` only the empty skeleton. Decide whether to merge or keep them.
+- [x] **Landing branches:** the marketing site was merged into `main` (`d7ab936`); it is not deployed yet. The `landing_dev` / `landing_main` branches can be deleted on the owner's word.

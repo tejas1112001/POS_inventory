@@ -1,6 +1,21 @@
+# Status, 2026-11-21
+
+Everything below is on GitHub `main` (pushed 2026-11-21, CI green at `9e1583a`). What is left: `REMAINING.md` (architecture review follow-up) and `NEXT_STEPS.md` (owner checks, pharmacy questions).
+
+Built 2026-11-21 (each with tests; details in `REMAINING.md` and the design notes):
+
+| Item | What | Design |
+|---|---|---|
+| H3 | Units (sell, buy, return by the box), decimal quantities everywhere, CSV import `allow_fraction` | ARCHITECTURE_REVIEW H3 |
+| M3 | GST per store and B2B: GSTIN/state on shop, stores, customers, suppliers; split per sale; copies on sales and credit notes; receipts; printable credit note; invoice numbers per store and year (opt-in) | `docs/M3_GST_DESIGN.md` |
+| — | Price per store; several barcodes per variant (case codes); scale barcodes | REMAINING "also decided" |
+| — | GST returns: GSTR-1 workbook and GSTR-3B summary per GSTIN and month or quarter | `docs/GST_REPORTS_DESIGN.md` |
+| — | Known issues: stock counts readable with the module off; batch scans in counts; expiry report CSV | `NEXT_STEPS.md` §3 |
+| CI | gitleaks allowlists match the old `backend-go/` paths (full-history job had failed since 2026-11-20) | — |
+
 # Architecture review fixes (ARCHITECTURE_REVIEW.md)
 
-2026-11-20, on request ("do the required items immediately"). All commits are local on `main`, **not pushed**.
+2026-11-20, on request ("do the required items immediately"). Pushed to `main` 2026-11-20/21.
 
 | Item | What | Commit | State |
 |---|---|---|---|
