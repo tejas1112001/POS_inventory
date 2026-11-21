@@ -1,6 +1,7 @@
 package sales
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -27,13 +28,30 @@ import (
 const MaxHeldPerUser = 20
 
 // HeldLine is one line of a held cart (display fields kept for the list).
+// With unitId (H3) the quantity is in that unit, as the checkout takes it;
+// unitName and unitFactor are the unit as it was when the cart was held.
+// unitPrice stays per base unit.
 type HeldLine struct {
-	ProductID int64            `json:"productId"`
-	VariantID int64            `json:"variantId"`
-	Quantity  qty.Q            `json:"quantity"`
-	UnitPrice *decimal.Decimal `json:"unitPrice"`
-	Name      string           `json:"name"`
-	Label     string           `json:"label"`
+	ProductID  int64            `json:"productId"`
+	VariantID  int64            `json:"variantId"`
+	Quantity   qty.Q            `json:"quantity"`
+	UnitPrice  *decimal.Decimal `json:"unitPrice"`
+	Name       string           `json:"name"`
+	Label      string           `json:"label"`
+	UnitID     *int64           `json:"unitId,omitempty"`
+	UnitName   *string          `json:"unitName,omitempty"`
+	UnitFactor *qty.Q           `json:"unitFactor,omitempty"`
+}
+
+// base is the line's quantity in base units.
+func (l HeldLine) base() qty.Q {
+	if l.UnitFactor == nil {
+		return l.Quantity
+	}
+	if q, err := l.Quantity.Times(*l.UnitFactor); err == nil {
+		return q
+	}
+	return l.Quantity
 }
 
 // HeldCart is a parked cart.
@@ -47,7 +65,7 @@ type HeldCart struct {
 	Label        *string         `json:"label"`
 	Lines        []HeldLine      `json:"lines"`
 	Discount     decimal.Decimal `json:"discount"`
-	Items        qty.Q           `json:"items"`    // units in the cart
+	Items        qty.Q           `json:"items"`    // base units in the cart
 	Estimate     decimal.Decimal `json:"estimate"` // at the held prices, before tax: the checkout re-prices
 	CreatedAt    time.Time       `json:"createdAt"`
 	ExpiresAt    time.Time       `json:"expiresAt"`
@@ -72,9 +90,10 @@ func scanHeld(row interface{ Scan(...any) error }) (HeldCart, error) {
 		return h, err
 	}
 	for _, l := range h.Lines {
-		h.Items = h.Items.Add(l.Quantity)
+		q := l.base()
+		h.Items = h.Items.Add(q)
 		if l.UnitPrice != nil {
-			h.Estimate = h.Estimate.Add(l.UnitPrice.Mul(l.Quantity.Decimal()))
+			h.Estimate = h.Estimate.Add(l.UnitPrice.Mul(q.Decimal()))
 		}
 	}
 	h.Estimate = decimal.Max(h.Estimate.Sub(h.Discount), decimal.Zero)
@@ -119,6 +138,7 @@ type heldLineIn struct {
 	UnitPrice money.Dec `json:"unitPrice"`
 	Name      string    `json:"name"`
 	Label     string    `json:"label"`
+	UnitID    money.Int `json:"unitId"` // H3: the quantity is in this unit
 }
 
 type holdIn struct {
@@ -168,6 +188,13 @@ func (a *API) hold(w http.ResponseWriter, r *http.Request) {
 			f[fmt.Sprintf("lines[%d].quantity", i)] = "Quantity must be above 0."
 		}
 		h := HeldLine{ProductID: l.ProductID.V, VariantID: l.VariantID.V, Quantity: l.Quantity.V, Name: clip(l.Name, 160), Label: clip(l.Label, 120)}
+		if l.UnitID.Valid {
+			if l.UnitID.V <= 0 {
+				f[fmt.Sprintf("lines[%d].unitId", i)] = "unitId is invalid."
+			}
+			id := l.UnitID.V
+			h.UnitID = &id
+		}
 		if l.UnitPrice.Valid {
 			if l.UnitPrice.D.IsNegative() {
 				f[fmt.Sprintf("lines[%d].unitPrice", i)] = "Must not be negative."
@@ -189,7 +216,6 @@ func (a *API) hold(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
-	raw, _ := json.Marshal(lines)
 	p := principal(r)
 	var out HeldCart
 	err := a.rw(r.Context(), tenant(r), func(tx tenancy.TenantTx) error {
@@ -211,6 +237,13 @@ func (a *API) hold(w http.ResponseWriter, r *http.Request) {
 		if mine >= MaxHeldPerUser {
 			return apperr.Conflict(apperr.CodeInvalidState, fmt.Sprintf("You already hold %d bills. Recall or discard one first.", MaxHeldPerUser))
 		}
+		if err := heldUnits(ctx, tx, lines); err != nil {
+			return err
+		}
+		raw, err := json.Marshal(lines)
+		if err != nil {
+			return err
+		}
 		var customer *int64
 		if in.CustomerID.Valid && in.CustomerID.V > 0 {
 			customer = &in.CustomerID.V
@@ -220,7 +253,6 @@ func (a *API) hold(w http.ResponseWriter, r *http.Request) {
 			VALUES ($1, $2, $3, NULLIF($4, ''), $5::text::jsonb, $6) RETURNING id`, in.StoreID.V, p.UserID, customer, label, string(raw), discount).Scan(&id); err != nil {
 			return err
 		}
-		var err error
 		if out, err = scanHeld(tx.QueryRow(ctx, `SELECT `+qHeldCols+` WHERE h.id = $1`, id)); err != nil {
 			return err
 		}
@@ -232,6 +264,40 @@ func (a *API) hold(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.WriteJSON(w, http.StatusCreated, out)
+}
+
+// heldUnits checks the units held lines name and copies each one's name
+// and size (H3). The checkout checks them again when the cart is recalled.
+func heldUnits(ctx context.Context, tx tenancy.TenantTx, lines []HeldLine) error {
+	var pids []int64
+	for _, l := range lines {
+		if l.UnitID != nil {
+			pids = append(pids, l.ProductID)
+		}
+	}
+	units, err := unitsOf(ctx, tx, pids)
+	if err != nil {
+		return err
+	}
+	f := fieldErrs{}
+	for i := range lines {
+		l := &lines[i]
+		if l.UnitID == nil {
+			continue
+		}
+		u, ok := units[unitKey{l.ProductID, *l.UnitID}]
+		if !ok {
+			f[fmt.Sprintf("lines[%d].unitId", i)] = "This product is not sold in that unit."
+			continue
+		}
+		if _, err := l.Quantity.Times(u.factor); err != nil {
+			f[fmt.Sprintf("lines[%d].quantity", i)] = "That quantity of this unit is not a whole thousandth of the base unit."
+			continue
+		}
+		name, factor := u.name, u.factor
+		l.UnitName, l.UnitFactor = &name, &factor
+	}
+	return f.err()
 }
 
 // take removes a held cart and returns it (recall), or just removes it

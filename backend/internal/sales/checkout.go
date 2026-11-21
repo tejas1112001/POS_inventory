@@ -605,8 +605,8 @@ func nextReference(ctx context.Context, tx tenancy.TenantTx, prefix string) (str
 // dimensions (industry P1 item 4, DB8); NULL otherwise.
 const qInsertItem = `INSERT INTO order_items (sale_id, product_id, variant_id, product_name, sku, quantity, unit_price,
 		catalog_price, discount, tax_type, tax_rate, tax_amount, cgst, sgst, igst, subtotal, mrp, mrp_amount, unit_name, unit_factor, unit_qty,
-		hsn_code, variant_label)
-	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21,
+		unit_id, hsn_code, variant_label)
+	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22,
 		(SELECT hsn_code FROM products WHERE id = $2),
 		(SELECT string_agg(CASE WHEN d.k = 'size' AND coalesce(p.attributes ->> 'size_system', '') <> ''
 		          THEN (p.attributes ->> 'size_system') || ' ' ELSE '' END || (v.attributes ->> d.k), ' / ' ORDER BY d.ord)
@@ -624,7 +624,8 @@ func insertItems(ctx context.Context, tx tenancy.TenantTx, saleID int64, p price
 		unitMRP, mrpAmount := lineMRP(l, sb.sold[i])
 		un, uf, uq := l.line.unit.columns()
 		b.Queue(qInsertItem, saleID, l.v.productID, l.v.id, l.v.productName, l.v.sku, l.qty, l.unit,
-			l.catalog, l.q.Discount, l.taxType, l.taxRate, l.q.Tax, l.q.CGST, l.q.SGST, l.q.IGST, l.q.Total, unitMRP, mrpAmount, un, uf, uq)
+			l.catalog, l.q.Discount, l.taxType, l.taxRate, l.q.Tax, l.q.CGST, l.q.SGST, l.q.IGST, l.q.Total, unitMRP, mrpAmount, un, uf, uq,
+			l.line.unit.unitID())
 	}
 	br := tx.SendBatch(ctx, b)
 	ids := make([]int64, len(p.lines))

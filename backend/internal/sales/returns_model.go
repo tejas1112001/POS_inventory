@@ -39,6 +39,12 @@ type ReturnItemJSON struct {
 	Reason       string           `json:"reason"`
 	Condition    *string          `json:"condition"` // industry P1 item 9
 	Restocked    bool             `json:"restocked"`
+	// The unit the line was returned in (H3), when not the base unit: its
+	// name and size, and the quantity in it. Quantity is in base units
+	// either way.
+	UnitName   *string `json:"unitName"`
+	UnitFactor *qty.Q  `json:"unitFactor"`
+	UnitQty    *qty.Q  `json:"unitQty"`
 	// Batches the units went to (industry P3 item 4, A28): bucket stock
 	// (back on sale) or quarantine. Empty for untracked lines.
 	Batches   []ReturnBatchJSON `json:"batches"`
@@ -128,7 +134,7 @@ const (
 		WHERE r.id = ANY($1)`
 	qLoadReturnItems = `SELECT i.id, i.sale_return_id, i.order_item_id, i.product_id, i.variant_id, i.product_name, i.sku, i.quantity,
 			i.unit_price, i.discount, i.tax_amount, i.cgst, i.sgst, i.igst, i.subtotal, coalesce(i.reason, ''), i.created_at,
-			p.image_file_id, i.condition, i.restocked,
+			p.image_file_id, i.condition, i.restocked, i.unit_name, i.unit_factor, i.unit_qty,
 			coalesce((SELECT jsonb_agg(jsonb_build_object('batchId', rb.batch_id, 'batchNo', b.batch_no, 'expiry', to_char(b.expiry_date, 'YYYY-MM-DD'),
 				'quantity', rb.quantity, 'bucket', rb.bucket, 'unknown', b.is_unknown) ORDER BY rb.id)
 				FROM return_item_batches rb JOIN batches b ON b.id = rb.batch_id WHERE rb.return_item_id = i.id), '[]'::jsonb)
@@ -209,7 +215,7 @@ func loadReturns(ctx context.Context, tx tenancy.TenantTx, ids []int64) ([]Retur
 		var img *uuid.UUID
 		if err := rows.Scan(&it.ID, &it.SaleReturnID, &it.OrderItemID, &it.ProductID, &it.VariantID, &it.ProductName, &it.SKU,
 			&it.Quantity, &it.UnitPrice, &it.Discount, &it.TaxAmount, &it.CGST, &it.SGST, &it.IGST, &it.Subtotal, &it.Reason,
-			&it.CreatedAt, &img, &it.Condition, &it.Restocked, &it.Batches); err != nil {
+			&it.CreatedAt, &img, &it.Condition, &it.Restocked, &it.UnitName, &it.UnitFactor, &it.UnitQty, &it.Batches); err != nil {
 			rows.Close()
 			return nil, err
 		}

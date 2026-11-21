@@ -282,3 +282,146 @@ func TestPurchaseUnits(t *testing.T) {
 	require.Equal(t, 48.0, num(ln["quantity"]))
 	require.Empty(t, reconcile(t, "a"))
 }
+
+// H3: quotes, held carts and returns in units. A product sold by the
+// piece and by the box (12 at the sale, 10 later). A return of a box
+// against the sale takes 12 pieces, the size it was sold at; a return
+// without a sale and a new quote use the size now.
+func TestReturnAndHeldUnits(t *testing.T) {
+	tok, _ := ownerLogin(t, "a")
+	host := tenants["a"].Host
+	store := storeIDs(t, "a", tok)[0]
+	unit := func(name, short string) float64 {
+		u := do(t, rq{method: "POST", host: host, path: "/api/units", token: tok, body: map[string]any{"name": name, "short_name": short}})
+		require.Equal(t, 201, u.Code, u.Raw)
+		return num(u.Body["id"])
+	}
+	piece, box, other := unit("Piece H3R", "pc"), unit("Box H3R", "box"), unit("Unused H3R", "un")
+	product := func(qty int, factor float64) map[string]any {
+		b := addFormSingle("UNIT-CUP", store, qty)
+		b["unitId"] = piece
+		b["units"] = []map[string]any{{"unitId": box, "factor": factor}}
+		return b
+	}
+	r := createProduct(t, "a", tok, product(100, 12))
+	require.Equal(t, 201, r.Code, r.Raw)
+	v := r.Body["ProductVariants"].([]any)[0].(map[string]any)
+	cup := stocked{pid: r.Body["id"].(float64), vid: v["id"].(float64), sku: "UNIT-CUP"}
+	boxes := func(n any) map[string]any {
+		l := qline(cup, n)
+		l["unitId"] = box
+		return l
+	}
+
+	// The quote prices two boxes as 24 pieces and says so.
+	q := do(t, rq{method: "POST", host: host, path: "/api/sales/quote", token: tok, body: posSale(store, boxes(2))})
+	require.Equal(t, 200, q.Code, q.Raw)
+	ql := q.Body["lines"].([]any)[0].(map[string]any)
+	require.Equal(t, 24.0, num(ql["quantity"]))
+	require.Equal(t, box, num(ql["unitId"]))
+	require.Equal(t, "Box H3R", ql["unitName"])
+	require.Equal(t, 12.0, num(ql["unitFactor"]))
+	require.Equal(t, 2.0, num(ql["unitQty"]))
+	require.Equal(t, "3412.56", dec(q.Body["total"]).StringFixed(2))
+
+	// Sold: two boxes on one line, three pieces on another sale.
+	s := sell(t, "a", tok, posSale(store, boxes(2)), nil)
+	require.Equal(t, 201, s.Code, s.Raw)
+	ln := lineOf(t, s.Body, cup)
+	require.Equal(t, box, num(ln["unitId"]))
+	saleID := s.Body["id"]
+	loose := sell(t, "a", tok, posSale(store, qline(cup, 3)), nil)
+	require.Equal(t, 201, loose.Code, loose.Raw)
+	require.Equal(t, "73.000", stockQ(t, "a", store, cup.vid))
+
+	// The box becomes 10 pieces.
+	edit := product(73, 10)
+	edit["variants"].([]map[string]any)[0]["id"] = cup.vid
+	up := do(t, rq{method: "PUT", host: host, path: "/api/products/" + jsonID(cup.pid), token: tok, body: edit})
+	require.Equal(t, 200, up.Code, up.Raw)
+
+	// One box back against the sale: 12 pieces, half the line's amount.
+	item := func(n any, u float64) map[string]any {
+		m := map[string]any{"productId": cup.pid, "variantId": cup.vid, "quantity": n, "reason": "too many"}
+		if u > 0 {
+			m["unitId"] = u
+		}
+		return m
+	}
+	ret := postReturn(t, "a", tok, retBody(saleID, store, item(1, box)), nil)
+	require.Equal(t, 201, ret.Code, ret.Raw)
+	ri := ret.Body["items"].([]any)[0].(map[string]any)
+	require.Equal(t, 12.0, num(ri["quantity"]))
+	require.Equal(t, "Box H3R", ri["unitName"])
+	require.Equal(t, 12.0, num(ri["unitFactor"]), "the size it was sold at")
+	require.Equal(t, 1.0, num(ri["unitQty"]))
+	require.Equal(t, "1706.28", dec(ri["subtotal"]).StringFixed(2), "half of 3412.56")
+	require.Equal(t, "85.000", stockQ(t, "a", store, cup.vid))
+
+	// Five pieces back: no unit copy. Then a box no longer fits (7 left).
+	ret = postReturn(t, "a", tok, retBody(saleID, store, item(5, 0)), nil)
+	require.Equal(t, 201, ret.Code, ret.Raw)
+	ri = ret.Body["items"].([]any)[0].(map[string]any)
+	require.Equal(t, 5.0, num(ri["quantity"]))
+	require.Nil(t, ri["unitName"])
+	ret = postReturn(t, "a", tok, retBody(saleID, store, item(1, box)), nil)
+	require.Equal(t, 409, ret.Code, ret.Raw)
+
+	// The loose sale was not sold in boxes; a unit the product never had.
+	ret = postReturn(t, "a", tok, retBody(loose.Body["id"], store, item(1, box)), nil)
+	require.Equal(t, 400, ret.Code, ret.Raw)
+	require.Equal(t, "returnItems[0].unitId", errField(ret))
+	ret = postReturn(t, "a", tok, retBody(saleID, store, item(1, other)), nil)
+	require.Equal(t, 400, ret.Code, ret.Raw)
+	require.Equal(t, "returnItems[0].unitId", errField(ret))
+
+	// Without a sale: the box as it is now (10), priced per piece.
+	nl := item(1, box)
+	nl["unitPrice"] = 20
+	ret = postReturn(t, "a", tok, retBody(nil, store, nl), nil)
+	require.Equal(t, 201, ret.Code, ret.Raw)
+	ri = ret.Body["items"].([]any)[0].(map[string]any)
+	require.Equal(t, 10.0, num(ri["quantity"]))
+	require.Equal(t, 10.0, num(ri["unitFactor"]))
+	require.Equal(t, "200.00", dec(ri["subtotal"]).StringFixed(2))
+	require.Equal(t, "100.000", stockQ(t, "a", store, cup.vid))
+	nl["unitId"] = other
+	ret = postReturn(t, "a", tok, retBody(nil, store, nl), nil)
+	require.Equal(t, 400, ret.Code, ret.Raw)
+	require.Equal(t, "returnItems[0].unitId", errField(ret))
+
+	// An exchange takes return lines the same way: one box back, one box out.
+	pol := get(t, host, "/api/settings/returns", tok)
+	require.Equal(t, 200, pol.Code, pol.Raw)
+	was := pol.Body["exchange"]
+	t.Cleanup(func() { putPolicy(t, "a", tok, map[string]any{"exchange": was}) })
+	require.Equal(t, 200, putPolicy(t, "a", tok, map[string]any{"exchange": true}).Code)
+	s = sell(t, "a", tok, posSale(store, boxes(1)), nil)
+	require.Equal(t, 201, s.Code, s.Raw)
+	require.Equal(t, "90.000", stockQ(t, "a", store, cup.vid), "a box is 10 now")
+	x := do(t, rq{method: "POST", host: host, path: "/api/sales/exchanges", token: tok, body: map[string]any{"saleId": s.Body["id"],
+		"returnLines": []map[string]any{item(1, box)}, "newLines": []map[string]any{boxes(1)}}})
+	require.Equal(t, 201, x.Code, x.Raw)
+	require.Equal(t, "90.000", stockQ(t, "a", store, cup.vid))
+
+	// A held cart keeps the unit: 2 boxes is 20 pieces in the count and estimate.
+	hl := map[string]any{"productId": cup.pid, "variantId": cup.vid, "quantity": 2, "unitPrice": 120.5, "name": "Cup", "label": "", "unitId": box}
+	h := do(t, rq{method: "POST", host: host, path: "/api/held-carts", token: tok,
+		body: map[string]any{"storeId": store, "label": "units", "lines": []map[string]any{hl}}})
+	require.Equal(t, 201, h.Code, h.Raw)
+	require.Equal(t, 20.0, num(h.Body["items"]))
+	require.Equal(t, "2410.00", dec(h.Body["estimate"]).StringFixed(2))
+	rc := do(t, rq{method: "POST", host: host, path: "/api/held-carts/" + jsonID(num(h.Body["id"])) + "/recall", token: tok, body: map[string]any{}})
+	require.Equal(t, 200, rc.Code, rc.Raw)
+	rl := rc.Body["lines"].([]any)[0].(map[string]any)
+	require.Equal(t, box, num(rl["unitId"]))
+	require.Equal(t, 2.0, num(rl["quantity"]), "as the checkout takes it")
+	require.Equal(t, "Box H3R", rl["unitName"])
+	hl["unitId"] = other
+	h = do(t, rq{method: "POST", host: host, path: "/api/held-carts", token: tok,
+		body: map[string]any{"storeId": store, "label": "units", "lines": []map[string]any{hl}}})
+	require.Equal(t, 400, h.Code, h.Raw)
+	require.Equal(t, "lines[0].unitId", errField(h))
+
+	require.Empty(t, reconcile(t, "a"))
+}

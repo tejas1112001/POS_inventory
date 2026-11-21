@@ -57,6 +57,11 @@ type returnItemIn struct {
 	// BatchID names the batch of a return without a sale (industry P3
 	// item 4, A28); a linked return goes back to the batches it was sold from.
 	BatchID money.Int `json:"batchId"`
+	// UnitID returns the line in another of the product's units (H3): the
+	// quantity is in that unit. Against a sale it takes the lines sold in
+	// that unit, at the size they were sold at; without a sale it uses the
+	// product's sale unit as it is now. unitPrice stays per base unit.
+	UnitID money.Int `json:"unitId"`
 
 	// Accepted and ignored: the server computes line amounts.
 	Total    json.RawMessage `json:"total"`
@@ -95,6 +100,7 @@ type returnLine struct {
 	priceSet                          bool
 	reason, condition                 string
 	batchID                           int64 // industry P3 item 4
+	unitID                            int64 // H3; qty is then in that unit
 }
 
 type cleanReturn struct {
@@ -139,11 +145,11 @@ func validateReturn(in returnIn) (cleanReturn, error) {
 	}
 	for i, it := range in.ReturnItems {
 		k := fmt.Sprintf("returnItems[%d]", i)
-		l := returnLine{orderItemID: it.OrderItemID.V, productID: it.ProductID.V, variantID: it.VariantID.V, qty: it.Quantity.V}
+		l := returnLine{orderItemID: it.OrderItemID.V, productID: it.ProductID.V, variantID: it.VariantID.V, qty: it.Quantity.V, unitID: it.UnitID.V}
 		if !it.Quantity.Valid || !it.Quantity.V.IsPositive() || it.Quantity.V.Greater(qty.Int(maxQty)) {
 			f[k+".quantity"] = "Quantity must be above 0."
 		}
-		for name, id := range map[string]money.Int{"orderItemId": it.OrderItemID, "productId": it.ProductID, "variantId": it.VariantID} {
+		for name, id := range map[string]money.Int{"orderItemId": it.OrderItemID, "productId": it.ProductID, "variantId": it.VariantID, "unitId": it.UnitID} {
 			if id.Valid && id.V <= 0 {
 				f[k+"."+name] = name + " is invalid."
 			}
@@ -237,11 +243,16 @@ type soldLine struct {
 	qty, returned                 qty.Q
 	unit, discount, tax, subtotal decimal.Decimal
 	cgst, sgst, igst              *decimal.Decimal
+	// The unit the line was sold in (H3), when not the base unit.
+	unitID     *int64
+	unitName   *string
+	unitFactor *qty.Q
 }
 
 const qSoldLines = `SELECT i.id, i.product_id, i.variant_id, i.product_name, i.sku, i.quantity, i.unit_price, i.discount,
 		i.tax_amount, i.cgst, i.sgst, i.igst, i.subtotal,
-		coalesce((SELECT sum(r.quantity) FROM return_items r WHERE r.order_item_id = i.id), 0)
+		coalesce((SELECT sum(r.quantity) FROM return_items r WHERE r.order_item_id = i.id), 0),
+		i.unit_id, i.unit_name, i.unit_factor
 	FROM order_items i WHERE i.sale_id = $1 ORDER BY i.id`
 
 func soldLines(ctx context.Context, tx tenancy.TenantTx, saleID int64) ([]soldLine, error) {
@@ -254,7 +265,7 @@ func soldLines(ctx context.Context, tx tenancy.TenantTx, saleID int64) ([]soldLi
 	for rows.Next() {
 		var s soldLine
 		if err := rows.Scan(&s.id, &s.productID, &s.variantID, &s.name, &s.sku, &s.qty, &s.unit, &s.discount,
-			&s.tax, &s.cgst, &s.sgst, &s.igst, &s.subtotal, &s.returned); err != nil {
+			&s.tax, &s.cgst, &s.sgst, &s.igst, &s.subtotal, &s.returned, &s.unitID, &s.unitName, &s.unitFactor); err != nil {
 			return nil, err
 		}
 		out = append(out, s)
@@ -276,6 +287,7 @@ type returnRow struct {
 	line                          int        // index of the body line
 	tracked                       bool       // industry P3 item 4
 	batches                       []rowBatch // where a tracked row's units go
+	inUnit                        *lineUnit  // H3: the unit copy (nil in base units)
 }
 
 // ReturnExcess is one entry of the RETURN_EXCEEDS_SOLD details.
@@ -335,12 +347,31 @@ func matchSold(c cleanReturn, sold []soldLine, currency string) ([]returnRow, er
 			f[k+".variantId"] = "Choose a variant: the sale has more than one variant of this product."
 			continue
 		}
+		want := l.qty
+		if l.unitID > 0 {
+			inUnit := cand[:0:0]
+			for _, s := range cand {
+				if s.unitID != nil && *s.unitID == l.unitID && s.unitFactor != nil {
+					inUnit = append(inUnit, s)
+				}
+			}
+			if len(inUnit) == 0 {
+				f[k+".unitId"] = "This product was not sold in that unit on this sale."
+				continue
+			}
+			base, err := l.qty.Times(*inUnit[0].unitFactor)
+			if err != nil {
+				f[k+".quantity"] = "That quantity of this unit is not a whole thousandth of the base unit."
+				continue
+			}
+			cand, want = inUnit, base
+		}
 		var soldQ, returned qty.Q
 		for _, s := range cand {
 			soldQ = soldQ.Add(s.qty)
 			returned = returned.Add(s.returned)
 		}
-		if l.qty.Greater(soldQ.Sub(returned)) {
+		if want.Greater(soldQ.Sub(returned)) {
 			sku := ""
 			if cand[0].sku != nil {
 				sku = *cand[0].sku
@@ -350,10 +381,10 @@ func matchSold(c cleanReturn, sold []soldLine, currency string) ([]returnRow, er
 				pid = *cand[0].productID
 			}
 			excess = append(excess, ReturnExcess{Index: i, ProductID: pid, VariantID: *cand[0].variantID, SKU: sku,
-				Sold: soldQ, Returned: returned, Requested: l.qty})
+				Sold: soldQ, Returned: returned, Requested: want})
 			continue
 		}
-		left := l.qty
+		left := want
 		for _, s := range cand {
 			take := qty.Min(left, s.qty.Sub(s.returned))
 			if !take.IsPositive() {
@@ -368,6 +399,9 @@ func matchSold(c cleanReturn, sold []soldLine, currency string) ([]returnRow, er
 				sgst:     refundSharePtr(s.sgst, s.qty, s.returned, take, currency),
 				igst:     refundSharePtr(s.igst, s.qty, s.returned, take, currency),
 				reason:   l.reason, condition: l.condition, line: i})
+			if l.unitID > 0 {
+				out[len(out)-1].inUnit = copyIn(s.unitName, s.unitFactor, take)
+			}
 			s.returned = s.returned.Add(take)
 			if left = left.Sub(take); left.IsZero() {
 				break
@@ -472,9 +506,34 @@ func unlinkedRows(ctx context.Context, tx tenancy.TenantTx, c cleanReturn, curre
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+	var pids []int64
+	for i, l := range c.lines {
+		if v, ok := byID[ids[i]]; ok && l.unitID > 0 {
+			pids = append(pids, v.productID)
+		}
+	}
+	units, err := unitsOf(ctx, tx, pids)
+	if err != nil {
+		return nil, err
+	}
 	out := make([]returnRow, 0, len(c.lines))
 	for i, l := range c.lines {
 		v, ok := byID[ids[i]]
+		var inUnit *lineUnit
+		if ok && l.unitID > 0 {
+			u, found := units[unitKey{v.productID, l.unitID}]
+			if !found {
+				f[fmt.Sprintf("returnItems[%d].unitId", i)] = "This product is not sold in that unit."
+				continue
+			}
+			base, err := l.qty.Times(u.factor)
+			if err != nil {
+				f[fmt.Sprintf("returnItems[%d].quantity", i)] = "That quantity of this unit is not a whole thousandth of the base unit."
+				continue
+			}
+			u.qty, l.qty = l.qty, base
+			inUnit = &u
+		}
 		switch {
 		case !ok:
 			f[fmt.Sprintf("returnItems[%d].variantId", i)] = "Product variant not found."
@@ -488,7 +547,7 @@ func unlinkedRows(ctx context.Context, tx tenancy.TenantTx, c cleanReturn, curre
 		}
 		pid, sku := v.productID, v.sku
 		out = append(out, returnRow{productID: &pid, variantID: ids[i], name: v.name, sku: &sku, qty: l.qty, unit: l.price,
-			subtotal: money.Round(l.price.Mul(l.qty.Decimal()), currency), reason: l.reason, condition: l.condition, line: i})
+			subtotal: money.Round(l.price.Mul(l.qty.Decimal()), currency), reason: l.reason, condition: l.condition, line: i, inUnit: inUnit})
 	}
 	return out, f.err()
 }
@@ -541,8 +600,8 @@ const (
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NULLIF($10, ''), $11, $12, $13, $14, $15, $16, $17, $18)
 		RETURNING id`
 	qInsertReturnItem = `INSERT INTO return_items (sale_return_id, order_item_id, product_id, variant_id, product_name, sku, quantity,
-			unit_price, discount, tax_amount, cgst, sgst, igst, subtotal, reason, condition, restocked)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NULLIF($15, ''), NULLIF($16, ''), $17)
+			unit_price, discount, tax_amount, cgst, sgst, igst, subtotal, reason, condition, restocked, unit_name, unit_factor, unit_qty)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NULLIF($15, ''), NULLIF($16, ''), $17, $18, $19, $20)
 		RETURNING id`
 )
 
@@ -614,13 +673,19 @@ func prepareReturn(ctx context.Context, tx tenancy.TenantTx, p auth.Principal, c
 }
 
 // checkReturnFractions refuses part units of a product sold in whole
-// units only (H3). Lines of a return without a sale are checked when they
-// are resolved (unlinkedRows).
+// units only (H3), on each line's quantity in base units (a line in
+// another unit is converted by matchSold). Lines of a return without a
+// sale are checked when they are resolved (unlinkedRows).
 func checkReturnFractions(ctx context.Context, tx tenancy.TenantTx, c cleanReturn, rows []returnRow) error {
-	var ids []int64
+	base := map[int]qty.Q{}
+	variant := map[int]int64{}
 	for _, x := range rows {
-		if x.line >= 0 && x.line < len(c.lines) && !c.lines[x.line].qty.IsWhole() {
-			ids = append(ids, x.variantID)
+		base[x.line], variant[x.line] = base[x.line].Add(x.qty), x.variantID
+	}
+	var ids []int64
+	for line, q := range base {
+		if !q.IsWhole() {
+			ids = append(ids, variant[line])
 		}
 	}
 	if len(ids) == 0 {
@@ -631,15 +696,14 @@ func checkReturnFractions(ctx context.Context, tx tenancy.TenantTx, c cleanRetur
 		return err
 	}
 	f := fieldErrs{}
-	for _, x := range rows {
-		if x.line >= 0 && x.line < len(c.lines) && !inventory.AllowedQty(c.lines[x.line].qty, frac[x.variantID]) {
-			f[fmt.Sprintf("returnItems[%d].quantity", x.line)] = inventory.WholeOnlyMessage
+	for line, q := range base {
+		if line >= 0 && line < len(c.lines) && !inventory.AllowedQty(q, frac[variant[line]]) {
+			f[fmt.Sprintf("returnItems[%d].quantity", line)] = inventory.WholeOnlyMessage
 		}
 	}
 	return f.err()
 }
 
-// needConditions: with conditions on, every line names one.
 func needConditions(pol ReturnPolicy, c cleanReturn, field string) error {
 	if !pol.Conditions {
 		return nil
@@ -712,8 +776,9 @@ func writeReturn(ctx context.Context, tx tenancy.TenantTx, p auth.Principal, c c
 	}
 	for _, x := range pr.rows {
 		var itemID int64
+		un, uf, uq := x.inUnit.columns()
 		if err := tx.QueryRow(ctx, qInsertReturnItem, id, x.orderItemID, x.productID, x.variantID, x.name, x.sku, x.qty,
-			x.unit, x.discount, x.tax, x.cgst, x.sgst, x.igst, x.subtotal, x.reason, x.condition, x.restocked).Scan(&itemID); err != nil {
+			x.unit, x.discount, x.tax, x.cgst, x.sgst, x.igst, x.subtotal, x.reason, x.condition, x.restocked, un, uf, uq).Scan(&itemID); err != nil {
 			return 0, "", err
 		}
 		if err := writeReturnBatches(ctx, tx, itemID, x); err != nil {

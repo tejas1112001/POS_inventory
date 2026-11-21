@@ -61,7 +61,8 @@ type ItemJSON struct {
 	HSN *string `json:"hsn_code"`
 	// The unit the line was sold in (H3), when not the base unit: its name
 	// and size at sale time, and the quantity in it. Quantity is in base
-	// units either way.
+	// units either way. UnitID names the unit (a return in it sends it).
+	UnitID     *int64  `json:"unitId"`
 	UnitName   *string `json:"unitName"`
 	UnitFactor *qty.Q  `json:"unitFactor"`
 	UnitQty    *qty.Q  `json:"unitQty"`
@@ -157,7 +158,7 @@ const (
 			i.catalog_price, i.discount, i.tax_type, i.tax_rate, i.tax_amount, i.cgst, i.sgst, i.igst, i.subtotal,
 			i.created_at, v.attributes, i.mrp, i.mrp_amount,
 			coalesce((SELECT sum(r.quantity) FROM return_items r WHERE r.order_item_id = i.id), 0), i.variant_label, i.hsn_code,
-			i.unit_name, i.unit_factor, i.unit_qty,
+			i.unit_name, i.unit_factor, i.unit_qty, i.unit_id,
 			coalesce((SELECT jsonb_agg(jsonb_build_object('batchId', ob.batch_id, 'batchNo', ob.batch_no, 'expiry', to_char(ob.expiry_date, 'YYYY-MM-DD'),
 				'mrp', ob.mrp, 'quantity', ob.quantity, 'chosen', ob.chosen, 'unknown', ob.is_unknown) ORDER BY ob.expiry_date NULLS LAST, ob.batch_id)
 				FROM order_item_batches ob WHERE ob.order_item_id = i.id), '[]'::jsonb)
@@ -209,7 +210,7 @@ func load(ctx context.Context, tx tenancy.TenantTx, ids []int64) ([]SaleJSON, er
 		if err := rows.Scan(&it.ID, &it.SaleID, &it.ProductID, &it.VariantID, &it.ProductName, &it.SKU, &it.Quantity, &it.UnitPrice,
 			&it.CatalogPrice, &it.Discount, &it.TaxType, &it.TaxRate, &it.TaxAmount, &it.CGST, &it.SGST, &it.IGST, &it.Subtotal,
 			&it.CreatedAt, &attrs, &it.MRP, &it.MRPAmount, &it.ReturnedQty, &it.VariantLabel, &it.HSN,
-			&it.UnitName, &it.UnitFactor, &it.UnitQty, &it.Batches); err != nil {
+			&it.UnitName, &it.UnitFactor, &it.UnitQty, &it.UnitID, &it.Batches); err != nil {
 			rows.Close()
 			return nil, err
 		}

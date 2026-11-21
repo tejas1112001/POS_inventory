@@ -14,20 +14,26 @@ import (
 
 // quoteLine is one priced cart line, in the order sent.
 type quoteLine struct {
-	Index     int              `json:"index"`
-	ProductID int64            `json:"productId"`
-	VariantID int64            `json:"variantId"`
-	SKU       string           `json:"sku"`
-	Quantity  qty.Q            `json:"quantity"`
-	UnitPrice decimal.Decimal  `json:"unitPrice"`
-	Discount  decimal.Decimal  `json:"discount"` // share of the cart discount
-	TaxRate   decimal.Decimal  `json:"taxRate"`
-	Tax       decimal.Decimal  `json:"tax"`
-	Total     decimal.Decimal  `json:"total"`
-	CGST      *decimal.Decimal `json:"cgst"`
-	SGST      *decimal.Decimal `json:"sgst"`
-	IGST      *decimal.Decimal `json:"igst"`
-	Available qty.Q            `json:"available"` // units in stock at the store now
+	Index     int             `json:"index"`
+	ProductID int64           `json:"productId"`
+	VariantID int64           `json:"variantId"`
+	SKU       string          `json:"sku"`
+	Quantity  qty.Q           `json:"quantity"` // base units
+	UnitPrice decimal.Decimal `json:"unitPrice"`
+	Discount  decimal.Decimal `json:"discount"` // share of the cart discount
+	// The unit the line is sold in (H3, the line's unitId), when not the
+	// base unit: its name and size now, and the quantity in it.
+	UnitID     *int64           `json:"unitId"`
+	UnitName   *string          `json:"unitName"`
+	UnitFactor *qty.Q           `json:"unitFactor"`
+	UnitQty    *qty.Q           `json:"unitQty"`
+	TaxRate    decimal.Decimal  `json:"taxRate"`
+	Tax        decimal.Decimal  `json:"tax"`
+	Total      decimal.Decimal  `json:"total"`
+	CGST       *decimal.Decimal `json:"cgst"`
+	SGST       *decimal.Decimal `json:"sgst"`
+	IGST       *decimal.Decimal `json:"igst"`
+	Available  qty.Q            `json:"available"` // units in stock at the store now
 	// Industry P3 item 3 (A27): the batches the sale would take now, and
 	// the line's warnings. Empty for untracked products.
 	Batches  []ItemBatchJSON `json:"batches"`
@@ -135,6 +141,8 @@ func (a *API) quote(w http.ResponseWriter, r *http.Request) {
 				Quantity: l.qty, UnitPrice: l.unit, Discount: l.q.Discount, TaxRate: l.taxRate, Tax: l.q.Tax,
 				Total: l.q.Total, CGST: l.q.CGST, SGST: l.q.SGST, IGST: l.q.IGST, Available: stock[l.v.id],
 				Batches: soldJSON(sb.sold[i]), Warnings: lineWarnings(sb.sold[i])}
+			ql.UnitName, ql.UnitFactor, ql.UnitQty = l.line.unit.columns()
+			ql.UnitID = l.line.unit.unitID()
 			ql.MRP, ql.MRPAmount = lineMRP(l, sb.sold[i])
 			if ql.AboveMRP = aboveMRP(l.q.Total, ql.MRPAmount); ql.AboveMRP {
 				ql.Warnings = append(ql.Warnings, mrpWarning(l.q.Total, *ql.MRPAmount))
