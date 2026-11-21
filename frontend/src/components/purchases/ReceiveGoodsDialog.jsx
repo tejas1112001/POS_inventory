@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { InlineAlert } from '@/components/feedback/InlineAlert';
 import { useScanner } from '@/hooks/useScanner';
 import { beep } from '@/lib/scan';
+import { unitQtyText } from '@/lib/saleUnits';
 import { api } from '@/services/api';
 import { toast } from '../../../shared/toast/store';
 
@@ -172,7 +173,7 @@ export default function ReceiveGoodsDialog({ purchase, onClose, onDone }) {
                           <span>
                             <span className="font-medium">{i.product_name}</span>
                             <span className="block text-xs text-muted-foreground">
-                              {[i.sku && `SKU ${i.sku}`, i.store?.name, `ordered ${i.quantity}`, `still to come ${outstanding(i)}`]
+                              {[i.sku && `SKU ${i.sku}`, i.store?.name, `ordered ${unitQtyText(i)}`, `still to come ${outstanding(i)}`]
                                 .filter(Boolean)
                                 .join(' · ')}
                             </span>

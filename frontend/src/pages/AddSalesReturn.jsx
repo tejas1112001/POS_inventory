@@ -16,6 +16,8 @@ import { currencySymbol, formatCurrency, formatDate, todayInShop } from '@/lib/f
 import { newIdempotencyKey } from '@/lib/checkout';
 import { COLLECT_METHODS, methodLabel } from '@/lib/payments';
 import { CONDITIONS, DEFAULT_POLICY } from '@/lib/returns';
+import { fmtQty, roundQty } from '@/lib/qty';
+import { maxInUnit, unitQtyText } from '@/lib/saleUnits';
 import BatchSelect from '@/components/batches/BatchSelect';
 
 // Refusals the return policy gives (industry P1 item 9); a user with
@@ -122,8 +124,15 @@ export default function AddSalesReturn() {
 
 
   const left = (item) => Math.max(0, (Number(item.quantity) || 0) - (Number(item.returnedQty) || 0));
+  // H3: a line sold in another unit (a box of 12) can come back in that
+  // unit (the default) or in base units. left() stays in base units.
+  const soldInUnit = (i) => !!(i.unitId && i.unitName && Number(i.unitFactor) > 0);
+  const inUnit = (i, q = qty) => soldInUnit(i) && (q[i.id]?.inUnit ?? true);
+  const returnBase = (i, q = qty) => roundQty((Number(q[i.id]?.quantity) || 0) * (inUnit(i, q) ? Number(i.unitFactor) : 1));
+  const leftIn = (i, q = qty) => (inUnit(i, q) ? maxInUnit(left(i), Number(i.unitFactor)) : left(i));
   const linkedTotal = useMemo(
-    () => (sale?.items || []).reduce((sum, i) => sum + (Number(qty[i.id]?.quantity) || 0) * (Number(i.unit_price) || 0), 0),
+    () => (sale?.items || []).reduce((sum, i) => sum + returnBase(i) * (Number(i.unit_price) || 0), 0),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- returnBase reads only sale and qty
     [sale, qty]
   );
   const freeTotal = useMemo(() => lines.reduce((s, l) => s + (Number(l.quantity) || 0) * (Number(l.unitPrice) || 0), 0), [lines]);
@@ -160,7 +169,7 @@ export default function AddSalesReturn() {
       if (!item) return noMatch(code, 'item still returnable on this sale');
       setQty((q) => {
         const cur = Number(q[item.id]?.quantity) || 0;
-        return { ...q, [item.id]: { ...q[item.id], quantity: String(Math.min(left(item), cur + 1)) } };
+        return { ...q, [item.id]: { ...q[item.id], quantity: String(Math.min(leftIn(item, q), cur + 1)) } };
       });
       return undefined;
     }
@@ -216,8 +225,8 @@ export default function AddSalesReturn() {
       if (!sale) return { message: 'Choose the sale the goods come from.', step: 0 };
       const chosen = (sale.items || []).filter((i) => Number(qty[i.id]?.quantity) > 0);
       if (!chosen.length) return { message: 'Enter how many of at least one item come back.', step: 1 };
-      const over = chosen.find((i) => Number(qty[i.id].quantity) > left(i));
-      if (over) return { message: `Only ${left(over)} of ${over.product_name} can still be returned.`, step: 1 };
+      const over = chosen.find((i) => returnBase(i) > left(i));
+      if (over) return { message: `Only ${fmtQty(left(over))} of ${over.product_name} can still be returned${inUnit(over) ? ` (${fmtQty(leftIn(over))} ${over.unitName})` : ''}.`, step: 1 };
       if (chosen.some((i) => (policy.conditions || soldTracked(i)) && !qty[i.id].condition)) return { message: 'Choose the condition of each returned item.', step: 1 };
       if (settlement === 'exchange' && !newLines.some((l) => Number(l.quantity) > 0)) return { message: 'Add the new goods the customer takes.', step: 2 };
       return null;
@@ -251,6 +260,7 @@ export default function AddSalesReturn() {
           .map((i) => ({
             orderItemId: i.id,
             quantity: Number(qty[i.id].quantity),
+            ...(inUnit(i) ? { unitId: i.unitId } : {}), // H3: the quantity is in the unit it was sold in
             reason: qty[i.id].reason || undefined,
             condition: qty[i.id].condition || undefined,
           })),
@@ -498,21 +508,37 @@ export default function AddSalesReturn() {
                               <div className="text-xs text-muted-foreground">{i.sku}</div>
                             </td>
                             <td className="px-2 py-2">{formatCurrency(i.unit_price)}</td>
-                            <td className="px-2 py-2">{i.quantity}</td>
+                            <td className="px-2 py-2">{unitQtyText(i)}</td>
                             <td className="px-2 py-2">{i.returnedQty || 0}</td>
                             <td className="px-2 py-2">
                               {left(i) > 0 ? (
-                                <input
-                                  type="number"
-                                  min="0"
-                                  max={left(i)}
-                                  step="any"
-                                  className={inputCls}
-                                  value={qty[i.id]?.quantity ?? ''}
-                                  placeholder={`0–${left(i)}`}
-                                  onChange={(e) => setQty({ ...qty, [i.id]: { ...qty[i.id], quantity: e.target.value } })}
-                                  aria-label={`Return quantity for ${i.product_name}`}
-                                />
+                                <>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    max={leftIn(i)}
+                                    step="any"
+                                    className={inputCls}
+                                    value={qty[i.id]?.quantity ?? ''}
+                                    placeholder={`0–${fmtQty(leftIn(i))}`}
+                                    onChange={(e) => setQty({ ...qty, [i.id]: { ...qty[i.id], quantity: e.target.value } })}
+                                    aria-label={`Return quantity for ${i.product_name}`}
+                                  />
+                                  {soldInUnit(i) && (
+                                    <select
+                                      className="mt-1 w-full rounded-lg border border-gray-300 px-2 py-1 text-xs"
+                                      aria-label={`Unit of the return for ${i.product_name}`}
+                                      value={inUnit(i) ? 'unit' : 'base'}
+                                      onChange={(e) => setQty({ ...qty, [i.id]: { ...qty[i.id], inUnit: e.target.value === 'unit', quantity: '' } })}
+                                    >
+                                      <option value="unit">{`${i.unitName} (${fmtQty(i.unitFactor)})`}</option>
+                                      <option value="base">Single</option>
+                                    </select>
+                                  )}
+                                  {inUnit(i) && Number(qty[i.id]?.quantity) > 0 && (
+                                    <p className="mt-1 text-xs text-muted-foreground tabular-nums">= {fmtQty(returnBase(i))}</p>
+                                  )}
+                                </>
                               ) : (
                                 <span className="text-xs text-muted-foreground">All returned</span>
                               )}

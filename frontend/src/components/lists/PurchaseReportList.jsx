@@ -10,6 +10,7 @@ import ReportExportButtons from '../ListComponents/ReportExportButtons';
 import { useServerReport } from '@/hooks/useServerReport';
 import { api } from '@/services/api';
 import { formatDate, formatCurrency } from '@/lib/format';
+import { unitQtyText } from '@/lib/saleUnits';
 
 const n = (v) => Number(v) || 0;
 
@@ -47,7 +48,8 @@ export default function PurchaseReportList() {
       { id: 'supplier', accessorFn: (r) => r.supplierName || r.supplier?.name || '', header: 'Supplier', size: 140 },
       { id: 'store', accessorFn: (r) => r.store?.name || '', header: 'Store', size: 120 },
       { accessorKey: 'status', header: 'Status', size: 100 },
-      { accessorKey: 'purchaseQty', header: 'Qty', size: 70, meta: { align: 'center' } },
+      // H3: "2 Carton (48)" for a line bought in another unit.
+      { accessorKey: 'purchaseQty', header: 'Qty', size: 100, meta: { align: 'center' }, cell: ({ row }) => unitQtyText(row.original, row.original.purchaseQty) },
       { accessorKey: 'purchaseAmount', header: 'Amount', size: 120, cell: ({ getValue }) => formatCurrency(getValue()) },
       { accessorKey: 'stockQty', header: 'In stock', size: 80, meta: { align: 'center' } },
     ],

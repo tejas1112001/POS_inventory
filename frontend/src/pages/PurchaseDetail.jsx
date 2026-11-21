@@ -11,6 +11,7 @@ import PrintLabelsDialog from '@/components/products/PrintLabelsDialog';
 import { usePermission } from '@/context/PermissionContext';
 import { useModules } from '@/hooks/useModules';
 import { formatCurrency, formatDate, formatDateTime } from '@/lib/format';
+import { unitQtyText } from '@/lib/saleUnits';
 
 const n = (v) => Number(v) || 0;
 
@@ -149,7 +150,7 @@ export default function PurchaseDetail() {
                       </span>
                     </td>
                     <td className="hidden px-3 py-2 md:table-cell">{i.store?.name || '—'}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{i.quantity}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{unitQtyText(i)}</td>
                     <td className={`px-3 py-2 text-right tabular-nums ${n(i.received_qty) < n(i.quantity) && p.status !== 'Cancelled' ? 'text-warning-fg' : ''}`}>
                       {n(i.received_qty)}
                     </td>

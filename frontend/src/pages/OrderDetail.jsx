@@ -10,6 +10,7 @@ import { ErrorState } from '@/components/kit/States';
 import Receipt from '@/components/Receipt';
 import VoidSaleDialog from '@/components/orders/VoidSaleDialog';
 import { formatCurrency, formatDateTime } from '@/lib/format';
+import { unitQtyText } from '@/lib/saleUnits';
 
 const n = (v) => Number(v) || 0;
 
@@ -177,7 +178,7 @@ export default function OrderDetail() {
                           {n(i.returnedQty) > 0 && <span className="ml-1 font-medium text-warning-fg">· {i.returnedQty} returned</span>}
                         </span>
                       </td>
-                      <td className="px-3 py-2 text-right tabular-nums">{i.quantity}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{unitQtyText(i)}</td>
                       <td className="px-3 py-2 text-right tabular-nums">{formatCurrency(i.unit_price)}</td>
                       <td className="hidden px-3 py-2 text-right tabular-nums sm:table-cell">{n(i.discount) ? formatCurrency(i.discount) : '—'}</td>
                       <td className="hidden px-3 py-2 text-right tabular-nums sm:table-cell">{n(i.tax_rate) ? `${n(i.tax_rate)}%` : '—'}</td>

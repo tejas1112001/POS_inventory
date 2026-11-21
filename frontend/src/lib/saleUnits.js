@@ -45,3 +45,12 @@ export function lineQtyText(line) {
   if (!line.unitId) return fmtQty(line.quantity);
   return `${fmtQty(line.quantity)} ${line.unitName} (${fmtQty(lineBase(line))})`;
 }
+
+// unitQtyText is a saved line's quantity for display (a sale, purchase or
+// return line, or a report row from the API): "2 Box (24)" when it was in
+// another unit (unitName, unitQty), else the base quantity. qty overrides
+// the base quantity (a report's soldQty).
+export function unitQtyText(item, qty = item?.quantity) {
+  if (item?.unitName && item?.unitQty != null) return `${fmtQty(item.unitQty)} ${item.unitName} (${fmtQty(qty)})`;
+  return fmtQty(qty);
+}

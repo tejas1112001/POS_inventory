@@ -5,6 +5,7 @@ import { api } from '@/services/api';
 import StatusBadge from '@/components/kit/StatusBadge';
 import { ErrorState } from '@/components/kit/States';
 import { formatCurrency, formatDateTime } from '@/lib/format';
+import { unitQtyText } from '@/lib/saleUnits';
 import { CONDITIONS } from '@/lib/returns';
 
 const CONDITION_LABEL = Object.fromEntries(CONDITIONS.map((c) => [c.value, c.label]));
@@ -129,7 +130,7 @@ export default function ReturnDetail() {
                       ))}
                     </td>
                     <td className="hidden px-3 py-2 md:table-cell">{i.reason || '—'}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{i.quantity}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{unitQtyText(i)}</td>
                     <td className="px-3 py-2 text-right tabular-nums">{formatCurrency(i.unit_price)}</td>
                     <td className="px-4 py-2 text-right font-medium tabular-nums">{formatCurrency(i.subtotal)}</td>
                   </tr>

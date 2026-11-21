@@ -6,6 +6,7 @@ import { usePermission } from '@/context/PermissionContext';
 import { usePos } from '@/hooks/usePos';
 import { useShopSettings } from '@/hooks/useShopSettings';
 import { formatCurrency, formatDateTime } from '@/lib/format';
+import { unitQtyText } from '@/lib/saleUnits';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -186,6 +187,8 @@ function ReceiptBody({ sale, store, settings, businessName, taxLabel, logoUrl, n
                   {showMrp && i.mrp != null && !(i.batches || []).some((b) => b.mrp != null) && (
                     <span className="rc-sku">MRP {formatCurrency(i.mrp)}</span>
                   )}
+                  {/* H3: sold in another unit; Qty and the price stay in base units ("24 × price"). */}
+                  {i.unitName && <span className="rc-sku">{unitQtyText(i)}</span>}
                 </td>
                 <td className="rc-qty">{i.quantity}</td>
                 <td>{formatCurrency(i.unit_price)}</td>

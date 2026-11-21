@@ -11,6 +11,7 @@ import ReportExportButtons from '../ListComponents/ReportExportButtons';
 import { useServerReport } from '@/hooks/useServerReport';
 import { api } from '@/services/api';
 import { formatCurrency, formatDate } from '@/lib/format';
+import { unitQtyText } from '@/lib/saleUnits';
 
 const n = (v) => Number(v) || 0;
 
@@ -56,7 +57,8 @@ export default function SalesReportList() {
       { accessorKey: 'category', header: 'Category', size: 110 },
       { id: 'customer', accessorFn: (r) => r.customerName || r.customer?.name || '', header: 'Customer', size: 140 },
       { id: 'store', accessorFn: (r) => r.store?.name || '', header: 'Store', size: 120 },
-      { accessorKey: 'soldQty', header: 'Sold', size: 70, meta: { align: 'center' } },
+      // H3: "2 Box (24)" for a line sold in another unit.
+      { accessorKey: 'soldQty', header: 'Sold', size: 100, meta: { align: 'center' }, cell: ({ row }) => unitQtyText(row.original, row.original.soldQty) },
       { accessorKey: 'returnedQty', header: 'Returned', size: 80, meta: { align: 'center' } },
       { accessorKey: 'soldAmount', header: 'Sold amount', size: 120, cell: ({ getValue }) => formatCurrency(getValue()) },
       { accessorKey: 'netAmount', header: 'Net', size: 120, cell: ({ getValue }) => formatCurrency(getValue()) },

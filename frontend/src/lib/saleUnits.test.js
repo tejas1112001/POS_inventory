@@ -1,7 +1,7 @@
 // Unit tests for the sale units helpers. Run with `npm run test:unit`.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { lineBase, lineQtyText, maxInUnit, purchaseUnitsOf, saleUnitsOf, unitOptionLabel } from './saleUnits.js';
+import { lineBase, lineQtyText, maxInUnit, purchaseUnitsOf, saleUnitsOf, unitOptionLabel, unitQtyText } from './saleUnits.js';
 
 test('sale units only, as numbers', () => {
   const p = { units: [{ unitId: 3, name: 'Box', factor: '12', forSale: true }, { unitId: 4, name: 'Carton', factor: 144, forSale: false }, { unitId: 5, name: 'Pack', factor: 6 }] };
@@ -33,4 +33,11 @@ test('labels', () => {
   assert.equal(unitOptionLabel({ name: 'Box', factor: 12 }), 'Box (12)');
   assert.equal(lineQtyText({ quantity: 2, unitId: 3, unitName: 'Box', factor: 12 }), '2 Box (24)');
   assert.equal(lineQtyText({ quantity: 1.25 }), '1.25');
+});
+
+test('saved lines show their unit', () => {
+  assert.equal(unitQtyText({ quantity: 24, unitName: 'Box', unitQty: 2, unitFactor: 12 }), '2 Box (24)');
+  assert.equal(unitQtyText({ quantity: '1.500', unitName: null, unitQty: null }), '1.5');
+  assert.equal(unitQtyText({ soldQty: 48, unitName: 'Carton', unitQty: 2 }, 48), '2 Carton (48)');
+  assert.equal(unitQtyText(null, 3), '3');
 });
