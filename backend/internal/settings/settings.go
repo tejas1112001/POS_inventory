@@ -23,6 +23,7 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend/internal/audit"
 	"github.com/tejas1112001/POS_inventory/backend/internal/auth"
 	"github.com/tejas1112001/POS_inventory/backend/internal/files"
+	"github.com/tejas1112001/POS_inventory/backend/internal/gst"
 	"github.com/tejas1112001/POS_inventory/backend/internal/httpx"
 	"github.com/tejas1112001/POS_inventory/backend/internal/mailer"
 	"github.com/tejas1112001/POS_inventory/backend/internal/modules"
@@ -99,6 +100,7 @@ type Business struct {
 	Name, Currency, Locale, Timezone, TaxLabel, TaxSplit, InvoicePrefix string
 	LegalName, Address, Phone, Email, TaxRegistrationNo                 *string
 	ReceiptHeader, ReceiptFooter                                        *string
+	StateCode                                                           *string // the shop's GST state (M3 DB1); nil: not set
 	LogoFileID                                                          *uuid.UUID
 	PricesIncludeTax                                                    bool
 	MaxDiscountPct                                                      decimal.Decimal
@@ -140,7 +142,7 @@ func DefaultStore(ctx context.Context, tx tenancy.TenantTx) (id int64, slug stri
 const qLoad = `SELECT business_name, legal_name, address, phone, email::text, logo_file_id, currency, locale, timezone,
 		tax_label, tax_registration_no, tax_split, prices_include_tax_default, max_discount_pct_without_override,
 		invoice_prefix, receipt_header, receipt_footer, default_customer_id, home_page, shop_store_id, new_checkout, updated_at,
-		low_stock_email, receipt_paper, show_mrp_on_receipt
+		low_stock_email, receipt_paper, show_mrp_on_receipt, state_code
 	FROM settings WHERE id = 1`
 
 // LoadBusiness reads the settings row in the caller's tenant transaction.
@@ -153,7 +155,7 @@ func scanBusiness(row pgx.Row) (Business, error) {
 	err := row.Scan(&b.Name, &b.LegalName, &b.Address, &b.Phone, &b.Email, &b.LogoFileID, &b.Currency, &b.Locale,
 		&b.Timezone, &b.TaxLabel, &b.TaxRegistrationNo, &b.TaxSplit, &b.PricesIncludeTax, &b.MaxDiscountPct,
 		&b.InvoicePrefix, &b.ReceiptHeader, &b.ReceiptFooter, &b.DefaultCustomerID, &b.HomePage, &b.ShopStoreID, &b.NewCheckout, &b.UpdatedAt,
-		&b.LowStockEmail, &b.ReceiptPaper, &b.ShowMRPOnReceipt)
+		&b.LowStockEmail, &b.ReceiptPaper, &b.ShowMRPOnReceipt, &b.StateCode)
 	return b, err
 }
 
@@ -179,6 +181,7 @@ type JSON struct {
 	TaxLabel          string          `json:"taxLabel"`
 	TaxRegistrationNo *string         `json:"taxRegistrationNo"`
 	TaxSplit          string          `json:"taxSplit"`
+	StateCode         *string         `json:"stateCode"` // M3: the shop's GST state code
 	PricesIncludeTax  bool            `json:"pricesIncludeTax"`
 	MaxDiscountPct    decimal.Decimal `json:"maxDiscountPct"`
 	InvoicePrefix     string          `json:"invoicePrefix"`
@@ -199,7 +202,7 @@ type JSON struct {
 func toJSON(b Business) JSON {
 	return JSON{BusinessName: b.Name, LegalName: b.LegalName, Address: b.Address, Phone: b.Phone, Email: b.Email,
 		Logo: files.URLPtr(b.LogoFileID, files.PurposeTenantLogo), Currency: b.Currency, Locale: b.Locale,
-		Timezone: b.Timezone, TaxLabel: b.TaxLabel, TaxRegistrationNo: b.TaxRegistrationNo, TaxSplit: b.TaxSplit,
+		Timezone: b.Timezone, TaxLabel: b.TaxLabel, TaxRegistrationNo: b.TaxRegistrationNo, TaxSplit: b.TaxSplit, StateCode: b.StateCode,
 		PricesIncludeTax: b.PricesIncludeTax, MaxDiscountPct: b.MaxDiscountPct, InvoicePrefix: b.InvoicePrefix,
 		ReceiptHeader: b.ReceiptHeader, ReceiptFooter: b.ReceiptFooter, DefaultCustomerID: b.DefaultCustomerID,
 		HomePage: b.HomePage, ShopStoreID: b.ShopStoreID, NewCheckout: b.NewCheckout, LowStockEmail: b.LowStockEmail, ReceiptPaper: b.ReceiptPaper,
@@ -248,6 +251,7 @@ type settingsIn struct {
 	TaxLabel          *string   `json:"taxLabel"`
 	TaxRegistrationNo *string   `json:"taxRegistrationNo"`
 	TaxSplit          *string   `json:"taxSplit"`
+	StateCode         *string   `json:"stateCode"`
 	PricesIncludeTax  *bool     `json:"pricesIncludeTax"`
 	MaxDiscountPct    money.Dec `json:"maxDiscountPct"`
 	InvoicePrefix     *string   `json:"invoicePrefix"`
@@ -384,6 +388,24 @@ func (a *API) apply(in settingsIn, b *Business) (changed []string, err error) {
 			f["taxSplit"] = "Use none, cgst_sgst or igst."
 		}
 	}
+	if in.StateCode != nil {
+		// M3 DB1: "" clears it (the shop then splits tax by taxSplit, as before).
+		switch c, ok := gst.NormState(*in.StateCode); {
+		case c == "":
+			b.StateCode = nil
+		case ok:
+			b.StateCode = &c
+		default:
+			f["stateCode"] = "Choose a GST state code (two digits, such as 27 for Maharashtra)."
+		}
+	}
+	// A GSTIN as the shop's tax number must be valid and of the shop's state (M3 Q6).
+	if b.TaxRegistrationNo != nil && b.StateCode != nil && f["taxRegistrationNo"] == "" && f["stateCode"] == "" &&
+		strings.EqualFold(b.TaxLabel, "GST") && len(*b.TaxRegistrationNo) == 15 {
+		if msg := gst.CheckGSTIN(*b.TaxRegistrationNo, *b.StateCode); msg != "" {
+			f["taxRegistrationNo"] = msg
+		}
+	}
 	if in.PricesIncludeTax != nil {
 		b.PricesIncludeTax = *in.PricesIncludeTax
 	}
@@ -448,7 +470,7 @@ func (a *API) apply(in settingsIn, b *Business) (changed []string, err error) {
 		{"email", neq(before.Email, b.Email)}, {"currency", before.Currency != b.Currency},
 		{"locale", before.Locale != b.Locale}, {"timezone", before.Timezone != b.Timezone},
 		{"taxLabel", before.TaxLabel != b.TaxLabel}, {"taxRegistrationNo", neq(before.TaxRegistrationNo, b.TaxRegistrationNo)},
-		{"taxSplit", before.TaxSplit != b.TaxSplit}, {"pricesIncludeTax", before.PricesIncludeTax != b.PricesIncludeTax},
+		{"taxSplit", before.TaxSplit != b.TaxSplit}, {"stateCode", neq(before.StateCode, b.StateCode)}, {"pricesIncludeTax", before.PricesIncludeTax != b.PricesIncludeTax},
 		{"maxDiscountPct", !before.MaxDiscountPct.Equal(b.MaxDiscountPct)}, {"invoicePrefix", before.InvoicePrefix != b.InvoicePrefix},
 		{"receiptHeader", neq(before.ReceiptHeader, b.ReceiptHeader)}, {"receiptFooter", neq(before.ReceiptFooter, b.ReceiptFooter)},
 		{"defaultCustomerId", neqInt(before.DefaultCustomerID, b.DefaultCustomerID)},
@@ -473,7 +495,7 @@ const qUpdate = `UPDATE settings SET business_name = $1, legal_name = $2, addres
 		tax_split = $12, prices_include_tax_default = $13, max_discount_pct_without_override = $14,
 		invoice_prefix = $15, receipt_header = $16, receipt_footer = $17, default_customer_id = $18,
 		home_page = $19, shop_store_id = $20, new_checkout = $21, low_stock_email = $22, receipt_paper = $23,
-		show_mrp_on_receipt = $24, updated_at = now()
+		show_mrp_on_receipt = $24, state_code = $25, updated_at = now()
 	WHERE id = 1`
 
 func (a *API) put(w http.ResponseWriter, r *http.Request) {
@@ -533,7 +555,7 @@ func (a *API) put(w http.ResponseWriter, r *http.Request) {
 		if _, err := tx.Exec(ctx, qUpdate, b.Name, b.LegalName, b.Address, b.Phone, b.Email, b.LogoFileID, b.Currency,
 			b.Locale, b.Timezone, b.TaxLabel, b.TaxRegistrationNo, b.TaxSplit, b.PricesIncludeTax, b.MaxDiscountPct,
 			b.InvoicePrefix, b.ReceiptHeader, b.ReceiptFooter, b.DefaultCustomerID, b.HomePage, b.ShopStoreID, b.NewCheckout, b.LowStockEmail, b.ReceiptPaper,
-			b.ShowMRPOnReceipt); err != nil {
+			b.ShowMRPOnReceipt, b.StateCode); err != nil {
 			return err
 		}
 		if len(changed) > 0 {

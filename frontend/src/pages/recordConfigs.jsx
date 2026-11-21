@@ -6,6 +6,7 @@ import { formatCurrency } from '@/lib/format';
 import { AuthImage } from '@/components/shared/auth-image';
 import StatusBadge from '@/components/kit/StatusBadge';
 import { ImageField, SelectField, STATUS_OPTIONS, TextAreaField, TextField } from '@/components/kit/Form';
+import { GstinField, StateField } from '@/components/forms/GstFields';
 
 const trim = (v) => (typeof v === 'string' ? v.trim() : v);
 
@@ -86,10 +87,23 @@ const contactFields = (withCity) =>
         <TextAreaField name="address" label="Address" rows={2} />
         {withCity && <TextField name="city" label="City" maxLength={120} />}
         {withCity && <TextField name="country" label="Country" maxLength={120} />}
+        {/* M3: GST registration. A buyer with a GSTIN gets B2B invoices. */}
+        <GstinField />
+        <StateField hint={withCity ? 'For an unregistered buyer, where they are. Set from the GSTIN otherwise.' : 'Set from the GSTIN.'} />
+        {withCity && <TextField name="legalName" label="Registered name" maxLength={200} hint="Optional. As on the GST registration, if it differs from the name." />}
+        {withCity && <TextAreaField name="billingAddress" label="Billing address" rows={2} hint="Optional. Printed on B2B invoices; the address is used otherwise." />}
         <ImageField name="image" label="Picture (optional)" current={r.image} />
       </>
     );
   };
+
+// gstDefaults and gstPayload are the M3 fields of a record ("" clears them).
+const gstDefaults = (r) => ({ gstin: r.gstin || '', stateCode: r.stateCode || '' });
+// With a GSTIN the state is its first two digits (the server checks it).
+const gstPayload = (v) => {
+  const gstin = (trim(v.gstin) || '').toUpperCase();
+  return { gstin, stateCode: gstin ? gstin.slice(0, 2) : v.stateCode || '' };
+};
 
 export const customerConfig = {
   endpoint: '/api/customers',
@@ -103,6 +117,7 @@ export const customerConfig = {
     { id: 'phone', header: 'Phone', card: 'subtitle', cell: (r) => dash(r.phone) },
     { id: 'email', header: 'Email', card: 'meta', className: 'hidden md:table-cell', cell: (r) => dash(r.email) },
     { id: 'city', header: 'City', card: 'hidden', className: 'hidden lg:table-cell', cell: (r) => dash(r.city) },
+    { id: 'gstin', header: 'GSTIN', card: 'hidden', className: 'hidden xl:table-cell font-mono text-xs', cell: (r) => dash(r.gstin) },
     // S10 item 5: what the customer owes now, and their credit limit.
     {
       id: 'due',
@@ -116,8 +131,18 @@ export const customerConfig = {
   ],
   // The customer's account: dues, payments, statement, credit limit.
   extraActions: (row, navigate) => [{ label: 'Account and dues', icon: Wallet, onSelect: () => navigate(`/customers/${row.id}`) }],
-  defaults: (r) => ({ name: r.name || '', phone: r.phone || '', email: r.email || '', address: r.address || '', city: r.city || '', country: r.country || '', status: r.status || 'Active', image: undefined }),
-  payload: (v) => withImage({ name: trim(v.name), phone: trim(v.phone), email: trim(v.email), address: trim(v.address), city: trim(v.city), country: trim(v.country), status: v.status }, v),
+  defaults: (r) => ({
+    name: r.name || '', phone: r.phone || '', email: r.email || '', address: r.address || '', city: r.city || '', country: r.country || '', status: r.status || 'Active', image: undefined,
+    ...gstDefaults(r), legalName: r.legalName || '', billingAddress: r.billingAddress || '',
+  }),
+  payload: (v) =>
+    withImage(
+      {
+        name: trim(v.name), phone: trim(v.phone), email: trim(v.email), address: trim(v.address), city: trim(v.city), country: trim(v.country), status: v.status,
+        ...gstPayload(v), legalName: trim(v.legalName) || '', billingAddress: trim(v.billingAddress) || '',
+      },
+      v
+    ),
   fields: contactFields(true),
 };
 
@@ -132,9 +157,10 @@ export const supplierConfig = {
     name,
     { id: 'phone', header: 'Phone', card: 'subtitle', cell: (r) => dash(r.phone) },
     { id: 'email', header: 'Email', card: 'meta', className: 'hidden md:table-cell', cell: (r) => dash(r.email) },
+    { id: 'gstin', header: 'GSTIN', card: 'hidden', className: 'hidden lg:table-cell font-mono text-xs', cell: (r) => dash(r.gstin) },
     status,
   ],
-  defaults: (r) => ({ name: r.name || '', phone: r.phone || '', email: r.email || '', address: r.address || '', status: r.status || 'Active', image: undefined }),
-  payload: (v) => withImage({ name: trim(v.name), phone: trim(v.phone), email: trim(v.email), address: trim(v.address), status: v.status }, v),
+  defaults: (r) => ({ name: r.name || '', phone: r.phone || '', email: r.email || '', address: r.address || '', status: r.status || 'Active', image: undefined, ...gstDefaults(r) }),
+  payload: (v) => withImage({ name: trim(v.name), phone: trim(v.phone), email: trim(v.email), address: trim(v.address), status: v.status, ...gstPayload(v) }, v),
   fields: contactFields(false),
 };

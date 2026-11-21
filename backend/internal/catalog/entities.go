@@ -1,6 +1,7 @@
 package catalog
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strings"
@@ -176,6 +177,7 @@ type supplierJSON struct {
 	Address string  `json:"address"`
 	Image   *string `json:"image"`
 	Status  string  `json:"status"`
+	taxOut          // M3: GSTIN and state (purchase tax is a later module)
 	stamp
 	imageID *uuid.UUID
 }
@@ -187,11 +189,12 @@ type supplierIn struct {
 	Address string  `json:"address"`
 	Image   *string `json:"image"`
 	Status  string  `json:"status"`
+	taxIn           // missing keeps, "" clears
 	ignored
 }
 
 const (
-	qSupCols   = `x.id, x.name, coalesce(x.email::text, ''), coalesce(x.phone, ''), coalesce(x.address, ''), x.image_file_id, x.status, x.created_by, coalesce(u.name, 'Unknown'), x.created_at, x.updated_at`
+	qSupCols   = `x.id, x.name, coalesce(x.email::text, ''), coalesce(x.phone, ''), coalesce(x.address, ''), x.image_file_id, x.status, x.created_by, coalesce(u.name, 'Unknown'), x.created_at, x.updated_at, x.gstin, x.state_code`
 	qSupCount  = `SELECT count(*) FROM suppliers WHERE deleted_at IS NULL AND ($1 = '' OR name ILIKE $1 OR phone ILIKE $1 OR email::text ILIKE $1) AND ($2 = '' OR status = $2)`
 	qSupList   = `SELECT ` + qSupCols + ` FROM suppliers x LEFT JOIN users u ON u.id = x.created_by WHERE x.deleted_at IS NULL AND ($3 = '' OR x.name ILIKE $3 OR x.phone ILIKE $3 OR x.email::text ILIKE $3) AND ($4 = '' OR x.status = $4) ORDER BY x.created_at DESC, x.id DESC LIMIT $1 OFFSET $2`
 	qSupInsert = `WITH x AS (INSERT INTO suppliers (name, email, phone, address, image_file_id, status, created_by)
@@ -200,11 +203,27 @@ const (
 	qSupUpdate  = `WITH x AS (UPDATE suppliers SET name = $2, email = $3, phone = $4, address = $5, image_file_id = $6, status = $7, updated_at = now()
 		WHERE id = $1 RETURNING *) SELECT ` + qSupCols + ` FROM x LEFT JOIN users u ON u.id = x.created_by`
 	qSupDelete = `UPDATE suppliers SET deleted_at = now() WHERE id = $1 AND deleted_at IS NULL`
+	qSupTax    = `WITH x AS (UPDATE suppliers SET gstin = $2, state_code = $3, updated_at = now() WHERE id = $1 RETURNING *)
+		SELECT ` + qSupCols + ` FROM x LEFT JOIN users u ON u.id = x.created_by`
 )
+
+// setSupplierTax applies a request's GSTIN and state (M3) to the supplier
+// as saved, if the request names either.
+func setSupplierTax(ctx context.Context, tx tenancy.TenantTx, in taxIn, cur supplierJSON) (supplierJSON, error) {
+	if in.GSTIN == nil && in.StateCode == nil {
+		return cur, nil
+	}
+	t, err := resolveTax(in, cur.taxOut)
+	if err != nil {
+		return cur, err
+	}
+	return scanSupplier(tx.QueryRow(ctx, qSupTax, cur.ID, t.GSTIN, t.StateCode))
+}
 
 func scanSupplier(row pgx.Row) (supplierJSON, error) {
 	var x supplierJSON
-	err := row.Scan(&x.ID, &x.Name, &x.Email, &x.Phone, &x.Address, &x.imageID, &x.Status, &x.CreatedBy, &x.CreatedByName, &x.CreatedAt, &x.UpdatedAt)
+	err := row.Scan(&x.ID, &x.Name, &x.Email, &x.Phone, &x.Address, &x.imageID, &x.Status, &x.CreatedBy, &x.CreatedByName, &x.CreatedAt, &x.UpdatedAt,
+		&x.GSTIN, &x.StateCode)
 	x.Image = files.URLPtr(x.imageID, files.PurposeSupplierImage)
 	return x, err
 }
@@ -285,7 +304,10 @@ func (a *API) createSupplier(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		var err error
-		out, err = scanSupplier(tx.QueryRow(r.Context(), qSupInsert, in.Name, nullIfEmpty(in.Email), nullIfEmpty(in.Phone), nullIfEmpty(in.Address), img, in.Status, uid))
+		if out, err = scanSupplier(tx.QueryRow(r.Context(), qSupInsert, in.Name, nullIfEmpty(in.Email), nullIfEmpty(in.Phone), nullIfEmpty(in.Address), img, in.Status, uid)); err != nil {
+			return err
+		}
+		out, err = setSupplierTax(r.Context(), tx, in.taxIn, out)
 		return err
 	})
 	ch.Done(r.Context(), err)
@@ -333,7 +355,10 @@ func (a *API) updateSupplier(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		var err error
-		out, err = scanSupplier(tx.QueryRow(r.Context(), qSupUpdate, id, in.Name, nullIfEmpty(in.Email), nullIfEmpty(in.Phone), nullIfEmpty(in.Address), img, in.Status))
+		if out, err = scanSupplier(tx.QueryRow(r.Context(), qSupUpdate, id, in.Name, nullIfEmpty(in.Email), nullIfEmpty(in.Phone), nullIfEmpty(in.Address), img, in.Status)); err != nil {
+			return err
+		}
+		out, err = setSupplierTax(r.Context(), tx, in.taxIn, out)
 		return err
 	})
 	ch.Done(r.Context(), err)
@@ -366,6 +391,11 @@ type customerJSON struct {
 	// S10 item 5: the credit limit (null: no credit) and what is owed now.
 	CreditLimit *decimal.Decimal `json:"creditLimit"`
 	Due         decimal.Decimal  `json:"due"`
+	// M3: a registered (B2B) buyer's GSTIN, state, registered name and
+	// billing address; a state alone for an unregistered buyer.
+	taxOut
+	LegalName      *string `json:"legalName"`
+	BillingAddress *string `json:"billingAddress"`
 	stamp
 	imageID *uuid.UUID
 }
@@ -379,12 +409,17 @@ type customerIn struct {
 	Country string  `json:"country"`
 	Image   *string `json:"image"`
 	Status  string  `json:"status"`
+	// M3: missing keeps, "" clears.
+	taxIn
+	LegalName      *string `json:"legalName"`
+	BillingAddress *string `json:"billingAddress"`
 	ignored
 }
 
 const (
 	qCusCols = `x.id, x.name, coalesce(x.email::text, ''), coalesce(x.phone, ''), coalesce(x.address, ''), coalesce(x.city, ''), coalesce(x.country, ''), x.image_file_id, x.status, x.created_by, coalesce(u.name, 'Unknown'), x.created_at, x.updated_at,
-		x.credit_limit, (SELECT coalesce(sum(s.due), 0) FROM sales s WHERE s.customer_id = x.id AND s.status <> 'Void' AND s.due > 0)`
+		x.credit_limit, (SELECT coalesce(sum(s.due), 0) FROM sales s WHERE s.customer_id = x.id AND s.status <> 'Void' AND s.due > 0),
+		x.gstin, x.state_code, x.legal_name, x.billing_address`
 	qCusCount = `SELECT count(*) FROM customers WHERE deleted_at IS NULL AND ($1 = '' OR name ILIKE $1 OR phone ILIKE $1 OR email::text ILIKE $1) AND ($2 = '' OR status = $2)`
 	qCusList  = `SELECT ` + qCusCols + ` FROM customers x LEFT JOIN users u ON u.id = x.created_by
 		WHERE x.deleted_at IS NULL AND ($3 = '' OR x.name ILIKE $3 OR x.phone ILIKE $3 OR x.email::text ILIKE $3) AND ($4 = '' OR x.status = $4)
@@ -396,12 +431,35 @@ const (
 		WHERE id = $1 RETURNING *) SELECT ` + qCusCols + ` FROM x LEFT JOIN users u ON u.id = x.created_by`
 	qCusDelete = `UPDATE customers SET deleted_at = now() WHERE id = $1 AND deleted_at IS NULL
 		AND id IS DISTINCT FROM (SELECT default_customer_id FROM settings WHERE id = 1)`
+	qCusTax = `WITH x AS (UPDATE customers SET gstin = $2, state_code = $3, legal_name = $4, billing_address = $5, updated_at = now()
+		WHERE id = $1 RETURNING *) SELECT ` + qCusCols + ` FROM x LEFT JOIN users u ON u.id = x.created_by`
 )
+
+// setCustomerTax applies a request's GSTIN, state, legal name and billing
+// address (M3) to the customer as saved, if the request names any.
+func setCustomerTax(ctx context.Context, tx tenancy.TenantTx, in customerIn, cur customerJSON) (customerJSON, error) {
+	if in.GSTIN == nil && in.StateCode == nil && in.LegalName == nil && in.BillingAddress == nil {
+		return cur, nil
+	}
+	t, err := resolveTax(in.taxIn, cur.taxOut)
+	if err != nil {
+		return cur, err
+	}
+	legal, err := optionalText("legalName", strOr(in.LegalName, cur.LegalName), 200)
+	if err != nil {
+		return cur, err
+	}
+	billing, err := optionalText("billingAddress", strOr(in.BillingAddress, cur.BillingAddress), 500)
+	if err != nil {
+		return cur, err
+	}
+	return scanCustomer(tx.QueryRow(ctx, qCusTax, cur.ID, t.GSTIN, t.StateCode, ptr(legal), ptr(billing)))
+}
 
 func scanCustomer(row pgx.Row) (customerJSON, error) {
 	var x customerJSON
 	err := row.Scan(&x.ID, &x.Name, &x.Email, &x.Phone, &x.Address, &x.City, &x.Country, &x.imageID, &x.Status, &x.CreatedBy, &x.CreatedByName,
-		&x.CreatedAt, &x.UpdatedAt, &x.CreditLimit, &x.Due)
+		&x.CreatedAt, &x.UpdatedAt, &x.CreditLimit, &x.Due, &x.GSTIN, &x.StateCode, &x.LegalName, &x.BillingAddress)
 	x.Image = files.URLPtr(x.imageID, files.PurposeCustomerImage)
 	return x, err
 }
@@ -516,8 +574,11 @@ func (a *API) createCustomer(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		var err error
-		out, err = scanCustomer(tx.QueryRow(r.Context(), qCusInsert, in.Name, nullIfEmpty(in.Email), nullIfEmpty(in.Phone),
-			nullIfEmpty(in.Address), nullIfEmpty(in.City), nullIfEmpty(in.Country), img, in.Status, uid))
+		if out, err = scanCustomer(tx.QueryRow(r.Context(), qCusInsert, in.Name, nullIfEmpty(in.Email), nullIfEmpty(in.Phone),
+			nullIfEmpty(in.Address), nullIfEmpty(in.City), nullIfEmpty(in.Country), img, in.Status, uid)); err != nil {
+			return err
+		}
+		out, err = setCustomerTax(r.Context(), tx, in, out)
 		return err
 	})
 	ch.Done(r.Context(), err)
@@ -565,8 +626,11 @@ func (a *API) updateCustomer(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		var err error
-		out, err = scanCustomer(tx.QueryRow(r.Context(), qCusUpdate, id, in.Name, nullIfEmpty(in.Email), nullIfEmpty(in.Phone),
-			nullIfEmpty(in.Address), nullIfEmpty(in.City), nullIfEmpty(in.Country), img, in.Status))
+		if out, err = scanCustomer(tx.QueryRow(r.Context(), qCusUpdate, id, in.Name, nullIfEmpty(in.Email), nullIfEmpty(in.Phone),
+			nullIfEmpty(in.Address), nullIfEmpty(in.City), nullIfEmpty(in.Country), img, in.Status)); err != nil {
+			return err
+		}
+		out, err = setCustomerTax(r.Context(), tx, in, out)
 		return err
 	})
 	ch.Done(r.Context(), err)

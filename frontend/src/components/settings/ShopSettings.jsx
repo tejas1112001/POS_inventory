@@ -7,6 +7,7 @@ import { usePos } from '@/hooks/usePos';
 import { setShopSettings, useShopSettings } from '@/hooks/useShopSettings';
 import { CheckField, Notice, SaveButton, SelectField, TextArea, TextField } from './FormKit';
 import { errorNotice } from './formUtils';
+import { useGstStates } from '@/lib/gst';
 
 const CURRENCIES = ['INR', 'USD', 'EUR', 'GBP', 'AED', 'SAR', 'SGD', 'AUD', 'CAD', 'NZD', 'ZAR', 'KES', 'NGN', 'LKR', 'NPR', 'BDT', 'MYR'];
 const LOCALES = [
@@ -37,7 +38,7 @@ const MAX_LOGO = 2 * 1024 * 1024;
 
 const FIELDS = [
   'businessName', 'legalName', 'address', 'phone', 'email', 'currency', 'locale', 'timezone', 'taxLabel',
-  'taxRegistrationNo', 'taxSplit', 'pricesIncludeTax', 'maxDiscountPct', 'invoicePrefix', 'receiptHeader', 'receiptFooter',
+  'taxRegistrationNo', 'taxSplit', 'stateCode', 'pricesIncludeTax', 'maxDiscountPct', 'invoicePrefix', 'receiptHeader', 'receiptFooter',
   'homePage', 'shopStoreId', 'newCheckout', 'lowStockEmail', 'receiptPaper', 'showMrpOnReceipt',
 ];
 
@@ -104,6 +105,7 @@ function readFile(file) {
 // sent. Without settings:edit the form is read-only.
 export default function ShopSettings({ canEdit }) {
   const { settings, error: loadError } = useShopSettings();
+  const gstStates = useGstStates();
   const { reloadMe } = usePos();
   const [form, setForm] = useState(() => fromSettings(settings));
   const [logo, setLogo] = useState(null); // data URI waiting to be saved
@@ -229,6 +231,17 @@ export default function ShopSettings({ canEdit }) {
           <TextField id="taxLabel" label="Tax name" hint="For example GST or VAT." value={form.taxLabel} onChange={set('taxLabel')} error={fields.taxLabel} disabled={dis} maxLength={20} />
           <TextField id="taxRegistrationNo" label="Tax registration number" hint="GSTIN or VAT number. Receipts become tax invoices." value={form.taxRegistrationNo} onChange={set('taxRegistrationNo')} error={fields.taxRegistrationNo} disabled={dis} maxLength={30} />
           <SelectField id="taxSplit" label="Tax lines on receipts" value={form.taxSplit} onChange={set('taxSplit')} error={fields.taxSplit} disabled={dis} options={TAX_SPLITS} />
+          {/* M3: the shop's GST state; a GSTIN above must be of this state. */}
+          <SelectField
+            id="stateCode"
+            label="GST state"
+            hint="Where the shop is registered. Stores in other states set their own."
+            value={form.stateCode}
+            onChange={set('stateCode')}
+            error={fields.stateCode}
+            disabled={dis || !gstStates}
+            options={[{ value: '', label: gstStates ? 'Not set' : 'Loading…' }, ...(gstStates || []).map((x) => ({ value: x.code, label: `${x.name} (${x.code})` }))]}
+          />
           <TextField id="invoicePrefix" label="Invoice number prefix" hint="Letters, digits and - only." value={form.invoicePrefix} onChange={set('invoicePrefix')} error={fields.invoicePrefix} disabled={dis} maxLength={20} />
           <TextField id="maxDiscountPct" type="number" min="0" max="100" step="0.01" label="Largest discount without approval (%)" value={form.maxDiscountPct} onChange={set('maxDiscountPct')} error={fields.maxDiscountPct} disabled={dis} />
           <div className="pt-6">

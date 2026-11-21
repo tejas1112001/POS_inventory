@@ -14,6 +14,7 @@ import RowActions from '@/components/kit/RowActions';
 import StatusBadge from '@/components/kit/StatusBadge';
 import { EmptyState } from '@/components/kit/States';
 import { FormSheet, SelectField, STATUS_OPTIONS, TextAreaField, TextField } from '@/components/kit/Form';
+import { GstinField, StateField } from '@/components/forms/GstFields';
 
 const trim = (v) => (typeof v === 'string' ? v.trim() : v);
 const units = (n) => `${Number(n || 0).toLocaleString()} ${Number(n) === 1 ? 'unit' : 'units'}`;
@@ -54,7 +55,12 @@ export default function Stores() {
 
   const save = async (values) => {
     const isNew = !editing?.id;
-    const body = { name: trim(values.name), phone: trim(values.phone), address: trim(values.address), status: values.status };
+    // M3: the store's own GST registration ("" clears; with a GSTIN the state is its first two digits).
+    const gstin = (trim(values.gstin) || '').toUpperCase();
+    const body = {
+      name: trim(values.name), phone: trim(values.phone), address: trim(values.address), status: values.status,
+      gstin, stateCode: gstin ? gstin.slice(0, 2) : values.stateCode || '', invoiceCode: (trim(values.invoiceCode) || '').toUpperCase(),
+    };
     try {
       if (isNew) await api.post('/api/stores', body, { quiet: true });
       else await api.put(`/api/stores/${editing.id}`, body, { quiet: true });
@@ -152,7 +158,10 @@ export default function Stores() {
         onOpenChange={(o) => !o && setEditing(null)}
         title={editing?.id ? 'Edit store' : 'Add store'}
         description={editing?.id ? `Web address: /${editing.slug} (change it on the Storefront page).` : 'The web address is made from the name; you can change it on the Storefront page.'}
-        defaultValues={{ name: editing?.name || '', phone: editing?.phone || '', address: editing?.address || '', status: editing?.status || 'Active' }}
+        defaultValues={{
+          name: editing?.name || '', phone: editing?.phone || '', address: editing?.address || '', status: editing?.status || 'Active',
+          gstin: editing?.gstin || '', stateCode: editing?.stateCode || '', invoiceCode: editing?.invoiceCode || '',
+        }}
         onSubmit={save}
         submitLabel={editing?.id ? 'Save changes' : 'Add store'}
       >
@@ -160,6 +169,11 @@ export default function Stores() {
         <TextField name="phone" label="Phone" type="tel" maxLength={40} autoComplete="off" />
         <SelectField name="status" label="Status" options={STATUS_OPTIONS} />
         <TextAreaField name="address" label="Address" rows={2} />
+        <GstinField hint="Optional. The store's own GSTIN when it is registered in another state; the shop's is used otherwise." />
+        <StateField hint="Where the store is. Set from the GSTIN." />
+        <TextField name="invoiceCode" label="Invoice code" maxLength={5} autoComplete="off" style={{ textTransform: 'uppercase' }}
+          hint="Optional. 2 to 5 letters or digits, such as MUM, for invoice numbers per store."
+          rules={{ pattern: { value: /^\s*[A-Za-z0-9]{2,5}\s*$/, message: 'Use 2 to 5 letters or digits.' } }} />
       </FormSheet>
     </div>
   );

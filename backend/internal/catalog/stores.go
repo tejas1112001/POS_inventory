@@ -17,6 +17,7 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend/internal/apperr"
 	"github.com/tejas1112001/POS_inventory/backend/internal/audit"
 	"github.com/tejas1112001/POS_inventory/backend/internal/files"
+	"github.com/tejas1112001/POS_inventory/backend/internal/gst"
 	"github.com/tejas1112001/POS_inventory/backend/internal/httpx"
 	"github.com/tejas1112001/POS_inventory/backend/internal/plans"
 	"github.com/tejas1112001/POS_inventory/backend/internal/qty"
@@ -38,6 +39,10 @@ type storeJSON struct {
 	Phone           string  `json:"phone"`
 	OpeningHours    string  `json:"openingHours"`
 	IsPublicEnabled bool    `json:"isPublicEnabled"`
+	// M3: the store's own GST registration (nil: the shop's) and its code
+	// in invoice numbers.
+	taxOut
+	InvoiceCode *string `json:"invoiceCode"`
 	// Only on the Stores page list (?includeInactive=true).
 	IsDefault  *bool     `json:"isDefault,omitempty"`
 	StockUnits *qty.Q    `json:"stockUnits,omitempty"`
@@ -50,7 +55,8 @@ type storeJSON struct {
 
 const (
 	qStoreCols = `id, name, slug::text, coalesce(address, ''), status, logo_file_id, banner_file_id, coalesce(description, ''),
-		coalesce(phone, ''), coalesce(opening_hours, ''), is_public_enabled, created_by, created_at, updated_at`
+		coalesce(phone, ''), coalesce(opening_hours, ''), is_public_enabled, created_by, created_at, updated_at,
+		gstin, state_code, invoice_code`
 	qStoreWhere = ` WHERE deleted_at IS NULL AND ($1 = '' OR name ILIKE $1 OR slug::text ILIKE $1 OR address ILIKE $1 OR phone ILIKE $1) AND ($2 = '' OR status = $2)`
 	qStoreCount = `SELECT count(*) FROM stores` + qStoreWhere
 	qStoreList  = `SELECT ` + qStoreCols + ` FROM stores` + qStoreWhere + ` ORDER BY id LIMIT $3 OFFSET $4`
@@ -66,12 +72,15 @@ const (
 	qStoreSlugTaken = `SELECT EXISTS (SELECT 1 FROM stores WHERE slug = $1 AND deleted_at IS NULL AND id <> $2)`
 	qStoreDelete    = `UPDATE stores SET deleted_at = now(), status = 'Inactive' WHERE id = $1 AND deleted_at IS NULL`
 	qStoreLiveCount = `SELECT count(*) FROM stores WHERE deleted_at IS NULL`
+	qStoreTax       = `UPDATE stores SET gstin = $2, state_code = $3, invoice_code = $4, updated_at = now() WHERE id = $1 RETURNING ` + qStoreCols
+	qStoreCodeTaken = `SELECT EXISTS (SELECT 1 FROM stores WHERE invoice_code = $1 AND deleted_at IS NULL AND id <> $2)`
 )
 
 func scanStore(row pgx.Row) (storeJSON, error) {
 	var s storeJSON
 	err := row.Scan(&s.ID, &s.Name, &s.Slug, &s.Address, &s.Status, &s.logoID, &s.bannerID, &s.Description,
-		&s.Phone, &s.OpeningHours, &s.IsPublicEnabled, &s.CreatedBy, &s.CreatedAt, &s.UpdatedAt)
+		&s.Phone, &s.OpeningHours, &s.IsPublicEnabled, &s.CreatedBy, &s.CreatedAt, &s.UpdatedAt,
+		&s.GSTIN, &s.StateCode, &s.InvoiceCode)
 	s.Logo = files.URLPtr(s.logoID, files.PurposeStoreLogo)
 	s.Banner = files.URLPtr(s.bannerID, files.PurposeStoreBanner)
 	return s, err
@@ -240,7 +249,35 @@ type storeIn struct {
 	Address *string `json:"address"`
 	Phone   *string `json:"phone"`
 	Status  *string `json:"status"`
+	taxIn
+	InvoiceCode *string `json:"invoiceCode"`
 	ignored
+}
+
+// setStoreTax applies a request's GSTIN, state and invoice code (M3) to
+// the store as it is now, if the request names any of them.
+func setStoreTax(ctx context.Context, tx tenancy.TenantTx, in storeIn, cur storeJSON) (storeJSON, error) {
+	if in.GSTIN == nil && in.StateCode == nil && in.InvoiceCode == nil {
+		return cur, nil
+	}
+	tax, err := resolveTax(in.taxIn, cur.taxOut)
+	if err != nil {
+		return cur, err
+	}
+	code := strOr(in.InvoiceCode, cur.InvoiceCode)
+	if code, err = cleanInvoiceCode(code); err != nil {
+		return cur, err
+	}
+	if code != "" {
+		var taken bool
+		if err := tx.QueryRow(ctx, qStoreCodeTaken, code, cur.ID).Scan(&taken); err != nil {
+			return cur, err
+		}
+		if taken {
+			return cur, apperr.Invalid("invoiceCode", "Another store uses this invoice code.")
+		}
+	}
+	return scanStore(tx.QueryRow(ctx, qStoreTax, cur.ID, tax.GSTIN, tax.StateCode, ptr(code)))
 }
 
 func (a *API) createStore(w http.ResponseWriter, r *http.Request) {
@@ -285,7 +322,10 @@ func (a *API) createStore(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
-		out, err = scanStore(tx.QueryRow(r.Context(), qStoreInsert, name, slug, nullIfEmpty(addr), status, principal(r).UserID, nullIfEmpty(phone)))
+		if out, err = scanStore(tx.QueryRow(r.Context(), qStoreInsert, name, slug, nullIfEmpty(addr), status, principal(r).UserID, nullIfEmpty(phone))); err != nil {
+			return err
+		}
+		out, err = setStoreTax(r.Context(), tx, in, out)
 		return err
 	})
 	if err != nil {
@@ -337,7 +377,10 @@ func (a *API) updateStore(w http.ResponseWriter, r *http.Request) {
 				return err
 			}
 		}
-		out, err = scanStore(tx.QueryRow(r.Context(), qStoreUpdate, id, name, nullIfEmpty(addr), status, nullIfEmpty(phone)))
+		if out, err = scanStore(tx.QueryRow(r.Context(), qStoreUpdate, id, name, nullIfEmpty(addr), status, nullIfEmpty(phone))); err != nil {
+			return err
+		}
+		out, err = setStoreTax(r.Context(), tx, in, out)
 		return err
 	})
 	if err != nil {
@@ -653,6 +696,11 @@ func (a *API) Mount(rt *rbac.Router) {
 		rt.Handle(del, e.path+"/{id}", req(e.module, "delete"), a.namedDelete(e.s))
 	}
 	rt.Handle(get, "/sub-categories", req("categories", "view"), a.listSubCategories)
+	// M3 A6: the GST state codes, for the store, customer and supplier forms.
+	rt.Handle(get, "/gst/states", rbac.Authenticated(), func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "private, max-age=86400")
+		httpx.WriteJSON(w, http.StatusOK, gst.States)
+	})
 	rt.Handle(post, "/sub-categories", req("categories", "create"), a.createSubCategory)
 
 	rt.Handle(get, "/units", req("units", "view"), a.listUnits)
