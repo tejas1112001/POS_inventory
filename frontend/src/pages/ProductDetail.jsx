@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import StorePricesCard from '@/components/products/StorePricesCard';
+import BarcodesCard from '@/components/products/BarcodesCard';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, History, Pencil, Printer, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -214,6 +215,7 @@ export default function ProductDetail() {
       </section>
 
       <StorePricesCard product={product} stores={stores} canEdit={hasPermission('products', 'edit')} onSaved={load} />
+      <BarcodesCard product={product} canEdit={hasPermission('products', 'edit')} onSaved={load} />
 
       {hasModule('product_attributes') && hasPermission('attributes', 'view') && (
         <AttributesCard product={product} canEdit={hasPermission('products', 'edit')} onSaved={load} />

@@ -43,12 +43,15 @@ type ItemJSON struct {
 	ReceivedQty qty.Q   `json:"received_qty"` // industry P1 item 8
 	// TracksBatches: receiving this line needs batch and expiry (industry
 	// P3 item 2; the product's flag and the module).
-	TracksBatches bool            `json:"tracksBatches"`
-	Barcode       *string         `json:"barcode"` // the variant's current barcode (scanning while receiving)
-	UnitPrice     decimal.Decimal `json:"unitPrice"`
-	UnitPriceS    decimal.Decimal `json:"unit_price"`
-	Discount      decimal.Decimal `json:"discount"`
-	Subtotal      decimal.Decimal `json:"subtotal"`
+	TracksBatches bool    `json:"tracksBatches"`
+	Barcode       *string `json:"barcode"` // the variant's current barcode (scanning while receiving)
+	// Barcodes: the variant's other codes (00043) and the base units one
+	// scan of each counts (a case code: the case's size).
+	Barcodes   []ItemBarcode   `json:"barcodes"`
+	UnitPrice  decimal.Decimal `json:"unitPrice"`
+	UnitPriceS decimal.Decimal `json:"unit_price"`
+	Discount   decimal.Decimal `json:"discount"`
+	Subtotal   decimal.Decimal `json:"subtotal"`
 	// The unit the line was bought in (H3), when not the base unit: its
 	// name and size at purchase time, and the quantity in it. Quantity,
 	// received_qty and unitPrice are in base units either way.
@@ -97,7 +100,10 @@ const (
 	qLoadItems = `SELECT i.id, i.purchase_id, i.product_id, i.variant_id, i.store_id, i.product_name, i.sku, i.quantity,
 			i.unit_price, i.discount, i.subtotal, i.created_at, st.name, i.received_qty, v.item_barcode,
 			coalesce(pr.tracks_batches, false) AND EXISTS (SELECT 1 FROM settings WHERE id = 1 AND 'batch_expiry' = ANY(modules)),
-			i.unit_name, i.unit_factor, i.unit_qty
+			i.unit_name, i.unit_factor, i.unit_qty,
+			(SELECT coalesce(jsonb_agg(jsonb_build_object('code', vb.code, 'factor', coalesce(pu.factor, 1)) ORDER BY vb.id), '[]'::jsonb)
+			 FROM variant_barcodes vb LEFT JOIN product_units pu ON pu.product_id = i.product_id AND pu.unit_id = vb.unit_id
+			 WHERE vb.variant_id = i.variant_id)
 		FROM purchase_items i LEFT JOIN stores st ON st.id = i.store_id
 		LEFT JOIN product_variants v ON v.id = i.variant_id
 		LEFT JOIN products pr ON pr.id = i.product_id
@@ -145,7 +151,7 @@ func load(ctx context.Context, tx tenancy.TenantTx, ids []int64) ([]PurchaseJSON
 		var store *string
 		if err := rows.Scan(&it.ID, &it.PurchaseID, &it.ProductID, &it.VariantID, &it.StoreID, &it.ProductName, &it.SKU,
 			&it.Quantity, &it.UnitPrice, &it.Discount, &it.Subtotal, &it.CreatedAt, &store, &it.ReceivedQty, &it.Barcode, &it.TracksBatches,
-			&it.UnitName, &it.UnitFactor, &it.UnitQty); err != nil {
+			&it.UnitName, &it.UnitFactor, &it.UnitQty, &it.Barcodes); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -252,4 +258,10 @@ func (a *API) get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, out[0])
+}
+
+// ItemBarcode is another code of a purchase line's variant.
+type ItemBarcode struct {
+	Code   string `json:"code"`
+	Factor qty.Q  `json:"factor"`
 }

@@ -506,6 +506,9 @@ const (
 
 // insertVariant writes a variant and its opening stock.
 func insertVariant(ctx context.Context, tx tenancy.TenantTx, productID int64, v cleanVariant, userID int64, reason string) (int64, error) {
+	if err := extraCodeTaken(ctx, tx, v.barcode); err != nil {
+		return 0, err
+	}
 	var id int64
 	err := tx.QueryRow(ctx, qInsertVariant, productID, v.sku, v.barcode, v.price, v.cost, v.weight, string(v.attributes),
 		v.expiry, v.manufactured, userID, v.mrp).Scan(&id)
@@ -627,6 +630,9 @@ func updateProduct(ctx context.Context, tx tenancy.TenantTx, id int64, c clean, 
 				return err
 			}
 			continue
+		}
+		if err := extraCodeTaken(ctx, tx, v.barcode); err != nil {
+			return err
 		}
 		if _, err := tx.Exec(ctx, qUpdateVariant, v.id, v.sku, v.barcode, v.price, v.cost, v.weight, string(v.attributes),
 			v.expiry, v.manufactured, v.mrpSet, v.mrp); err != nil {

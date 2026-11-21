@@ -133,7 +133,7 @@ export default function Checkout() {
     focusSearch();
   };
 
-  const add = async (product, variant) => added(await c.addVariant(product, variant));
+  const add = async (product, variant, unitId = null) => added(await c.addVariant(product, variant, unitId));
 
   const pick = (product) => {
     const variants = variantsOf(product);
@@ -149,14 +149,14 @@ export default function Checkout() {
     const hit = findByCode(c.products, code);
     if (hit) {
       if (isLocked(hit.product)) c.setProblem(`"${hit.product.name}" is in use at another till.`);
-      else await add(hit.product, hit.variant);
+      else await add(hit.product, hit.variant, hit.unitId);
       return true;
     }
     try {
       const p = await api.get(`/api/products/barcode/${encodeURIComponent(code)}?storeId=${encodeURIComponent(c.storeId)}`, { quiet: true });
       const v = variantsOf(p).find((x) => x.id === p.variantId) || (variantsOf(p).length === 1 ? variantsOf(p)[0] : null);
       if (v) {
-        await add(p, v);
+        await add(p, v, p.unitId ?? null);
         return true;
       }
     } catch (err) {

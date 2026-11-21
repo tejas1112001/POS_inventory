@@ -43,7 +43,7 @@ Design note `docs/M3_GST_DESIGN.md`, approved 2026-11-21 (§11 as recommended). 
 ## Also decided, not started
 
 - **Price per store:** done 2026-11-21 (tenant 00042 `store_prices`; `PUT /api/products/{id}/store-prices`, null removes; checkout, quote, sale edits, exchanges, the POS list, the product lock, the inventory list, the storefront picker and the online shop of that store use it; a "Prices by store" card on the product page when the shop has more than one store; `TestStorePrices`). Cost and MRP stay per variant. Barcode labels still print the variant price.
-- **Several barcodes per variant:** a table of barcodes; scanning and the stock-count code lookup (`qByCode`) search it.
+- **Several barcodes per variant:** done 2026-11-21 (tenant 00043 `variant_barcodes`, review L6). The main code stays `item_barcode` (labels print it); other codes may name one of the product's units (a case code). Codes are unique across main and other codes, both ways (product form, label generator, import). `PUT /api/products/{id}/barcodes` replaces a product's other codes; the POS lookup (with `unitId`), the product search, the POS list, stock counts (a case code counts the case), checkout (adds a box), Add Purchase, returns without a sale and Receive goods (adds the case's size) find them; an "Other barcodes" card on the product page. `TestVariantBarcodes`.
 - **Scale barcodes:** weight or price embedded in the EAN-13 (prefix 2x). This needs `allowFraction` products (done) and the barcode table above.
 
 ## Housekeeping

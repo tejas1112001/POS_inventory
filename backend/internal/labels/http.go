@@ -102,9 +102,10 @@ const (
 	qEnsureCounter = `INSERT INTO doc_counters (name) VALUES ('barcode') ON CONFLICT (name) DO NOTHING`
 	qNextBarcode   = `UPDATE doc_counters SET next_value = next_value + 1 WHERE name = 'barcode' RETURNING next_value - 1`
 	// A code any variant ever held (deleted ones too) is never reused.
-	qCodeTaken = `SELECT EXISTS (SELECT 1 FROM product_variants WHERE item_barcode = $1)`
-	qSetCode   = `UPDATE product_variants SET item_barcode = $1, updated_at = now() WHERE id = $2 AND item_barcode IS NULL`
-	qTouch     = `UPDATE products SET updated_at = now() WHERE id = ANY($1::bigint[])`
+	qCodeTaken = `SELECT EXISTS (SELECT 1 FROM product_variants WHERE item_barcode = $1)
+		OR EXISTS (SELECT 1 FROM variant_barcodes WHERE code = $1)`
+	qSetCode = `UPDATE product_variants SET item_barcode = $1, updated_at = now() WHERE id = $2 AND item_barcode IS NULL`
+	qTouch   = `UPDATE products SET updated_at = now() WHERE id = ANY($1::bigint[])`
 )
 
 func uniqueIDs(ids []int64) ([]int64, error) {

@@ -93,7 +93,8 @@ func escapeLike(s string) string {
 const (
 	qProductFilter = ` FROM products p WHERE p.deleted_at IS NULL
 		AND ($1 = '' OR p.name ILIKE $1 OR p.article_no ILIKE $1 OR EXISTS (SELECT 1 FROM product_variants v WHERE v.product_id = p.id
-		     AND v.deleted_at IS NULL AND (v.sku ILIKE $1 OR v.item_barcode ILIKE $1)))
+		     AND v.deleted_at IS NULL AND (v.sku ILIKE $1 OR v.item_barcode ILIKE $1
+		       OR EXISTS (SELECT 1 FROM variant_barcodes vb WHERE vb.variant_id = v.id AND vb.code ILIKE $1))))
 		AND ($2 = 0 OR p.category_id = $2) AND ($3 = 0 OR p.brand_id = $3) AND ($4 = '' OR p.status = $4)`
 	qProductCount = `SELECT count(*)` + qProductFilter
 	qProductIDs   = `SELECT p.id` + qProductFilter + ` ORDER BY p.created_at DESC, p.id DESC LIMIT $5 OFFSET $6`
@@ -169,6 +170,13 @@ type posVariant struct {
 	Price       decimal.Decimal `json:"price"`
 	Attributes  map[string]any  `json:"attributes"`
 	Inventories []posStock      `json:"Inventories"`
+	// Barcodes: the variant's other codes (00043), matched locally too.
+	Barcodes []posBarcode `json:"barcodes,omitempty"`
+}
+
+type posBarcode struct {
+	Code   string `json:"code"`
+	UnitID *int64 `json:"unitId,omitempty"`
 }
 
 type posStock struct {
@@ -187,6 +195,9 @@ func slimPOS(list []ProductJSON) []posProduct {
 				inv[k] = posStock{Qty: x.Qty, QuantityAlert: x.QuantityAlert, StoreID: x.StoreID}
 			}
 			vs[j] = posVariant{ID: v.ID, SKU: v.SKU, ItemBarcode: v.ItemBarcode, Label: v.Label, Price: v.Price, Attributes: v.Attributes, Inventories: inv}
+			for _, b := range v.Barcodes {
+				vs[j].Barcodes = append(vs[j].Barcodes, posBarcode{Code: b.Code, UnitID: b.UnitID})
+			}
 		}
 		out[i] = posProduct{ID: p.ID, Name: p.Name, Image: p.Image, Category: p.Category, Price: p.Price, Qty: p.Qty, AllowFraction: p.AllowFraction, Units: saleUnits(p.Units),
 			Tax: p.Tax, TaxType: p.TaxType, IsLocked: p.IsLocked, LockedAt: p.LockedAt, LockedBy: p.LockedBy, ProductVariants: vs}
@@ -230,6 +241,9 @@ func (a *API) pos(w http.ResponseWriter, r *http.Request) {
 type barcodeJSON struct {
 	ProductJSON
 	VariantID int64 `json:"variantId"`
+	// UnitID: the scanned code is another code of the variant naming one
+	// of the product's units (a case code, 00043).
+	UnitID *int64 `json:"unitId"`
 }
 
 func (a *API) barcode(w http.ResponseWriter, r *http.Request) {
@@ -243,9 +257,13 @@ func (a *API) barcode(w http.ResponseWriter, r *http.Request) {
 		var pid int64
 		// An exact barcode wins over a SKU (coalesce: a NULL barcode would
 		// otherwise sort first under DESC).
-		err := tx.QueryRow(r.Context(), `SELECT v.product_id, v.id FROM product_variants v JOIN products p ON p.id = v.product_id
-			WHERE v.deleted_at IS NULL AND p.deleted_at IS NULL AND p.status = 'Active' AND (v.item_barcode = $1 OR v.sku = $1::citext)
-			ORDER BY coalesce(v.item_barcode = $1, false) DESC, v.id LIMIT 1`, code).Scan(&pid, &out.VariantID)
+		// The main barcode, then another code of the variant (00043, with
+		// its unit), then a SKU.
+		err := tx.QueryRow(r.Context(), `SELECT v.product_id, v.id, vb.unit_id FROM product_variants v JOIN products p ON p.id = v.product_id
+			LEFT JOIN variant_barcodes vb ON vb.variant_id = v.id AND vb.code = $1
+			WHERE v.deleted_at IS NULL AND p.deleted_at IS NULL AND p.status = 'Active'
+				AND (v.item_barcode = $1 OR vb.code IS NOT NULL OR v.sku = $1::citext)
+			ORDER BY coalesce(v.item_barcode = $1, false) DESC, (vb.code IS NOT NULL) DESC, v.id LIMIT 1`, code).Scan(&pid, &out.VariantID, &out.UnitID)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil
 		}
@@ -609,6 +627,7 @@ func (a *API) Mount(rt *rbac.Router) {
 	rt.Handle(http.MethodDelete, "/products/{id}", req("products", "delete"), a.remove)
 	rt.Handle(http.MethodPut, "/products/{id}/lock", req("pos", "create"), a.lock)
 	rt.Handle(http.MethodPut, "/products/{id}/store-prices", req("products", "edit"), a.putStorePrices)
+	rt.Handle(http.MethodPut, "/products/{id}/barcodes", req("products", "edit"), a.putBarcodes)
 	rt.Handle(http.MethodPost, "/product-variants", req("products", "edit"), a.addVariant)
 	rt.Handle(http.MethodPost, "/products/{id}/variants/matrix", req("products", "edit").InModule(attributes.Module), a.matrix)
 

@@ -203,7 +203,9 @@ export default function AddSalesReturn() {
       setLines((prev) => {
         const same = prev.find((l) => String(l.variantId) === String(hit.variant.id));
         if (same) return prev.map((l) => (l === same ? { ...l, quantity: addQty(l.quantity, 1) } : l));
-        const line = { productId: String(hit.product.id), variantId: String(hit.variant.id), quantity: 1, unitPrice: String(hit.variant.price ?? '') };
+        // A case code (several barcodes) starts the line in its unit when the product sells in it.
+        const caseUnit = hit.unitId && saleUnitsOf(hit.product).some((u) => String(u.unitId) === String(hit.unitId)) ? String(hit.unitId) : '';
+        const line = { productId: String(hit.product.id), variantId: String(hit.variant.id), quantity: 1, unitPrice: String(hit.variant.price ?? ''), unitId: caseUnit };
         const empty = prev.find((l) => !l.productId);
         return empty ? prev.map((l) => (l === empty ? { ...l, ...line } : l)) : [...prev, { ...freeLine(), ...line }];
       });

@@ -61,3 +61,12 @@ test('findByCode: barcode first, then SKU (case-insensitive)', () => {
   assert.equal(findByCode(products, 'nope'), null);
   assert.equal(findByCode(products, ''), null);
 });
+
+test('other codes of a variant, with the case unit', () => {
+  const products = [{ id: 1, ProductVariants: [{ id: 10, sku: 'SOAP', itemBarcode: 'MAIN', barcodes: [{ code: 'OLD' }, { code: 'CASE', unitId: 7 }] }] }];
+  assert.equal(findByCode(products, 'MAIN').unitId, undefined, 'the main code is a single unit');
+  assert.equal(findByCode(products, 'OLD').variant.id, 10);
+  assert.equal(findByCode(products, 'OLD').unitId, null);
+  assert.equal(findByCode(products, 'CASE').unitId, 7);
+  assert.equal(findByCode(products, 'NOPE'), null);
+});

@@ -688,9 +688,13 @@ const (
 	// One count edit at a time per store (this shop's schema), so two
 	// drafts cannot take the same variant at once.
 	qStoreLock = `SELECT pg_advisory_xact_lock(hashtextextended('stock_count:' || current_schema() || ':' || $1::text, 0))`
-	qByCode    = `SELECT v.id FROM product_variants v JOIN products p ON p.id = v.product_id
-		WHERE v.deleted_at IS NULL AND p.deleted_at IS NULL AND (v.item_barcode = $1 OR lower(v.sku::text) = lower($1))
-		ORDER BY (v.item_barcode = $1) DESC NULLS LAST, v.id LIMIT 1`
+	// The main barcode, another code of the variant (00043: a case code
+	// counts its unit's base units), then a SKU.
+	qByCode = `SELECT v.id, coalesce(pu.factor, 1) FROM product_variants v JOIN products p ON p.id = v.product_id
+		LEFT JOIN variant_barcodes vb ON vb.variant_id = v.id AND vb.code = $1
+		LEFT JOIN product_units pu ON pu.product_id = v.product_id AND pu.unit_id = vb.unit_id
+		WHERE v.deleted_at IS NULL AND p.deleted_at IS NULL AND (v.item_barcode = $1 OR vb.code IS NOT NULL OR lower(v.sku::text) = lower($1))
+		ORDER BY coalesce(v.item_barcode = $1, false) DESC, (vb.code IS NOT NULL) DESC, v.id LIMIT 1`
 	qVariants = `SELECT v.id, coalesce(p.category_id, 0), coalesce(p.brand_id, 0) FROM product_variants v JOIN products p ON p.id = v.product_id
 		WHERE v.id = ANY($1) AND v.deleted_at IS NULL AND p.deleted_at IS NULL`
 	qOtherDraft = `SELECT DISTINCT ON (l.variant_id) l.variant_id, c.reference FROM stock_count_lines l JOIN stock_counts c ON c.id = l.count_id
@@ -724,7 +728,8 @@ func apply(ctx context.Context, tx tenancy.TenantTx, d draft, in []change, codes
 	f := map[string]string{}
 	for i, code := range codes {
 		var id int64
-		err := tx.QueryRow(ctx, qByCode, code).Scan(&id)
+		var factor qty.Q
+		err := tx.QueryRow(ctx, qByCode, code).Scan(&id, &factor)
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
 			f[in[i].field] = fmt.Sprintf("No product has the code %q.", code)
@@ -732,6 +737,12 @@ func apply(ctx context.Context, tx tenancy.TenantTx, d draft, in []change, codes
 			return nil, err
 		default:
 			in[i].variant = id
+			if factor.Cmp(qty.Int(1)) != 0 {
+				// A case code: the quantity is in cases.
+				if in[i].qty, err = in[i].qty.Times(factor); err != nil {
+					f[in[i].field] = "That quantity of this unit is not a whole thousandth of the base unit."
+				}
+			}
 		}
 	}
 	if err := apperr.Fields(f); err != nil {

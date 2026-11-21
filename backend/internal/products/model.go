@@ -54,7 +54,10 @@ type VariantJSON struct {
 	// (store_prices). With a store asked for (POS, the lock), Price is
 	// already that store's and BasePrice the variant's own.
 	StorePrices []StorePriceJSON `json:"storePrices"`
-	BasePrice   *decimal.Decimal `json:"basePrice,omitempty"`
+	// Barcodes are the variant's other codes (00043); itemBarcode stays
+	// the main one.
+	Barcodes  []VariantBarcodeJSON `json:"barcodes"`
+	BasePrice *decimal.Decimal     `json:"basePrice,omitempty"`
 	// Label is "M / Blue" (or "UK 8 / Black") when the product has variant
 	// dimensions (industry P1 item 4); left out otherwise.
 	Label string `json:"label,omitempty"`
@@ -239,6 +242,7 @@ func load(ctx context.Context, tx tenancy.TenantTx, ids []int64, o loadOpts) ([]
 		}
 		v.Inventories = []InventoryJSON{}
 		v.StorePrices = []StorePriceJSON{}
+		v.Barcodes = []VariantBarcodeJSON{}
 		if p := byID[v.ProductID]; p != nil {
 			v.Label = attributes.Label(p.VariantDims, p.Attributes, v.Attributes)
 			rate := decimal.Zero
@@ -257,6 +261,9 @@ func load(ctx context.Context, tx tenancy.TenantTx, ids []int64, o loadOpts) ([]
 	}
 
 	if err := loadStorePrices(ctx, tx, variantIDs, variantOwner); err != nil {
+		return nil, err
+	}
+	if err := loadBarcodes(ctx, tx, variantIDs, variantOwner); err != nil {
 		return nil, err
 	}
 

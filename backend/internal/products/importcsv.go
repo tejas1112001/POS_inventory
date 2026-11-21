@@ -1018,7 +1018,8 @@ func loadLookups(ctx context.Context, tx tenancy.TenantTx) (lookupMaps, error) {
 	if err := set(tx.Query(ctx, `SELECT lower(sku::text) FROM product_variants WHERE deleted_at IS NULL`))(m.skus); err != nil {
 		return m, err
 	}
-	if err := set(tx.Query(ctx, `SELECT item_barcode FROM product_variants WHERE deleted_at IS NULL AND item_barcode IS NOT NULL`))(m.barcodes); err != nil {
+	if err := set(tx.Query(ctx, `SELECT item_barcode FROM product_variants WHERE deleted_at IS NULL AND item_barcode IS NOT NULL
+		UNION SELECT code FROM variant_barcodes`))(m.barcodes); err != nil {
 		return m, err
 	}
 	rows, err := tx.Query(ctx, `SELECT id, name FROM stores WHERE deleted_at IS NULL ORDER BY id`)

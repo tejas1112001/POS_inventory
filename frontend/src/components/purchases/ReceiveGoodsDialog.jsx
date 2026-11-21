@@ -49,15 +49,22 @@ export default function ReceiveGoodsDialog({ purchase, onClose, onDone }) {
   useScanner(
     (code) => {
       const c = code.trim().toLowerCase();
-      const hit = open.find((i) => (i.barcode && i.barcode.toLowerCase() === c) || (i.sku && i.sku.toLowerCase() === c));
+      // The main barcode or SKU count one; another code of the variant counts
+      // its unit's size (a case code, several barcodes).
+      let step = 1;
+      let hit = open.find((i) => (i.barcode && i.barcode.toLowerCase() === c) || (i.sku && i.sku.toLowerCase() === c));
+      if (!hit) {
+        hit = open.find((i) => (i.barcodes || []).some((b) => b.code.toLowerCase() === c));
+        if (hit) step = Number(hit.barcodes.find((b) => b.code.toLowerCase() === c).factor) || 1;
+      }
       if (!hit) {
         beep();
         toast.error(`Nothing still to receive on this purchase has the code ${code}.`);
         return;
       }
-      if (num(hit.id) >= outstanding(hit)) {
+      if (addQty(num(hit.id), step) > outstanding(hit)) {
         beep();
-        toast.error(`${hit.product_name}: all ${outstanding(hit)} still to receive are already counted.`);
+        toast.error(`${hit.product_name}: only ${fmtQty(roundQty(outstanding(hit) - num(hit.id)))} more still to receive.`);
         return;
       }
       if (tracked(hit.id)) {
@@ -65,11 +72,11 @@ export default function ReceiveGoodsDialog({ purchase, onClose, onDone }) {
         setBatches((cur) => {
           const rows = cur[hit.id];
           const last = rows.length - 1;
-          return { ...cur, [hit.id]: rows.map((b, j) => (j === last ? { ...b, quantity: String(addQty(b.quantity, 1)) } : b)) };
+          return { ...cur, [hit.id]: rows.map((b, j) => (j === last ? { ...b, quantity: String(addQty(b.quantity, step)) } : b)) };
         });
         return;
       }
-      setQty((q) => ({ ...q, [hit.id]: String(addQty(q[hit.id], 1)) }));
+      setQty((q) => ({ ...q, [hit.id]: String(addQty(q[hit.id], step)) }));
     },
     { enabled: !busy }
   );

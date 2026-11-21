@@ -82,6 +82,14 @@ export function findByCode(products, code, variantsOf = (p) => p?.ProductVariant
       if (v.itemBarcode && v.itemBarcode === c) return { product: p, variant: v };
     }
   }
+  // Another code of a variant (several barcodes, 00043); a case code names
+  // its unit (unitId), so the scan counts one case.
+  for (const p of products || []) {
+    for (const v of variantsOf(p)) {
+      const b = (v.barcodes || []).find((x) => x.code === c);
+      if (b) return { product: p, variant: v, unitId: b.unitId ?? null };
+    }
+  }
   const lower = c.toLowerCase();
   for (const p of products || []) {
     for (const v of variantsOf(p)) {

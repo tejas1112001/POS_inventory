@@ -152,7 +152,9 @@ const AddPurchase = () => {
       setPurchaseItems((prev) => {
         const same = prev.find((i) => String(i.variantId) === String(hit.variant.id));
         if (same) return prev.map((i) => (i === same ? { ...i, quantity: String(addQty(i.quantity, 1)) } : i));
-        const line = { productId: hit.product.id, variantId: hit.variant.id, storeId: stores[0]?.id || '', quantity: '1', unitPrice: hit.variant.cost != null ? String(hit.variant.cost) : '' };
+        // A case code (several barcodes) starts the line in its unit when the product is bought in it.
+        const caseUnit = hit.unitId && purchaseUnitsOf(hit.product).some((u) => String(u.unitId) === String(hit.unitId)) ? String(hit.unitId) : '';
+        const line = { productId: hit.product.id, variantId: hit.variant.id, storeId: stores[0]?.id || '', quantity: '1', unitPrice: hit.variant.cost != null ? String(hit.variant.cost) : '', unitId: caseUnit };
         const empty = prev.find((i) => !i.productId);
         return empty ? prev.map((i) => (i === empty ? { ...i, ...line, storeId: i.storeId || line.storeId } : i)) : [...prev, line];
       });

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '@/services/api';
 import { priceChanges } from '@/lib/checkout';
-import { addQty, fmtQty, parseQty } from '@/lib/qty';
+import { addQty, fmtQty, parseQty, roundQty } from '@/lib/qty';
 import { lineBase, maxInUnit, saleUnitsOf, unitOptionLabel } from '@/lib/saleUnits';
 import { variantLabel, variantStock, variantsOf } from '@/components/pos/stock';
 
@@ -33,6 +33,14 @@ export function cartBody(lines, { storeId, customerId, discount, placeOfSupply }
     ...(placeOfSupply ? { placeOfSupply } : {}),
     discount,
   };
+}
+
+// scanUnit is a new line's unit: the case unit of a scanned code when the
+// product sells in it and one fits the stock, else the base unit.
+function scanUnit(units, unitId, available) {
+  const u = unitId ? units.find((x) => String(x.unitId) === String(unitId)) : null;
+  if (u && u.factor <= available) return { unitId: u.unitId, unitName: u.name, factor: u.factor };
+  return { unitId: null, unitName: '', factor: 1 };
 }
 
 function lock(id, storeId, on, opts = {}) {
@@ -227,13 +235,26 @@ export default function useCheckout({ defaultCustomerId }) {
   );
   const setLineBatches = useCallback((key, batches) => setLines((prev) => prev.map((l) => (l.key === key ? { ...l, batches } : l))), []);
 
-  // addVariant puts one unit in the cart (or one more). Returns the line key.
+  // addVariant puts one unit in the cart (or one more). With unitId (a
+  // case code, several barcodes) it is one of that unit: a new line starts
+  // in it, a line in it gets one more, and a line in another unit gets the
+  // unit's size in its own unit. Returns the line key.
   const addVariant = useCallback(
-    async (product, variant) => {
+    async (product, variant, unitId = null) => {
       setProblem(null);
       const existing = lines.find((l) => l.variantId === variant.id);
       if (existing) {
-        changeQuantity(existing.key, 1);
+        const u = unitId ? (existing.units || []).find((x) => String(x.unitId) === String(unitId)) : null;
+        if (!u || String(existing.unitId) === String(unitId)) {
+          changeQuantity(existing.key, 1);
+          return existing.key;
+        }
+        const base = addQty(lineBase(existing), u.factor);
+        if (base > existing.maxQty) {
+          setProblem(`Only ${fmtQty(existing.maxQty)} of "${lineName(existing)}" in stock here.`);
+          return existing.key;
+        }
+        setLines((prev) => prev.map((l) => (l.key === existing.key ? { ...l, quantity: roundQty(base / (l.factor || 1)) } : l)));
         return existing.key;
       }
       try {
@@ -263,9 +284,7 @@ export default function useCheckout({ defaultCustomerId }) {
             allowFraction: !!fresh.allowFraction,
             units: saleUnitsOf(fresh),
             baseName: fresh.unit || '',
-            unitId: null,
-            unitName: '',
-            factor: 1,
+            ...scanUnit(saleUnitsOf(fresh), unitId, available),
           },
         ]);
         return v.id;
