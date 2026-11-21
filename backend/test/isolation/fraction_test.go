@@ -4,6 +4,7 @@ package isolation
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -170,6 +171,21 @@ func TestProductUnits(t *testing.T) {
 	require.Equal(t, "76.000", stockQ(t, "a", store, pen.vid))
 	saleID := jsonID(num(s.Body["id"]))
 
+	// The sales report and its export say "2 Box of 12 H3"; the receipt renders.
+	rows := reportRows(t, "a", tok, "/api/sales/report?productId="+jsonID(pen.pid))
+	require.Len(t, rows, 1)
+	require.Equal(t, 24.0, num(rows[0]["soldQty"]))
+	require.Equal(t, "Box of 12 H3", rows[0]["unitName"])
+	require.Equal(t, 2.0, num(rows[0]["unitQty"]))
+	require.Equal(t, 12.0, num(rows[0]["unitFactor"]))
+	x := xlsxRows(t, get(t, host, "/api/sales/report/export?format=xlsx&productId="+jsonID(pen.pid), tok).Raw)
+	require.Equal(t, "Sold as", x[0][7])
+	require.Equal(t, "24", x[1][6])
+	require.Equal(t, "2 Box of 12 H3", x[1][7])
+	pdf := get(t, host, "/api/sales/"+saleID+"/receipt", tok)
+	require.Equal(t, 200, pdf.Code, pdf.Raw)
+	require.True(t, strings.HasPrefix(pdf.Raw, "%PDF-"))
+
 	// A unit the product is not sold in.
 	l["unitId"] = half
 	s = sell(t, "a", tok, posSale(store, l), nil)
@@ -236,6 +252,14 @@ func TestPurchaseUnits(t *testing.T) {
 	require.Equal(t, "480.00", dec(pu.Body["total"]).StringFixed(2))
 	require.Equal(t, "48.000", stockQ(t, "a", store, soap.vid))
 	poID := jsonID(num(pu.Body["id"]))
+	prow := reportRows(t, "a", tok, "/api/purchase/report?productId="+jsonID(soap.pid))
+	require.Len(t, prow, 1)
+	require.Equal(t, 48.0, num(prow[0]["purchaseQty"]))
+	require.Equal(t, "Carton of 24 H3P", prow[0]["unitName"])
+	require.Equal(t, 2.0, num(prow[0]["unitQty"]))
+	px := xlsxRows(t, get(t, host, "/api/purchase/report/export?format=xlsx&productId="+jsonID(soap.pid), tok).Raw)
+	require.Equal(t, "Bought as", px[0][8])
+	require.Equal(t, "2 Carton of 24 H3P", px[1][8])
 
 	// A base-unit line has no unit copy.
 	pu = postPurchase(t, "a", tok, purchaseBody(sup, "UNIT-PO-2", "Received", line(3, 0)), nil)

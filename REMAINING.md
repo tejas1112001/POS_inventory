@@ -12,17 +12,17 @@ Done:
 - Frontend: checkout, the old POS, the batch picker and the product add/edit forms take part units.
 - **Purchases in units** (2026-11-21): a purchase line can name `unitId` (one of the product's `forPurchase` units). The quantity is in that unit; the unit price stays **per base unit**; the line keeps the unit name, factor and quantity in that unit (`unitName`, `unitFactor`, `unitQty`). Stock, `received_qty` and goods receipts stay in base units. Code: `internal/purchases/units.go`; test: `TestPurchaseUnits`.
 - **Returns, exchanges, held carts and the quote in units** (2026-11-21, tenant migration 00038). Sale lines record which unit they were sold in (`order_items.unit_id`, returned as `unitId`). A return line can name `unitId`: against a sale it takes only the lines sold in that unit, at the size they were sold at (a box of 12 stays 12 after the product's box becomes 10); without a sale it uses the product's sale unit as it is now. Return lines keep the unit copy (`unitName`, `unitFactor`, `unitQty`; on a return split over several sold lines, `unitQty` is each row's share to three decimals). Exchanges take the same return lines. The quote returns `unitId`/`unitName`/`unitFactor`/`unitQty` per line. Held lines keep `unitId` with the quantity in that unit (as the checkout takes it), plus the unit's name and size when held; the cart's `items` and `estimate` are in base units. Test: `TestReturnAndHeldUnits`.
+- **Receipts and reports show the unit** (server side, 2026-11-21). The PDF receipt prints a line sold in another unit as "2 Box (24)" (the Qty column widens only on receipts that have such a line; the price stays per base unit). The sales and purchase reports return `unitName`/`unitFactor`/`unitQty` per row, and their Excel/PDF exports have a "Sold as" / "Bought as" column ("2 Box"); Qty stays in base units so its total adds up. The receipt email lists totals only, so it is unchanged. The screen and print receipts are drawn by the frontend (below).
 
 Left:
-1. **Receipts and reports show the unit.** The receipt (HTML, PDF and print) and the sales report should show "2 Box (24)" when `unitName` is set. `internal/receipts/view.go` only reads the quantity in base units so far.
-2. **Frontend units.**
+1. **Frontend units.**
    - A units editor on the product form (`units: [{unitId, factor, forSale, forPurchase}]`).
    - A unit picker on checkout lines (POS products carry `units`).
    - A unit choice on purchase lines (the API takes `unitId` since 2026-11-21; the price field stays per base unit).
-   - Show `unitName`/`unitQty` on sale, order, purchase and return lines.
+   - Show `unitName`/`unitQty` on sale, order, purchase and return lines, the screen and print receipt ("2 Box (24)", as the PDF), and the report screens ("Sold as" / "Bought as").
    - A unit choice on return lines (send the sold line's `unitId`) and on held carts (send `unitId` with the line).
-3. **Frontend decimal display, remaining screens.** Stock counts, AddSales/AddSalesReturn, the purchase receive dialog and the reports still show raw numbers. Use `fmtQty` from `frontend/src/lib/qty.js`. The inputs already accept decimals (`step="any"`), and the server checks each product's `allowFraction`.
-4. **Imports.** Product CSV import (`opening_qty`, `quantity_alert`) still takes whole numbers only, because imported products start as whole-unit. Add an `allow_fraction` column if shops need it.
+2. **Frontend decimal display, remaining screens.** Stock counts, AddSales/AddSalesReturn, the purchase receive dialog and the reports still show raw numbers. Use `fmtQty` from `frontend/src/lib/qty.js`. The inputs already accept decimals (`step="any"`), and the server checks each product's `allowFraction`.
+3. **Imports.** Product CSV import (`opening_qty`, `quantity_alert`) still takes whole numbers only, because imported products start as whole-unit. Add an `allow_fraction` column if shops need it.
 
 Design notes to keep:
 - Prices on sale **and purchase** lines stay **per base unit**: a unit's price is the base price times its factor, and `unit_price × quantity` still equals the line amount.

@@ -32,9 +32,22 @@ type Line struct {
 	Name, Attributes, SKU, HSN                     string
 	Batch                                          string // industry P3 item 3: "Batch B1 · Exp 03/2027 · MRP 45.00"
 	MRP                                            string // one unit's MRP, when the shop shows MRP and Batch does not already
-	Qty                                            qty.Q
+	Qty                                            qty.Q  // base units
 	UnitPrice, Discount, TaxRate, TaxAmount, Total string
 	HasDiscount                                    bool
+	// The unit the line was sold in (H3), when not the base unit: its name
+	// at sale time and the quantity in it.
+	UnitName string
+	UnitQty  qty.Q
+}
+
+// QtyText is the quantity as the receipt prints it: "24", or "2 Box (24)"
+// for a line sold in another unit (the price stays per base unit).
+func (l Line) QtyText() string {
+	if l.UnitName == "" {
+		return l.Qty.String()
+	}
+	return l.UnitQty.String() + " " + l.UnitName + " (" + l.Qty.String() + ")"
 }
 
 // TaxRow is one line of the tax summary ("CGST 9%").
@@ -122,7 +135,7 @@ const (
 					|| coalesce(' · Exp ' || to_char(ob.expiry_date, 'MM/YYYY'), '') || coalesce(' · MRP ' || to_char(ob.mrp, 'FM9999999990.00'), '') AS t,
 					ob.quantity, ob.expiry_date AS e, ob.batch_id AS b, count(*) OVER () AS n
 				FROM order_item_batches ob WHERE ob.order_item_id = i.id) x),
-			i.mrp, i.mrp_amount
+			i.mrp, i.mrp_amount, i.unit_name, i.unit_qty
 		FROM order_items i LEFT JOIN product_variants v ON v.id = i.variant_id
 		WHERE i.sale_id = $1 ORDER BY i.id`
 	qLogo = `SELECT storage_key FROM files WHERE id = $1`
@@ -298,9 +311,11 @@ func Load(ctx context.Context, tx tenancy.TenantTx, receiptID int64) (View, erro
 			attrs                           []byte
 			label, hsn, batch               *string
 			mrp, mrpAmount                  *decimal.Decimal
+			unitName                        *string
+			unitQty                         *qty.Q
 		)
 		if err := rows.Scan(&name, &sku, &n, &unit, &ldisc, &rate, &ltax, &cgst, &sgst, &igst, &ltotal, &attrs, &label, &hsn, &batch,
-			&mrp, &mrpAmount); err != nil {
+			&mrp, &mrpAmount, &unitName, &unitQty); err != nil {
 			return v, err
 		}
 		// The sale-time label ("M / Blue", industry P1 item 4) wins over
@@ -312,6 +327,9 @@ func Load(ctx context.Context, tx tenancy.TenantTx, receiptID int64) (View, erro
 		ln := Line{Name: name, Attributes: attrText, SKU: deref(sku), HSN: deref(hsn), Batch: deref(batch), Qty: n,
 			UnitPrice: f.Money(unit), Discount: f.Money(ldisc), HasDiscount: ldisc.IsPositive(),
 			TaxRate: f.Percent(rate), TaxAmount: f.Money(ltax), Total: f.Money(ltotal)}
+		if unitName != nil && unitQty != nil {
+			ln.UnitName, ln.UnitQty = *unitName, *unitQty
+		}
 		if b.ShowMRPOnReceipt {
 			// A batch line already names its batch's MRP.
 			if mrp != nil && !strings.Contains(ln.Batch, "MRP") {

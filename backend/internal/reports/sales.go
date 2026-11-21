@@ -65,6 +65,11 @@ type SalesRow struct {
 	ReturnedQty    qty.Q           `json:"returnedQty"`
 	ReturnedAmount decimal.Decimal `json:"returnedAmount"`
 	NetAmount      decimal.Decimal `json:"netAmount"`
+	// The unit the line was sold in (H3), when not the base unit: its
+	// name and size then, and the quantity in it. SoldQty is in base units.
+	UnitName   *string `json:"unitName"`
+	UnitFactor *qty.Q  `json:"unitFactor"`
+	UnitQty    *qty.Q  `json:"unitQty"`
 }
 
 const (
@@ -75,7 +80,7 @@ const (
 	qSalesRows  = `SELECT i.id, i.sale_id, s.reference, s.date, s.status, s.store_id, st.name, s.customer_id, c.name,
 			i.product_id, i.variant_id, i.product_name, i.sku, p.image_file_id, coalesce(b.name, 'No Brand'),
 			coalesce(cat.name, 'Uncategorized'), i.quantity, i.unit_price, i.discount, i.tax_amount, i.subtotal,
-			coalesce(r.qty, 0), coalesce(r.amount, 0), coalesce(inv.qty, 0)
+			coalesce(r.qty, 0), coalesce(r.amount, 0), coalesce(inv.qty, 0), i.unit_name, i.unit_factor, i.unit_qty
 		FROM order_items i
 		JOIN sales s ON s.id = i.sale_id
 		LEFT JOIN stores st ON st.id = s.store_id
@@ -132,7 +137,8 @@ func SalesRows(ctx context.Context, tx tenancy.TenantTx, f SalesFilter, limit, o
 		)
 		if err := rows.Scan(&itemID, &x.SaleID, &x.Reference, &x.Date, &x.Status, &storeID, &storeName, &custID, &custNm,
 			&x.Product.ID, &x.VariantID, &x.Product.Name, &x.ItemSKU, &img, &x.Product.Brand, &x.Category, &x.SoldQty,
-			&x.UnitPrice, &x.Discount, &x.Tax, &x.SoldAmount, &x.ReturnedQty, &x.ReturnedAmount, &x.StockQty); err != nil {
+			&x.UnitPrice, &x.Discount, &x.Tax, &x.SoldAmount, &x.ReturnedQty, &x.ReturnedAmount, &x.StockQty,
+			&x.UnitName, &x.UnitFactor, &x.UnitQty); err != nil {
 			return nil, 0, err
 		}
 		x.ID = fmt.Sprintf("%d-%d", x.SaleID, itemID)

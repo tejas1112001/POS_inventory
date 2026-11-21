@@ -44,7 +44,11 @@ func sample(n int) table {
 		if i == 0 {
 			name = "=cmd|' /C calc'!A0"
 		}
-		t.rows = append(t.rows, []any{day, "POS-INV-000001", name, "SKU-1", "Walk-in Customer", "Main", 2,
+		soldAs := ""
+		if i == 1 {
+			soldAs = "2 Box"
+		}
+		t.rows = append(t.rows, []any{day, "POS-INV-000001", name, "SKU-1", "Walk-in Customer", "Main", 2, soldAs,
 			decimal.RequireFromString("84.00"), decimal.RequireFromString("42.00"), decimal.RequireFromString("42.00")})
 	}
 	return t
@@ -58,13 +62,15 @@ func TestWriteXLSX(t *testing.T) {
 	rows, err := xlsx.Read(b)
 	require.NoError(t, err)
 	require.Len(t, rows, 5, "header, 3 rows, totals")
-	require.Equal(t, []string{"Date", "Reference", "Product", "SKU", "Customer", "Store", "Qty", "Amount", "Returned", "Net"}, rows[0])
+	require.Equal(t, []string{"Date", "Reference", "Product", "SKU", "Customer", "Store", "Qty", "Sold as", "Amount", "Returned", "Net"}, rows[0])
 	require.Equal(t, "2026-10-24 00:06", rows[1][0], "the tenant's time zone")
 	require.Equal(t, "'=cmd|' /C calc'!A0", rows[1][2], "formula-safe text")
-	require.Equal(t, "84", rows[1][7], "amounts are numbers")
+	require.Equal(t, "84", rows[1][8], "amounts are numbers")
+	require.Equal(t, "2 Box", rows[2][7], "the unit sold in (H3)")
 	require.Equal(t, "Total", rows[4][0])
-	require.Equal(t, "6", rows[4][6])
-	require.Equal(t, "252", rows[4][7])
+	require.Equal(t, "6", rows[4][6], "quantities total in base units")
+	require.Equal(t, "", rows[4][7], "no total for the unit text")
+	require.Equal(t, "252", rows[4][8])
 	zr, err := zip.NewReader(bytes.NewReader(b), int64(len(b)))
 	require.NoError(t, err)
 	sheet, err := zr.Open("xl/worksheets/sheet1.xml")
@@ -85,4 +91,15 @@ func TestWritePDF(t *testing.T) {
 	empty, err := writePDF(sample(0), f)
 	require.NoError(t, err)
 	require.True(t, bytes.HasPrefix(empty, []byte("%PDF-")))
+}
+
+// Every export's PDF columns fill the grid exactly.
+func TestColumnWidths(t *testing.T) {
+	for name, cols := range map[string][]column{"sales": salesColumns, "purchases": purchaseColumns} {
+		w := 0
+		for _, c := range cols {
+			w += c.width
+		}
+		require.Equal(t, pdfGrid, w, name)
+	}
 }

@@ -170,7 +170,8 @@ func TestReportExports(t *testing.T) {
 	pr := xlsxRows(t, get(t, host, "/api/purchase/report/export?format=xlsx&supplierId="+jsonID(sup), tok).Raw)
 	require.Equal(t, "EXP-1", pr[1][1])
 	require.Equal(t, "Export Traders A", pr[1][2])
-	require.Equal(t, "38", pr[1][9])
+	require.Equal(t, "", pr[1][8], "bought in base units: no unit text")
+	require.Equal(t, "38", pr[1][10])
 
 	require.Equal(t, 400, get(t, host, "/api/sales/report/export?format=csv", tok).Code)
 	require.Equal(t, 400, get(t, host, "/api/sales/report/export", tok).Code)

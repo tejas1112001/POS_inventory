@@ -107,3 +107,22 @@ func TestRenderPDF(t *testing.T) {
 	_, err = RenderPDF(h, []byte("not an image"))
 	require.NoError(t, err, "an unreadable logo is skipped")
 }
+
+// H3: a line sold in another unit prints "2 Box (24)"; the receipt with
+// such a line renders with the wider quantity column.
+func TestUnitLines(t *testing.T) {
+	require.Equal(t, "24", Line{Qty: qty.Int(24)}.QtyText())
+	require.Equal(t, "1.5", Line{Qty: qty.Must("1.5")}.QtyText())
+	require.Equal(t, "2 Box (24)", Line{Qty: qty.Int(24), UnitName: "Box", UnitQty: qty.Int(2)}.QtyText())
+	require.Equal(t, "0.5 Half kg pack (0.25)", Line{Qty: qty.Must("0.25"), UnitName: "Half kg pack", UnitQty: qty.Must("0.5")}.QtyText())
+
+	v := sampleView()
+	v.Lines = append(v.Lines, Line{Name: "Pens", Qty: qty.Int(24), UnitName: "Carton of 24", UnitQty: qty.Int(1),
+		UnitPrice: "₹10.00", TaxRate: "0%", Total: "₹240.00"})
+	pdf, err := RenderPDF(v, nil)
+	require.NoError(t, err)
+	require.True(t, bytes.HasPrefix(pdf, []byte("%PDF-")))
+	if dir := os.Getenv("RECEIPT_SAMPLE_DIR"); dir != "" {
+		require.NoError(t, os.WriteFile(dir+"/units.pdf", pdf, 0o600))
+	}
+}

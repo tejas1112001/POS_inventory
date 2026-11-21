@@ -12,6 +12,7 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend/internal/audit"
 	"github.com/tejas1112001/POS_inventory/backend/internal/httpx"
 	"github.com/tejas1112001/POS_inventory/backend/internal/plans"
+	"github.com/tejas1112001/POS_inventory/backend/internal/qty"
 	"github.com/tejas1112001/POS_inventory/backend/internal/receipts"
 	"github.com/tejas1112001/POS_inventory/backend/internal/settings"
 	"github.com/tejas1112001/POS_inventory/backend/internal/tenancy"
@@ -125,11 +126,12 @@ func (a *API) export(w http.ResponseWriter, r *http.Request, name string,
 var salesColumns = []column{
 	{header: "Date", kind: kindDate, width: 3, xlsx: 17},
 	{header: "Reference", kind: kindText, width: 3, xlsx: 18},
-	{header: "Product", kind: kindText, width: 4, xlsx: 32},
+	{header: "Product", kind: kindText, width: 3, xlsx: 32},
 	{header: "SKU", kind: kindText, width: 2, xlsx: 16},
-	{header: "Customer", kind: kindText, width: 3, xlsx: 22},
+	{header: "Customer", kind: kindText, width: 2, xlsx: 22},
 	{header: "Store", kind: kindText, width: 2, xlsx: 18},
 	{header: "Qty", kind: kindInt, width: 1, xlsx: 7, total: true},
+	{header: "Sold as", kind: kindText, width: 2, xlsx: 16}, // H3: "2 Box"; Qty stays in base units
 	{header: "Amount", kind: kindMoney, width: 2, xlsx: 14, total: true},
 	{header: "Returned", kind: kindMoney, width: 2, xlsx: 14, total: true},
 	{header: "Net", kind: kindMoney, width: 2, xlsx: 14, total: true},
@@ -155,7 +157,7 @@ func (a *API) salesExport(w http.ResponseWriter, r *http.Request) {
 			subtitle: period(fm, f.From, f.To) + " · generated " + fm.DateTime(a.d.Now())}
 		for _, x := range rows {
 			t.rows = append(t.rows, []any{x.Date, x.Reference, x.Product.Name, str(x.ItemSKU), x.CustomerName, str(&x.Store.Name),
-				x.SoldQty, x.SoldAmount, x.ReturnedAmount, x.NetAmount})
+				x.SoldQty, unitText(x.UnitName, x.UnitQty), x.SoldAmount, x.ReturnedAmount, x.NetAmount})
 		}
 		return t, map[string]any{"startDate": r.URL.Query().Get("startDate"), "endDate": r.URL.Query().Get("endDate"),
 			"own_only": f.Scope != 0, "store_id": f.StoreID, "product_id": f.ProductID, "customer_id": f.CustomerID}, nil
@@ -165,12 +167,13 @@ func (a *API) salesExport(w http.ResponseWriter, r *http.Request) {
 var purchaseColumns = []column{
 	{header: "Date", kind: kindDate, width: 3, xlsx: 17},
 	{header: "Reference", kind: kindText, width: 3, xlsx: 18},
-	{header: "Supplier", kind: kindText, width: 3, xlsx: 24},
-	{header: "Product", kind: kindText, width: 4, xlsx: 32},
+	{header: "Supplier", kind: kindText, width: 2, xlsx: 24},
+	{header: "Product", kind: kindText, width: 3, xlsx: 32},
 	{header: "SKU", kind: kindText, width: 2, xlsx: 16},
 	{header: "Store", kind: kindText, width: 2, xlsx: 18},
 	{header: "Status", kind: kindText, width: 2, xlsx: 12},
 	{header: "Qty", kind: kindInt, width: 1, xlsx: 7, total: true},
+	{header: "Bought as", kind: kindText, width: 2, xlsx: 16}, // H3: "2 Carton"; Qty stays in base units
 	{header: "Unit price", kind: kindMoney, width: 2, xlsx: 14},
 	{header: "Amount", kind: kindMoney, width: 2, xlsx: 14, total: true},
 }
@@ -199,9 +202,18 @@ func (a *API) purchaseExport(w http.ResponseWriter, r *http.Request) {
 			subtitle: period(fm, f.From, f.To) + " · generated " + fm.DateTime(a.d.Now())}
 		for _, x := range rows {
 			t.rows = append(t.rows, []any{x.Date, x.Reference, x.SupplierName, x.Product.Name, str(x.ItemSKU), str(&x.Store.Name),
-				x.Status, x.PurchaseQty, x.UnitPrice, x.PurchaseAmount})
+				x.Status, x.PurchaseQty, unitText(x.UnitName, x.UnitQty), x.UnitPrice, x.PurchaseAmount})
 		}
 		return t, map[string]any{"startDate": r.URL.Query().Get("startDate"), "endDate": r.URL.Query().Get("endDate"),
 			"supplier_id": f.SupplierID, "store_id": f.StoreID, "product_id": f.ProductID}, nil
 	})
+}
+
+// unitText is a line's quantity in the unit it was sold or bought in
+// ("2 Box"), or "" in base units (H3).
+func unitText(name *string, n *qty.Q) string {
+	if name == nil || n == nil {
+		return ""
+	}
+	return n.String() + " " + *name
 }

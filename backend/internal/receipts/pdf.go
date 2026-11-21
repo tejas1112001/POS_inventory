@@ -130,10 +130,18 @@ func RenderPDF(v View, logo []byte) ([]byte, error) {
 	}
 	m.AddRow(3)
 
-	// Items.
+	// Items. A receipt with a line sold in another unit ("2 Box (24)")
+	// gives the quantity a wider column.
+	itemW, qtyW := 5, 1
+	for _, l := range v.Lines {
+		if l.UnitName != "" {
+			itemW, qtyW = 4, 2
+			break
+		}
+	}
 	m.AddAutoRow(
-		text.NewCol(5, "Item", tp(8.5, bold)),
-		text.NewCol(1, "Qty", tp(8.5, bold, right)),
+		text.NewCol(itemW, "Item", tp(8.5, bold)),
+		text.NewCol(qtyW, "Qty", tp(8.5, bold, right)),
 		text.NewCol(2, "Price", tp(8.5, bold, right)),
 		text.NewCol(1, "Disc.", tp(8.5, bold, right)),
 		text.NewCol(1, "Tax", tp(8.5, bold, right)),
@@ -161,8 +169,8 @@ func RenderPDF(v View, logo []byte) ([]byte, error) {
 			disc = l.Discount
 		}
 		m.AddAutoRow(
-			text.NewCol(5, name, tp(8.5)),
-			text.NewCol(1, l.Qty.String(), tp(8.5, right)),
+			text.NewCol(itemW, name, tp(8.5)),
+			text.NewCol(qtyW, l.QtyText(), tp(8.5, right)),
 			text.NewCol(2, l.UnitPrice, tp(8.5, right)),
 			text.NewCol(1, disc, tp(8.5, right)),
 			text.NewCol(1, l.TaxRate, tp(8.5, right)),

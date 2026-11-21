@@ -57,6 +57,11 @@ type PurchaseRow struct {
 	Store          NamedRef        `json:"store"`
 	UnitPrice      decimal.Decimal `json:"unitPrice"`
 	Discount       decimal.Decimal `json:"discount"`
+	// The unit the line was bought in (H3), when not the base unit: its
+	// name and size then, and the quantity in it. PurchaseQty is in base units.
+	UnitName   *string `json:"unitName"`
+	UnitFactor *qty.Q  `json:"unitFactor"`
+	UnitQty    *qty.Q  `json:"unitQty"`
 }
 
 var errNoPurchases = apperr.Forbidden(apperr.CodeForbidden, "The purchase report needs the purchases view permission.")
@@ -68,7 +73,7 @@ const (
 	qPurchaseCount = `SELECT count(*) FROM purchase_items i JOIN purchases p ON p.id = i.purchase_id` + qPurchaseWhere
 	qPurchaseRows  = `SELECT i.id, i.purchase_id, p.reference, p.date, p.status, p.supplier_id, sup.name, i.store_id, st.name,
 			i.product_id, i.variant_id, i.product_name, i.sku, pr.image_file_id, coalesce(cat.name, 'Uncategorized'),
-			i.quantity, i.unit_price, i.discount, i.subtotal, coalesce(inv.qty, 0), i.received_qty
+			i.quantity, i.unit_price, i.discount, i.subtotal, coalesce(inv.qty, 0), i.received_qty, i.unit_name, i.unit_factor, i.unit_qty
 		FROM purchase_items i
 		JOIN purchases p ON p.id = i.purchase_id
 		LEFT JOIN suppliers sup ON sup.id = p.supplier_id
@@ -121,7 +126,7 @@ func PurchaseRows(ctx context.Context, tx tenancy.TenantTx, f PurchaseFilter, li
 		)
 		if err := rows.Scan(&itemID, &x.PurchaseID, &x.Reference, &x.Date, &x.Status, &supID, &supName, &stID, &stName,
 			&x.Product.ID, &x.VariantID, &x.Product.Name, &x.ItemSKU, &img, &x.Category, &x.PurchaseQty, &x.UnitPrice,
-			&x.Discount, &x.PurchaseAmount, &x.StockQty, &x.ReceivedQty); err != nil {
+			&x.Discount, &x.PurchaseAmount, &x.StockQty, &x.ReceivedQty, &x.UnitName, &x.UnitFactor, &x.UnitQty); err != nil {
 			return nil, 0, err
 		}
 		x.ID = fmt.Sprintf("%d-%d", x.PurchaseID, itemID)
