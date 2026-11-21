@@ -17,7 +17,7 @@ import { newIdempotencyKey } from '@/lib/checkout';
 import { COLLECT_METHODS, methodLabel } from '@/lib/payments';
 import { CONDITIONS, DEFAULT_POLICY } from '@/lib/returns';
 import { fmtQty, roundQty } from '@/lib/qty';
-import { maxInUnit, unitQtyText } from '@/lib/saleUnits';
+import { maxInUnit, saleUnitsOf, unitOptionLabel, unitQtyText } from '@/lib/saleUnits';
 import BatchSelect from '@/components/batches/BatchSelect';
 
 // Refusals the return policy gives (industry P1 item 9); a user with
@@ -33,7 +33,7 @@ const STEPS = [
 const inputCls = 'w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-blue-500';
 const today = () => todayInShop();
 let seq = 0;
-const freeLine = () => ({ key: ++seq, productId: '', variantId: '', quantity: 1, unitPrice: '', reason: '', condition: '', batchId: '' });
+const freeLine = () => ({ key: ++seq, productId: '', variantId: '', quantity: 1, unitPrice: '', reason: '', condition: '', batchId: '', unitId: '' });
 
 // AddSalesReturn records a return (C-13). A return linked to a sale lists
 // that sale's lines with what is left to return; the server refunds the
@@ -135,7 +135,31 @@ export default function AddSalesReturn() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- returnBase reads only sale and qty
     [sale, qty]
   );
-  const freeTotal = useMemo(() => lines.reduce((s, l) => s + (Number(l.quantity) || 0) * (Number(l.unitPrice) || 0), 0), [lines]);
+  // H3: a line without a sale, or a new exchange line, may be in one of the
+  // product's sale units as they are now; prices stay per base unit.
+  const unitsOfProduct = (pid) => saleUnitsOf(lookups.products.find((p) => String(p.id) === String(pid)));
+  const factorOf = (pid, unitId) => (unitId ? unitsOfProduct(pid).find((u) => String(u.unitId) === String(unitId))?.factor || 1 : 1);
+  const baseOf = (l) => roundQty((Number(l.quantity) || 0) * factorOf(l.productId, l.unitId));
+  const unitChoice = (l, onChange, name) => {
+    const us = unitsOfProduct(l.productId);
+    if (!us.length) return null;
+    return (
+      <>
+        <select className="mt-1 w-full rounded-lg border border-gray-300 px-2 py-1 text-xs" aria-label={`Unit of ${name}`} value={l.unitId || ''} onChange={(e) => onChange(e.target.value)}>
+          <option value="">Single</option>
+          {us.map((u) => (
+            <option key={u.unitId} value={u.unitId}>{unitOptionLabel(u)}</option>
+          ))}
+        </select>
+        {l.unitId && Number(l.quantity) > 0 && <p className="mt-1 text-xs text-muted-foreground tabular-nums">= {fmtQty(baseOf(l))}</p>}
+      </>
+    );
+  };
+  const freeTotal = useMemo(
+    () => lines.reduce((s, l) => s + baseOf(l) * (Number(l.unitPrice) || 0), 0),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- baseOf reads only lines and the products
+    [lines, lookups.products]
+  );
   const estimate = mode === 'linked' ? linkedTotal : freeTotal;
 
   const variantsOf = (pid) => lookups.products.find((p) => String(p.id) === String(pid))?.ProductVariants || [];
@@ -276,7 +300,8 @@ export default function AddSalesReturn() {
           productId: Number(l.productId),
           variantId: Number(l.variantId),
           quantity: Number(l.quantity),
-          unitPrice: Number(l.unitPrice) || 0,
+          unitPrice: Number(l.unitPrice) || 0, // per base unit
+          ...(l.unitId ? { unitId: Number(l.unitId) } : {}),
           reason: l.reason || undefined,
           condition: l.condition || undefined,
           batchId: lineTracked(l) && l.batchId ? Number(l.batchId) : undefined,
@@ -297,7 +322,13 @@ export default function AddSalesReturn() {
       returnLines: b.returnItems,
       newLines: newLines
         .filter((l) => Number(l.quantity) > 0)
-        .map((l) => ({ productId: l.productId, variantId: l.variantId, quantity: Number(l.quantity), unitPrice: Number(l.unitPrice) })),
+        .map((l) => ({
+          productId: l.productId,
+          variantId: l.variantId,
+          quantity: Number(l.quantity),
+          unitPrice: Number(l.unitPrice), // per base unit
+          ...(l.unitId ? { unitId: Number(l.unitId) } : {}),
+        })),
       payments: owe > 0 ? [{ method: xPay.method, amount: owe, ...(xPay.reference.trim() ? { reference: xPay.reference.trim() } : {}) }] : [],
       settlement: xRest,
     };
@@ -606,7 +637,7 @@ export default function AddSalesReturn() {
                                 aria-label="Product"
                                 onChange={(e) => {
                                   const v = variantsOf(e.target.value);
-                                  setLine(l.key, { productId: e.target.value, variantId: v.length === 1 ? String(v[0].id) : '', unitPrice: v.length === 1 ? String(v[0].price) : '' });
+                                  setLine(l.key, { productId: e.target.value, variantId: v.length === 1 ? String(v[0].id) : '', unitPrice: v.length === 1 ? String(v[0].price) : '', unitId: '' });
                                 }}
                               >
                                 <option value="">Select product</option>
@@ -629,9 +660,16 @@ export default function AddSalesReturn() {
                             </td>
                             <td className="px-2 py-2">
                               <input type="number" min="1" className={inputCls} value={l.quantity} aria-label="Quantity" onChange={(e) => setLine(l.key, { quantity: e.target.value })} />
+                              {unitChoice(l, (v) => setLine(l.key, { unitId: v }), 'the returned item')}
                             </td>
                             <td className="px-2 py-2">
                               <input type="number" min="0" step="0.01" className={inputCls} value={l.unitPrice} aria-label="Refund per unit" onChange={(e) => setLine(l.key, { unitPrice: e.target.value })} />
+                              {l.unitId && l.unitPrice !== '' && (
+                                <p className="mt-1 text-xs text-muted-foreground tabular-nums">
+                                  per single unit · {formatCurrency((Number(l.unitPrice) || 0) * factorOf(l.productId, l.unitId))} per{' '}
+                                  {unitsOfProduct(l.productId).find((u) => String(u.unitId) === String(l.unitId))?.name}
+                                </p>
+                              )}
                             </td>
                             <td className="px-2 py-2">
                               <input className={inputCls} maxLength={200} value={l.reason} aria-label="Reason" onChange={(e) => setLine(l.key, { reason: e.target.value })} />
@@ -753,8 +791,12 @@ export default function AddSalesReturn() {
                                     aria-label={`Quantity of ${l.name}`}
                                     onChange={(e) => setNewLines((p) => p.map((x) => (x.key === l.key ? { ...x, quantity: e.target.value } : x)))}
                                   />
+                                  {unitChoice(l, (v) => setNewLines((p) => p.map((x) => (x.key === l.key ? { ...x, unitId: v } : x))), l.name)}
                                 </td>
-                                <td className="px-2 py-2">{formatCurrency(l.unitPrice)}</td>
+                                <td className="px-2 py-2">
+                                  {formatCurrency(l.unitPrice)}
+                                  {l.unitId && <span className="block text-xs text-muted-foreground">each single unit</span>}
+                                </td>
                                 <td className="px-2 py-2">
                                   <button
                                     type="button"
