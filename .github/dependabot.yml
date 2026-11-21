@@ -3,8 +3,9 @@ updates:
   - package-ecosystem: gomod
     directory: /backend
     schedule: { interval: weekly }
+    # Minor and patch updates together; each major update in its own PR.
     groups:
-      go-modules: { patterns: ["*"] }
+      go-modules: { patterns: ["*"], update-types: ["minor", "patch"] }
   - package-ecosystem: docker
     directories: ["/backend"]
     schedule: { interval: weekly }
@@ -19,5 +20,7 @@ updates:
   - package-ecosystem: npm
     directories: ["/", "/frontend"]
     schedule: { interval: weekly }
+    # Minor and patch updates together; each major update (ESLint, React
+    # plugins, TanStack Table, ...) in its own PR, to be tested on its own.
     groups:
-      npm: { patterns: ["*"] }
+      npm: { patterns: ["*"], update-types: ["minor", "patch"] }
