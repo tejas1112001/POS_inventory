@@ -42,6 +42,38 @@ func NewAPI(svc *Service, s *tenancy.Sessions) *API { return &API{svc: svc, sess
 func (a *API) Mount(rt *rbac.Router) {
 	rt.Handle(http.MethodGet, "/sales/{id}/receipt", rbac.Require("receipts", "view"), a.download)
 	rt.Handle(http.MethodPost, "/sales/{id}/receipt/resend", rbac.Require("receipts", "resend"), a.resend)
+	// M3: a return's credit note, for whoever may see the return.
+	rt.Handle(http.MethodGet, "/sales/returns/{id}/credit-note", rbac.Require("sales_returns", "view"), a.creditNote)
+}
+
+// creditNote streams return {id}'s credit note PDF, rendered on request.
+func (a *API) creditNote(w http.ResponseWriter, r *http.Request) {
+	id, err := saleID(r)
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	t, _ := tenancy.TenantFrom(r.Context())
+	ctx, cancel := context.WithTimeout(r.Context(), syncRenderTimeout)
+	defer cancel()
+	pdf, ref, err := a.svc.CreditNotePDF(ctx, t, id)
+	switch {
+	case errors.Is(err, ErrNotFound):
+		err = apperr.NotFound()
+	case errors.Is(err, context.DeadlineExceeded):
+		err = apperr.Unavailable()
+	}
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	name := safeName.ReplaceAllString(ref, "_")
+	w.Header().Set("Content-Type", "application/pdf")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="credit-note-%s.pdf"`, name))
+	w.Header().Set("Cache-Control", "private, no-store")
+	w.Header().Set("Content-Length", strconv.Itoa(len(pdf)))
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(pdf)
 }
 
 func saleID(r *http.Request) (int64, error) {

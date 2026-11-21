@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, FileDown } from 'lucide-react';
 import { api } from '@/services/api';
 import StatusBadge from '@/components/kit/StatusBadge';
+import { Button } from '@/components/ui/button';
+import { toast } from '../../shared/toast/store';
 import { ErrorState } from '@/components/kit/States';
 import { formatCurrency, formatDateTime } from '@/lib/format';
 import { unitQtyText } from '@/lib/saleUnits';
@@ -65,7 +67,21 @@ export default function ReturnDetail() {
         <h2 className="mt-1 flex flex-wrap items-center gap-2 text-xl font-semibold">
           Return {r.reference} <StatusBadge value={r.status} /> <StatusBadge value={r.payment_status} />
         </h2>
-        <p className="text-sm text-muted-foreground">{formatDateTime(r.date)}</p>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-sm text-muted-foreground">{formatDateTime(r.date)}</p>
+          {/* M3: the return as a credit note (PDF), with the GST of its invoice. */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              api
+                .download(`/api/sales/returns/${r.id}/credit-note`, `credit-note-${r.reference}.pdf`, { quiet: true })
+                .catch((err) => toast.error(err.message || 'The credit note could not be downloaded.'))
+            }
+          >
+            <FileDown className="size-4" aria-hidden="true" /> Credit note
+          </Button>
+        </div>
       </div>
 
       <section className="rounded-lg border bg-card p-4 shadow-xs" aria-label="Return details">

@@ -222,7 +222,11 @@ func RenderPDF(v View, logo []byte) ([]byte, error) {
 		}
 		total(label, p.Amount, muted)
 	}
-	total("Paid", v.Paid)
+	if v.CreditNote {
+		total("Refunded", v.Paid)
+	} else {
+		total("Paid", v.Paid)
+	}
 	if v.HasTendered {
 		total("Received", v.Tendered)
 		total("Change", v.Change)
@@ -243,7 +247,9 @@ func RenderPDF(v View, logo []byte) ([]byte, error) {
 	for _, f := range v.Footer {
 		m.AddAutoRow(text.NewCol(12, f, tp(8.5, center, muted)))
 	}
-	m.AddAutoRow(text.NewCol(12, "Thank you for your purchase.", tp(10, bold, center)))
+	if !v.CreditNote {
+		m.AddAutoRow(text.NewCol(12, "Thank you for your purchase.", tp(10, bold, center)))
+	}
 
 	doc, err := m.Generate()
 	if err != nil {

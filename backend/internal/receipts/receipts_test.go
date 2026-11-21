@@ -151,3 +151,13 @@ func TestGSTCopy(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, bytes.HasPrefix(pdf, []byte("%PDF-")))
 }
+
+// A credit note renders with its own labels (no "Paid", no thank-you).
+func TestCreditNotePDF(t *testing.T) {
+	v := sampleView()
+	v.CreditNote, v.Title = true, "Credit Note"
+	v.Header = []string{"Against invoice MUM/2627/00042 of 21 Nov 2026"}
+	pdf, err := RenderPDF(v, nil)
+	require.NoError(t, err)
+	require.True(t, bytes.HasPrefix(pdf, []byte("%PDF-")))
+}

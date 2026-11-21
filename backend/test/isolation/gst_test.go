@@ -176,6 +176,12 @@ func TestGSTSales(t *testing.T) {
 	require.Equal(t, 201, ret.Code, ret.Raw)
 	require.Equal(t, "igst", gstOf(ret)["taxSplit"])
 	require.Equal(t, "29", gstOf(ret)["placeOfSupply"])
+	cn := call("GET", fmt.Sprintf("/api/sales/returns/%v/credit-note", ret.Body["id"]), nil)
+	require.Equal(t, 200, cn.Code, cn.Raw)
+	require.Equal(t, "application/pdf", cn.Header.Get("Content-Type"))
+	require.True(t, strings.HasPrefix(cn.Raw, "%PDF-"))
+	require.Contains(t, cn.Header.Get("Content-Disposition"), "credit-note-")
+	require.Equal(t, 404, call("GET", "/api/sales/returns/99999999/credit-note", nil).Code)
 
 	// A registered buyer in Karnataka at the Bengaluru store: B2B, within the state.
 	cu := call("POST", "/api/customers", map[string]any{"name": "Kaveri", "gstin": gstinKA, "legalName": "Kaveri Traders Pvt Ltd",

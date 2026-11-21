@@ -119,6 +119,10 @@ type View struct {
 	VoidedAt   string
 	VoidReason string
 
+	// CreditNote: a return's credit note (LoadCreditNote): "Refunded"
+	// in place of "Paid", no thank-you line.
+	CreditNote bool
+
 	// Raw values for templates that need them.
 	TotalAmount decimal.Decimal
 	Currency    string
@@ -384,22 +388,30 @@ func Load(ctx context.Context, tx tenancy.TenantTx, receiptID int64) (View, erro
 	if s := mrpTotal.Sub(mrpPaid); s.IsPositive() {
 		v.Saving, v.HasSaving = f.Money(s), true
 	}
+	v.TaxRows = taxRows(accs, order, f, b.TaxLabel, v.SecondHalf)
+	return v, nil
+}
+
+// taxRows is the tax summary from the per-rate totals: CGST and SGST (or
+// UTGST) halves, IGST, or one row under the shop's tax label.
+func taxRows(accs map[string]*taxAcc, order []string, f Formatter, taxLabel, secondHalf string) []TaxRow {
+	var out []TaxRow
 	half := decimal.NewFromInt(2)
 	for _, k := range order {
 		a := accs[k]
 		switch {
 		case a.cgst.IsPositive() || a.sgst.IsPositive():
 			hr := f.Percent(a.rate.Div(half))
-			v.TaxRows = append(v.TaxRows,
+			out = append(out,
 				TaxRow{Label: "CGST " + hr, Taxable: f.Money(a.taxable), Amount: f.Money(a.cgst)},
-				TaxRow{Label: v.SecondHalf + " " + hr, Taxable: f.Money(a.taxable), Amount: f.Money(a.sgst)})
+				TaxRow{Label: secondHalf + " " + hr, Taxable: f.Money(a.taxable), Amount: f.Money(a.sgst)})
 		case a.igst.IsPositive():
-			v.TaxRows = append(v.TaxRows, TaxRow{Label: "IGST " + f.Percent(a.rate), Taxable: f.Money(a.taxable), Amount: f.Money(a.igst)})
+			out = append(out, TaxRow{Label: "IGST " + f.Percent(a.rate), Taxable: f.Money(a.taxable), Amount: f.Money(a.igst)})
 		default:
-			v.TaxRows = append(v.TaxRows, TaxRow{Label: b.TaxLabel + " " + f.Percent(a.rate), Taxable: f.Money(a.taxable), Amount: f.Money(a.tx)})
+			out = append(out, TaxRow{Label: taxLabel + " " + f.Percent(a.rate), Taxable: f.Money(a.taxable), Amount: f.Money(a.tx)})
 		}
 	}
-	return v, nil
+	return out
 }
 
 // saleGST is the sale's M3 copy (all nil before M3).
