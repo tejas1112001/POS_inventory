@@ -14,6 +14,14 @@ export function saleUnitsOf(product) {
     .map((u) => ({ unitId: u.unitId, name: u.name, factor: Number(u.factor) }));
 }
 
+// purchaseUnitsOf lists the units a product is bought in besides its base
+// unit (the full product record): [{ unitId, name, factor }].
+export function purchaseUnitsOf(product) {
+  return (product?.units || [])
+    .filter((u) => u.forPurchase !== false)
+    .map((u) => ({ unitId: u.unitId, name: u.name, factor: Number(u.factor) }));
+}
+
 // lineBase is a cart line's quantity in base units.
 export function lineBase(line) {
   return roundQty(Number(line.quantity) * (line.factor || 1));

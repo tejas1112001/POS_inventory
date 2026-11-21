@@ -1,13 +1,15 @@
 // Unit tests for the sale units helpers. Run with `npm run test:unit`.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { lineBase, lineQtyText, maxInUnit, saleUnitsOf, unitOptionLabel } from './saleUnits.js';
+import { lineBase, lineQtyText, maxInUnit, purchaseUnitsOf, saleUnitsOf, unitOptionLabel } from './saleUnits.js';
 
 test('sale units only, as numbers', () => {
   const p = { units: [{ unitId: 3, name: 'Box', factor: '12', forSale: true }, { unitId: 4, name: 'Carton', factor: 144, forSale: false }, { unitId: 5, name: 'Pack', factor: 6 }] };
   assert.deepEqual(saleUnitsOf(p), [{ unitId: 3, name: 'Box', factor: 12 }, { unitId: 5, name: 'Pack', factor: 6 }]);
   assert.deepEqual(saleUnitsOf({}), []);
   assert.deepEqual(saleUnitsOf(null), []);
+  assert.deepEqual(purchaseUnitsOf({ units: [{ unitId: 3, name: 'Box', factor: 12, forPurchase: false }, { unitId: 4, name: 'Carton', factor: '144', forSale: false }] }),
+    [{ unitId: 4, name: 'Carton', factor: 144 }]);
 });
 
 test('base quantity of a line', () => {

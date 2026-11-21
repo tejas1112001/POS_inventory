@@ -12,6 +12,9 @@ import { todayInShop } from '@/lib/format';
 import { beep, findByCode } from '@/lib/scan';
 import { useScanner } from '@/hooks/useScanner';
 import { usePermission } from '../hooks/usePermission';
+import { formatCurrency } from '@/lib/format';
+import { fmtQty, roundQty } from '@/lib/qty';
+import { purchaseUnitsOf, unitOptionLabel } from '@/lib/saleUnits';
 import {
   InformationCircleIcon,
   PlusCircleIcon,
@@ -63,15 +66,16 @@ const AddPurchase = () => {
       const items = purchaseItems.map((item, index) => {
         const quantity = parseFloat(data[`quantity_${index}`]) || 0;
         const unitPrice = parseFloat(data[`unitPrice_${index}`]) || 0;
-        const itemTotal = quantity * unitPrice;
+        const itemTotal = lineTotal({ ...item, quantity, unitPrice });
         subtotal += itemTotal;
         
         return {
           productId: item.productId,
           variantId: item.variantId,
           storeId: item.storeId,
-          quantity: quantity,
-          unitPrice: unitPrice,
+          quantity: quantity, // in the line's unit (H3)
+          unitPrice: unitPrice, // per base unit
+          ...(item.unitId ? { unitId: Number(item.unitId) } : {}),
           subtotal: itemTotal
         };
       });
@@ -106,7 +110,8 @@ const AddPurchase = () => {
       variantId: '', 
       storeId: stores[0]?.id || '', 
       quantity: '1',
-      unitPrice: ''
+      unitPrice: '',
+      unitId: ''
     }]);
   };
 
@@ -118,10 +123,11 @@ const AddPurchase = () => {
 
   const updatePurchaseItem = (index, field, value) => {
     const newItems = [...purchaseItems];
-    newItems[index][field] = value;
+    newItems[index] = { ...newItems[index], [field]: value };
     
-    // If product changes, auto-select the first variant
+    // If product changes, auto-select the first variant (and the base unit)
     if (field === 'productId') {
+      newItems[index].unitId = '';
       const product = products.find(p => String(p.id) === String(value));
       if (product && product.ProductVariants && product.ProductVariants.length > 0) {
         newItems[index].variantId = product.ProductVariants[0].id;
@@ -159,6 +165,11 @@ const AddPurchase = () => {
     return product?.ProductVariants || [];
   };
 
+  // H3: the units a line's product is bought in, and the chosen one.
+  const productOf = (item) => products.find((p) => String(p.id) === String(item.productId));
+  const lineUnit = (item) => (item.unitId ? purchaseUnitsOf(productOf(item)).find((u) => String(u.unitId) === String(item.unitId)) : null);
+  const lineFactor = (item) => lineUnit(item)?.factor || 1;
+
   const calculateDueAmount = (e) => {
     const form = e.target.form;
     const total = parseFloat(form.total?.value) || 0;
@@ -169,7 +180,8 @@ const AddPurchase = () => {
   };
 
   // Calculate total from purchase items
-  const lineTotal = (item) => (parseFloat(item.quantity) || 0) * (parseFloat(item.unitPrice) || 0);
+  // The quantity is in the line's unit, the price per base unit (H3).
+  const lineTotal = (item) => roundQty((parseFloat(item.quantity) || 0) * lineFactor(item)) * (parseFloat(item.unitPrice) || 0);
   const calculateTotal = () => purchaseItems.reduce((total, item) => total + lineTotal(item), 0);
 
   // Update total when purchase items change
@@ -351,8 +363,9 @@ const AddPurchase = () => {
                       <th>Product</th>
                       <th>Variant</th>
                       <th>Store</th>
+                      <th>Unit</th>
                       <th>Quantity</th>
-                      <th>Unit Price</th>
+                      <th>Price per base unit</th>
                       <th>Total</th>
                       <th>Actions</th>
                     </tr>
@@ -360,6 +373,10 @@ const AddPurchase = () => {
                   <tbody>
                     {purchaseItems.map((item, index) => {
                       const variants = getProductVariants(item.productId);
+                      const product = productOf(item);
+                      const units = purchaseUnitsOf(product);
+                      const unit = lineUnit(item);
+                      const baseName = product?.unit || 'base unit';
                       return (
                         <tr key={index}>
                           <td className="px-4 py-3">
@@ -412,6 +429,22 @@ const AddPurchase = () => {
                           </td>
                           
                           <td className="px-4 py-3">
+                            {/* H3: buy in the base unit or one of the product's purchase units. */}
+                            <select
+                              aria-label={`Unit of line ${index + 1}`}
+                              className="w-full px-2 py-1 border border-gray-600 rounded focus:ring-blue-500 focus:border-blue-500"
+                              value={item.unitId || ''}
+                              onChange={(e) => updatePurchaseItem(index, 'unitId', e.target.value)}
+                              disabled={units.length === 0}
+                            >
+                              <option value="">{product?.unit || 'Base unit'}</option>
+                              {units.map((u) => (
+                                <option key={u.unitId} value={u.unitId}>{unitOptionLabel(u)}</option>
+                              ))}
+                            </select>
+                          </td>
+
+                          <td className="px-4 py-3">
                             <input 
                               name={`quantity_${index}`}
                               type="number" 
@@ -421,6 +454,11 @@ const AddPurchase = () => {
                               onChange={(e) => updatePurchaseItem(index, 'quantity', e.target.value)}
                               required
                             />
+                            {unit && (
+                              <p className="mt-1 text-xs text-gray-500 tabular-nums">
+                                = {fmtQty(roundQty((parseFloat(item.quantity) || 0) * unit.factor))} {baseName}
+                              </p>
+                            )}
                           </td>
                           
                           <td className="px-4 py-3">
@@ -434,6 +472,11 @@ const AddPurchase = () => {
                               onChange={(e) => updatePurchaseItem(index, 'unitPrice', e.target.value)}
                               required
                             />
+                            {unit && item.unitPrice !== '' && (
+                              <p className="mt-1 text-xs text-gray-500 tabular-nums">
+                                per {baseName} · {formatCurrency((parseFloat(item.unitPrice) || 0) * unit.factor)} per {unit.name}
+                              </p>
+                            )}
                           </td>
                           
                           <td className="px-4 py-3">
