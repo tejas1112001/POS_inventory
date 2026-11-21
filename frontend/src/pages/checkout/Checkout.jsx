@@ -133,7 +133,7 @@ export default function Checkout() {
     focusSearch();
   };
 
-  const add = async (product, variant, unitId = null) => added(await c.addVariant(product, variant, unitId));
+  const add = async (product, variant, unitId = null, scaleQty = null) => added(await c.addVariant(product, variant, unitId, scaleQty));
 
   const pick = (product) => {
     const variants = variantsOf(product);
@@ -156,7 +156,8 @@ export default function Checkout() {
       const p = await api.get(`/api/products/barcode/${encodeURIComponent(code)}?storeId=${encodeURIComponent(c.storeId)}`, { quiet: true });
       const v = variantsOf(p).find((x) => x.id === p.variantId) || (variantsOf(p).length === 1 ? variantsOf(p)[0] : null);
       if (v) {
-        await add(p, v, p.unitId ?? null);
+        // A weighing scale's label carries the quantity (by weight or price).
+        await add(p, v, p.unitId ?? null, p.quantity != null ? Number(p.quantity) : null);
         return true;
       }
     } catch (err) {

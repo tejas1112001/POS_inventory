@@ -240,9 +240,19 @@ export default function useCheckout({ defaultCustomerId }) {
   // in it, a line in it gets one more, and a line in another unit gets the
   // unit's size in its own unit. Returns the line key.
   const addVariant = useCallback(
-    async (product, variant, unitId = null) => {
+    async (product, variant, unitId = null, scaleQty = null) => {
       setProblem(null);
       const existing = lines.find((l) => l.variantId === variant.id);
+      // A weighing scale's label (scale barcodes): its quantity in base units.
+      if (existing && scaleQty) {
+        const base = addQty(lineBase(existing), scaleQty);
+        if (base > existing.maxQty) {
+          setProblem(`Only ${fmtQty(existing.maxQty)} of "${lineName(existing)}" in stock here.`);
+          return existing.key;
+        }
+        setLines((prev) => prev.map((l) => (l.key === existing.key ? { ...l, quantity: roundQty(base / (l.factor || 1)) } : l)));
+        return existing.key;
+      }
       if (existing) {
         const u = unitId ? (existing.units || []).find((x) => String(x.unitId) === String(unitId)) : null;
         if (!u || String(existing.unitId) === String(unitId)) {
@@ -268,6 +278,10 @@ export default function useCheckout({ defaultCustomerId }) {
           setProblem(`"${product.name}${many ? ` (${variantLabel(v)})` : ''}" is out of stock here.`);
           return null;
         }
+        if (scaleQty && scaleQty > available) {
+          setProblem(`Only ${fmtQty(available)} of "${product.name}" in stock here.`);
+          return null;
+        }
         setLines((prev) => [
           ...prev,
           {
@@ -279,12 +293,12 @@ export default function useCheckout({ defaultCustomerId }) {
             image: fresh.image,
             price: Number(v.price),
             unitPrice: v.price,
-            quantity: fresh.allowFraction ? Math.min(1, available) : 1,
+            quantity: scaleQty || (fresh.allowFraction ? Math.min(1, available) : 1),
             maxQty: available,
             allowFraction: !!fresh.allowFraction,
             units: saleUnitsOf(fresh),
             baseName: fresh.unit || '',
-            ...scanUnit(saleUnitsOf(fresh), unitId, available),
+            ...(scaleQty ? scanUnit([], null, available) : scanUnit(saleUnitsOf(fresh), unitId, available)),
           },
         ]);
         return v.id;

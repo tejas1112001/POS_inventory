@@ -56,8 +56,11 @@ type VariantJSON struct {
 	StorePrices []StorePriceJSON `json:"storePrices"`
 	// Barcodes are the variant's other codes (00043); itemBarcode stays
 	// the main one.
-	Barcodes  []VariantBarcodeJSON `json:"barcodes"`
-	BasePrice *decimal.Decimal     `json:"basePrice,omitempty"`
+	Barcodes []VariantBarcodeJSON `json:"barcodes"`
+	// ScaleCode is the item code a weighing scale prints in its labels
+	// (00044); null: none.
+	ScaleCode *string          `json:"scaleCode"`
+	BasePrice *decimal.Decimal `json:"basePrice,omitempty"`
 	// Label is "M / Blue" (or "UK 8 / Black") when the product has variant
 	// dimensions (industry P1 item 4); left out otherwise.
 	Label string `json:"label,omitempty"`
@@ -175,7 +178,7 @@ const (
 		WHERE p.id = ANY($1) AND p.deleted_at IS NULL`
 	qLoadVariants = `SELECT v.id, v.sku::text, v.item_barcode, coalesce(sp.price, v.price), v.cost, v.weight, v.attributes,
 		to_char(v.expiry_date, 'YYYY-MM-DD'), to_char(v.manufactured_date, 'YYYY-MM-DD'), v.product_id, v.created_by, v.created_at,
-		v.updated_at, v.mrp, CASE WHEN sp.price IS NOT NULL THEN v.price END
+		v.updated_at, v.mrp, CASE WHEN sp.price IS NOT NULL THEN v.price END, v.scale_code
 		FROM product_variants v LEFT JOIN store_prices sp ON sp.variant_id = v.id AND sp.store_id = $2
 		WHERE v.product_id = ANY($1) AND v.deleted_at IS NULL ORDER BY v.id`
 	qLoadStorePrices = `SELECT sp.variant_id, sp.store_id, s.name, sp.price FROM store_prices sp
@@ -233,7 +236,7 @@ func load(ctx context.Context, tx tenancy.TenantTx, ids []int64, o loadOpts) ([]
 	for rows.Next() {
 		var v VariantJSON
 		if err := rows.Scan(&v.ID, &v.SKU, &v.ItemBarcode, &v.Price, &v.Cost, &v.Weight, &v.Attributes, &v.ExpiryDate,
-			&v.ManufacturedDate, &v.ProductID, &v.CreatedBy, &v.CreatedAt, &v.UpdatedAt, &v.MRP, &v.BasePrice); err != nil {
+			&v.ManufacturedDate, &v.ProductID, &v.CreatedBy, &v.CreatedAt, &v.UpdatedAt, &v.MRP, &v.BasePrice, &v.ScaleCode); err != nil {
 			rows.Close()
 			return nil, err
 		}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -19,6 +20,9 @@ import (
 // main code stays product_variants.item_barcode (labels print it); a
 // variant may have other codes, each optionally naming one of the
 // product's units (a case code: scanning it counts one case).
+
+// scaleCodePattern is a scale code (PLU): 4 to 6 digits.
+var scaleCodePattern = regexp.MustCompile(`^[0-9]{4,6}$`)
 
 // MaxBarcodesPerProduct bounds a product's extra codes.
 const MaxBarcodesPerProduct = 50
@@ -89,8 +93,15 @@ type barcodeIn struct {
 	UnitID    money.Int `json:"unitId"` // optional: one of the product's units
 }
 
+type scaleCodeIn struct {
+	VariantID money.Int `json:"variantId"`
+	ScaleCode *string   `json:"scaleCode"` // null or "": none
+}
+
 type barcodesIn struct {
-	Barcodes []barcodeIn `json:"barcodes"`
+	Barcodes []barcodeIn `json:"barcodes"` // replaces all; missing keeps them
+	// ScaleCodes sets variants' scale codes (00044); missing keeps them.
+	ScaleCodes []scaleCodeIn `json:"scaleCodes"`
 }
 
 // putBarcodes is PUT /api/products/{id}/barcodes: replaces the product's
@@ -179,11 +190,17 @@ func (a *API) putBarcodes(w http.ResponseWriter, r *http.Request) {
 			JOIN product_variants v ON v.id = vb.variant_id WHERE v.product_id = $1`, id).Scan(&before); err != nil {
 			return err
 		}
-		if _, err := tx.Exec(ctx, `DELETE FROM variant_barcodes vb USING product_variants v
-			WHERE v.id = vb.variant_id AND v.product_id = $1`, id); err != nil {
-			return err
+		// Missing barcodes keep them (a request with only scaleCodes); [] clears.
+		if in.Barcodes != nil {
+			if _, err := tx.Exec(ctx, `DELETE FROM variant_barcodes vb USING product_variants v
+				WHERE v.id = vb.variant_id AND v.product_id = $1`, id); err != nil {
+				return err
+			}
 		}
 		after := make([]string, 0, len(in.Barcodes))
+		if in.Barcodes == nil {
+			after = append(after, before...) // kept
+		}
 		for i, b := range in.Barcodes {
 			k := fmt.Sprintf("barcodes[%d]", i)
 			if !variants[b.VariantID.V] {
@@ -212,6 +229,37 @@ func (a *API) putBarcodes(w http.ResponseWriter, r *http.Request) {
 				return err
 			}
 			after = append(after, b.Code)
+		}
+		for i, sc := range in.ScaleCodes {
+			k := fmt.Sprintf("scaleCodes[%d]", i)
+			if !variants[sc.VariantID.V] {
+				f[k+".variantId"] = "Not a variant of this product."
+				continue
+			}
+			code := ""
+			if sc.ScaleCode != nil {
+				code = strings.TrimSpace(*sc.ScaleCode)
+			}
+			if code != "" && !scaleCodePattern.MatchString(code) {
+				f[k+".scaleCode"] = "A scale code is the 4 to 6 digits the scale prints."
+				continue
+			}
+			if code != "" {
+				var taken bool
+				if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM product_variants WHERE scale_code = $1 AND id <> $2 AND deleted_at IS NULL)`,
+					code, sc.VariantID.V).Scan(&taken); err != nil {
+					return err
+				}
+				if taken {
+					f[k+".scaleCode"] = "Another product has this scale code."
+					continue
+				}
+			}
+			if _, err := tx.Exec(ctx, `UPDATE product_variants SET scale_code = NULLIF($2, ''), updated_at = now() WHERE id = $1`,
+				sc.VariantID.V, code); err != nil {
+				return err
+			}
+			after = append(after, "scale:"+code)
 		}
 		if err := apperr.Fields(f); err != nil {
 			return err

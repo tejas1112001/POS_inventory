@@ -244,6 +244,12 @@ type barcodeJSON struct {
 	// UnitID: the scanned code is another code of the variant naming one
 	// of the product's units (a case code, 00043).
 	UnitID *int64 `json:"unitId"`
+	// Quantity: a weighing scale's label (00044) gave the quantity in base
+	// units (its weight, or its price at the store's price); Scale says
+	// which ("weight" or "price") and ScaleValue is the printed value.
+	Quantity   *qty.Q           `json:"quantity,omitempty"`
+	Scale      string           `json:"scale,omitempty"`
+	ScaleValue *decimal.Decimal `json:"scaleValue,omitempty"`
 }
 
 func (a *API) barcode(w http.ResponseWriter, r *http.Request) {
@@ -265,9 +271,11 @@ func (a *API) barcode(w http.ResponseWriter, r *http.Request) {
 				AND (v.item_barcode = $1 OR vb.code IS NOT NULL OR v.sku = $1::citext)
 			ORDER BY coalesce(v.item_barcode = $1, false) DESC, (vb.code IS NOT NULL) DESC, v.id LIMIT 1`, code).Scan(&pid, &out.VariantID, &out.UnitID)
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil
-		}
-		if err != nil {
+			// Not a product's code: a weighing scale's label?
+			if pid, err = scaleLookup(r.Context(), tx, code, storeID, &out); err != nil || pid == 0 {
+				return err
+			}
+		} else if err != nil {
 			return err
 		}
 		out.ProductJSON, found, err = loadOne(r.Context(), tx, pid, loadOpts{storeID: storeID})

@@ -6,7 +6,9 @@ package settings
 import (
 	"context"
 	"crypto/x509"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"regexp"
 	"strings"
@@ -30,6 +32,7 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend/internal/money"
 	"github.com/tejas1112001/POS_inventory/backend/internal/plans"
 	"github.com/tejas1112001/POS_inventory/backend/internal/rbac"
+	"github.com/tejas1112001/POS_inventory/backend/internal/scale"
 	"github.com/tejas1112001/POS_inventory/backend/internal/secrets"
 	"github.com/tejas1112001/POS_inventory/backend/internal/tenancy"
 )
@@ -100,8 +103,9 @@ type Business struct {
 	Name, Currency, Locale, Timezone, TaxLabel, TaxSplit, InvoicePrefix string
 	LegalName, Address, Phone, Email, TaxRegistrationNo                 *string
 	ReceiptHeader, ReceiptFooter                                        *string
-	StateCode                                                           *string // the shop's GST state (M3 DB1); nil: not set
-	InvoiceNumbering                                                    string  // M3 §6: "shop" or "store_year"
+	StateCode                                                           *string      // the shop's GST state (M3 DB1); nil: not set
+	InvoiceNumbering                                                    string       // M3 §6: "shop" or "store_year"
+	ScaleBarcodes                                                       []scale.Rule // scale barcode rules (00044); empty: off
 	LogoFileID                                                          *uuid.UUID
 	PricesIncludeTax                                                    bool
 	MaxDiscountPct                                                      decimal.Decimal
@@ -143,7 +147,7 @@ func DefaultStore(ctx context.Context, tx tenancy.TenantTx) (id int64, slug stri
 const qLoad = `SELECT business_name, legal_name, address, phone, email::text, logo_file_id, currency, locale, timezone,
 		tax_label, tax_registration_no, tax_split, prices_include_tax_default, max_discount_pct_without_override,
 		invoice_prefix, receipt_header, receipt_footer, default_customer_id, home_page, shop_store_id, new_checkout, updated_at,
-		low_stock_email, receipt_paper, show_mrp_on_receipt, state_code, invoice_numbering
+		low_stock_email, receipt_paper, show_mrp_on_receipt, state_code, invoice_numbering, scale_barcodes
 	FROM settings WHERE id = 1`
 
 // LoadBusiness reads the settings row in the caller's tenant transaction.
@@ -156,7 +160,7 @@ func scanBusiness(row pgx.Row) (Business, error) {
 	err := row.Scan(&b.Name, &b.LegalName, &b.Address, &b.Phone, &b.Email, &b.LogoFileID, &b.Currency, &b.Locale,
 		&b.Timezone, &b.TaxLabel, &b.TaxRegistrationNo, &b.TaxSplit, &b.PricesIncludeTax, &b.MaxDiscountPct,
 		&b.InvoicePrefix, &b.ReceiptHeader, &b.ReceiptFooter, &b.DefaultCustomerID, &b.HomePage, &b.ShopStoreID, &b.NewCheckout, &b.UpdatedAt,
-		&b.LowStockEmail, &b.ReceiptPaper, &b.ShowMRPOnReceipt, &b.StateCode, &b.InvoiceNumbering)
+		&b.LowStockEmail, &b.ReceiptPaper, &b.ShowMRPOnReceipt, &b.StateCode, &b.InvoiceNumbering, &b.ScaleBarcodes)
 	return b, err
 }
 
@@ -184,6 +188,7 @@ type JSON struct {
 	TaxSplit          string          `json:"taxSplit"`
 	StateCode         *string         `json:"stateCode"`        // M3: the shop's GST state code
 	InvoiceNumbering  string          `json:"invoiceNumbering"` // M3 §6: shop or store_year
+	ScaleBarcodes     []scale.Rule    `json:"scaleBarcodes"`    // weighing-scale label layouts (00044)
 	PricesIncludeTax  bool            `json:"pricesIncludeTax"`
 	MaxDiscountPct    decimal.Decimal `json:"maxDiscountPct"`
 	InvoicePrefix     string          `json:"invoicePrefix"`
@@ -205,6 +210,7 @@ func toJSON(b Business) JSON {
 	return JSON{BusinessName: b.Name, LegalName: b.LegalName, Address: b.Address, Phone: b.Phone, Email: b.Email,
 		Logo: files.URLPtr(b.LogoFileID, files.PurposeTenantLogo), Currency: b.Currency, Locale: b.Locale,
 		Timezone: b.Timezone, TaxLabel: b.TaxLabel, TaxRegistrationNo: b.TaxRegistrationNo, TaxSplit: b.TaxSplit, StateCode: b.StateCode, InvoiceNumbering: b.InvoiceNumbering,
+		ScaleBarcodes:    b.ScaleBarcodes,
 		PricesIncludeTax: b.PricesIncludeTax, MaxDiscountPct: b.MaxDiscountPct, InvoicePrefix: b.InvoicePrefix,
 		ReceiptHeader: b.ReceiptHeader, ReceiptFooter: b.ReceiptFooter, DefaultCustomerID: b.DefaultCustomerID,
 		HomePage: b.HomePage, ShopStoreID: b.ShopStoreID, NewCheckout: b.NewCheckout, LowStockEmail: b.LowStockEmail, ReceiptPaper: b.ReceiptPaper,
@@ -241,32 +247,33 @@ func (a *API) get(w http.ResponseWriter, r *http.Request) {
 // ------------------------------------------------------------------ PUT
 
 type settingsIn struct {
-	BusinessName      *string   `json:"businessName"`
-	LegalName         *string   `json:"legalName"`
-	Address           *string   `json:"address"`
-	Phone             *string   `json:"phone"`
-	Email             *string   `json:"email"`
-	Logo              *string   `json:"logo"`
-	Currency          *string   `json:"currency"`
-	Locale            *string   `json:"locale"`
-	Timezone          *string   `json:"timezone"`
-	TaxLabel          *string   `json:"taxLabel"`
-	TaxRegistrationNo *string   `json:"taxRegistrationNo"`
-	TaxSplit          *string   `json:"taxSplit"`
-	StateCode         *string   `json:"stateCode"`
-	InvoiceNumbering  *string   `json:"invoiceNumbering"`
-	PricesIncludeTax  *bool     `json:"pricesIncludeTax"`
-	MaxDiscountPct    money.Dec `json:"maxDiscountPct"`
-	InvoicePrefix     *string   `json:"invoicePrefix"`
-	ReceiptHeader     *string   `json:"receiptHeader"`
-	ReceiptFooter     *string   `json:"receiptFooter"`
-	DefaultCustomerID money.Int `json:"defaultCustomerId"`
-	HomePage          *string   `json:"homePage"`
-	ShopStoreID       money.Int `json:"shopStoreId"`
-	NewCheckout       *bool     `json:"newCheckout"`
-	LowStockEmail     *bool     `json:"lowStockEmail"`
-	ReceiptPaper      *string   `json:"receiptPaper"`
-	ShowMRPOnReceipt  *bool     `json:"showMrpOnReceipt"`
+	BusinessName      *string       `json:"businessName"`
+	LegalName         *string       `json:"legalName"`
+	Address           *string       `json:"address"`
+	Phone             *string       `json:"phone"`
+	Email             *string       `json:"email"`
+	Logo              *string       `json:"logo"`
+	Currency          *string       `json:"currency"`
+	Locale            *string       `json:"locale"`
+	Timezone          *string       `json:"timezone"`
+	TaxLabel          *string       `json:"taxLabel"`
+	TaxRegistrationNo *string       `json:"taxRegistrationNo"`
+	TaxSplit          *string       `json:"taxSplit"`
+	StateCode         *string       `json:"stateCode"`
+	InvoiceNumbering  *string       `json:"invoiceNumbering"`
+	ScaleBarcodes     *[]scale.Rule `json:"scaleBarcodes"`
+	PricesIncludeTax  *bool         `json:"pricesIncludeTax"`
+	MaxDiscountPct    money.Dec     `json:"maxDiscountPct"`
+	InvoicePrefix     *string       `json:"invoicePrefix"`
+	ReceiptHeader     *string       `json:"receiptHeader"`
+	ReceiptFooter     *string       `json:"receiptFooter"`
+	DefaultCustomerID money.Int     `json:"defaultCustomerId"`
+	HomePage          *string       `json:"homePage"`
+	ShopStoreID       money.Int     `json:"shopStoreId"`
+	NewCheckout       *bool         `json:"newCheckout"`
+	LowStockEmail     *bool         `json:"lowStockEmail"`
+	ReceiptPaper      *string       `json:"receiptPaper"`
+	ShowMRPOnReceipt  *bool         `json:"showMrpOnReceipt"`
 }
 
 var (
@@ -402,6 +409,16 @@ func (a *API) apply(in settingsIn, b *Business) (changed []string, err error) {
 			f["stateCode"] = "Choose a GST state code (two digits, such as 27 for Maharashtra)."
 		}
 	}
+	if in.ScaleBarcodes != nil {
+		rules := *in.ScaleBarcodes
+		if rules == nil {
+			rules = []scale.Rule{}
+		}
+		for k, v := range scale.CheckRules(rules) {
+			f[k] = v
+		}
+		b.ScaleBarcodes = rules
+	}
 	if in.InvoiceNumbering != nil {
 		switch v := strings.TrimSpace(*in.InvoiceNumbering); v {
 		case "shop", "store_year":
@@ -481,7 +498,8 @@ func (a *API) apply(in settingsIn, b *Business) (changed []string, err error) {
 		{"email", neq(before.Email, b.Email)}, {"currency", before.Currency != b.Currency},
 		{"locale", before.Locale != b.Locale}, {"timezone", before.Timezone != b.Timezone},
 		{"taxLabel", before.TaxLabel != b.TaxLabel}, {"taxRegistrationNo", neq(before.TaxRegistrationNo, b.TaxRegistrationNo)},
-		{"taxSplit", before.TaxSplit != b.TaxSplit}, {"stateCode", neq(before.StateCode, b.StateCode)}, {"invoiceNumbering", before.InvoiceNumbering != b.InvoiceNumbering}, {"pricesIncludeTax", before.PricesIncludeTax != b.PricesIncludeTax},
+		{"taxSplit", before.TaxSplit != b.TaxSplit}, {"stateCode", neq(before.StateCode, b.StateCode)}, {"invoiceNumbering", before.InvoiceNumbering != b.InvoiceNumbering},
+		{"scaleBarcodes", fmt.Sprint(before.ScaleBarcodes) != fmt.Sprint(b.ScaleBarcodes)}, {"pricesIncludeTax", before.PricesIncludeTax != b.PricesIncludeTax},
 		{"maxDiscountPct", !before.MaxDiscountPct.Equal(b.MaxDiscountPct)}, {"invoicePrefix", before.InvoicePrefix != b.InvoicePrefix},
 		{"receiptHeader", neq(before.ReceiptHeader, b.ReceiptHeader)}, {"receiptFooter", neq(before.ReceiptFooter, b.ReceiptFooter)},
 		{"defaultCustomerId", neqInt(before.DefaultCustomerID, b.DefaultCustomerID)},
@@ -506,7 +524,7 @@ const qUpdate = `UPDATE settings SET business_name = $1, legal_name = $2, addres
 		tax_split = $12, prices_include_tax_default = $13, max_discount_pct_without_override = $14,
 		invoice_prefix = $15, receipt_header = $16, receipt_footer = $17, default_customer_id = $18,
 		home_page = $19, shop_store_id = $20, new_checkout = $21, low_stock_email = $22, receipt_paper = $23,
-		show_mrp_on_receipt = $24, state_code = $25, invoice_numbering = $26, updated_at = now()
+		show_mrp_on_receipt = $24, state_code = $25, invoice_numbering = $26, scale_barcodes = $27, updated_at = now()
 	WHERE id = 1`
 
 func (a *API) put(w http.ResponseWriter, r *http.Request) {
@@ -589,7 +607,7 @@ func (a *API) put(w http.ResponseWriter, r *http.Request) {
 		if _, err := tx.Exec(ctx, qUpdate, b.Name, b.LegalName, b.Address, b.Phone, b.Email, b.LogoFileID, b.Currency,
 			b.Locale, b.Timezone, b.TaxLabel, b.TaxRegistrationNo, b.TaxSplit, b.PricesIncludeTax, b.MaxDiscountPct,
 			b.InvoicePrefix, b.ReceiptHeader, b.ReceiptFooter, b.DefaultCustomerID, b.HomePage, b.ShopStoreID, b.NewCheckout, b.LowStockEmail, b.ReceiptPaper,
-			b.ShowMRPOnReceipt, b.StateCode, b.InvoiceNumbering); err != nil {
+			b.ShowMRPOnReceipt, b.StateCode, b.InvoiceNumbering, scaleJSON(b.ScaleBarcodes)); err != nil {
 			return err
 		}
 		if len(changed) > 0 {
@@ -612,4 +630,13 @@ func (a *API) put(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, res)
+}
+
+// scaleJSON is the rules as the jsonb column takes them ([] for none).
+func scaleJSON(rules []scale.Rule) string {
+	if rules == nil {
+		rules = []scale.Rule{}
+	}
+	b, _ := json.Marshal(rules)
+	return string(b)
 }

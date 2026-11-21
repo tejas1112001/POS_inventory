@@ -21,12 +21,17 @@ function rowsOf(product) {
 // barcode (labels print it) is set on the product form.
 export default function BarcodesCard({ product, canEdit, onSaved }) {
   const saved = useMemo(() => rowsOf(product), [product]);
+  // Scale codes (scale barcodes): the item code a weighing scale prints, per option.
+  const savedScale = useMemo(() => Object.fromEntries((product?.ProductVariants || []).map((v) => [v.id, v.scaleCode || ''])), [product]);
   const [rows, setRows] = useState(saved);
+  const [scale, setScale] = useState(savedScale);
   const [busy, setBusy] = useState(false);
   useEffect(() => setRows(saved), [saved]);
+  useEffect(() => setScale(savedScale), [savedScale]);
   const variants = product?.ProductVariants || [];
   const units = product?.units || [];
-  if (variants.length === 0 || (!canEdit && saved.length === 0)) return null;
+  const anyScale = Object.values(savedScale).some(Boolean);
+  if (variants.length === 0 || (!canEdit && saved.length === 0 && !anyScale)) return null;
 
   const set = (i, patch) => setRows((r) => r.map((x, j) => (j === i ? { ...x, ...patch } : x)));
   const label = (v) => v.label || v.sku;
@@ -39,16 +44,24 @@ export default function BarcodesCard({ product, canEdit, onSaved }) {
       if (variants.some((v) => v.itemBarcode === c)) return `Barcode ${i + 1} is already the main barcode.`;
       seen.add(c);
     }
+    for (const v of variants) {
+      const c = (scale[v.id] || '').trim();
+      if (c && !/^[0-9]{4,6}$/.test(c)) return `Scale code of ${label(v)}: the 4 to 6 digits the scale prints.`;
+    }
     return '';
   })();
-  const dirty = JSON.stringify(rows) !== JSON.stringify(saved);
+  const scaleDirty = variants.some((v) => (scale[v.id] || '').trim() !== (savedScale[v.id] || ''));
+  const dirty = JSON.stringify(rows) !== JSON.stringify(saved) || scaleDirty;
 
   const save = async () => {
     setBusy(true);
     try {
       await api.put(
         `/api/products/${product.id}/barcodes`,
-        { barcodes: rows.map((r) => ({ variantId: Number(r.variantId), code: r.code.trim(), ...(r.unitId ? { unitId: Number(r.unitId) } : {}) })) },
+        {
+          barcodes: rows.map((r) => ({ variantId: Number(r.variantId), code: r.code.trim(), ...(r.unitId ? { unitId: Number(r.unitId) } : {}) })),
+          ...(scaleDirty ? { scaleCodes: variants.map((v) => ({ variantId: v.id, scaleCode: (scale[v.id] || '').trim() })) } : {}),
+        },
         { quiet: true }
       );
       toast.success('Barcodes saved.');
@@ -133,7 +146,25 @@ export default function BarcodesCard({ product, canEdit, onSaved }) {
           ))}
         </ul>
       )}
-      {canEdit && problem && rows.length > 0 && (
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t px-4 py-2">
+        <span className="text-xs text-muted-foreground">Scale code (the item code a weighing scale prints on its labels):</span>
+        {variants.map((v) => (
+          <label key={v.id} className="flex items-center gap-1 text-sm">
+            {variants.length > 1 && <span className="text-xs text-muted-foreground">{label(v)}</span>}
+            <Input
+              className="h-8 w-24 font-mono text-sm"
+              inputMode="numeric"
+              maxLength={6}
+              value={scale[v.id] || ''}
+              disabled={!canEdit}
+              placeholder="None"
+              onChange={(e) => setScale((x) => ({ ...x, [v.id]: e.target.value }))}
+              aria-label={`Scale code of ${label(v)}`}
+            />
+          </label>
+        ))}
+      </div>
+      {canEdit && problem && (
         <p role="alert" className="border-t px-4 py-2 text-xs text-danger-fg">
           {problem}
         </p>

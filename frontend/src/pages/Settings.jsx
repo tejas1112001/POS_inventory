@@ -5,6 +5,7 @@ import ShopSettings from '@/components/settings/ShopSettings';
 import EmailSettings from '@/components/settings/EmailSettings';
 import BusinessSettings from '@/components/settings/BusinessSettings';
 import ScannerSettings from '@/components/settings/ScannerSettings';
+import ScaleSettings from '@/components/settings/ScaleSettings';
 import LabelSettings from '@/components/settings/LabelSettings';
 import ReturnPolicySettings from '@/components/settings/ReturnPolicySettings';
 import BatchSettings from '@/components/settings/BatchSettings';
@@ -68,6 +69,7 @@ export default function Settings() {
         <div className="space-y-3">
           <Appearance />
           <ScannerSettings />
+          <ScaleSettings canEdit={hasPermission('settings', 'edit')} />
         </div>
       )}
     </div>
