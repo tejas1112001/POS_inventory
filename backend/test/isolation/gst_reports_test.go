@@ -68,14 +68,14 @@ func TestGSTReturns(t *testing.T) {
 		r := postReturn(t, l, tok, retBody(s.Body["id"], store, map[string]any{"productId": p.pid, "variantId": p.vid, "quantity": q, "reason": "x"}), nil)
 		require.Equal(t, 201, r.Code, r.Raw)
 	}
-	sale(mum, line(tea, 1), "", nil)                    // b2cs 27, 18 %
-	toKA := sale(mum, line(tea, 1), "29", nil)          // b2cs 29, 18 % ...
-	ret(toKA, mum, tea, 1)                              // ... and its credit note: b2cs 29 nets to 0
-	b2b := sale(mum, line(tea, 2), "", kaveri.Body["id"]) // b2b (supplied in Maharashtra)
-	ret(b2b, mum, tea, 1)                               // cdnr
+	sale(mum, line(tea, 1), "", nil)                         // b2cs 27, 18 %
+	toKA := sale(mum, line(tea, 1), "29", nil)               // b2cs 29, 18 % ...
+	ret(toKA, mum, tea, 1)                                   // ... and its credit note: b2cs 29 nets to 0
+	b2b := sale(mum, line(tea, 2), "", kaveri.Body["id"])    // b2b (supplied in Maharashtra)
+	ret(b2b, mum, tea, 1)                                    // cdnr
 	large := sale(mum, line(tea, 710), "29", big.Body["id"]) // b2cl: 710 x 142.19 > 1,00,000
-	ret(large, mum, tea, 10)                            // cdnur
-	sale(mum, line(rice, 1), "", nil)                   // nil, intra-state B2C
+	ret(large, mum, tea, 10)                                 // cdnur
+	sale(mum, line(rice, 1), "", nil)                        // nil, intra-state B2C
 	void := sale(mum, line(tea, 1), "", nil)
 	require.Equal(t, 204, call("DELETE", fmt.Sprintf("/api/sales/%v?reason=test", void.Body["id"]), nil).Code)
 	sale(num(blr.Body["id"]), line(kaTea, 1), "", nil) // the Karnataka GSTIN's
