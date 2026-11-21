@@ -28,7 +28,8 @@ import SaleDone from './SaleDone';
 import CustomerPicker from './CustomerPicker';
 import ShortcutsHelp from './ShortcutsHelp';
 import BatchPicker from './BatchPicker';
-import { fmtQty } from '@/lib/qty';
+import { addQty, fmtQty } from '@/lib/qty';
+import { lineBase, unitOptionLabel } from '@/lib/saleUnits';
 
 const FAV_KEY = 'pos.favourites';
 
@@ -107,7 +108,7 @@ export default function Checkout() {
   const categories = useMemo(() => [...new Set(c.products.map((p) => p.category).filter(Boolean))].sort((a, b) => a.localeCompare(b)), [c.products]);
   const inCart = useMemo(() => {
     const m = new Map();
-    for (const l of lines) m.set(l.productId, (m.get(l.productId) || 0) + l.quantity);
+    for (const l of lines) m.set(l.productId, addQty(m.get(l.productId) || 0, lineBase(l)));
     return m;
   }, [lines]);
 
@@ -205,7 +206,15 @@ export default function Checkout() {
         ...(c.customerId && String(c.customerId) !== String(c.walkIn?.id) ? { customerId: Number(c.customerId) } : {}),
         label,
         discount: c.discount || 0,
-        lines: lines.map((l) => ({ productId: l.productId, variantId: l.variantId, quantity: l.quantity, unitPrice: l.unitPrice, name: l.name, label: l.label || '' })),
+        lines: lines.map((l) => ({
+          productId: l.productId,
+          variantId: l.variantId,
+          quantity: l.quantity,
+          unitPrice: l.unitPrice,
+          name: l.name,
+          label: l.label || '',
+          ...(l.unitId ? { unitId: l.unitId } : {}), // H3: quantity in this unit
+        })),
       },
       { quiet: true }
     );
@@ -330,9 +339,9 @@ export default function Checkout() {
   const canCredit = hasPermission('sales', 'credit');
   const store = c.stores.find((s) => String(s.id) === String(c.storeId));
   const q = c.quoteReady ? c.quote.data : null;
-  const estimate = lines.reduce((n, l) => n + l.price * l.quantity, 0);
+  const estimate = lines.reduce((n, l) => n + l.price * lineBase(l), 0);
   const total = q ? Number(q.total) : Math.max(0, estimate - c.discount);
-  const itemCount = lines.reduce((n, l) => n + l.quantity, 0);
+  const itemCount = lines.reduce((n, l) => addQty(n, lineBase(l)), 0); // base units
   const quoteProblem = c.quote.error && !priceChanges(c.quote.error) ? c.quote.error : null;
 
   if (c.loading) {
@@ -404,7 +413,8 @@ export default function Checkout() {
                         <p className="truncate text-sm font-medium">{l.name}</p>
                         {l.label && <p className="truncate text-xs text-slate-600 dark:text-slate-300">{l.label}</p>}
                         <p className="text-xs text-slate-600 tabular-nums dark:text-slate-300">
-                          {formatCurrency(l.price)} each{ql && Number(ql.taxRate) > 0 ? ` · tax ${Number(ql.taxRate)}%` : ''}
+                          {l.unitId ? `${formatCurrency(l.price * l.factor)} per ${l.unitName}` : `${formatCurrency(l.price)} each`}
+                          {ql && Number(ql.taxRate) > 0 ? ` · tax ${Number(ql.taxRate)}%` : ''}
                           {ql?.mrp != null ? ` · MRP ${formatCurrency(ql.mrp)}` : ''}
                         </p>
                         {ql?.aboveMrp && (
@@ -433,10 +443,29 @@ export default function Checkout() {
                             </button>
                           </div>
                         )}
+                        {l.units?.length > 0 && (
+                          // H3: sell this line by the piece or in another of the product's units.
+                          <div className="mt-1" onClick={(e) => e.stopPropagation()}>
+                            <Select value={l.unitId ? String(l.unitId) : 'base'} onValueChange={(v) => c.setLineUnit(l.key, v === 'base' ? null : v)}>
+                              <SelectTrigger className="h-8 w-auto min-w-[8rem] text-xs" aria-label={`Unit of ${lineName(l)}`}>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="base">{l.baseName || 'Single'}</SelectItem>
+                                {l.units.map((u) => (
+                                  <SelectItem key={u.unitId} value={String(u.unitId)}>
+                                    {unitOptionLabel(u)}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            {l.unitId && <span className="ml-2 text-xs text-slate-600 tabular-nums dark:text-slate-300">= {fmtQty(lineBase(l))} {l.baseName}</span>}
+                          </div>
+                        )}
                         {l.maxQty <= 0 ? (
                           <p className="mt-0.5 text-xs font-medium text-danger-fg">Not in stock at this store</p>
                         ) : (
-                          l.quantity > l.maxQty && <p className="mt-0.5 text-xs font-medium text-warning-fg">Only {l.maxQty} at this store</p>
+                          lineBase(l) > l.maxQty && <p className="mt-0.5 text-xs font-medium text-warning-fg">Only {fmtQty(l.maxQty)} {l.baseName} at this store</p>
                         )}
                       </div>
                       <Button variant="ghost" size="icon" className="size-9 shrink-0 text-muted-foreground hover:text-danger" aria-label={`Remove ${lineName(l)}`} onClick={() => c.removeLine(l.key)}>
@@ -467,15 +496,15 @@ export default function Checkout() {
                             }}
                           />
                         ) : (
-                          <button type="button" onClick={() => setEditingQty(l.key)} className="h-9 min-w-10 rounded-md px-1 text-center text-sm font-semibold tabular-nums hover:bg-muted" aria-label={`Quantity ${fmtQty(l.quantity)}. Tap to type a quantity`}>
+                          <button type="button" onClick={() => setEditingQty(l.key)} className="h-9 min-w-10 rounded-md px-1 text-center text-sm font-semibold tabular-nums hover:bg-muted" aria-label={`Quantity ${fmtQty(l.quantity)}${l.unitId ? ` ${l.unitName}` : ''}. Tap to type a quantity`}>
                             {fmtQty(l.quantity)}
                           </button>
                         )}
-                        <Button variant="outline" size="icon" className="size-9" aria-label={`One more ${lineName(l)}`} disabled={l.quantity >= l.maxQty} onClick={() => c.changeQuantity(l.key, 1)}>
+                        <Button variant="outline" size="icon" className="size-9" aria-label={`One more ${lineName(l)}`} disabled={lineBase({ ...l, quantity: addQty(l.quantity, 1) }) > l.maxQty} onClick={() => c.changeQuantity(l.key, 1)}>
                           <Plus className="size-3.5" aria-hidden="true" />
                         </Button>
                       </div>
-                      <p className="text-sm font-semibold tabular-nums">{formatCurrency(ql ? ql.total : l.price * l.quantity)}</p>
+                      <p className="text-sm font-semibold tabular-nums">{formatCurrency(ql ? ql.total : l.price * lineBase(l))}</p>
                     </div>
                   </div>
                 </li>
@@ -685,7 +714,7 @@ export default function Checkout() {
       {receiptFor && <Receipt isOpen sale={receiptFor.sale} store={store} autoPrint={receiptFor.print} onClose={() => setReceiptFor(null)} />}
       {picking && (
         <BatchPicker
-          line={picking}
+          line={{ ...picking, quantity: lineBase(picking) }}
           storeId={c.storeId}
           onClose={() => setPicking(null)}
           onPick={(picks) => {

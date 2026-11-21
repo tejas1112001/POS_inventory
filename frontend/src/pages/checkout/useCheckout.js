@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '@/services/api';
 import { priceChanges } from '@/lib/checkout';
 import { addQty, fmtQty, parseQty } from '@/lib/qty';
+import { lineBase, maxInUnit, saleUnitsOf, unitOptionLabel } from '@/lib/saleUnits';
 import { variantLabel, variantStock, variantsOf } from '@/components/pos/stock';
 
 const RENEW_MS = 60_000; // locks last 2 minutes; renew well before
@@ -21,8 +22,10 @@ export function cartBody(lines, { storeId, customerId, discount }) {
       variantId: l.variantId,
       quantity: l.quantity,
       unitPrice: l.unitPrice,
-      // Batches the cashier chose (industry P3 item 3); dropped once they no longer fit the quantity.
-      ...(l.batches?.length && addQty(...l.batches.map((b) => b.quantity)) <= l.quantity ? { batches: l.batches } : {}),
+      // H3: the quantity is in this unit; the price stays per base unit.
+      ...(l.unitId ? { unitId: l.unitId } : {}),
+      // Batches the cashier chose (industry P3 item 3, in base units); dropped once they no longer fit the quantity.
+      ...(l.batches?.length && addQty(...l.batches.map((b) => b.quantity)) <= lineBase(l) ? { batches: l.batches } : {}),
     })),
     storeId: Number(storeId),
     ...(customerId ? { customerId: Number(customerId) } : {}),
@@ -37,7 +40,9 @@ function lock(id, storeId, on, opts = {}) {
 // useCheckout: everything the new checkout keeps between renders.
 //  - stores, customers, the chosen store and customer
 //  - the store's products (refetched per store)
-//  - cart lines, one per variant: { key, productId, variantId, name, label, image, price, unitPrice, quantity, maxQty }
+//  - cart lines, one per variant: { key, productId, variantId, name, label, image, price, unitPrice, quantity, maxQty,
+//    units, baseName, unitId, unitName, factor }. quantity is in the line's unit (unitId; base units when null),
+//    maxQty, price and unitPrice in base units (H3).
 //  - product locks: taken when a product enters the cart, renewed every
 //    minute, released when its last line leaves, on store change and when
 //    the tab closes
@@ -161,7 +166,7 @@ export default function useCheckout({ defaultCustomerId }) {
       const line = lines.find((l) => l.key === key);
       if (!line) return;
       const quantity = addQty(line.quantity, delta);
-      if (delta > 0 && quantity > line.maxQty) {
+      if (delta > 0 && lineBase({ ...line, quantity }) > line.maxQty) {
         setProblem(`Only ${fmtQty(line.maxQty)} of "${lineName(line)}" in stock here.`);
         return;
       }
@@ -182,9 +187,10 @@ export default function useCheckout({ defaultCustomerId }) {
         return;
       }
       if (n <= 0) return;
-      if (n > line.maxQty) {
+      if (lineBase({ ...line, quantity: n }) > line.maxQty) {
         setProblem(`Only ${fmtQty(line.maxQty)} of "${lineName(line)}" in stock here.`);
-        setLines((prev) => prev.map((l) => (l.key === key ? { ...l, quantity: line.allowFraction ? line.maxQty : Math.max(1, Math.floor(line.maxQty)) } : l)));
+        const most = maxInUnit(line.maxQty, line.factor, line.allowFraction);
+        setLines((prev) => prev.map((l) => (l.key === key ? { ...l, quantity: most > 0 ? most : l.quantity } : l)));
         return;
       }
       setProblem(null);
@@ -194,6 +200,28 @@ export default function useCheckout({ defaultCustomerId }) {
   );
 
   const removeLine = useCallback((key) => setLines((prev) => prev.filter((l) => l.key !== key)), []);
+
+  // setLineUnit sells a line in another of its units (H3; null: the base
+  // unit). The line starts again at one of the new unit, and its chosen
+  // batches are dropped (they no longer match the quantity).
+  const setLineUnit = useCallback(
+    (key, unitId) => {
+      const line = lines.find((l) => l.key === key);
+      if (!line) return;
+      const u = unitId ? line.units.find((x) => String(x.unitId) === String(unitId)) : null;
+      if (unitId && !u) return;
+      const factor = u ? u.factor : 1;
+      if (factor > line.maxQty) {
+        setProblem(`Not enough "${lineName(line)}" in stock here for one ${u ? unitOptionLabel(u) : line.baseName || 'unit'}.`);
+        return;
+      }
+      setProblem(null);
+      setLines((prev) =>
+        prev.map((l) => (l.key === key ? { ...l, unitId: u ? u.unitId : null, unitName: u ? u.name : '', factor, quantity: 1, batches: undefined } : l))
+      );
+    },
+    [lines]
+  );
   const setLineBatches = useCallback((key, batches) => setLines((prev) => prev.map((l) => (l.key === key ? { ...l, batches } : l))), []);
 
   // addVariant puts one unit in the cart (or one more). Returns the line key.
@@ -230,6 +258,11 @@ export default function useCheckout({ defaultCustomerId }) {
             quantity: fresh.allowFraction ? Math.min(1, available) : 1,
             maxQty: available,
             allowFraction: !!fresh.allowFraction,
+            units: saleUnitsOf(fresh),
+            baseName: fresh.unit || '',
+            unitId: null,
+            unitName: '',
+            factor: 1,
           },
         ]);
         return v.id;
@@ -269,7 +302,26 @@ export default function useCheckout({ defaultCustomerId }) {
             notes.push(`"${l.name || fresh.name}" is out of stock here.`);
             continue;
           }
-          if (l.quantity > stock) notes.push(`Only ${fmtQty(stock)} of "${l.name || fresh.name}" left here.`);
+          // H3: a line held in a unit comes back in it while the product
+          // is still sold in it; otherwise in base units.
+          const units = saleUnitsOf(fresh);
+          let u = l.unitId ? units.find((x) => String(x.unitId) === String(l.unitId)) : null;
+          let quantity = Number(l.quantity);
+          if (l.unitId && !u) {
+            quantity = lineBase({ quantity, factor: Number(l.unitFactor) || 1 });
+            notes.push(`"${l.name || fresh.name}" is no longer sold by the ${l.unitName || 'unit'}; it was added as ${fmtQty(quantity)}.`);
+          } else if (u && Number(l.unitFactor) && Number(l.unitFactor) !== u.factor) {
+            notes.push(`A ${u.name} of "${l.name || fresh.name}" is now ${fmtQty(u.factor)}, not ${fmtQty(l.unitFactor)}.`);
+          }
+          const factor = u ? u.factor : 1;
+          if (lineBase({ quantity, factor }) > stock) {
+            notes.push(`Only ${fmtQty(stock)} of "${l.name || fresh.name}" left here.`);
+            quantity = maxInUnit(stock, factor, !!fresh.allowFraction);
+            if (quantity <= 0) {
+              u = null;
+              quantity = maxInUnit(stock, 1, !!fresh.allowFraction);
+            }
+          }
           next.push({
             key: v.id,
             productId: pid,
@@ -279,9 +331,14 @@ export default function useCheckout({ defaultCustomerId }) {
             image: fresh.image,
             price: Number(l.unitPrice ?? v.price),
             unitPrice: l.unitPrice ?? v.price,
-            quantity: Math.min(l.quantity, stock),
+            quantity,
             maxQty: stock,
             allowFraction: !!fresh.allowFraction,
+            units,
+            baseName: fresh.unit || '',
+            unitId: u ? u.unitId : null,
+            unitName: u ? u.name : '',
+            factor: u ? u.factor : 1,
           });
         }
       }
@@ -324,7 +381,7 @@ export default function useCheckout({ defaultCustomerId }) {
       const v = byVariant.get(l.variantId);
       const stock = v ? Math.max(0, variantStock(v)) : 0;
       if (stock <= 0) missing.push(lineName(l));
-      else if (l.quantity > stock) short.push(`${lineName(l)} (${stock} here)`);
+      else if (lineBase(l) > stock) short.push(`${lineName(l)} (${fmtQty(stock)} here)`);
       return { ...l, maxQty: stock };
     });
     setLines(next);
@@ -417,6 +474,7 @@ export default function useCheckout({ defaultCustomerId }) {
     changeQuantity,
     setQuantity,
     removeLine,
+    setLineUnit,
     setLineBatches,
     clearCart,
     restoreCart,
