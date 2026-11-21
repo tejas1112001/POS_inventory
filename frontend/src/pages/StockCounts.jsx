@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { InlineAlert } from '@/components/feedback/InlineAlert';
 import { SelectField, TextArea } from '@/components/settings/FormKit';
 import { usePermission } from '@/context/PermissionContext';
+import { useModules } from '@/hooks/useModules';
 import { formatDateTime } from '@/lib/format';
 import { api } from '@/services/api';
 
@@ -19,7 +20,10 @@ const STATUSES = ['', 'Draft', 'Completed', 'Cancelled'];
 // new one for a store, or for one category or brand in it.
 export default function StockCounts() {
   const { hasPermission } = usePermission();
-  const canCreate = hasPermission('stock_counts', 'create');
+  const { hasModule } = useModules();
+  // With the module off, past counts stay readable; no new ones.
+  const moduleOn = hasModule('stock_counts');
+  const canCreate = moduleOn && hasPermission('stock_counts', 'create');
   const [stores, setStores] = useState([]);
   const [storeId, setStoreId] = useState('');
   const [status, setStatus] = useState('');
@@ -57,6 +61,11 @@ export default function StockCounts() {
 
   return (
     <div className="space-y-4">
+      {!moduleOn && (
+        <InlineAlert kind="info">
+          Stock counts are switched off for this shop. Past counts are shown read-only; turn the module on in Settings to count again.
+        </InlineAlert>
+      )}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="flex flex-wrap gap-3">
           <div className="w-48">

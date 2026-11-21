@@ -183,9 +183,10 @@ var expiryColumns = []column{
 	{header: "MRP value", kind: kindMoney, width: 2, xlsx: 14, total: true},
 }
 
-// expiryExport is GET /api/reports/expiry/export?format=xlsx|pdf.
+// expiryExport is GET /api/reports/expiry/export?format=csv|xlsx|pdf
+// (CSV as the industry P3 design asks, besides Excel and PDF).
 func (a *API) expiryExport(w http.ResponseWriter, r *http.Request) {
-	a.export(w, r, "expiry-report", func(ctx context.Context, tx tenancy.TenantTx, b settings.Business, max int) (table, map[string]any, error) {
+	a.exportAs(w, r, "expiry-report", true, func(ctx context.Context, tx tenancy.TenantTx, b settings.Business, max int) (table, map[string]any, error) {
 		f, err := a.expiryFilter(ctx, tx, r)
 		if err != nil {
 			return table{}, nil, err

@@ -23,9 +23,9 @@ Each needs the owner's go-ahead or answers from outside. Source: design §9.
 
 ## 3. Small known issues
 
-- [ ] **Stock counts (P3 item 6):** for a product counted by batch, scanning adds to its "No batch" line. To count a batch, use "Count a batch".
-- [ ] **Expiry report (P3 item 7):** exports are Excel and PDF like the other reports; the design said CSV and Excel.
-- [ ] **Stock counts (P1 item 7):** with the stock counts module off, completed counts are hidden. The design says they should stay readable. This needs a small change to the route check from P1 item 1.
+- [x] **Stock counts (P3 item 6):** fixed 2026-11-21. A scan of a product counted by batch is refused with 409 `BATCH_REQUIRED` (`details{variantId, productName}`) instead of landing on "No batch"; the page opens "Count a batch" for it.
+- [x] **Expiry report (P3 item 7):** fixed 2026-11-21. CSV too (`?format=csv`: UTF-8 with BOM, formula-safe, no totals row), besides Excel and PDF; the other reports stay Excel and PDF.
+- [x] **Stock counts (P1 item 7):** fixed 2026-11-21. With the module off, the list and a count stay readable (`modules.Module.ReadsWhenOff` names the two GET routes; every change still returns `MODULE_OFF`); the pages show a read-only notice. The nav item stays hidden while the module is off.
 
 ## 4. Housekeeping
 

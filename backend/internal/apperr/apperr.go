@@ -86,6 +86,7 @@ const (
 	CodeModuleOff          = "MODULE_OFF"         // industry P1 item 1: module not entitled or not switched on
 	CodeNearExpiry         = "NEAR_EXPIRY"        // industry P3 item 2: receiving a batch close to expiry needs a confirmation
 	CodeBatchNotSellable   = "BATCH_NOT_SELLABLE" // industry P3 item 3: expired, recalled or too close to expiry
+	CodeBatchRequired      = "BATCH_REQUIRED"     // a stock count scan of a batch-tracked product needs its batch
 )
 
 // Validation reports field errors.

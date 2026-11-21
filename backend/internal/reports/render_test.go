@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"io"
+	"strings"
 	"testing"
 	"time"
 
@@ -102,4 +103,17 @@ func TestColumnWidths(t *testing.T) {
 		}
 		require.Equal(t, pdfGrid, w, name)
 	}
+}
+
+// CSV (the expiry report): BOM, header, formula-safe text, exact amounts,
+// no totals row.
+func TestWriteCSV(t *testing.T) {
+	b, err := writeCSV(sample(2), "INR", time.UTC)
+	require.NoError(t, err)
+	s := string(b)
+	require.True(t, strings.HasPrefix(s, "\ufeffDate,Reference,Product"), s)
+	lines := strings.Split(strings.TrimSpace(strings.TrimPrefix(s, "\ufeff")), "\n")
+	require.Len(t, lines, 3, "header and two rows, no totals")
+	require.Contains(t, lines[1], ",'=cmd|' /C calc'!A0,", "formula-safe (a leading apostrophe)")
+	require.Contains(t, lines[1], ",84.00,42.00,42.00", "amounts to the paisa")
 }

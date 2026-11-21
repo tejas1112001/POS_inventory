@@ -90,6 +90,10 @@ type Module struct {
 	// the path and everything below it). Every route under them must be
 	// registered with InModule(Key) (CheckRoutes).
 	Routes []string `json:"-"`
+	// ReadsWhenOff are routes under Routes ("GET /api/path") that stay
+	// open with the module off, so its records stay readable. Each is
+	// named exactly: a new route is still checked.
+	ReadsWhenOff []string `json:"-"`
 }
 
 // Registry is the module list, in display order. A new module is added
@@ -119,6 +123,8 @@ var Registry = []Module{
 		Perms:          []string{"stock_counts:view", "stock_counts:create", "stock_counts:complete"},
 		RecommendedFor: []string{Clothing, Footwear, Pharmacy},
 		Routes:         []string{"/api/stock-counts"},
+		// Completed counts stay readable with the module off (P1 item 7).
+		ReadsWhenOff: []string{"GET /api/stock-counts", "GET /api/stock-counts/{id}"},
 	},
 	{
 		Key: BatchExpiry, Label: "Batches and expiry",
@@ -208,6 +214,12 @@ func RouteOwner(reg []Module, path string) string {
 	return ""
 }
 
+// readWhenOff reports whether module key keeps route open when off.
+func readWhenOff(reg []Module, key, route string) bool {
+	m, ok := getIn(reg, key)
+	return ok && slices.Contains(m.ReadsWhenOff, route)
+}
+
 // Route is a declared tenant route and the module it is registered in.
 type Route struct {
 	Key    string // "METHOD /api/path"
@@ -223,6 +235,8 @@ func CheckRoutes(reg []Module, routes []Route) error {
 		_, path, _ := strings.Cut(r.Key, " ")
 		owner := RouteOwner(reg, path)
 		switch {
+		case owner != "" && r.Module == "" && readWhenOff(reg, owner, r.Key):
+			// A read the module keeps open when off.
 		case owner != "" && r.Module != owner:
 			problems = append(problems, fmt.Sprintf("%s is under module %s but registered with %q", r.Key, owner, r.Module))
 		case r.Module != "" && owner == "":

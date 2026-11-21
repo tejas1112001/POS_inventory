@@ -2,6 +2,7 @@ package reports
 
 import (
 	"bytes"
+	"encoding/csv"
 	"strconv"
 	"strings"
 	"time"
@@ -162,6 +163,46 @@ func writeXLSX(t table, currency string, loc *time.Location) ([]byte, error) {
 		return nil, err
 	}
 	return buf.Bytes(), nil
+}
+
+// writeCSV writes the table as CSV: UTF-8 with a byte-order mark (so
+// Excel shows ₹), a header row, text made formula-safe, quantities and
+// amounts exact (amounts to the currency's minor digits), dates in the
+// tenant's time zone, and no totals row (the file stays plain data).
+func writeCSV(t table, currency string, loc *time.Location) ([]byte, error) {
+	var buf bytes.Buffer
+	buf.WriteString("\ufeff")
+	w := csv.NewWriter(&buf)
+	header := make([]string, len(t.columns))
+	for i, c := range t.columns {
+		header[i] = c.header
+	}
+	if err := w.Write(header); err != nil {
+		return nil, err
+	}
+	exp := money.Exponent(currency)
+	for _, row := range t.rows {
+		rec := make([]string, len(row))
+		for i, v := range row {
+			switch x := v.(type) {
+			case string:
+				rec[i] = SafeText(x)
+			case int:
+				rec[i] = strconv.Itoa(x)
+			case qty.Q:
+				rec[i] = x.String()
+			case decimal.Decimal:
+				rec[i] = x.StringFixed(exp)
+			case time.Time:
+				rec[i] = x.In(loc).Format("2006-01-02 15:04")
+			}
+		}
+		if err := w.Write(rec); err != nil {
+			return nil, err
+		}
+	}
+	w.Flush()
+	return buf.Bytes(), w.Error()
 }
 
 var (

@@ -88,3 +88,14 @@ func TestSummaryKeepsOnlyEntitledModulesUsable(t *testing.T) {
 	require.Equal(t, []string{ProductAttributes, StockCounts}, s.EnabledModules)
 	require.Equal(t, Clothing, s.BusinessType)
 }
+
+// Named reads may stay open with the module off; nothing else under the
+// module's paths may.
+func TestReadsWhenOff(t *testing.T) {
+	ok := []Route{{Key: "GET /api/stock-counts"}, {Key: "GET /api/stock-counts/{id}"}, {Key: "POST /api/stock-counts", Module: StockCounts}}
+	require.NoError(t, CheckRoutes(Registry, ok))
+	err := CheckRoutes(Registry, []Route{{Key: "GET /api/stock-counts/{id}/lines"}})
+	require.ErrorContains(t, err, "is under module stock_counts", "a new read is still checked")
+	err = CheckRoutes(Registry, []Route{{Key: "POST /api/stock-counts/{id}/complete"}})
+	require.ErrorContains(t, err, "is under module stock_counts")
+}

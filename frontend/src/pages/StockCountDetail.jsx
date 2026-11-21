@@ -49,8 +49,10 @@ export default function StockCountDetail() {
   const fileRef = useRef(null);
 
   const draft = count?.status === 'Draft';
-  const canEdit = draft && hasPermission('stock_counts', 'create');
-  const canComplete = draft && hasPermission('stock_counts', 'complete');
+  // With the module off, counts are read-only (the server refuses changes).
+  const moduleOn = hasModule('stock_counts');
+  const canEdit = draft && moduleOn && hasPermission('stock_counts', 'create');
+  const canComplete = draft && moduleOn && hasPermission('stock_counts', 'complete');
   const canLabels = hasModule('barcode_labels') && hasPermission('labels', 'print');
 
   const load = useCallback(() => {
@@ -104,6 +106,14 @@ export default function StockCountDetail() {
       const l = r.lines?.[0];
       if (l) toast.success(`${itemName(l)}: ${l.countedQty}`);
     } catch (err) {
+      // A product counted by batch: choose the batch (the scan does not
+      // land on "No batch").
+      if (err.code === 'BATCH_REQUIRED' && err.details?.variantId) {
+        const known = lines.find((x) => x.variantId === err.details.variantId);
+        setAddBatch(known || { variantId: err.details.variantId, productName: err.details.productName || 'This product' });
+        toast.info(err.message);
+        return;
+      }
       beep();
       toast.error(err.message);
     }
@@ -207,6 +217,11 @@ export default function StockCountDetail() {
 
   return (
     <div className="space-y-4">
+      {!moduleOn && (
+        <InlineAlert kind="info">
+          Stock counts are switched off for this shop, so this count is read-only{draft ? ': it can be finished once the module is on again' : ''}.
+        </InlineAlert>
+      )}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="space-y-1">
           <Link to="/stock-counts" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:underline">

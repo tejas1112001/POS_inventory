@@ -67,12 +67,15 @@ type API struct{ d Deps }
 // New creates the API.
 func New(d Deps) *API { return &API{d: d} }
 
-// Mount registers the routes (all in the stock_counts module).
+// Mount registers the routes. Changes are in the stock_counts module; the
+// two reads are not, so counts stay readable with the module off (design
+// §1, NEXT_STEPS: completed counts stay readable).
 func (a *API) Mount(rt *rbac.Router) {
 	req := func(action string) rbac.Requirement { return rbac.Require("stock_counts", action).InModule(Module) }
-	rt.Handle(http.MethodGet, "/stock-counts", req("view"), a.list)
+	read := rbac.Require("stock_counts", "view")
+	rt.Handle(http.MethodGet, "/stock-counts", read, a.list)
 	rt.Handle(http.MethodPost, "/stock-counts", req("create"), a.create)
-	rt.Handle(http.MethodGet, "/stock-counts/{id}", req("view"), a.get)
+	rt.Handle(http.MethodGet, "/stock-counts/{id}", read, a.get)
 	rt.Handle(http.MethodPut, "/stock-counts/{id}", req("create"), a.update)
 	rt.Handle(http.MethodPost, "/stock-counts/{id}/complete", req("complete"), a.complete)
 	rt.Handle(http.MethodPost, "/stock-counts/{id}/cancel", req("create"), a.cancel)
@@ -695,6 +698,9 @@ const (
 		LEFT JOIN product_units pu ON pu.product_id = v.product_id AND pu.unit_id = vb.unit_id
 		WHERE v.deleted_at IS NULL AND p.deleted_at IS NULL AND (v.item_barcode = $1 OR vb.code IS NOT NULL OR lower(v.sku::text) = lower($1))
 		ORDER BY coalesce(v.item_barcode = $1, false) DESC, (vb.code IS NOT NULL) DESC, v.id LIMIT 1`
+	// The variant's product counts by batch (tracks batches, module on).
+	qTrackedVariant = `SELECT p.tracks_batches AND EXISTS (SELECT 1 FROM settings WHERE id = 1 AND 'batch_expiry' = ANY(modules)), p.name
+		FROM product_variants v JOIN products p ON p.id = v.product_id WHERE v.id = $1`
 	qVariants = `SELECT v.id, coalesce(p.category_id, 0), coalesce(p.brand_id, 0) FROM product_variants v JOIN products p ON p.id = v.product_id
 		WHERE v.id = ANY($1) AND v.deleted_at IS NULL AND p.deleted_at IS NULL`
 	qOtherDraft = `SELECT DISTINCT ON (l.variant_id) l.variant_id, c.reference FROM stock_count_lines l JOIN stock_counts c ON c.id = l.count_id
@@ -747,6 +753,24 @@ func apply(ctx context.Context, tx tenancy.TenantTx, d draft, in []change, codes
 	}
 	if err := apperr.Fields(f); err != nil {
 		return nil, err
+	}
+	// A scan (a code adding to the count) of a product that tracks batches
+	// asks for its batch instead of landing on "No batch" (NEXT_STEPS
+	// known issue): the client opens "Count a batch" for the variant.
+	for i := range codes {
+		c := in[i]
+		if !c.add || c.batch != 0 || c.batchNo != "" {
+			continue
+		}
+		var tracked bool
+		var name string
+		if err := tx.QueryRow(ctx, qTrackedVariant, c.variant).Scan(&tracked, &name); err != nil {
+			return nil, err
+		}
+		if tracked {
+			return nil, apperr.Conflict(apperr.CodeBatchRequired, name+" is counted by batch. Choose the batch you are counting.").
+				WithDetails(map[string]any{"variantId": c.variant, "productName": name, "field": c.field})
+		}
 	}
 	ids := make([]int64, 0, len(in))
 	seen := map[int64]bool{}

@@ -8,7 +8,8 @@ import { api } from '@/services/api';
 // (GET <path>?format=xlsx|pdf with the same filters). The server applies
 // the user's scope and the plan's report-export feature, and never cuts
 // the file short.
-export default function ReportExportButtons({ path, qs, name }) {
+// csv: the report also offers CSV (the expiry report).
+export default function ReportExportButtons({ path, qs, name, csv = false }) {
   const { hasPermission } = usePermission();
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
@@ -37,6 +38,11 @@ export default function ReportExportButtons({ path, qs, name }) {
         <Button type="button" variant="outline" onClick={() => get('pdf')} disabled={!!busy}>
           {busy === 'pdf' ? <Loader2 className="size-4 animate-spin" /> : <FileText className="size-4" />} PDF
         </Button>
+        {csv && (
+          <Button type="button" variant="outline" onClick={() => get('csv')} disabled={!!busy}>
+            {busy === 'csv' ? <Loader2 className="size-4 animate-spin" /> : <FileText className="size-4" />} CSV
+          </Button>
+        )}
       </div>
       {error && <span role="alert" className="text-xs text-destructive">{error}</span>}
     </div>

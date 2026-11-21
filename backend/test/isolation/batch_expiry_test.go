@@ -5,6 +5,7 @@ package isolation
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -79,6 +80,13 @@ func TestBatchExpiryReport(t *testing.T) {
 	// Export.
 	x := do(t, rq{method: "GET", host: host, path: "/api/reports/expiry/export?format=xlsx", token: tok})
 	require.Equal(t, 200, x.Code, x.Raw)
+	// CSV too, as the design asks (the other reports stay Excel and PDF).
+	cv := do(t, rq{method: "GET", host: host, path: "/api/reports/expiry/export?format=csv", token: tok})
+	require.Equal(t, 200, cv.Code, cv.Raw)
+	require.Equal(t, "text/csv; charset=utf-8", cv.Header.Get("Content-Type"))
+	require.Contains(t, cv.Header.Get("Content-Disposition"), ".csv")
+	require.True(t, strings.HasPrefix(cv.Raw, "\ufeffSection,Product"), cv.Raw)
+	require.Equal(t, 400, do(t, rq{method: "GET", host: host, path: "/api/sales/report/export?format=csv", token: tok}).Code)
 
 	// The dashboard tile.
 	d := get(t, host, "/api/dashboard", tok)

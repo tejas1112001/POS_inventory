@@ -28,14 +28,21 @@ const (
 const (
 	contentXLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 	contentPDF  = "application/pdf"
+	contentCSV  = "text/csv; charset=utf-8"
 )
 
-func exportFormat(r *http.Request) (string, int, error) {
-	switch f := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("format"))); f {
-	case "xlsx", "excel":
+// exportFormat reads ?format=. csvOK: the report also offers CSV (the
+// expiry report, industry P3 design; the others are Excel and PDF only).
+func exportFormat(r *http.Request, csvOK bool) (string, int, error) {
+	switch f := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("format"))); {
+	case f == "xlsx" || f == "excel":
 		return "xlsx", MaxXLSXRows, nil
-	case "pdf":
+	case f == "pdf":
 		return "pdf", MaxPDFRows, nil
+	case f == "csv" && csvOK:
+		return "csv", MaxXLSXRows, nil
+	case csvOK:
+		return "", 0, apperr.Invalid("format", "format must be csv, xlsx or pdf.")
 	default:
 		return "", 0, apperr.Invalid("format", "format must be xlsx or pdf.")
 	}
@@ -63,7 +70,13 @@ func period(f receipts.Formatter, from, to *time.Time) string {
 // the file.
 func (a *API) export(w http.ResponseWriter, r *http.Request, name string,
 	build func(ctx context.Context, tx tenancy.TenantTx, b settings.Business, max int) (table, map[string]any, error)) {
-	format, max, err := exportFormat(r)
+	a.exportAs(w, r, name, false, build)
+}
+
+// exportAs is export; csvOK also offers ?format=csv.
+func (a *API) exportAs(w http.ResponseWriter, r *http.Request, name string, csvOK bool,
+	build func(ctx context.Context, tx tenancy.TenantTx, b settings.Business, max int) (table, map[string]any, error)) {
+	format, max, err := exportFormat(r, csvOK)
 	if err != nil {
 		httpx.WriteError(w, r, err)
 		return
@@ -89,9 +102,12 @@ func (a *API) export(w http.ResponseWriter, r *http.Request, name string,
 		}
 		filters, rows = fl, len(tbl.rows)
 		loc := location(b)
-		if format == "xlsx" {
+		switch format {
+		case "xlsx":
 			file, err = writeXLSX(tbl, b.Currency, loc)
-		} else {
+		case "csv":
+			file, err = writeCSV(tbl, b.Currency, loc)
+		default:
 			file, err = writePDF(tbl, receipts.NewFormatter(b.Locale, b.Currency, loc))
 		}
 		return err
@@ -111,8 +127,11 @@ func (a *API) export(w http.ResponseWriter, r *http.Request, name string,
 		return
 	}
 	ct := contentXLSX
-	if format == "pdf" {
+	switch format {
+	case "pdf":
 		ct = contentPDF
+	case "csv":
+		ct = contentCSV
 	}
 	h := w.Header()
 	h.Set("Content-Type", ct)

@@ -66,8 +66,10 @@ func TestStockCounts(t *testing.T) {
 		return do(t, rq{method: "PUT", host: host, path: path, token: tk, body: body})
 	}
 
-	// A retail shop: the module is off.
-	off := get(t, host, "/api/stock-counts", tok)
+	// A retail shop: the module is off. Counts can be read (none yet) but
+	// not started.
+	require.Equal(t, 200, get(t, host, "/api/stock-counts", tok).Code)
+	off := post(tok, "/api/stock-counts", map[string]any{"storeId": store})
 	require.Equal(t, 403, off.Code)
 	require.Equal(t, "MODULE_OFF", codeOf(off))
 	setModules(t, l, "clothing")
@@ -238,10 +240,15 @@ func TestStockCounts(t *testing.T) {
 	require.NoError(t, admin(t).QueryRow(ctx, `SELECT count(*) FROM `+schema(l)+`.audit_log WHERE action LIKE 'stock_count.%'`).Scan(&n))
 	require.GreaterOrEqual(t, n, 7)
 
-	// Module off: every route refuses; counts and their movements stay.
+	// Module off: counts stay readable (list and detail), every change
+	// refuses; counts and their movements stay.
 	setModules(t, l, "retail")
-	require.Equal(t, "MODULE_OFF", codeOf(get(t, host, path, tok)))
+	rd := get(t, host, path, tok)
+	require.Equal(t, 200, rd.Code, rd.Raw)
+	require.NotEmpty(t, rd.Body["reference"])
+	require.Equal(t, 200, get(t, host, "/api/stock-counts", tok).Code)
 	require.Equal(t, "MODULE_OFF", codeOf(post(tok, "/api/stock-counts", map[string]any{"storeId": store})))
+	require.Equal(t, "MODULE_OFF", codeOf(put(tok, path, map[string]any{"lines": []any{}})))
 	require.NoError(t, admin(t).QueryRow(ctx, `SELECT count(*) FROM `+schema(l)+`.stock_counts`).Scan(&n))
 	require.GreaterOrEqual(t, n, 4)
 	setModules(t, l, "clothing")

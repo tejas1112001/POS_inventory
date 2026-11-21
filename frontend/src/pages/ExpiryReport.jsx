@@ -94,7 +94,7 @@ export default function ExpiryReport() {
               ))}
             </select>
           </label>
-          <ReportExportButtons path="/api/reports/expiry/export" qs={qs} name="expiry-report" />
+          <ReportExportButtons path="/api/reports/expiry/export" qs={qs} name="expiry-report" csv />
         </div>
 
         {error && <InlineAlert>{error.message}</InlineAlert>}

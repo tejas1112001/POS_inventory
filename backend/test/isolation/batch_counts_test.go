@@ -77,6 +77,19 @@ func TestBatchCounts(t *testing.T) {
 	require.Equal(t, 400, bad(map[string]any{"variantId": a.vid, "batchNo": "unbatched", "expiry": day(9), "qty": 1}).Code)
 	require.Equal(t, 400, bad(map[string]any{"variantId": plain.vid, "batchId": b1, "qty": 1}).Code, "untracked product")
 
+	// A scan of a product counted by batch asks for the batch (it does not
+	// land on "No batch"); with the batch it adds; an untracked scan adds.
+	r = bad(map[string]any{"code": "BCBC-PARA", "add": 1})
+	require.Equal(t, 409, r.Code, r.Raw)
+	require.Equal(t, "BATCH_REQUIRED", codeOf(r))
+	require.Equal(t, a.vid, num(r.Body["details"].(map[string]any)["variantId"]))
+	require.Equal(t, 200, bad(map[string]any{"code": "BCBC-PARA", "batchId": b1, "add": 1}).Code)
+	pr := bad(map[string]any{"code": "BC-PLAIN", "add": 1}) // by SKU
+	require.Equal(t, 200, pr.Code, pr.Raw)
+	require.Equal(t, 200, put(path, map[string]any{"remove": []any{plain.vid}}).Code, "and take it back out")
+	// Put B1 back to 2 for the rest of the test (the scan made it 3).
+	require.Equal(t, 200, bad(map[string]any{"variantId": a.vid, "batchId": b1, "qty": 2}).Code)
+
 	// Remove one line by id, then put it back.
 	var shelf2Line any
 	for _, x := range get(t, host, path, tok).Body["lines"].([]any) {
