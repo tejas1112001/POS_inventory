@@ -69,6 +69,10 @@ func (a *API) Mount(rt *rbac.Router) {
 	// Industry P3 item 7 (A33): the expiry report, in the batch_expiry module.
 	rt.Handle(http.MethodGet, "/reports/expiry", req("reports", "view").InModule(modules.BatchExpiry), a.expiryReport)
 	rt.Handle(http.MethodGet, "/reports/expiry/export", req("reports", "export").InModule(modules.BatchExpiry), a.expiryExport)
+	// GST returns (docs/GST_REPORTS_DESIGN.md): the whole shop's figures.
+	rt.Handle(http.MethodGet, "/reports/gst/gstins", req("reports", "view"), a.gstGSTINs)
+	rt.Handle(http.MethodGet, "/reports/gst", req("reports", "view"), a.gstReport)
+	rt.Handle(http.MethodGet, "/reports/gst/export", req("reports", "export"), a.gstExport)
 }
 
 func tenant(r *http.Request) tenancy.Tenant {

@@ -61,3 +61,15 @@ func TestParty(t *testing.T) {
 	require.Empty(t, f)
 	require.Empty(t, g+s)
 }
+
+func TestUQCs(t *testing.T) {
+	seen := map[string]bool{}
+	for _, u := range UQCs {
+		require.Len(t, u.Code, 3)
+		require.False(t, seen[u.Code])
+		seen[u.Code] = true
+	}
+	require.True(t, IsUQC("NOS"))
+	require.True(t, IsUQC("KGS"))
+	require.False(t, IsUQC("KG"))
+}

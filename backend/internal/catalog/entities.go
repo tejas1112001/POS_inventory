@@ -12,6 +12,7 @@ import (
 
 	"github.com/tejas1112001/POS_inventory/backend/internal/apperr"
 	"github.com/tejas1112001/POS_inventory/backend/internal/files"
+	"github.com/tejas1112001/POS_inventory/backend/internal/gst"
 	"github.com/tejas1112001/POS_inventory/backend/internal/httpx"
 	"github.com/tejas1112001/POS_inventory/backend/internal/tenancy"
 )
@@ -23,28 +24,32 @@ type unitJSON struct {
 	Name      string `json:"name"`
 	ShortName string `json:"short_name"`
 	Status    string `json:"status"`
+	// UQC is the GST unit code for the HSN summary (GSTR-1); null: OTH.
+	UQC *string `json:"uqc"`
 	stamp
 }
 
 type unitIn struct {
-	Name      string `json:"name"`
-	ShortName string `json:"short_name"`
-	Status    string `json:"status"`
+	Name      string  `json:"name"`
+	ShortName string  `json:"short_name"`
+	Status    string  `json:"status"`
+	UQC       *string `json:"uqc"` // missing keeps, "" clears
 	ignored
 }
 
 const (
-	qUnitCols   = `x.id, x.name::text, x.short_name, x.status, x.created_by, coalesce(u.name, 'Unknown'), x.created_at, x.updated_at`
+	qUnitCols   = `x.id, x.name::text, x.short_name, x.status, x.created_by, coalesce(u.name, 'Unknown'), x.created_at, x.updated_at, x.uqc`
 	qUnitCount  = `SELECT count(*) FROM units WHERE deleted_at IS NULL AND ($1 = '' OR name ILIKE $1 OR short_name ILIKE $1) AND ($2 = '' OR status = $2)`
 	qUnitList   = `SELECT ` + qUnitCols + ` FROM units x LEFT JOIN users u ON u.id = x.created_by WHERE x.deleted_at IS NULL AND ($3 = '' OR x.name ILIKE $3 OR x.short_name ILIKE $3) AND ($4 = '' OR x.status = $4) ORDER BY x.created_at DESC, x.id DESC LIMIT $1 OFFSET $2`
-	qUnitInsert = `WITH x AS (INSERT INTO units (name, short_name, status, created_by) VALUES ($1, $2, $3, NULLIF($4, 0)) RETURNING *) SELECT ` + qUnitCols + ` FROM x LEFT JOIN users u ON u.id = x.created_by`
-	qUnitUpdate = `WITH x AS (UPDATE units SET name = $2, short_name = $3, status = $4, updated_at = now() WHERE id = $1 AND deleted_at IS NULL RETURNING *) SELECT ` + qUnitCols + ` FROM x LEFT JOIN users u ON u.id = x.created_by`
+	qUnitInsert = `WITH x AS (INSERT INTO units (name, short_name, status, created_by, uqc) VALUES ($1, $2, $3, NULLIF($4, 0), NULLIF($5, '')) RETURNING *) SELECT ` + qUnitCols + ` FROM x LEFT JOIN users u ON u.id = x.created_by`
+	qUnitUpdate = `WITH x AS (UPDATE units SET name = $2, short_name = $3, status = $4, uqc = CASE WHEN $5 THEN NULLIF($6, '') ELSE uqc END, updated_at = now()
+		WHERE id = $1 AND deleted_at IS NULL RETURNING *) SELECT ` + qUnitCols + ` FROM x LEFT JOIN users u ON u.id = x.created_by`
 	qUnitDelete = `UPDATE units SET deleted_at = now() WHERE id = $1 AND deleted_at IS NULL`
 )
 
 func scanUnit(row pgx.Row) (unitJSON, error) {
 	var x unitJSON
-	err := row.Scan(&x.ID, &x.Name, &x.ShortName, &x.Status, &x.CreatedBy, &x.CreatedByName, &x.CreatedAt, &x.UpdatedAt)
+	err := row.Scan(&x.ID, &x.Name, &x.ShortName, &x.Status, &x.CreatedBy, &x.CreatedByName, &x.CreatedAt, &x.UpdatedAt, &x.UQC)
 	return x, err
 }
 
@@ -61,7 +66,22 @@ func (a *API) unitParse(r *http.Request) (unitIn, error) {
 		return in, err
 	}
 	in.Status = normStatus(in.Status)
+	if in.UQC != nil {
+		u := strings.ToUpper(strings.TrimSpace(*in.UQC))
+		if u != "" && !gst.IsUQC(u) {
+			return in, apperr.Invalid("uqc", "Choose a GST unit code (UQC) from the list, such as NOS or KGS.")
+		}
+		in.UQC = &u
+	}
 	return in, nil
+}
+
+// uqcArgs are the insert/update arguments of a unit's UQC.
+func (in unitIn) uqcArgs() (bool, string) {
+	if in.UQC == nil {
+		return false, ""
+	}
+	return true, *in.UQC
 }
 
 func (a *API) listUnits(w http.ResponseWriter, r *http.Request) {
@@ -105,7 +125,8 @@ func (a *API) createUnit(w http.ResponseWriter, r *http.Request) {
 	var out unitJSON
 	err = a.rw(r.Context(), tenant(r), func(tx tenancy.TenantTx) error {
 		var err error
-		out, err = scanUnit(tx.QueryRow(r.Context(), qUnitInsert, in.Name, in.ShortName, in.Status, principal(r).UserID))
+		_, uqc := in.uqcArgs()
+		out, err = scanUnit(tx.QueryRow(r.Context(), qUnitInsert, in.Name, in.ShortName, in.Status, principal(r).UserID, uqc))
 		return err
 	})
 	if err != nil {
@@ -129,7 +150,8 @@ func (a *API) updateUnit(w http.ResponseWriter, r *http.Request) {
 	var out unitJSON
 	err = a.rw(r.Context(), tenant(r), func(tx tenancy.TenantTx) error {
 		var err error
-		out, err = scanUnit(tx.QueryRow(r.Context(), qUnitUpdate, id, in.Name, in.ShortName, in.Status))
+		set, uqc := in.uqcArgs()
+		out, err = scanUnit(tx.QueryRow(r.Context(), qUnitUpdate, id, in.Name, in.ShortName, in.Status, set, uqc))
 		return notFound(err)
 	})
 	if err != nil {

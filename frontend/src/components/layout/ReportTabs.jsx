@@ -14,6 +14,8 @@ export default function ReportTabs() {
     { to: '/customer-report', label: 'Customers' },
     { to: '/customer-due-report', label: 'Customer dues' },
     hasModule('batch_expiry') && { to: '/reports/expiry', label: 'Expiry' },
+    // GST returns cover the whole shop (the server needs sales:view_all).
+    hasPermission('sales', 'view_all') && { to: '/reports/gst', label: 'GST returns' },
   ].filter(Boolean);
   return (
     <nav aria-label="Reports" className="-mx-4 mb-4 overflow-x-auto border-b px-4 sm:mx-0 sm:px-0">

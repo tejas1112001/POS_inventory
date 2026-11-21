@@ -6,7 +6,7 @@ import { formatCurrency } from '@/lib/format';
 import { AuthImage } from '@/components/shared/auth-image';
 import StatusBadge from '@/components/kit/StatusBadge';
 import { ImageField, SelectField, STATUS_OPTIONS, TextAreaField, TextField } from '@/components/kit/Form';
-import { GstinField, StateField } from '@/components/forms/GstFields';
+import { GstinField, StateField, UqcField } from '@/components/forms/GstFields';
 
 const trim = (v) => (typeof v === 'string' ? v.trim() : v);
 
@@ -62,16 +62,18 @@ export const unitConfig = {
   columns: [
     { id: 'name', header: 'Name', card: 'title', cell: (r) => r.name },
     { id: 'short', header: 'Short name', card: 'subtitle', cell: (r) => dash(r.short_name) },
+    { id: 'uqc', header: 'GST code', card: 'meta', className: 'hidden md:table-cell font-mono text-xs', cell: (r) => dash(r.uqc) },
     status,
     createdBy,
   ],
-  defaults: (r) => ({ name: r.name || '', short_name: r.short_name || '', status: r.status || 'Active' }),
-  payload: (v) => ({ name: trim(v.name), short_name: trim(v.short_name), status: v.status }),
+  defaults: (r) => ({ name: r.name || '', short_name: r.short_name || '', status: r.status || 'Active', uqc: r.uqc || '' }),
+  payload: (v) => ({ name: trim(v.name), short_name: trim(v.short_name), status: v.status, uqc: v.uqc || '' }),
   fields: () => (
     <>
       <TextField name="name" label="Unit name" required maxLength={60} autoFocus />
       <TextField name="short_name" label="Short name" maxLength={20} hint="For example pc, pk, kg." />
       <SelectField name="status" label="Status" options={STATUS_OPTIONS} />
+      <UqcField />
     </>
   ),
 };

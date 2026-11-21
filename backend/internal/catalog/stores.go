@@ -721,6 +721,11 @@ func (a *API) Mount(rt *rbac.Router) {
 		w.Header().Set("Cache-Control", "private, max-age=86400")
 		httpx.WriteJSON(w, http.StatusOK, gst.States)
 	})
+	// GST reports: the unit codes (UQC) for the Units page.
+	rt.Handle(get, "/gst/uqcs", rbac.Authenticated(), func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "private, max-age=86400")
+		httpx.WriteJSON(w, http.StatusOK, gst.UQCs)
+	})
 	rt.Handle(post, "/sub-categories", req("categories", "create"), a.createSubCategory)
 
 	rt.Handle(get, "/units", req("units", "view"), a.listUnits)

@@ -47,3 +47,31 @@ export function stateLabel(states, code) {
 
 // GSTIN_RULE is the form check before the server's full one (check character, state).
 export const GSTIN_RULE = { pattern: { value: /^\s*[0-9]{2}[A-Za-z0-9]{13}\s*$/, message: 'A GSTIN has 15 characters and starts with the 2-digit state code.' } };
+
+let uqcCache = null;
+let uqcPending = null;
+
+// useUqcs is the GST unit codes ([{ code, name }]), or null while they load.
+export function useUqcs() {
+  const [list, setList] = useState(uqcCache);
+  useEffect(() => {
+    if (uqcCache) return undefined;
+    let live = true;
+    uqcPending =
+      uqcPending ||
+      api
+        .get('/api/gst/uqcs', { quiet: true })
+        .then((l) => {
+          uqcCache = Array.isArray(l) ? l : [];
+          return uqcCache;
+        })
+        .finally(() => {
+          uqcPending = null;
+        });
+    uqcPending.then((l) => live && setList(l)).catch(() => live && setList([]));
+    return () => {
+      live = false;
+    };
+  }, []);
+  return list;
+}
