@@ -17,6 +17,8 @@ import { formatCurrency } from '../lib/format';
 import { mrpBody, mrpWarning } from '../lib/mrp';
 import { qtyStep, roundQty } from '../lib/qty';
 import { checkWizard, formValues, stepClass } from '../lib/wizard';
+import { unitsPayload, unitsProblem } from '../lib/productUnits';
+import ProductUnitsEditor from '../components/forms/ProductUnitsEditor';
 import {
   ArrowLeftIcon,
   ArrowPathIcon,
@@ -62,6 +64,10 @@ const AddProduct = () => {
   const [productType, setProductType] = useState('single');
   // H3: sold in part units (kg, metres, litres): stock and sales take 3 decimals.
   const [allowFraction, setAllowFraction] = useState(false);
+  // H3: the product's unit (stock is kept in it) and its other units.
+  const [baseUnitId, setBaseUnitId] = useState('');
+  const [unitRows, setUnitRows] = useState([]);
+  const unitsError = unitsProblem(unitRows, baseUnitId, allowFraction);
   const [selectedImages, setSelectedImages] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [customFields, setCustomFields] = useState({
@@ -113,6 +119,11 @@ const AddProduct = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!checkWizard(e.target, goToStep)) return;
+    if (unitsError) {
+      goToStep(1);
+      toast.error(unitsError);
+      return;
+    }
 
     try {
       const data = formValues(e.target);
@@ -190,6 +201,7 @@ const AddProduct = () => {
         image: data.image,
         variants: variants,
         allowFraction,
+        units: unitsPayload(unitRows),
         supplierId: data.supplierId,
         slug: data.slug
       };
@@ -428,7 +440,7 @@ const AddProduct = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Unit
                 </label>
-                <select name="unitId" className="w-full px-3 py-2 border border-gray-600 rounded-lg">
+                <select name="unitId" className="w-full px-3 py-2 border border-gray-600 rounded-lg" onChange={(e) => setBaseUnitId(e.target.value)}>
                   <option value="">Select</option>
                   {units.map(unit => (
                     <option key={unit.id} value={unit.id}>{unit.name}</option>
@@ -522,6 +534,18 @@ const AddProduct = () => {
                 <span className="block text-xs text-gray-500">Stock and sales take up to 3 decimals, for example 1.25 kg. Leave off for items sold by the piece.</span>
               </span>
             </label>
+
+            <div className="mb-6">
+              <span className="block text-sm font-medium text-gray-700 mb-1">Other units</span>
+              <ProductUnitsEditor
+                rows={unitRows}
+                onChange={setUnitRows}
+                units={units}
+                baseUnitId={baseUnitId}
+                fractional={allowFraction}
+                problem={unitsError}
+              />
+            </div>
 
             {productType === 'single' ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">

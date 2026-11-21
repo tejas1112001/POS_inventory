@@ -128,6 +128,16 @@ export default function EntityForm({
             );
           }
 
+          // A custom field draws itself: render({ value, onChange, values }).
+          if (field.type === 'custom') {
+            return (
+              <div key={field.name} className={field.fullWidth ? 'md:col-span-2' : ''}>
+                <span className="block text-sm font-medium text-gray-700 mb-1">{label}</span>
+                {field.render({ value: formData[field.name], onChange: (v) => handleChange(field.name, v), values: formData })}
+              </div>
+            );
+          }
+
           if (field.type === 'image') {
             return (
               <div key={field.name} className={field.fullWidth ? 'md:col-span-2' : ''}>

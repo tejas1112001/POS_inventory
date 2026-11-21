@@ -5,6 +5,8 @@ import { useShopSettings } from '../../hooks/useShopSettings';
 import { formatCurrency } from '../../lib/format';
 import { mrpBody, mrpWarning } from '../../lib/mrp';
 import EntityForm from './EntityForm';
+import ProductUnitsEditor from './ProductUnitsEditor';
+import { unitRowsFromProduct, unitsPayload, unitsProblem } from '../../lib/productUnits';
 
 const buildSelectOptions = (items = [], labelKey = 'name') => {
   return [
@@ -153,6 +155,7 @@ export default function EditProductForm({ product, onSaved, onCancel }) {
       quantityAlert: primaryInventory?.quantityAlert ?? '',
       storeId: primaryInventory?.storeId || '',
       allowFraction: String(!!product?.allowFraction),
+      units: unitRowsFromProduct(product), // H3: other units
     }),
     [product, primaryVariant, primaryInventory]
   );
@@ -199,6 +202,23 @@ export default function EditProductForm({ product, onSaved, onCancel }) {
           { value: 'false', label: 'Whole units only' },
           { value: 'true', label: 'Part units too (up to 3 decimals: kg, m, L)' },
         ],
+      },
+      {
+        // H3: other units the product is sold or bought in (box of 12).
+        name: 'units',
+        label: 'Other units',
+        type: 'custom',
+        fullWidth: true,
+        render: ({ value, onChange, values }) => (
+          <ProductUnitsEditor
+            rows={value || []}
+            onChange={onChange}
+            units={options.units}
+            baseUnitId={values.unitId}
+            fractional={values.allowFraction === 'true'}
+            problem={unitsProblem(value || [], values.unitId, values.allowFraction === 'true')}
+          />
+        ),
       },
       {
         name: 'sellingType',
@@ -306,6 +326,12 @@ export default function EditProductForm({ product, onSaved, onCancel }) {
       return Promise.reject(new Error('Product record is missing an id.'));
     }
 
+    const unitRows = values.units || [];
+    const problem = unitsProblem(unitRows, values.unitId, values.allowFraction === 'true');
+    if (problem) {
+      return Promise.reject(new Error(problem));
+    }
+
     const payload = {
       name: values.name.trim(),
       description: values.description || '',
@@ -326,6 +352,9 @@ export default function EditProductForm({ product, onSaved, onCancel }) {
       supplierId: product.supplierId || null,
       slug: values.slug || null,
       allowFraction: values.allowFraction === 'true',
+      // Sent only when the product came with its units: left out, the
+      // server keeps them (a partial product never wipes them).
+      units: Array.isArray(product.units) ? unitsPayload(unitRows) : undefined,
       variants: buildVariantsPayload(product, values),
     };
 
