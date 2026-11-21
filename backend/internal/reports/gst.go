@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/shopspring/decimal"
 
 	"github.com/tejas1112001/POS_inventory/backend/internal/apperr"
@@ -390,17 +391,15 @@ func BuildGSTReport(ctx context.Context, tx tenancy.TenantTx, gstin string, p GS
 		rep.GSTR3B.Unregistered = []GST3BPlace{}
 	}
 
-	// HSN summary, net of credit notes.
+	// HSN summary, net of credit notes (each query constant at its call:
+	// constsql).
 	hsn := map[string]*GSTHSNRow{}
 	var noUQC, b2bNoHSN int
-	for _, q := range []struct {
-		sql  string
-		sign int64
-	}{{qGSTHSN, 1}, {qGSTHSNNotes, -1}} {
-		rows, err := tx.Query(ctx, q.sql, gstin, p.From, p.To)
+	readHSN := func(rows pgx.Rows, err error, sign int64) error {
 		if err != nil {
-			return rep, err
+			return err
 		}
+		defer rows.Close()
 		for rows.Next() {
 			var (
 				r       GSTHSNRow
@@ -409,10 +408,9 @@ func BuildGSTReport(ctx context.Context, tx tenancy.TenantTx, gstin string, p GS
 			)
 			if err := rows.Scan(&r.HSN, &r.UQC, &r.Description, &r.Quantity, &r.Value, &r.Taxable, &r.IGST, &r.CGST, &r.SGST,
 				&missing, &b2b); err != nil {
-				rows.Close()
-				return rep, err
+				return err
 			}
-			if q.sign > 0 {
+			if sign > 0 {
 				noUQC += missing
 				if b2b && r.HSN == "" {
 					b2bNoHSN++
@@ -424,17 +422,22 @@ func BuildGSTReport(ctx context.Context, tx tenancy.TenantTx, gstin string, p GS
 				cur = &GSTHSNRow{HSN: r.HSN, UQC: r.UQC, Description: r.Description}
 				hsn[k] = cur
 			}
-			if q.sign > 0 {
+			if sign > 0 {
 				cur.Quantity, cur.Value = cur.Quantity.Add(r.Quantity), cur.Value.Add(r.Value)
 			} else {
 				cur.Quantity, cur.Value = cur.Quantity.Sub(r.Quantity), cur.Value.Sub(r.Value)
 			}
-			cur.add(r.GSTTax, q.sign)
+			cur.add(r.GSTTax, sign)
 		}
-		rows.Close()
-		if err := rows.Err(); err != nil {
-			return rep, err
-		}
+		return rows.Err()
+	}
+	rows, err = tx.Query(ctx, qGSTHSN, gstin, p.From, p.To)
+	if err := readHSN(rows, err, 1); err != nil {
+		return rep, err
+	}
+	rows, err = tx.Query(ctx, qGSTHSNNotes, gstin, p.From, p.To)
+	if err := readHSN(rows, err, -1); err != nil {
+		return rep, err
 	}
 	short := 0
 	for _, r := range hsn {
