@@ -16,7 +16,7 @@ import { currencySymbol, formatCurrency, formatDate, todayInShop } from '@/lib/f
 import { newIdempotencyKey } from '@/lib/checkout';
 import { COLLECT_METHODS, methodLabel } from '@/lib/payments';
 import { CONDITIONS, DEFAULT_POLICY } from '@/lib/returns';
-import { fmtQty, roundQty } from '@/lib/qty';
+import { addQty, fmtQty, roundQty } from '@/lib/qty';
 import { maxInUnit, saleUnitsOf, unitOptionLabel, unitQtyText } from '@/lib/saleUnits';
 import BatchSelect from '@/components/batches/BatchSelect';
 
@@ -123,7 +123,7 @@ export default function AddSalesReturn() {
   }, [preset]);
 
 
-  const left = (item) => Math.max(0, (Number(item.quantity) || 0) - (Number(item.returnedQty) || 0));
+  const left = (item) => Math.max(0, roundQty((Number(item.quantity) || 0) - (Number(item.returnedQty) || 0)));
   // H3: a line sold in another unit (a box of 12) can come back in that
   // unit (the default) or in base units. left() stays in base units.
   const soldInUnit = (i) => !!(i.unitId && i.unitName && Number(i.unitFactor) > 0);
@@ -193,7 +193,7 @@ export default function AddSalesReturn() {
       if (!item) return noMatch(code, 'item still returnable on this sale');
       setQty((q) => {
         const cur = Number(q[item.id]?.quantity) || 0;
-        return { ...q, [item.id]: { ...q[item.id], quantity: String(Math.min(leftIn(item, q), cur + 1)) } };
+        return { ...q, [item.id]: { ...q[item.id], quantity: String(Math.min(leftIn(item, q), addQty(cur, 1))) } };
       });
       return undefined;
     }
@@ -202,7 +202,7 @@ export default function AddSalesReturn() {
       if (!hit) return noMatch(code, 'product');
       setLines((prev) => {
         const same = prev.find((l) => String(l.variantId) === String(hit.variant.id));
-        if (same) return prev.map((l) => (l === same ? { ...l, quantity: (Number(l.quantity) || 0) + 1 } : l));
+        if (same) return prev.map((l) => (l === same ? { ...l, quantity: addQty(l.quantity, 1) } : l));
         const line = { productId: String(hit.product.id), variantId: String(hit.variant.id), quantity: 1, unitPrice: String(hit.variant.price ?? '') };
         const empty = prev.find((l) => !l.productId);
         return empty ? prev.map((l) => (l === empty ? { ...l, ...line } : l)) : [...prev, { ...freeLine(), ...line }];
@@ -216,7 +216,7 @@ export default function AddSalesReturn() {
   const addNew = (product, variant) => {
     setNewLines((prev) => {
       const same = prev.find((l) => String(l.variantId) === String(variant.id));
-      if (same) return prev.map((l) => (l === same ? { ...l, quantity: (Number(l.quantity) || 0) + 1 } : l));
+      if (same) return prev.map((l) => (l === same ? { ...l, quantity: addQty(l.quantity, 1) } : l));
       const label = (product.ProductVariants || []).length > 1 ? `${product.name} (${variant.sku})` : product.name;
       return [...prev, { key: ++xseq, productId: product.id, variantId: variant.id, name: label, quantity: 1, unitPrice: variant.price }];
     });
@@ -540,7 +540,7 @@ export default function AddSalesReturn() {
                             </td>
                             <td className="px-2 py-2">{formatCurrency(i.unit_price)}</td>
                             <td className="px-2 py-2">{unitQtyText(i)}</td>
-                            <td className="px-2 py-2">{i.returnedQty || 0}</td>
+                            <td className="px-2 py-2">{fmtQty(i.returnedQty || 0)}</td>
                             <td className="px-2 py-2">
                               {left(i) > 0 ? (
                                 <>
@@ -659,7 +659,7 @@ export default function AddSalesReturn() {
                               </select>
                             </td>
                             <td className="px-2 py-2">
-                              <input type="number" min="1" className={inputCls} value={l.quantity} aria-label="Quantity" onChange={(e) => setLine(l.key, { quantity: e.target.value })} />
+                              <input type="number" min="0" step="any" className={inputCls} value={l.quantity} aria-label="Quantity" onChange={(e) => setLine(l.key, { quantity: e.target.value })} />
                               {unitChoice(l, (v) => setLine(l.key, { unitId: v }), 'the returned item')}
                             </td>
                             <td className="px-2 py-2">
@@ -785,7 +785,8 @@ export default function AddSalesReturn() {
                                 <td className="px-2 py-2">
                                   <input
                                     type="number"
-                                    min="1"
+                                    min="0"
+                                    step="any"
                                     className={inputCls}
                                     value={l.quantity}
                                     aria-label={`Quantity of ${l.name}`}

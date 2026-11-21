@@ -12,6 +12,7 @@ import { useServerReport } from '@/hooks/useServerReport';
 import { api } from '@/services/api';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { unitQtyText } from '@/lib/saleUnits';
+import { addQty, fmtQty } from '@/lib/qty';
 
 const n = (v) => Number(v) || 0;
 
@@ -79,7 +80,7 @@ export default function SalesReportList() {
   const totals = useMemo(
     () =>
       filteredData.reduce(
-        (t, r) => ({ sold: t.sold + n(r.soldAmount), returned: t.returned + n(r.returnedAmount), net: t.net + n(r.netAmount), qty: t.qty + n(r.soldQty) }),
+        (t, r) => ({ sold: t.sold + n(r.soldAmount), returned: t.returned + n(r.returnedAmount), net: t.net + n(r.netAmount), qty: addQty(t.qty, n(r.soldQty)) }),
         { sold: 0, returned: 0, net: 0, qty: 0 }
       ),
     [filteredData]
@@ -88,7 +89,7 @@ export default function SalesReportList() {
     { title: 'Sold', value: formatCurrency(totals.sold), icon: CurrencyDollarIcon, color: 'bg-green-500' },
     { title: 'Returned', value: formatCurrency(totals.returned), icon: ArrowUturnLeftIcon, color: 'bg-orange-500' },
     { title: 'Net sales', value: formatCurrency(totals.net), icon: BanknotesIcon, color: 'bg-blue-500' },
-    { title: 'Items sold', value: totals.qty, icon: CubeIcon, color: 'bg-purple-500' },
+    { title: 'Items sold', value: fmtQty(totals.qty), icon: CubeIcon, color: 'bg-purple-500' },
   ];
 
   const { table, controlButtons, emptyState } = useUI({

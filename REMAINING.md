@@ -21,10 +21,10 @@ Done:
   - "2 Box (24)" on the order, purchase and return pages, the Receive goods dialog and the sales and purchase report screens. The screen and print receipt keep Qty in base units (so "24 × price" reads right on thermal paper) and tag the line "2 Box (24)".
   - Returns without a sale and the new goods of an exchange: a unit choice per line (the product's sale units now); the refund and the price stay per base unit.
   - Decided 2026-11-21: the old POS screen stays in base units. Selling in units needs the new checkout (Settings: new checkout, off by default; all dev shops have it off).
+- **Decimal quantities on the remaining screens** (2026-11-21). Stock counts kept a counted 2.5 as 2 (`Math.floor`); they now keep 3 decimals. The old Add Sale, Add Purchase and return/exchange quantity inputs take decimals (`step="any"`, above 0). Quantities worked out in the browser (still to receive, still returnable, report totals, scan +1) use `addQty`/`roundQty`/`fmtQty`, so no float noise (1.2000000000000002). The server already sends quantities in their shortest form and checks `allowFraction` per product.
 
 Left:
-1. **Frontend decimal display, remaining screens.** Stock counts, AddSales/AddSalesReturn, the purchase receive dialog and the reports still show raw numbers. Use `fmtQty` from `frontend/src/lib/qty.js`. The inputs already accept decimals (`step="any"`), and the server checks each product's `allowFraction`.
-2. **Imports.** Product CSV import (`opening_qty`, `quantity_alert`) still takes whole numbers only, because imported products start as whole-unit. Add an `allow_fraction` column if shops need it.
+1. **Imports.** Product CSV import (`opening_qty`, `quantity_alert`) still takes whole numbers only, because imported products start as whole-unit. Add an `allow_fraction` column if shops need it.
 
 Design notes to keep:
 - Prices on sale **and purchase** lines stay **per base unit**: a unit's price is the base price times its factor, and `unit_price × quantity` still equals the line amount.

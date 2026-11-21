@@ -13,7 +13,7 @@ import { beep, findByCode } from '@/lib/scan';
 import { useScanner } from '@/hooks/useScanner';
 import { usePermission } from '../hooks/usePermission';
 import { formatCurrency } from '@/lib/format';
-import { fmtQty, roundQty } from '@/lib/qty';
+import { addQty, fmtQty, roundQty } from '@/lib/qty';
 import { purchaseUnitsOf, unitOptionLabel } from '@/lib/saleUnits';
 import {
   InformationCircleIcon,
@@ -151,7 +151,7 @@ const AddPurchase = () => {
       }
       setPurchaseItems((prev) => {
         const same = prev.find((i) => String(i.variantId) === String(hit.variant.id));
-        if (same) return prev.map((i) => (i === same ? { ...i, quantity: String((Number(i.quantity) || 0) + 1) } : i));
+        if (same) return prev.map((i) => (i === same ? { ...i, quantity: String(addQty(i.quantity, 1)) } : i));
         const line = { productId: hit.product.id, variantId: hit.variant.id, storeId: stores[0]?.id || '', quantity: '1', unitPrice: hit.variant.cost != null ? String(hit.variant.cost) : '' };
         const empty = prev.find((i) => !i.productId);
         return empty ? prev.map((i) => (i === empty ? { ...i, ...line, storeId: i.storeId || line.storeId } : i)) : [...prev, line];
@@ -449,7 +449,8 @@ const AddPurchase = () => {
                               name={`quantity_${index}`}
                               type="number" 
                               className="w-full px-2 py-1 border border-gray-600 rounded focus:ring-blue-500 focus:border-blue-500"
-                              min="1"
+                              min="0"
+                              step="any"
                               value={item.quantity}
                               onChange={(e) => updatePurchaseItem(index, 'quantity', e.target.value)}
                               required

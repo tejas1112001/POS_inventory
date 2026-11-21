@@ -6,6 +6,7 @@ import { InlineAlert } from '@/components/feedback/InlineAlert';
 import { useScanner } from '@/hooks/useScanner';
 import { beep } from '@/lib/scan';
 import { unitQtyText } from '@/lib/saleUnits';
+import { addQty, fmtQty, roundQty } from '@/lib/qty';
 import { api } from '@/services/api';
 import { toast } from '../../../shared/toast/store';
 
@@ -15,7 +16,7 @@ const inputCls =
 const smallCls =
   'h-11 w-full min-w-0 rounded-md border border-input bg-background px-2 text-base outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 sm:h-8 sm:text-sm';
 
-const outstanding = (i) => Math.max(0, (Number(i.quantity) || 0) - (Number(i.received_qty) || 0));
+const outstanding = (i) => Math.max(0, roundQty((Number(i.quantity) || 0) - (Number(i.received_qty) || 0)));
 const emptyBatch = () => ({ batchNo: '', expiry: '', mrp: '', quantity: '' });
 
 // ReceiveGoodsDialog (industry P1 item 8, A16): what arrived now, per
@@ -38,12 +39,12 @@ export default function ReceiveGoodsDialog({ purchase, onClose, onDone }) {
   const [key] = useState(() => (crypto.randomUUID ? crypto.randomUUID() : `grn-${Date.now()}-${Math.random()}`));
 
   const tracked = (id) => Array.isArray(batches[id]);
-  const num = (id) => (tracked(id) ? batches[id].reduce((s, b) => s + (Number(b.quantity) || 0), 0) : Number(qty[id]) || 0);
+  const num = (id) => (tracked(id) ? addQty(...batches[id].map((b) => Number(b.quantity) || 0)) : roundQty(Number(qty[id]) || 0));
   const setBatch = (id, k, field, v) =>
     setBatches((cur) => ({ ...cur, [id]: cur[id].map((b, j) => (j === k ? { ...b, [field]: v } : b)) }));
   const addBatch = (id) => setBatches((cur) => ({ ...cur, [id]: [...cur[id], emptyBatch()] }));
   const dropBatch = (id, k) => setBatches((cur) => ({ ...cur, [id]: cur[id].length > 1 ? cur[id].filter((_, j) => j !== k) : [emptyBatch()] }));
-  const units = open.reduce((s, i) => s + num(i.id), 0);
+  const units = addQty(...open.map((i) => num(i.id)));
 
   useScanner(
     (code) => {
@@ -64,11 +65,11 @@ export default function ReceiveGoodsDialog({ purchase, onClose, onDone }) {
         setBatches((cur) => {
           const rows = cur[hit.id];
           const last = rows.length - 1;
-          return { ...cur, [hit.id]: rows.map((b, j) => (j === last ? { ...b, quantity: String((Number(b.quantity) || 0) + 1) } : b)) };
+          return { ...cur, [hit.id]: rows.map((b, j) => (j === last ? { ...b, quantity: String(addQty(b.quantity, 1)) } : b)) };
         });
         return;
       }
-      setQty((q) => ({ ...q, [hit.id]: String((Number(q[hit.id]) || 0) + 1) }));
+      setQty((q) => ({ ...q, [hit.id]: String(addQty(q[hit.id], 1)) }));
     },
     { enabled: !busy }
   );
@@ -173,7 +174,7 @@ export default function ReceiveGoodsDialog({ purchase, onClose, onDone }) {
                           <span>
                             <span className="font-medium">{i.product_name}</span>
                             <span className="block text-xs text-muted-foreground">
-                              {[i.sku && `SKU ${i.sku}`, i.store?.name, `ordered ${unitQtyText(i)}`, `still to come ${outstanding(i)}`]
+                              {[i.sku && `SKU ${i.sku}`, i.store?.name, `ordered ${unitQtyText(i)}`, `still to come ${fmtQty(outstanding(i))}`]
                                 .filter(Boolean)
                                 .join(' · ')}
                             </span>
@@ -246,7 +247,7 @@ export default function ReceiveGoodsDialog({ purchase, onClose, onDone }) {
                       </span>
                       {err && <span className="block text-xs text-danger">{err}</span>}
                     </td>
-                    <td className="px-2 py-2 text-right tabular-nums">{i.quantity}</td>
+                    <td className="px-2 py-2 text-right tabular-nums">{fmtQty(i.quantity)}</td>
                     <td className="px-2 py-2 text-right tabular-nums">{outstanding(i)}</td>
                     <td className="py-2 pl-2 text-right">
                       <input

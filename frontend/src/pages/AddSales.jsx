@@ -85,7 +85,8 @@ export default function AddSales() {
     if (!info.customerId) return { message: 'Choose a customer.', step: 0 };
     const usable = lines.filter((l) => l.variantId);
     if (usable.length === 0) return { message: 'Add at least one product.', step: 1 };
-    if (usable.some((l) => !(Number(l.quantity) >= 1))) return { message: 'Every quantity must be at least 1.', step: 1 };
+    // H3: part units (1.25 kg) are allowed; the server refuses them for whole-unit products.
+    if (usable.some((l) => !(Number(l.quantity) > 0))) return { message: 'Every quantity must be above 0.', step: 1 };
     return null;
   };
 
@@ -261,7 +262,7 @@ export default function AddSales() {
                             <td className="px-2 py-2">
                               <input
                                 type="number"
-                                min="1"
+                                min="0"
                                 step="any"
                                 className={inputCls}
                                 value={l.quantity}

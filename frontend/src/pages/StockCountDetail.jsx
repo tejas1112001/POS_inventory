@@ -16,6 +16,7 @@ import { formatDateTime } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { api } from '@/services/api';
 import { toast } from '../../shared/toast/store';
+import { parseQty, qtyHint } from '@/lib/qty';
 
 const inputCls =
   'h-11 w-full rounded-md border border-input bg-background px-3 text-base outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 sm:h-9 sm:text-sm';
@@ -111,8 +112,13 @@ export default function StockCountDetail() {
   useScanner((c) => scan(c), { enabled: canEdit });
 
   const setQty = async (line, value) => {
-    const n = Math.floor(Number(value));
-    if (value === '' || !Number.isFinite(n) || n < 0 || n === line.countedQty) return;
+    // H3: up to 3 decimals (2.5 kg); the server refuses part units for whole-unit products.
+    const n = parseQty(value, { fractional: true });
+    if (n === null) {
+      if (String(value).trim() !== '') toast.error(qtyHint(true));
+      return;
+    }
+    if (n === Number(line.countedQty)) return;
     await change({ lines: [{ variantId: line.variantId, ...(line.batchId ? { batchId: line.batchId } : {}), qty: n }] }).catch(() => {});
   };
 
@@ -359,6 +365,7 @@ export default function StockCountDetail() {
                         key={`${l.id}-${l.countedQty}`}
                         type="number"
                         min="0"
+                        step="any"
                         className={inputCls}
                         defaultValue={l.countedQty}
                         aria-label={`Counted ${itemName(l)}`}
