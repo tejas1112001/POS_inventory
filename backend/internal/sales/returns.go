@@ -596,8 +596,9 @@ func nextReturnReference(ctx context.Context, tx tenancy.TenantTx) (string, erro
 
 const (
 	qInsertReturn = `INSERT INTO sale_returns (reference, date, status, payment_status, total, tax, paid, due, currency, note,
-			sale_id, customer_id, store_id, created_by, applied_to_due, settlement, to_store_credit, to_exchange)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NULLIF($10, ''), $11, $12, $13, $14, $15, $16, $17, $18)
+			sale_id, customer_id, store_id, created_by, applied_to_due, settlement, to_store_credit, to_exchange, ` + gstCols + `)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NULLIF($10, ''), $11, $12, $13, $14, $15, $16, $17, $18,
+			$19, $20, $21, $22, $23, $24, $25, $26, $27)
 		RETURNING id`
 	qInsertReturnItem = `INSERT INTO return_items (sale_return_id, order_item_id, product_id, variant_id, product_name, sku, quantity,
 			unit_price, discount, tax_amount, cgst, sgst, igst, subtotal, reason, condition, restocked, unit_name, unit_factor, unit_qty)
@@ -615,6 +616,7 @@ type preparedReturn struct {
 	currency            string
 	date                time.Time
 	total, tax, applied decimal.Decimal
+	gst                 taxCtx // M3: the credit note's copy (the sale's, or worked out for a return without one)
 }
 
 // prepareReturn locks the sale (when there is one) and prices the return:
@@ -657,11 +659,19 @@ func prepareReturn(ctx context.Context, tx tenancy.TenantTx, p auth.Principal, c
 		if err := checkReturnFractions(ctx, tx, c, pr.rows); err != nil {
 			return pr, err
 		}
+		var g gstScan
+		if err := tx.QueryRow(ctx, `SELECT `+gstCols+` FROM sales WHERE id = $1`, c.saleID).Scan(g.dest()...); err != nil {
+			return pr, err
+		}
+		pr.gst = g.ctx()
 	} else {
 		if pr.custID, err = checkParties(ctx, tx, cleanSale{customerID: pr.custID, storeID: pr.storeID}, s); err != nil {
 			return pr, err
 		}
 		if pr.rows, err = unlinkedRows(ctx, tx, c, pr.currency); err != nil {
+			return pr, err
+		}
+		if pr.gst, err = taxContext(ctx, tx, pr.storeID, pr.custID, "", s); err != nil {
 			return pr, err
 		}
 	}
@@ -762,8 +772,9 @@ func writeReturn(ctx context.Context, tx tenancy.TenantTx, p auth.Principal, c c
 		return 0, "", err
 	}
 	var id int64
-	if err := tx.QueryRow(ctx, qInsertReturn, ref, pr.date, c.status, st.payStatus, pr.total, pr.tax, st.paid, st.due, pr.currency, c.note,
-		pr.saleID, pr.custID, pr.storeID, p.UserID, pr.applied, st.mode, st.toCredit, st.toExchange).Scan(&id); err != nil {
+	args := append([]any{ref, pr.date, c.status, st.payStatus, pr.total, pr.tax, st.paid, st.due, pr.currency, c.note,
+		pr.saleID, pr.custID, pr.storeID, p.UserID, pr.applied, st.mode, st.toCredit, st.toExchange}, pr.gst.values()...)
+	if err := tx.QueryRow(ctx, qInsertReturn, args...).Scan(&id); err != nil {
 		return 0, "", err
 	}
 	if pr.applied.IsPositive() {

@@ -153,3 +153,11 @@ func TestAboveMRP(t *testing.T) {
 	require.False(t, AboveMRP(d("1000"), d("18"), true, nil), "no MRP")
 	eq(t, "59", TaxInclusive(d("50"), d("18"), false), "tax added")
 }
+
+// M3: CGST + UTGST splits like CGST + SGST (the UTGST half in SGST).
+func TestSplitUTGST(t *testing.T) {
+	c, s, i := split(decimal.RequireFromString("1.81"), SplitCGSTUTGST, 2)
+	require.Equal(t, "0.91", c.String())
+	require.Equal(t, "0.9", s.String())
+	require.Nil(t, i)
+}

@@ -34,7 +34,7 @@ Design notes to keep:
 
 ## M3: GST per store and B2B (decided: multi-state and B2B)
 
-Design note `docs/M3_GST_DESIGN.md`, approved 2026-11-21 (§11 as recommended). Build order in §10. Step 1 done 2026-11-21 (state list, GSTIN checks, shop state, store/customer/supplier GSTIN and state, forms; tenant 00039). Setting a state has no effect on sales until step 2. Next: step 2 (the split per sale). Purchase tax and input tax credit: a future module (owner).
+Design note `docs/M3_GST_DESIGN.md`, approved 2026-11-21 (§11 as recommended). Build order in §10. Step 1 done 2026-11-21 (state list, GSTIN checks, shop state, store/customer/supplier GSTIN and state, forms; tenant 00039). Step 2 done 2026-11-21 (the split per sale from the seller's state and the place of supply, B2B buyers, copies on sales and credit notes, the over-₹50,000 rule, the checkout's place of supply; tenant 00040). Next: step 3 (receipts print the seller, buyer, place of supply and the split from the sale's copy). Purchase tax and input tax credit: a future module (owner).
 - Add GSTIN and state on `stores`, falling back to the shop's.
 - Add GSTIN and state on customers and suppliers.
 - For each sale, use CGST+SGST or IGST depending on the store's state and the place of supply, and keep a copy on the sale. Today the split is one shop setting (`settings.tax_split`), used in `internal/pricing`.

@@ -69,6 +69,9 @@ type saleIn struct {
 	// (YYYY-MM-DD) of what is left on account.
 	Payments []paymentIn `json:"payments"`
 	DueDate  *string     `json:"dueDate"`
+	// PlaceOfSupply is the GST state the goods are supplied to (M3 A4);
+	// empty or missing: the store's state.
+	PlaceOfSupply *string `json:"placeOfSupply"`
 
 	// POS aliases.
 	Method         *string   `json:"method"`
@@ -125,6 +128,7 @@ type cleanSale struct {
 	receiptEmail       *string
 	payments           []payLine // nil: the old single-payment fields
 	dueDate            string
+	place              string // M3: the place of supply asked for ("" the store's state)
 }
 
 type fieldErrs map[string]string
@@ -252,6 +256,9 @@ func validate(in saleIn) (cleanSale, error) {
 	if in.DueDate != nil {
 		c.dueDate = strings.TrimSpace(*in.DueDate)
 	}
+	if in.PlaceOfSupply != nil {
+		c.place = strings.TrimSpace(*in.PlaceOfSupply) // checked with the store (taxContext)
+	}
 	if in.ReceiptEmail != nil {
 		e := strings.TrimSpace(*in.ReceiptEmail)
 		if e != "" && !validEmail(e) {
@@ -266,6 +273,7 @@ func validate(in saleIn) (cleanSale, error) {
 
 type settings struct {
 	currency, split, prefix string
+	taxReg, stateCode       *string // M3: the shop's GSTIN (when GST) and state
 	inclusiveDefault        bool
 	maxDiscountPct          decimal.Decimal
 	defaultCustomer         *int64
@@ -276,8 +284,10 @@ func loadSettings(ctx context.Context, tx tenancy.TenantTx) (settings, error) {
 	var s settings
 	var tz string
 	err := tx.QueryRow(ctx, `SELECT currency, tax_split, invoice_prefix, prices_include_tax_default,
-			max_discount_pct_without_override, default_customer_id, timezone FROM settings WHERE id = 1`).
-		Scan(&s.currency, &s.split, &s.prefix, &s.inclusiveDefault, &s.maxDiscountPct, &s.defaultCustomer, &tz)
+			max_discount_pct_without_override, default_customer_id, timezone,
+			CASE WHEN upper(tax_label) = 'GST' AND length(tax_registration_no) = 15 THEN tax_registration_no END, state_code
+		FROM settings WHERE id = 1`).
+		Scan(&s.currency, &s.split, &s.prefix, &s.inclusiveDefault, &s.maxDiscountPct, &s.defaultCustomer, &tz, &s.taxReg, &s.stateCode)
 	if err != nil {
 		return s, err
 	}

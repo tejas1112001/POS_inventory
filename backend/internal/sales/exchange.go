@@ -38,6 +38,8 @@ type exchangeIn struct {
 	Note                 *string        `json:"note"`
 	Date                 *string        `json:"date"`
 	ReceiptEmail         *string        `json:"receiptEmail"`
+	// PlaceOfSupply of the new sale (M3 A7); missing: the returned sale's.
+	PlaceOfSupply *string `json:"placeOfSupply"`
 }
 
 // ExchangeQuote is the dry run's answer (?dryRun=true): the amounts the
@@ -144,11 +146,23 @@ func (a *API) exchange(w http.ResponseWriter, r *http.Request) {
 			payments = []paymentIn{}
 		}
 		cust := pr.custID
+		place := in.PlaceOfSupply
+		if place == nil {
+			place = pr.gst.place
+		}
 		cs, err := validate(saleIn{OrderItems: in.NewLines, StoreID: money.Int{V: pr.storeID, Valid: true, Set: true},
-			CustomerID: money.Int{V: cust, Valid: true, Set: true}, Payments: payments, Date: in.Date, ReceiptEmail: in.ReceiptEmail})
+			CustomerID: money.Int{V: cust, Valid: true, Set: true}, Payments: payments, Date: in.Date, ReceiptEmail: in.ReceiptEmail,
+			PlaceOfSupply: place})
 		if err != nil {
 			return renameSaleFields(err)
 		}
+		// M3: the new goods are priced under the new sale's tax identity
+		// (insertSale works out the same one).
+		tc, err := taxContext(ctx, tx, pr.storeID, cust, cs.place, s)
+		if err != nil {
+			return err
+		}
+		s.split = tc.split
 		byID, err := resolve(ctx, tx, cs.lines)
 		if err != nil {
 			return renameSaleFields(err)

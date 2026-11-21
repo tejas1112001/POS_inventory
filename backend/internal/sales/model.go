@@ -91,6 +91,8 @@ type ItemBatchJSON struct {
 // SaleJSON keeps the old field names (snake_case columns, camelCase
 // timestamps, nested customer/user/items).
 type SaleJSON struct {
+	// GST is the sale's tax identity as made (M3); null before M3.
+	GST           *GSTJSON         `json:"gst"`
 	ID            int64            `json:"id"`
 	Reference     string           `json:"reference"`
 	Date          time.Time        `json:"date"`
@@ -148,7 +150,8 @@ const (
 			s.customer_id, s.store_id, s.user_id, s.updated_by, s.receipt_email::text, s.voided_at, s.voided_by, s.void_reason,
 			s.version, s.created_at, s.updated_at, c.name, u.name, st.name,
 			to_char(s.due_date, 'YYYY-MM-DD'), ` + sqlOverdue + `, s.exchange_return_id,
-			(SELECT coalesce(sum(e.amount), 0) FROM customer_credit_entries e WHERE e.customer_id = s.customer_id)
+			(SELECT coalesce(sum(e.amount), 0) FROM customer_credit_entries e WHERE e.customer_id = s.customer_id),
+			` + gstColsS + `
 		FROM sales s
 		LEFT JOIN customers c ON c.id = s.customer_id
 		LEFT JOIN users u ON u.id = s.user_id
@@ -179,14 +182,16 @@ func load(ctx context.Context, tx tenancy.TenantTx, ids []int64) ([]SaleJSON, er
 	for rows.Next() {
 		s := &SaleJSON{Items: []ItemJSON{}}
 		var cust, user, store *string
-		if err := rows.Scan(&s.ID, &s.Reference, &s.Date, &s.Status, &s.PaymentStatus, &s.PaymentMethod, &s.PaymentNote, &s.Note,
+		var g gstScan
+		if err := rows.Scan(append([]any{&s.ID, &s.Reference, &s.Date, &s.Status, &s.PaymentStatus, &s.PaymentMethod, &s.PaymentNote, &s.Note,
 			&s.Subtotal, &s.Discount, &s.Tax, &s.Shipping, &s.Total, &s.Paid, &s.Due, &s.Tendered, &s.Change, &s.Currency,
 			&s.CustomerID, &s.StoreID, &s.UserID, &s.UpdatedBy, &s.ReceiptEmail, &s.VoidedAt, &s.VoidedBy, &s.VoidReason,
 			&s.Version, &s.CreatedAt, &s.UpdatedAt, &cust, &user, &store, &s.DueDate, &s.Overdue, &s.ExchangeReturnID,
-			&s.StoreCreditLeft); err != nil {
+			&s.StoreCreditLeft}, g.dest()...)...); err != nil {
 			rows.Close()
 			return nil, err
 		}
+		s.GST = g.json()
 		s.Payments = []PaymentJSON{}
 		if s.Overdue && s.Status != "Void" {
 			s.PaymentStatus = "Overdue"

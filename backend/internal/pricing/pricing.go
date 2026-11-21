@@ -18,7 +18,10 @@ import (
 const (
 	SplitNone     = "none"
 	SplitCGSTSGST = "cgst_sgst"
-	SplitIGST     = "igst"
+	// SplitCGSTUTGST is CGST + UTGST, in a union territory without a
+	// legislature (M3): the UTGST half is carried where SGST would be.
+	SplitCGSTUTGST = "cgst_utgst"
+	SplitIGST      = "igst"
 )
 
 // Errors.
@@ -140,7 +143,7 @@ func Allocate(amount decimal.Decimal, weights []decimal.Decimal, exp int32) []de
 // rounded half-up, SGST the rest) or all IGST.
 func split(tax decimal.Decimal, mode string, exp int32) (cgst, sgst, igst *decimal.Decimal) {
 	switch mode {
-	case SplitCGSTSGST:
+	case SplitCGSTSGST, SplitCGSTUTGST:
 		c := tax.Div(decimal.NewFromInt(2)).Round(exp)
 		s := tax.Sub(c)
 		return &c, &s, nil

@@ -81,6 +81,9 @@ type returnCustomer struct {
 // (customerName, productName, ...) and adds the nested customer and
 // product objects and paymentStatus that SalesReturnList.jsx reads.
 type ReturnJSON struct {
+	// GST is the credit note's tax identity (M3; the sale's for a linked
+	// return); null before M3.
+	GST       *GSTJSON        `json:"gst"`
 	ID        int64           `json:"id"`
 	Reference string          `json:"reference"`
 	Date      time.Time       `json:"date"`
@@ -125,7 +128,8 @@ type ReturnJSON struct {
 const (
 	qLoadReturns = `SELECT r.id, r.reference, r.date, r.status, r.payment_status, r.total, r.tax, r.paid, r.due, r.applied_to_due, r.currency, r.note,
 			r.sale_id, s.reference, r.customer_id, r.store_id, st.name, r.created_by, r.created_at, r.updated_at,
-			c.name, c.email::text, c.phone, c.image_file_id, r.settlement, r.to_store_credit, r.to_exchange, xs.id, xs.reference
+			c.name, c.email::text, c.phone, c.image_file_id, r.settlement, r.to_store_credit, r.to_exchange, xs.id, xs.reference,
+			` + gstColsR + `
 		FROM sale_returns r
 		LEFT JOIN sales xs ON xs.exchange_return_id = r.id
 		LEFT JOIN sales s ON s.id = r.sale_id
@@ -179,12 +183,14 @@ func loadReturns(ctx context.Context, tx tenancy.TenantTx, ids []int64) ([]Retur
 		var name, email, phone, xsRef *string
 		var xsID *int64
 		var img *uuid.UUID
-		if err := rows.Scan(&x.ID, &x.Reference, &x.Date, &x.Status, &x.PaymentStatus, &x.Total, &x.Tax, &x.Paid, &x.Due, &x.AppliedToDue,
+		var g gstScan
+		if err := rows.Scan(append([]any{&x.ID, &x.Reference, &x.Date, &x.Status, &x.PaymentStatus, &x.Total, &x.Tax, &x.Paid, &x.Due, &x.AppliedToDue,
 			&x.Currency, &x.Note, &x.SaleID, &x.SaleReference, &x.CustomerID, &x.StoreID, &x.StoreName, &x.CreatedBy,
-			&x.CreatedAt, &x.UpdatedAt, &name, &email, &phone, &img, &x.Settlement, &x.ToStoreCredit, &x.ToExchange, &xsID, &xsRef); err != nil {
+			&x.CreatedAt, &x.UpdatedAt, &name, &email, &phone, &img, &x.Settlement, &x.ToStoreCredit, &x.ToExchange, &xsID, &xsRef}, g.dest()...)...); err != nil {
 			rows.Close()
 			return nil, err
 		}
+		x.GST = g.json()
 		x.PaymentStatusC = x.PaymentStatus
 		if xsID != nil && xsRef != nil {
 			x.ExchangeSale = &SaleRef{ID: *xsID, Reference: *xsRef}

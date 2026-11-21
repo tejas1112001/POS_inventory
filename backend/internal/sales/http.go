@@ -290,9 +290,9 @@ func (a *API) invoices(w http.ResponseWriter, r *http.Request) {
 
 const qInsertSale = `INSERT INTO sales (reference, date, status, payment_status, payment_method, payment_note, note,
 		subtotal, discount, tax, shipping, total, paid, due, tendered, change_due, currency,
-		customer_id, store_id, user_id, receipt_email, due_date)
+		customer_id, store_id, user_id, receipt_email, due_date, ` + gstCols + `)
 	VALUES ($1, $2, $3, $4, NULLIF($5, ''), NULLIF($6, ''), NULLIF($7, ''), $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
-		$18, $19, $20, NULLIF($21, ''), $22)
+		$18, $19, $20, NULLIF($21, ''), $22, $23, $24, $25, $26, $27, $28, $29, $30, $31)
 	RETURNING id`
 
 // saleExtra is what an exchange (A20) hands insertSale: the new goods
@@ -382,6 +382,13 @@ func (a *API) insertSale(r *http.Request, tx tenancy.TenantTx, p auth.Principal,
 	if err != nil {
 		return 0, 0, "", err
 	}
+	// M3: the sale's tax identity decides its split (an exchange priced
+	// its new goods with the same one).
+	tc, err := taxContext(ctx, tx, c.storeID, cust, c.place, s)
+	if err != nil {
+		return 0, 0, "", err
+	}
+	s.split = tc.split
 	var pr priced
 	if x.priced != nil {
 		pr = *x.priced
@@ -434,6 +441,9 @@ func (a *API) insertSale(r *http.Request, tx tenancy.TenantTx, p auth.Principal,
 	if x.exchange != nil {
 		c.payments = append([]payLine{*x.exchange}, c.payments...)
 	}
+	if msg := tc.interStateProblem(pr.quote.Total, s.currency); msg != "" {
+		return 0, 0, "", apperr.Invalid("customerId", msg)
+	}
 	st, err := settle(pr.quote.Total, c, s.currency)
 	if err != nil {
 		return 0, 0, "", err
@@ -450,9 +460,10 @@ func (a *API) insertSale(r *http.Request, tx tenancy.TenantTx, p auth.Principal,
 		}
 	}
 	var id int64
-	if err := tx.QueryRow(ctx, qInsertSale, ref, date, status, st.status, st.methodLabel(c.paymentMethod), deref(c.paymentNote),
+	args := append([]any{ref, date, status, st.status, st.methodLabel(c.paymentMethod), deref(c.paymentNote),
 		deref(c.note), pr.quote.Subtotal, pr.quote.Discount, pr.quote.Tax, pr.quote.Shipping, pr.quote.Total,
-		st.paid, st.due, st.tendered, st.chg, s.currency, cust, c.storeID, p.UserID, receiptTo, due).Scan(&id); err != nil {
+		st.paid, st.due, st.tendered, st.chg, s.currency, cust, c.storeID, p.UserID, receiptTo, due}, tc.values()...)
+	if err := tx.QueryRow(ctx, qInsertSale, args...).Scan(&id); err != nil {
 		return 0, 0, "", err
 	}
 	if err := writePayments(ctx, tx, id, p.UserID, date, st.rows); err != nil {
@@ -651,6 +662,20 @@ func (a *API) update(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
+		// M3: an edit keeps the sale's place of supply unless it names one.
+		place := c.place
+		if place == "" {
+			var old *string
+			if err := tx.QueryRow(ctx, `SELECT place_of_supply FROM sales WHERE id = $1`, id).Scan(&old); err != nil {
+				return err
+			}
+			place = deref(old)
+		}
+		tc, err := taxContext(ctx, tx, c.storeID, cust, place, s)
+		if err != nil {
+			return err
+		}
+		s.split = tc.split
 		items, err := oldItems(ctx, tx, id)
 		if err != nil {
 			return err
@@ -687,6 +712,13 @@ func (a *API) update(w http.ResponseWriter, r *http.Request) {
 		}
 		// An edit never has tracked lines (refuseIfBatched): the MRP is the variant's.
 		if _, err := insertItems(ctx, tx, id, pr, saleBatches{}); err != nil {
+			return err
+		}
+		if msg := tc.interStateProblem(pr.quote.Total, s.currency); msg != "" {
+			return apperr.Invalid("customerId", msg)
+		}
+		if _, err := tx.Exec(ctx, `UPDATE sales SET (`+gstCols+`) = ($2, $3, $4, $5, $6, $7, $8, $9, $10) WHERE id = $1`,
+			append([]any{id}, tc.values()...)...); err != nil {
 			return err
 		}
 		status := c.status

@@ -57,6 +57,12 @@ type quoteJSON struct {
 	// (BATCH_NOT_SELLABLE or INSUFFICIENT_STOCK), so the till shows it
 	// before payment; null when the batches cover the cart.
 	BatchProblem *batchProblem `json:"batchProblem"`
+	// M3: the sale's GST: how its tax is split, the place of supply, the
+	// seller's GSTIN, B2B or B2C, and warnings (a B2B line without an HSN
+	// code; a sale the checkout will refuse until the buyer's address is
+	// added).
+	GST         GSTJSON  `json:"gst"`
+	GSTWarnings []string `json:"gstWarnings"`
 }
 
 type batchProblem struct {
@@ -92,9 +98,15 @@ func (a *API) quote(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
-		if _, err := checkParties(ctx, tx, c, s); err != nil {
+		cust, err := checkParties(ctx, tx, c, s)
+		if err != nil {
 			return err
 		}
+		tc, err := taxContext(ctx, tx, c.storeID, cust, c.place, s)
+		if err != nil {
+			return err
+		}
+		s.split = tc.split
 		byID, err := resolve(ctx, tx, c.lines)
 		if err != nil {
 			return err
@@ -135,7 +147,17 @@ func (a *API) quote(w http.ResponseWriter, r *http.Request) {
 		q := pr.quote
 		problem := out.BatchProblem
 		out = quoteJSON{BatchProblem: problem, Currency: s.currency, Subtotal: q.Subtotal, Discount: q.Discount, Tax: q.Tax,
-			Shipping: q.Shipping, Total: q.Total, Lines: make([]quoteLine, 0, len(pr.lines))}
+			Shipping: q.Shipping, Total: q.Total, Lines: make([]quoteLine, 0, len(pr.lines)), GSTWarnings: []string{}}
+		out.GST = GSTJSON{SellerGSTIN: tc.sellerGSTIN, SellerState: tc.sellerState, BuyerGSTIN: tc.buyerGSTIN, BuyerName: tc.buyerName,
+			BuyerAddress: tc.buyerAddress, BuyerState: tc.buyerState, PlaceOfSupply: tc.place, TaxSplit: tc.split, InvoiceKind: tc.kind}
+		if msg := tc.interStateProblem(q.Total, s.currency); msg != "" {
+			out.GSTWarnings = append(out.GSTWarnings, msg)
+		}
+		hsn, err := tc.hsnWarnings(ctx, tx, pr)
+		if err != nil {
+			return err
+		}
+		out.GSTWarnings = append(out.GSTWarnings, hsn...)
 		for i, l := range pr.lines {
 			ql := quoteLine{Index: i, ProductID: l.v.productID, VariantID: l.v.id, SKU: l.v.sku,
 				Quantity: l.qty, UnitPrice: l.unit, Discount: l.q.Discount, TaxRate: l.taxRate, Tax: l.q.Tax,

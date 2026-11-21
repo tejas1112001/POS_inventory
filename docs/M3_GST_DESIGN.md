@@ -100,7 +100,7 @@ Done on the server, in `internal/pricing`'s caller (checkout and quote), once pe
 ## 10. Build order (after approval)
 
 1. DB1–DB4, A1–A3, A6, the state list and GSTIN checks, and the forms (Settings, Stores, Customers, Suppliers). **Done 2026-11-21** (tenant 00039, `internal/gst`, `TestGSTParties`).
-2. §4 split per sale, DB5/DB6 copies, A4, A5, A7, and the checkout display.
+2. §4 split per sale, DB5/DB6 copies, A4, A5, A7, and the checkout display. **Done 2026-11-21** (tenant 00040, `internal/sales/gst.go`, `TestGSTSales`, `TestGSTSalesNoState`). The old POS screen sells with the store's state as place of supply (no override), as §8 says.
 3. Receipts: PDF, screen and print (§5).
 4. Numbering per store and financial year (§6), with DB7 (moved here from step 1: the table comes with the numbering).
 

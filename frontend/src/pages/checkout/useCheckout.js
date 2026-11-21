@@ -15,7 +15,7 @@ export const parseAmount = (v) => {
 };
 
 // cartBody is what both the price check and the sale send.
-export function cartBody(lines, { storeId, customerId, discount }) {
+export function cartBody(lines, { storeId, customerId, discount, placeOfSupply }) {
   return {
     orderItems: lines.map((l) => ({
       productId: l.productId,
@@ -29,6 +29,8 @@ export function cartBody(lines, { storeId, customerId, discount }) {
     })),
     storeId: Number(storeId),
     ...(customerId ? { customerId: Number(customerId) } : {}),
+    // M3: the GST place of supply when the cashier changed it ('' = the store's state).
+    ...(placeOfSupply ? { placeOfSupply } : {}),
     discount,
   };
 }
@@ -58,6 +60,7 @@ export default function useCheckout({ defaultCustomerId }) {
   const [loadError, setLoadError] = useState('');
   const [lines, setLines] = useState([]);
   const [discountText, setDiscountText] = useState('');
+  const [placeOfSupply, setPlaceOfSupply] = useState(''); // M3: '' = the store's state
   const [problem, setProblem] = useState(null);
   const [quote, setQuote] = useState({ data: null, key: '', loading: false, error: null });
   const [changedPrices, setChangedPrices] = useState(null);
@@ -353,6 +356,7 @@ export default function useCheckout({ defaultCustomerId }) {
   const clearCart = useCallback(() => {
     setLines([]);
     setDiscountText('');
+    setPlaceOfSupply('');
     setProblem(null);
     setChangedPrices(null);
   }, []);
@@ -364,6 +368,7 @@ export default function useCheckout({ defaultCustomerId }) {
     (value) => {
       if (value === storeId) return;
       recheckFor.current = lines.length ? value : null;
+      setPlaceOfSupply(''); // the new store's state
       setStoreId(value);
     },
     [storeId, lines.length]
@@ -404,7 +409,7 @@ export default function useCheckout({ defaultCustomerId }) {
 
   // The server's price check. The key is the request body: a quote is used
   // only while the cart still matches it.
-  const body = useMemo(() => cartBody(lines, { storeId, customerId, discount }), [lines, storeId, customerId, discount]);
+  const body = useMemo(() => cartBody(lines, { storeId, customerId, discount, placeOfSupply }), [lines, storeId, customerId, discount, placeOfSupply]);
   const bodyKey = useMemo(() => JSON.stringify(body), [body]);
   const asked = useRef('');
   const [quoteTick, setQuoteTick] = useState(0);
@@ -480,6 +485,8 @@ export default function useCheckout({ defaultCustomerId }) {
     restoreCart,
     discountText,
     setDiscountText,
+    placeOfSupply,
+    setPlaceOfSupply,
     discount,
     problem,
     setProblem,

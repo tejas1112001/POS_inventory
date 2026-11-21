@@ -30,6 +30,7 @@ import ShortcutsHelp from './ShortcutsHelp';
 import BatchPicker from './BatchPicker';
 import { addQty, fmtQty } from '@/lib/qty';
 import { lineBase, unitOptionLabel } from '@/lib/saleUnits';
+import { stateLabel, useGstStates } from '@/lib/gst';
 
 const FAV_KEY = 'pos.favourites';
 
@@ -336,6 +337,21 @@ export default function Checkout() {
   }, [lines, selected, search, openPay, c]);
 
   const customer = c.customers.find((x) => String(x.id) === String(c.customerId));
+  // M3: the quote's GST (split, place of supply) and its tax by kind.
+  const gst = q?.gst;
+  const taxParts = useMemo(() => {
+    const sum = (k) => (q?.lines || []).reduce((n, l) => n + (Number(l[k]) || 0), 0);
+    switch (gst?.taxSplit) {
+      case 'cgst_sgst':
+        return [['CGST', sum('cgst')], ['SGST', sum('sgst')]];
+      case 'cgst_utgst':
+        return [['CGST', sum('cgst')], ['UTGST', sum('sgst')]];
+      case 'igst':
+        return [['IGST', sum('igst')]];
+      default:
+        return [];
+    }
+  }, [q, gst?.taxSplit]);
   const canCredit = hasPermission('sales', 'credit');
   const store = c.stores.find((s) => String(s.id) === String(c.storeId));
   const q = c.quoteReady ? c.quote.data : null;
@@ -383,9 +399,15 @@ export default function Checkout() {
         <span className="flex min-w-0 items-center gap-2">
           <User className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
           <span className="truncate font-medium">{customer?.name || 'Walk-in Customer'}</span>
+          {customer?.gstin && (
+            <span className="shrink-0 rounded bg-accent px-1.5 py-0.5 font-mono text-[11px] text-accent-foreground" title="Registered buyer: a B2B invoice">
+              B2B · {customer.gstin}
+            </span>
+          )}
         </span>
         <span className="shrink-0 text-xs text-slate-600 dark:text-slate-300">Change · F4</span>
       </button>
+      <PlaceOfSupply c={c} gst={gst} customer={customer} />
       <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin">
         {lines.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center p-6 text-center">
@@ -538,6 +560,20 @@ export default function Checkout() {
           <span className="text-muted-foreground">{settings?.taxLabel || 'Tax'}</span>
           <span className="font-medium tabular-nums">{q ? formatCurrency(q.tax) : '—'}</span>
         </div>
+        {taxParts.length > 0 && (
+          <div className="-mt-1 flex justify-end gap-3 text-xs text-slate-600 tabular-nums dark:text-slate-300" aria-label="Tax by kind">
+            {taxParts.map(([k, v]) => (
+              <span key={k}>
+                {k} {formatCurrency(v)}
+              </span>
+            ))}
+          </div>
+        )}
+        {(q?.gstWarnings || []).map((w) => (
+          <p key={w} className="text-xs font-medium text-warning-fg">
+            {w}
+          </p>
+        ))}
         <div className="flex items-center justify-between border-t pt-2">
           <span className="flex items-center gap-2 text-sm font-semibold">
             Total
@@ -732,6 +768,41 @@ export default function Checkout() {
         onAccept={c.acceptNewPrices}
         onClose={() => c.setChangedPrices(null)}
       />
+    </div>
+  );
+}
+
+// PlaceOfSupply (M3 §8): where the goods are supplied, the store's state
+// unless the cashier changes it (delivery to another state: IGST). Shown
+// once the shop has a GST state (the quote then names a place of supply).
+function PlaceOfSupply({ c, gst, customer }) {
+  const states = useGstStates();
+  if (!gst?.placeOfSupply && !c.placeOfSupply) return null;
+  const place = c.placeOfSupply || gst?.placeOfSupply || '';
+  const other = customer?.gstin && customer.stateCode && customer.stateCode !== place;
+  return (
+    <div className="border-b px-4 py-1.5 text-xs">
+      <label className="flex items-center justify-between gap-2">
+        <span className="text-muted-foreground">Place of supply</span>
+        <select
+          className="h-7 max-w-[60%] rounded-md border bg-background px-1 text-xs"
+          value={place}
+          onChange={(e) => c.setPlaceOfSupply(e.target.value === gst?.sellerState ? '' : e.target.value)}
+          aria-label="Place of supply"
+        >
+          {(states || []).map((s) => (
+            <option key={s.code} value={s.code}>
+              {s.name} ({s.code})
+            </option>
+          ))}
+          {!states && <option value={place}>{place}</option>}
+        </select>
+      </label>
+      {other && (
+        <p className="mt-1 text-warning-fg">
+          The buyer is registered in {stateLabel(states, customer.stateCode)}. Delivering there? Change the place of supply.
+        </p>
+      )}
     </div>
   );
 }
