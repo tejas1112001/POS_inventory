@@ -29,6 +29,11 @@ const TAX_SPLITS = [
   { value: 'cgst_sgst', label: 'CGST + SGST (within the state)' },
   { value: 'igst', label: 'IGST (between states)' },
 ];
+// M3 §6: invoice and credit note numbers.
+const NUMBERINGS = [
+  { value: 'shop', label: 'One series for the shop (INV-000042)' },
+  { value: 'store_year', label: 'Per store and financial year (MUM/2627/00042)' },
+];
 const HOME_PAGES = [
   { value: 'login', label: 'Staff login' },
   { value: 'shop', label: 'Online shop' },
@@ -38,7 +43,7 @@ const MAX_LOGO = 2 * 1024 * 1024;
 
 const FIELDS = [
   'businessName', 'legalName', 'address', 'phone', 'email', 'currency', 'locale', 'timezone', 'taxLabel',
-  'taxRegistrationNo', 'taxSplit', 'stateCode', 'pricesIncludeTax', 'maxDiscountPct', 'invoicePrefix', 'receiptHeader', 'receiptFooter',
+  'taxRegistrationNo', 'taxSplit', 'stateCode', 'invoiceNumbering', 'pricesIncludeTax', 'maxDiscountPct', 'invoicePrefix', 'receiptHeader', 'receiptFooter',
   'homePage', 'shopStoreId', 'newCheckout', 'lowStockEmail', 'receiptPaper', 'showMrpOnReceipt',
 ];
 
@@ -242,7 +247,21 @@ export default function ShopSettings({ canEdit }) {
             disabled={dis || !gstStates}
             options={[{ value: '', label: gstStates ? 'Not set' : 'Loading…' }, ...(gstStates || []).map((x) => ({ value: x.code, label: `${x.name} (${x.code})` }))]}
           />
-          <TextField id="invoicePrefix" label="Invoice number prefix" hint="Letters, digits and - only." value={form.invoicePrefix} onChange={set('invoicePrefix')} error={fields.invoicePrefix} disabled={dis} maxLength={20} />
+          <TextField id="invoicePrefix" label="Invoice number prefix" hint="Letters, digits and - only. Used for one series for the shop." value={form.invoicePrefix} onChange={set('invoicePrefix')} error={fields.invoicePrefix} disabled={dis} maxLength={20} />
+          <SelectField
+            id="invoiceNumbering"
+            label="Invoice numbers"
+            hint={
+              form.invoiceNumbering === 'store_year'
+                ? "Each store has its own series, restarting on 1 April; credit notes are MUM/2627/C0003. Every store needs an invoice code (Stores). Earlier invoices keep their numbers."
+                : 'Per store and year needs an invoice code on every store (Stores). Earlier invoices keep their numbers.'
+            }
+            value={form.invoiceNumbering || 'shop'}
+            onChange={set('invoiceNumbering')}
+            error={fields.invoiceNumbering}
+            disabled={dis}
+            options={NUMBERINGS}
+          />
           <TextField id="maxDiscountPct" type="number" min="0" max="100" step="0.01" label="Largest discount without approval (%)" value={form.maxDiscountPct} onChange={set('maxDiscountPct')} error={fields.maxDiscountPct} disabled={dis} />
           <div className="pt-6">
             <CheckField id="pricesIncludeTax" label="Prices include tax" hint="Used for products without their own setting." checked={form.pricesIncludeTax} onChange={set('pricesIncludeTax')} disabled={dis} />

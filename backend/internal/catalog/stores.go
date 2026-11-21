@@ -280,6 +280,22 @@ func setStoreTax(ctx context.Context, tx tenancy.TenantTx, in storeIn, cur store
 	return scanStore(tx.QueryRow(ctx, qStoreTax, cur.ID, tax.GSTIN, tax.StateCode, ptr(code)))
 }
 
+// needInvoiceCode refuses a store without an invoice code while the shop
+// numbers invoices per store and year (M3 §6).
+func needInvoiceCode(ctx context.Context, tx tenancy.TenantTx, st storeJSON) error {
+	if st.InvoiceCode != nil {
+		return nil
+	}
+	var numbering string
+	if err := tx.QueryRow(ctx, `SELECT invoice_numbering FROM settings WHERE id = 1`).Scan(&numbering); err != nil {
+		return err
+	}
+	if numbering == "store_year" {
+		return apperr.Invalid("invoiceCode", "This shop numbers invoices per store: give the store an invoice code, such as MUM.")
+	}
+	return nil
+}
+
 func (a *API) createStore(w http.ResponseWriter, r *http.Request) {
 	var in storeIn
 	if err := httpx.DecodeJSON(r, &in); err != nil {
@@ -325,8 +341,10 @@ func (a *API) createStore(w http.ResponseWriter, r *http.Request) {
 		if out, err = scanStore(tx.QueryRow(r.Context(), qStoreInsert, name, slug, nullIfEmpty(addr), status, principal(r).UserID, nullIfEmpty(phone))); err != nil {
 			return err
 		}
-		out, err = setStoreTax(r.Context(), tx, in, out)
-		return err
+		if out, err = setStoreTax(r.Context(), tx, in, out); err != nil {
+			return err
+		}
+		return needInvoiceCode(r.Context(), tx, out)
 	})
 	if err != nil {
 		writeErr(w, r, err, "Store")
@@ -380,8 +398,10 @@ func (a *API) updateStore(w http.ResponseWriter, r *http.Request) {
 		if out, err = scanStore(tx.QueryRow(r.Context(), qStoreUpdate, id, name, nullIfEmpty(addr), status, nullIfEmpty(phone))); err != nil {
 			return err
 		}
-		out, err = setStoreTax(r.Context(), tx, in, out)
-		return err
+		if out, err = setStoreTax(r.Context(), tx, in, out); err != nil {
+			return err
+		}
+		return needInvoiceCode(r.Context(), tx, out)
 	})
 	if err != nil {
 		writeErr(w, r, err, "Store")

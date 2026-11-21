@@ -767,7 +767,7 @@ type returnSettle struct {
 // A) and moves the restocked lines into stock. The caller has locked keys.
 func writeReturn(ctx context.Context, tx tenancy.TenantTx, p auth.Principal, c cleanReturn, pr preparedReturn, st returnSettle,
 	keys []inventory.Key, deltas map[inventory.Key]qty.Q) (int64, string, error) {
-	ref, err := nextReturnReference(ctx, tx)
+	ref, err := returnReference(ctx, tx, pr.storeID, pr.date)
 	if err != nil {
 		return 0, "", err
 	}

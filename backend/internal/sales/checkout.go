@@ -274,6 +274,7 @@ func validate(in saleIn) (cleanSale, error) {
 type settings struct {
 	currency, split, prefix string
 	taxReg, stateCode       *string // M3: the shop's GSTIN (when GST) and state
+	numbering               string  // M3 step 4: invoice_numbering (shop or store_year)
 	inclusiveDefault        bool
 	maxDiscountPct          decimal.Decimal
 	defaultCustomer         *int64
@@ -285,9 +286,11 @@ func loadSettings(ctx context.Context, tx tenancy.TenantTx) (settings, error) {
 	var tz string
 	err := tx.QueryRow(ctx, `SELECT currency, tax_split, invoice_prefix, prices_include_tax_default,
 			max_discount_pct_without_override, default_customer_id, timezone,
-			CASE WHEN upper(tax_label) = 'GST' AND length(tax_registration_no) = 15 THEN tax_registration_no END, state_code
+			CASE WHEN upper(tax_label) = 'GST' AND length(tax_registration_no) = 15 THEN tax_registration_no END, state_code,
+			invoice_numbering
 		FROM settings WHERE id = 1`).
-		Scan(&s.currency, &s.split, &s.prefix, &s.inclusiveDefault, &s.maxDiscountPct, &s.defaultCustomer, &tz, &s.taxReg, &s.stateCode)
+		Scan(&s.currency, &s.split, &s.prefix, &s.inclusiveDefault, &s.maxDiscountPct, &s.defaultCustomer, &tz, &s.taxReg, &s.stateCode,
+			&s.numbering)
 	if err != nil {
 		return s, err
 	}

@@ -1,6 +1,6 @@
 # M3: GST per store and B2B invoices (design note)
 
-Status: **approved 2026-11-21** (all of §11 as recommended; Q5: purchase tax and input tax credit are a future module, M3 stores the supplier's GSTIN and state only).
+Status: **built 2026-11-21** (steps 1–4). Approved 2026-11-21 (all of §11 as recommended; Q5: purchase tax and input tax credit are a future module, M3 stores the supplier's GSTIN and state only).
 Source: ARCHITECTURE_REVIEW M3 (decided: multi-state chains and B2B are in scope) and REMAINING.md.
 
 > This note describes software behaviour. The GST rules it follows (place of supply, invoice contents, numbering) should be checked by the shop's chartered accountant before shops rely on it. Questions that need that check are marked **(CA)**.
@@ -64,7 +64,7 @@ Done on the server, in `internal/pricing`'s caller (checkout and quote), once pe
 
 - A new shop setting, `invoiceNumbering`:
   - `shop` (the default, as today): `INV-000042`, `RET-000010`.
-  - `store_year`: separate numbers per store and financial year, restarting on 1 April, formatted `{prefix}/{store code}/{yy-yy}/{n}`, for example `INV/MUM/26-27/000042` (at most 16 characters, as GST allows; the format is checked to fit). Credit notes are numbered the same way with their own prefix (`CN/MUM/26-27/000003`).
+  - `store_year`: separate numbers per store and financial year, restarting on 1 April, formatted `{store code}/{yyyy}/{n}`: invoices `MUM/2627/00042`, credit notes `MUM/2627/C0003` (FY 2026-27). With a store code of up to 5 characters this is at most 16 characters, as GST allows, up to 99,999 invoices and 9,999 credit notes per store per year. **Owner, 2026-11-21:** this format, chosen because the first draft's `INV/MUM/26-27/000042` was 20 characters, over the limit. The shop's invoice prefix is not used in this mode (the store code takes its place).
 - The financial year comes from the sale's date in the shop's time zone.
 - Numbers stay gapless per series, using the same locked counter as today (`invoice_series` row per store, kind and year).
 - Switching to `store_year` changes only new documents. Old sales keep their numbers. Switching back is allowed, but the setting warns that numbers then mix.
@@ -74,7 +74,7 @@ Done on the server, in `internal/pricing`'s caller (checkout and quote), once pe
 
 | ID | Change |
 |---|---|
-| A1 | `GET/PUT /api/settings`: `stateCode`, `invoiceNumbering`, `creditNotePrefix`. |
+| A1 | `GET/PUT /api/settings`: `stateCode`, `invoiceNumbering`. |
 | A2 | Stores: `gstin`, `stateCode`, `invoiceCode` (validated; GSTIN state = store state). |
 | A3 | Customers: `gstin`, `stateCode`, `legalName`, `billingAddress`. Suppliers: `gstin`, `stateCode`. |
 | A4 | `POST /api/sales` and `/quote`: optional `placeOfSupply` (state code). The quote returns `taxSplit`, `placeOfSupply`, `sellerGstin`, `invoiceKind`, and warnings (B2B line without HSN). |
@@ -84,7 +84,7 @@ Done on the server, in `internal/pricing`'s caller (checkout and quote), once pe
 
 ## 8. Screens
 
-- **Settings → Business:** the shop's state; invoice numbering (and credit note prefix).
+- **Settings → Business:** the shop's state; invoice numbering.
 - **Settings → Stores:** GSTIN, state, invoice code per store.
 - **Customers and suppliers:** GSTIN, state, legal name, billing address (customers).
 - **Checkout (new):** under the customer, "B2B · GSTIN …" for a registered buyer; a "Place of supply" line (the store's state by default, changeable); the quote's split shown in the totals ("CGST 9% / SGST 9%" or "IGST 18%").
@@ -102,7 +102,7 @@ Done on the server, in `internal/pricing`'s caller (checkout and quote), once pe
 1. DB1–DB4, A1–A3, A6, the state list and GSTIN checks, and the forms (Settings, Stores, Customers, Suppliers). **Done 2026-11-21** (tenant 00039, `internal/gst`, `TestGSTParties`).
 2. §4 split per sale, DB5/DB6 copies, A4, A5, A7, and the checkout display. **Done 2026-11-21** (tenant 00040, `internal/sales/gst.go`, `TestGSTSales`, `TestGSTSalesNoState`). The old POS screen sells with the store's state as place of supply (no override), as §8 says.
 3. Receipts: PDF, screen and print (§5). **Done 2026-11-21**: a sale made under a GST state prints from its copy (the seller's GSTIN, "Tax Invoice" only under a GSTIN, Bill to on B2B, place of supply, UTGST rows); older sales and shops with no state print as before. The return page shows the credit note's GST. A printable credit note document does not exist yet (left in REMAINING.md).
-4. Numbering per store and financial year (§6), with DB7 (moved here from step 1: the table comes with the numbering).
+4. Numbering per store and financial year (§6), with DB7 (moved here from step 1: the table comes with the numbering). **Done 2026-11-21** (tenant 00041, `internal/sales/numbering.go`, `TestInvoiceSeries`, `TestFiscalYear`).
 
 Each step ships with integration tests (two stores in two states; a B2B buyer in another state; a UT store; a shop with no state behaving as today; numbering across 31 March / 1 April).
 
@@ -112,7 +112,7 @@ Each step ships with integration tests (two stores in two states; a B2B buyer in
 |---|---|---|
 | Q1 | **Place of supply** for a counter sale: always the store's state, with the cashier able to change it for delivery to another state? Or default to the buyer's registered state for B2B? **(CA)** | Store's state by default, changeable per sale; a hint when a B2B buyer is from another state. |
 | Q2 | **Invoice numbering per store and financial year**: build it now as an opt-in setting, in the `INV/MUM/26-27/000042` format? | Yes, opt-in; today's shop-wide numbering stays the default. |
-| Q3 | **Credit notes** (returns) numbered per store and year too, with prefix `CN`? | Yes, with the same setting. |
+| Q3 | **Credit notes** (returns) numbered per store and year too? | Yes, with the same setting (format `MUM/2627/C0003`, §6). |
 | Q4 | **GST reports** (a GSTR-1 style export: B2B invoices, B2C summary, HSN summary, credit notes): in M3, or a separate item after it? | A separate item after M3; M3 stores everything they need. |
 | Q5 | **Tax on purchases** (input tax credit): out of scope for M3, storing only the supplier's GSTIN and state now? | Yes, out of scope; purchases have no tax lines today and need their own design. **Owner: a future module (purchase tax and ITC); M3 stores the supplier's GSTIN and state now.** |
 | Q6 | A GSTIN whose first two digits don't match the state it is entered for: refuse it, or warn? | Refuse (it can't be right). |

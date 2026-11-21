@@ -420,7 +420,7 @@ func (a *API) insertSale(r *http.Request, tx tenancy.TenantTx, p auth.Principal,
 	if err != nil {
 		return 0, 0, "", err
 	}
-	ref, err := nextReference(ctx, tx, s.prefix)
+	ref, err := saleReference(ctx, tx, s, c.storeID, date)
 	if err != nil {
 		return 0, 0, "", err
 	}

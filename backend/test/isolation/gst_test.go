@@ -259,3 +259,65 @@ func TestGSTSalesNoState(t *testing.T) {
 	require.Equal(t, "27", g["placeOfSupply"])
 	require.Nil(t, lineOf(t, s.Body, p)["igst"])
 }
+
+// M3 step 4 (§6): numbers per store and financial year, opt-in. Turning it
+// on needs every store's invoice code; each store has its own series of
+// invoices (MUM/2627/00001) and credit notes (MUM/2627/C0001); the year is
+// the sale's (1 April); switching back resumes the shop-wide numbers.
+func TestInvoiceSeries(t *testing.T) {
+	l := billingTenant(t, "gst-series")
+	tok, _ := ownerLogin(t, l)
+	host := tenants[l].Host
+	call := func(method, path string, body map[string]any) resp {
+		return do(t, rq{method: method, host: host, path: path, token: tok, body: body})
+	}
+	mum := storeIDs(t, l, tok)[0]
+	r := call("PUT", "/api/settings", map[string]any{"invoiceNumbering": "store_year"})
+	require.Equal(t, 400, r.Code, r.Raw)
+	require.Equal(t, "invoiceNumbering", errField(r))
+	require.Equal(t, 200, call("PUT", "/api/stores/"+jsonID(mum), map[string]any{"invoiceCode": "MUM"}).Code)
+	blr := call("POST", "/api/stores", map[string]any{"name": "Bengaluru", "invoiceCode": "BLRMG"})
+	require.Equal(t, 201, blr.Code, blr.Raw)
+	r = call("PUT", "/api/settings", map[string]any{"invoiceNumbering": "store_year"})
+	require.Equal(t, 200, r.Code, r.Raw)
+	require.Equal(t, "store_year", r.Body["invoiceNumbering"])
+
+	// A store must keep its code now.
+	r = call("POST", "/api/stores", map[string]any{"name": "No code"})
+	require.Equal(t, 400, r.Code, r.Raw)
+	require.Equal(t, "invoiceCode", errField(r))
+	r = call("PUT", "/api/stores/"+jsonID(mum), map[string]any{"invoiceCode": ""})
+	require.Equal(t, 400, r.Code, r.Raw)
+
+	pm := stockedProduct(t, l, tok, "SER-MUM", mum, 10)
+	pb := stockedProduct(t, l, tok, "SER-BLR", num(blr.Body["id"]), 10)
+	ref := func(s resp) string {
+		t.Helper()
+		require.Equal(t, 201, s.Code, s.Raw)
+		v := s.Body["reference"].(string)
+		require.LessOrEqual(t, len(v), 16, "GST allows 16 characters: %s", v)
+		return v
+	}
+	first := ref(sell(t, l, tok, posSale(mum, line(pm, 1)), nil))
+	require.Regexp(t, `^MUM/\d{4}/00001$`, first)
+	fy := first[4:8]
+	require.Equal(t, "MUM/"+fy+"/00002", ref(sell(t, l, tok, posSale(mum, line(pm, 1)), nil)))
+	b := ref(sell(t, l, tok, posSale(num(blr.Body["id"]), line(pb, 1)), nil))
+	require.Equal(t, "BLRMG/"+fy+"/00001", b, "each store has its own series")
+
+	// A credit note: its own series.
+	sale := sell(t, l, tok, posSale(mum, line(pm, 1)), nil)
+	require.Equal(t, 201, sale.Code, sale.Raw)
+	ret := postReturn(t, l, tok, retBody(sale.Body["id"], mum, map[string]any{"productId": pm.pid, "variantId": pm.vid, "quantity": 1, "reason": "x"}), nil)
+	require.Equal(t, 201, ret.Code, ret.Raw)
+	require.Equal(t, "MUM/"+fy+"/C0001", ret.Body["reference"])
+
+	// A sale dated in the previous financial year is numbered in that year.
+	old := posSale(mum, line(pm, 1))
+	old["date"] = "2026-03-31"
+	require.Equal(t, "MUM/2526/00001", ref(sell(t, l, tok, old, nil)))
+
+	// Back to shop-wide numbers.
+	require.Equal(t, 200, call("PUT", "/api/settings", map[string]any{"invoiceNumbering": "shop"}).Code)
+	require.Equal(t, "POS-INV-000001", ref(sell(t, l, tok, posSale(mum, line(pm, 1)), nil)), "the shop-wide counter resumes where it was")
+}
