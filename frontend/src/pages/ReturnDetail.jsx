@@ -7,6 +7,10 @@ import { ErrorState } from '@/components/kit/States';
 import { formatCurrency, formatDateTime } from '@/lib/format';
 import { unitQtyText } from '@/lib/saleUnits';
 import { CONDITIONS } from '@/lib/returns';
+import { useGstStates } from '@/lib/gst';
+import { receiptGst } from '@/lib/gstReceipt';
+
+const SPLIT_LABELS = { cgst_sgst: 'CGST + SGST', cgst_utgst: 'CGST + UTGST', igst: 'IGST' };
 
 const CONDITION_LABEL = Object.fromEntries(CONDITIONS.map((c) => [c.value, c.label]));
 
@@ -27,6 +31,7 @@ export default function ReturnDetail() {
   const { id } = useParams();
   const [r, setR] = useState(null);
   const [error, setError] = useState('');
+  const states = useGstStates();
 
   const load = useCallback(() => {
     setError('');
@@ -48,6 +53,8 @@ export default function ReturnDetail() {
     );
   }
   if (!r) return <div className="h-64 animate-pulse rounded-lg bg-muted" aria-busy="true" aria-label="Loading the return" />;
+  // Only the credit note's own copy (no shop-settings fallback on this page).
+  const gst = receiptGst(r, null, 'GST', states);
 
   return (
     <div className="space-y-4">
@@ -88,6 +95,11 @@ export default function ReturnDetail() {
             </Field>
           )}
           {r.note && <Field label="Note">{r.note}</Field>}
+          {/* M3: the credit note's GST (the sale's for a return against one). */}
+          {gst.taxId && <Field label="Seller">{gst.taxId}</Field>}
+          {gst.placeOfSupply && <Field label="Place of supply">{gst.placeOfSupply}</Field>}
+          {gst.billTo.length > 0 && <Field label="Bill to">{gst.billTo.join(', ')}</Field>}
+          {r.gst?.taxSplit && r.gst.taxSplit !== 'none' && <Field label="Tax">{SPLIT_LABELS[r.gst.taxSplit] || r.gst.taxSplit}</Field>}
         </dl>
       </section>
 

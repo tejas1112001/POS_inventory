@@ -3,6 +3,8 @@
 package isolation
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -193,12 +195,16 @@ func TestGSTSales(t *testing.T) {
 	require.Equal(t, gstinKA, g["buyerGstin"])
 	require.Equal(t, "Kaveri Traders Pvt Ltd", g["buyerName"])
 	require.Equal(t, "4 Residency Road, Bengaluru", g["buyerAddress"])
+	pdf := call("GET", fmt.Sprintf("/api/sales/%v/receipt", s.Body["id"]), nil)
+	require.Equal(t, 200, pdf.Code, "the B2B receipt (Bill to, place of supply) renders: %s", pdf.Raw)
+	require.True(t, strings.HasPrefix(pdf.Raw, "%PDF-"))
 
 	// Chandigarh: CGST + UTGST (carried in sgst), under the shop's GSTIN.
 	s = sell(t, l, tok, posSale(num(chd.Body["id"]), line(pc, 1)), nil)
 	require.Equal(t, 201, s.Code, s.Raw)
 	require.Equal(t, "cgst_utgst", gstOf(s)["taxSplit"])
 	require.NotNil(t, lineOf(t, s.Body, pc)["sgst"])
+	require.Equal(t, 200, call("GET", fmt.Sprintf("/api/sales/%v/receipt", s.Body["id"]), nil).Code, "the UTGST receipt renders")
 
 	// Q7: more than ₹50,000 to another state without the buyer's address.
 	body = posSale(mum, line(pm, 400))

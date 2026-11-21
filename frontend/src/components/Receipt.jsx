@@ -7,6 +7,8 @@ import { usePos } from '@/hooks/usePos';
 import { useShopSettings } from '@/hooks/useShopSettings';
 import { formatCurrency, formatDateTime } from '@/lib/format';
 import { unitQtyText } from '@/lib/saleUnits';
+import { receiptGst } from '@/lib/gstReceipt';
+import { useGstStates } from '@/lib/gst';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -47,7 +49,7 @@ function attrText(a) {
 }
 
 // taxRows: the PDF's tax summary, from the stored lines ("CGST 9% on 1,000.00").
-function taxRows(items, taxLabel) {
+function taxRows(items, taxLabel, secondHalf = 'SGST') {
   const by = new Map();
   for (const i of items) {
     if (n(i.tax_rate) <= 0) continue;
@@ -64,7 +66,7 @@ function taxRows(items, taxLabel) {
   for (const a of by.values()) {
     if (a.cgst > 0 || a.sgst > 0) {
       out.push({ label: `CGST ${pct(a.rate / 2)}`, taxable: a.taxable, amount: a.cgst });
-      out.push({ label: `SGST ${pct(a.rate / 2)}`, taxable: a.taxable, amount: a.sgst });
+      out.push({ label: `${secondHalf} ${pct(a.rate / 2)}`, taxable: a.taxable, amount: a.sgst });
     } else if (a.igst > 0) out.push({ label: `IGST ${pct(a.rate)}`, taxable: a.taxable, amount: a.igst });
     else out.push({ label: `${taxLabel} ${pct(a.rate)}`, taxable: a.taxable, amount: a.tax });
   }
@@ -102,9 +104,11 @@ function ReceiptBody({ sale, store, settings, businessName, taxLabel, logoUrl, n
   const items = sale.items || [];
   // The sale's own payments and collections, without the on-account part (as on the PDF).
   const payments = (sale.payments || []).filter((p) => p.method !== 'credit');
-  const rows = taxRows(items, taxLabel);
-  const taxReg = settings?.taxRegistrationNo;
-  const taxId = taxReg ? (taxLabel === 'GST' ? `GSTIN: ${taxReg}` : `${taxLabel} No: ${taxReg}`) : '';
+  // M3: the sale's own GST copy (seller, buyer, place of supply), else the shop's settings.
+  const states = useGstStates();
+  const gst = receiptGst(sale, settings, taxLabel, states);
+  const rows = taxRows(items, taxLabel, gst.secondHalf);
+  const taxId = gst.taxId;
   const address = lines(settings?.address);
   const contact = [settings?.phone, settings?.email].filter(Boolean).join(' · ');
   const storeLine = [store?.name || sale.Store?.name, store?.address, store?.phone].filter(Boolean).join(', ');
@@ -140,7 +144,7 @@ function ReceiptBody({ sale, store, settings, businessName, taxLabel, logoUrl, n
       </div>
       <hr className="rc-rule" />
       <div className="rc-meta">
-        <p className="rc-title">{taxReg ? 'Tax Invoice' : 'Receipt'}</p>
+        <p className="rc-title">{gst.title}</p>
         <p className="rc-title rc-r">{sale.reference}</p>
         <p>Store: {storeLine}</p>
         <p className="rc-r">{formatDateTime(sale.date)}</p>
@@ -149,6 +153,12 @@ function ReceiptBody({ sale, store, settings, businessName, taxLabel, logoUrl, n
           {sale.receipt_email ? ` (${sale.receipt_email})` : ''}
         </p>
         <p className="rc-r">Cashier: {sale.user?.name || ''}</p>
+        {gst.billTo.length > 0 && (
+          <p>
+            <strong>Bill to:</strong> {gst.billTo.join(', ')}
+          </p>
+        )}
+        {gst.placeOfSupply && <p className={gst.billTo.length > 0 ? 'rc-r' : ''}>Place of supply: {gst.placeOfSupply}</p>}
       </div>
       {lines(settings?.receiptHeader).map((l, i) => (
         <p key={i} className="rc-center rc-muted">

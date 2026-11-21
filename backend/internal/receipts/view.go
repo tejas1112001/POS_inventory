@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/shopspring/decimal"
 
+	"github.com/tejas1112001/POS_inventory/backend/internal/gst"
 	"github.com/tejas1112001/POS_inventory/backend/internal/qty"
 	"github.com/tejas1112001/POS_inventory/backend/internal/settings"
 	"github.com/tejas1112001/POS_inventory/backend/internal/tenancy"
@@ -86,6 +87,13 @@ type View struct {
 
 	StoreName, StoreAddress, StorePhone string
 
+	// M3 (docs/M3_GST_DESIGN.md §5), from the sale's copy: the place of
+	// supply ("Karnataka (29)"), the buyer of a B2B invoice (name, GSTIN,
+	// address, state), and the label of the second GST half (SGST or UTGST).
+	PlaceOfSupply string
+	BillTo        []string
+	SecondHalf    string
+
 	Reference, Date, Cashier, Customer, CustomerEmail string
 
 	Lines   []Line
@@ -122,7 +130,8 @@ const (
 	qSale    = `SELECT s.reference, s.date, s.status, s.payment_status, s.payment_method, s.subtotal, s.discount, s.tax,
 			s.shipping, s.total, s.paid, s.due, s.tendered, s.change_due, s.currency, s.version, s.receipt_email::text,
 			s.voided_at, s.void_reason, st.name, st.address, st.phone, c.name, c.email::text, u.name,
-			to_char(s.due_date, 'YYYY-MM-DD')
+			to_char(s.due_date, 'YYYY-MM-DD'), s.seller_gstin, s.seller_state, s.buyer_gstin, s.buyer_name, s.buyer_address,
+			s.buyer_state, s.place_of_supply, s.tax_split, s.invoice_kind
 		FROM sales s
 		JOIN stores st ON st.id = s.store_id
 		JOIN customers c ON c.id = s.customer_id
@@ -209,10 +218,12 @@ func Load(ctx context.Context, tx tenancy.TenantTx, receiptID int64) (View, erro
 		version                                int
 		voidedAt                               *time.Time
 		dueDate                                *string
+		g                                      saleGST
 	)
 	if err := tx.QueryRow(ctx, qSale, v.SaleID).Scan(&v.Reference, &date, &status, &payStatus, &method, &sub, &disc, &tax,
 		&ship, &total, &paid, &due, &tendered, &change, &currency, &version, &receiptEmail, &voidedAt, &voidReason,
-		&v.StoreName, &storeAddr, &storePhone, &v.Customer, &custEmail, &v.Cashier, &dueDate); err != nil {
+		&v.StoreName, &storeAddr, &storePhone, &v.Customer, &custEmail, &v.Cashier, &dueDate, &g.sellerGSTIN, &g.sellerState,
+		&g.buyerGSTIN, &g.buyerName, &g.buyerAddress, &g.buyerState, &g.place, &g.split, &g.kind); err != nil {
 		return v, err
 	}
 	if version != v.Version {
@@ -223,7 +234,12 @@ func Load(ctx context.Context, tx tenancy.TenantTx, receiptID int64) (View, erro
 	v.BusinessName, v.LegalName, v.Phone, v.Email = b.Name, deref(b.LegalName), deref(b.Phone), deref(b.Email)
 	v.Address, v.Header, v.Footer = lines(b.Address), lines(b.ReceiptHeader), lines(b.ReceiptFooter)
 	v.Title = "Receipt"
-	if b.TaxRegistrationNo != nil {
+	v.SecondHalf = "SGST"
+	if g.sellerState != nil {
+		// M3: the sale's own tax identity.
+		g.apply(&v)
+	} else if b.TaxRegistrationNo != nil {
+		// Before M3, or a shop with no GST state: the shop's settings.
 		v.TaxID = b.TaxLabel + " No: " + *b.TaxRegistrationNo
 		if b.TaxLabel == "GST" {
 			v.TaxID = "GSTIN: " + *b.TaxRegistrationNo
@@ -376,7 +392,7 @@ func Load(ctx context.Context, tx tenancy.TenantTx, receiptID int64) (View, erro
 			hr := f.Percent(a.rate.Div(half))
 			v.TaxRows = append(v.TaxRows,
 				TaxRow{Label: "CGST " + hr, Taxable: f.Money(a.taxable), Amount: f.Money(a.cgst)},
-				TaxRow{Label: "SGST " + hr, Taxable: f.Money(a.taxable), Amount: f.Money(a.sgst)})
+				TaxRow{Label: v.SecondHalf + " " + hr, Taxable: f.Money(a.taxable), Amount: f.Money(a.sgst)})
 		case a.igst.IsPositive():
 			v.TaxRows = append(v.TaxRows, TaxRow{Label: "IGST " + f.Percent(a.rate), Taxable: f.Money(a.taxable), Amount: f.Money(a.igst)})
 		default:
@@ -384,4 +400,43 @@ func Load(ctx context.Context, tx tenancy.TenantTx, receiptID int64) (View, erro
 		}
 	}
 	return v, nil
+}
+
+// saleGST is the sale's M3 copy (all nil before M3).
+type saleGST struct {
+	sellerGSTIN, sellerState, buyerGSTIN, buyerName, buyerAddress, buyerState, place, split, kind *string
+}
+
+// stateName is "Karnataka (29)".
+func stateName(code string) string {
+	if s, ok := gst.StateOf(code); ok {
+		return s.Name + " (" + code + ")"
+	}
+	return code
+}
+
+// apply sets the receipt's seller, title, buyer and place of supply from
+// the copy: a tax invoice only under a GSTIN; Bill to on a B2B invoice.
+func (g saleGST) apply(v *View) {
+	if g.sellerGSTIN != nil {
+		v.TaxID, v.Title = "GSTIN: "+*g.sellerGSTIN, "Tax Invoice"
+	}
+	if g.place != nil {
+		v.PlaceOfSupply = stateName(*g.place)
+	}
+	if deref(g.split) == "cgst_utgst" {
+		v.SecondHalf = "UTGST"
+	}
+	if deref(g.kind) == "b2b" {
+		v.BillTo = append(v.BillTo, deref(g.buyerName))
+		if g.buyerGSTIN != nil {
+			v.BillTo = append(v.BillTo, "GSTIN: "+*g.buyerGSTIN)
+		}
+		if g.buyerAddress != nil {
+			v.BillTo = append(v.BillTo, *g.buyerAddress)
+		}
+		if g.buyerState != nil {
+			v.BillTo = append(v.BillTo, "State: "+stateName(*g.buyerState))
+		}
+	}
 }

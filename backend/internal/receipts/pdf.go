@@ -3,6 +3,7 @@ package receipts
 import (
 	"bytes"
 	"errors"
+	"strings"
 
 	"github.com/johnfercher/maroto/v2"
 	"github.com/johnfercher/maroto/v2/pkg/components/col"
@@ -125,6 +126,19 @@ func RenderPDF(v View, logo []byte) ([]byte, error) {
 		text.NewCol(6, cust, tp(8.5)),
 		text.NewCol(6, "Cashier: "+v.Cashier, tp(8.5, right)),
 	)
+	// M3: a B2B invoice names its buyer; the place of supply when known.
+	pos := ""
+	if v.PlaceOfSupply != "" {
+		pos = "Place of supply: " + v.PlaceOfSupply
+	}
+	if len(v.BillTo) > 0 {
+		m.AddAutoRow(
+			text.NewCol(7, "Bill to: "+strings.Join(v.BillTo, ", "), tp(8.5, bold)),
+			text.NewCol(5, pos, tp(8.5, right)),
+		)
+	} else if pos != "" {
+		m.AddAutoRow(text.NewCol(12, pos, tp(8.5)))
+	}
 	for _, h := range v.Header {
 		m.AddAutoRow(text.NewCol(12, h, tp(8.5, center, muted)))
 	}

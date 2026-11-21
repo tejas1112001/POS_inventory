@@ -126,3 +126,28 @@ func TestUnitLines(t *testing.T) {
 		require.NoError(t, os.WriteFile(dir+"/units.pdf", pdf, 0o600))
 	}
 }
+
+// M3 §5: the receipt's seller, buyer and place of supply come from the
+// sale's copy; UTGST in a union territory.
+func TestGSTCopy(t *testing.T) {
+	s := func(v string) *string { return &v }
+	var v View
+	saleGST{sellerGSTIN: s("29AAGCB7383J1Z4"), sellerState: s("29"), buyerGSTIN: s("27AAPFU0939F1ZV"), buyerName: s("Kaveri Traders Pvt Ltd"),
+		buyerAddress: s("4 Residency Road"), buyerState: s("27"), place: s("27"), split: s("igst"), kind: s("b2b")}.apply(&v)
+	require.Equal(t, "Tax Invoice", v.Title)
+	require.Equal(t, "GSTIN: 29AAGCB7383J1Z4", v.TaxID, "the store's GSTIN, not the shop's")
+	require.Equal(t, "Maharashtra (27)", v.PlaceOfSupply)
+	require.Equal(t, []string{"Kaveri Traders Pvt Ltd", "GSTIN: 27AAPFU0939F1ZV", "4 Residency Road", "State: Maharashtra (27)"}, v.BillTo)
+
+	v = View{Title: "Receipt", SecondHalf: "SGST"}
+	saleGST{sellerState: s("04"), place: s("04"), split: s("cgst_utgst"), kind: s("b2c")}.apply(&v)
+	require.Equal(t, "Receipt", v.Title, "no GSTIN: not a tax invoice")
+	require.Equal(t, "UTGST", v.SecondHalf)
+	require.Empty(t, v.BillTo, "B2C: no Bill to")
+
+	pv := sampleView()
+	pv.BillTo, pv.PlaceOfSupply = []string{"Kaveri Traders Pvt Ltd", "GSTIN: 27AAPFU0939F1ZV"}, "Maharashtra (27)"
+	pdf, err := RenderPDF(pv, nil)
+	require.NoError(t, err)
+	require.True(t, bytes.HasPrefix(pdf, []byte("%PDF-")))
+}
