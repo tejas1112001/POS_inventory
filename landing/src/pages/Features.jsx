@@ -6,7 +6,7 @@ import { Versus } from '@/sections/features/Versus';
 
 export default function Features() {
   usePageMeta(
-    'Features | BillPiko',
+    'Features | BilMitra',
     'Fast checkout, GST bills, stock history, customer dues, reports and an online catalogue for your shop.',
   );
   return (

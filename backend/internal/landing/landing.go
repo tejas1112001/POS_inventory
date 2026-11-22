@@ -80,8 +80,13 @@ type Deps struct {
 	Metrics    *obs.Metrics
 	Log        *slog.Logger
 	Limits     Limits
-	Now        func() time.Time // tests
-	PlansTTL   time.Duration    // default 1 minute
+	// SPA is the React marketing site (landing/ build, docs/LANDING_DEPLOYMENT.md).
+	// When set it serves the pages in spaPages and /assets/*, and the Go
+	// templates keep the other pages (terms, privacy, login, find my shop,
+	// form replies). Nil: the Go home and contact pages are served.
+	SPA      *httpx.SPA
+	Now      func() time.Time // tests
+	PlansTTL time.Duration    // default 1 minute
 }
 
 // FormKey derives the form-signing key from the master key, so every
@@ -113,6 +118,10 @@ type content struct {
 	Steps          []step
 	FAQs           []faq
 }
+
+// spaPages are the routes of the React marketing site (landing/src/App.jsx).
+// Any other path the Go site does not own is a real 404.
+var spaPages = []string{"/", "/features", "/industries", "/pricing", "/contact"}
 
 var pageNames = []string{"home", "find", "find_sent", "contact", "contact_sent", "login", "terms", "privacy", "error"}
 
@@ -185,12 +194,21 @@ func New(d Deps) (*Site, error) {
 // Mount registers the site's routes on the apex host router.
 func (s *Site) Mount(r chi.Router) {
 	r.Group(func(r chi.Router) {
-		r.Use(middleware.Compress(5, "text/html", "text/css", "text/plain", "application/xml", "image/svg+xml"))
+		r.Use(middleware.Compress(5, "text/html", "text/css", "text/plain", "application/xml", "image/svg+xml",
+			"text/javascript", "application/javascript", "application/json"))
 		get := func(p string, h http.HandlerFunc) {
 			r.Get(p, h)
 			r.Head(p, h)
 		}
-		get("/", s.home)
+		if s.d.SPA != nil {
+			for _, p := range spaPages {
+				get(p, s.d.SPA.ServeHTTP)
+			}
+			get("/assets/*", s.d.SPA.ServeHTTP) // s.cssPath below is more specific and wins
+		} else {
+			get("/", s.home)
+			get("/contact", s.contactPage)
+		}
 		get("/terms", s.simple("terms", "Terms of Service", "The terms that apply when you use "+s.d.PlatformName+"."))
 		get("/privacy", s.simple("privacy", "Privacy Policy", "How "+s.d.PlatformName+" collects, uses and protects personal data."))
 		get("/login", s.login)
@@ -198,7 +216,7 @@ func (s *Site) Mount(r chi.Router) {
 		get("/find-my-shop", s.findPage)
 		r.Post("/find-my-shop", s.findSubmit)
 		get("/find-my-shop/sent", s.findSent)
-		get("/contact", s.contactPage)
+		get("/contact/token", s.contactToken)
 		r.Post("/contact", s.contactSubmit)
 		get("/contact/sent", s.contactSent)
 		get("/robots.txt", s.robots)
@@ -309,6 +327,10 @@ func (s *Site) serveCSS(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Site) serveFavicon(w http.ResponseWriter, r *http.Request) {
+	if s.d.SPA != nil && s.d.SPA.Has("/favicon.svg") {
+		s.d.SPA.ServeHTTP(w, r) // the React site's own icon
+		return
+	}
 	w.Header().Set("Content-Type", "image/svg+xml")
 	w.Header().Set("Cache-Control", "public, max-age=86400")
 	_, _ = w.Write(s.favicon)

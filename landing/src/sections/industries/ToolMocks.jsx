@@ -158,7 +158,7 @@ export function PharmacyBatches() {
   ];
   const msg =
     sold === 0
-      ? 'Press "Sell 1 strip". BillPiko skips the expired batch and takes the earliest good one.'
+      ? 'Press "Sell 1 strip". BilMitra skips the expired batch and takes the earliest good one.'
       : `Sold ${sold} strip${sold > 1 ? 's' : ''}. Taken from ${fromNext > 0 ? 'B2104, then B2291' : 'B2104'}. B1980 is expired and was skipped.`;
 
   return (

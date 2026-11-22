@@ -52,10 +52,17 @@ func currencyOrINR(c string) string {
 // sitemapPaths are the indexable pages.
 var sitemapPaths = []string{"/", "/find-my-shop", "/contact", "/terms", "/privacy"}
 
+// spaSitemapPaths are the indexable pages while the React site is served.
+var spaSitemapPaths = []string{"/", "/features", "/industries", "/pricing", "/contact", "/find-my-shop", "/terms", "/privacy"}
+
 func (s *Site) sitemap(w http.ResponseWriter, _ *http.Request) {
 	var b strings.Builder
 	b.WriteString(`<?xml version="1.0" encoding="UTF-8"?>` + "\n" + `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">` + "\n")
-	for _, p := range sitemapPaths {
+	paths := sitemapPaths
+	if s.d.SPA != nil {
+		paths = spaSitemapPaths
+	}
+	for _, p := range paths {
 		b.WriteString("  <url><loc>")
 		template.HTMLEscape(&b, []byte(s.origin+p))
 		b.WriteString("</loc></url>\n")

@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -517,4 +519,121 @@ func TestFormKey(t *testing.T) {
 	require.NotEqual(t, a, b)
 	_, err := New(Deps{FormKey: []byte("short")})
 	require.Error(t, err)
+}
+
+// spaSite is a site that serves a tiny React build.
+func spaSite(t *testing.T) *harness {
+	t.Helper()
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "assets"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "index.html"), []byte(`<!doctype html><div id="root">react-landing</div>`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "assets", "index-abc123.js"), []byte(`console.log(1)`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "favicon.svg"), []byte(`<svg id="react-icon"/>`), 0o644))
+	spa, err := httpx.NewSPA(dir)
+	require.NoError(t, err)
+	return newSite(t, func(d *Deps) { d.SPA = spa }, nil)
+}
+
+func TestLandingSPA(t *testing.T) {
+	hs := spaSite(t)
+	for _, p := range []string{"/", "/features", "/industries", "/pricing", "/contact"} {
+		rec := hs.get(t, p)
+		require.Equal(t, http.StatusOK, rec.Code, p)
+		require.Contains(t, rec.Body.String(), "react-landing", p)
+		require.Equal(t, "no-cache", rec.Header().Get("Cache-Control"), p)
+		require.Equal(t, httpx.CSPStrict, rec.Header().Get("Content-Security-Policy"), "%s: strict CSP for the React site too", p)
+	}
+
+	rec := hs.get(t, "/assets/index-abc123.js")
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, "public, max-age=31536000, immutable", rec.Header().Get("Cache-Control"))
+	require.Equal(t, http.StatusOK, hs.get(t, hs.site.cssPath).Code, "the Go stylesheet still wins over /assets/*")
+	require.Contains(t, hs.get(t, "/favicon.svg").Body.String(), "react-icon")
+
+	for _, p := range []string{"/terms", "/privacy", "/login", "/find-my-shop", "/contact/sent"} {
+		rec := hs.get(t, p)
+		require.Equal(t, http.StatusOK, rec.Code, p)
+		require.NotContains(t, rec.Body.String(), "react-landing", "%s stays a Go page", p)
+	}
+	rec = hs.get(t, "/no-such-page")
+	require.Equal(t, http.StatusNotFound, rec.Code, "unknown paths are real 404s, not the SPA")
+	require.NotContains(t, rec.Body.String(), "react-landing")
+	require.Equal(t, http.StatusNotFound, hs.get(t, "/assets/missing.js").Code)
+
+	sm := hs.get(t, "/sitemap.xml").Body.String()
+	for _, p := range []string{"/features", "/industries", "/pricing", "/contact"} {
+		require.Contains(t, sm, "<loc>https://pos.test"+p+"</loc>")
+	}
+}
+
+func TestGoPagesWithoutSPA(t *testing.T) {
+	hs := newSite(t, nil, nil)
+	require.Equal(t, http.StatusNotFound, hs.get(t, "/pricing").Code)
+	require.NotContains(t, hs.get(t, "/sitemap.xml").Body.String(), "/pricing")
+	require.Equal(t, http.StatusOK, hs.get(t, "/contact").Code, "the Go contact page without the SPA")
+}
+
+func (hs *harness) postJSON(t *testing.T, form url.Values, ip string) (*httptest.ResponseRecorder, map[string]any) {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, "https://pos.test/contact", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Origin", origin)
+	req.RemoteAddr = ip + ":4000"
+	req.TLS = nil // as in post: the origin const is http
+	rec := httptest.NewRecorder()
+	hs.h.ServeHTTP(rec, req)
+	var body map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body), rec.Body.String())
+	return rec, body
+}
+
+func (hs *harness) jsonToken(t *testing.T) string {
+	t.Helper()
+	rec := hs.get(t, "/contact/token")
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, "no-store", rec.Header().Get("Cache-Control"))
+	var body map[string]string
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+	require.NotEmpty(t, body["token"])
+	return body["token"]
+}
+
+func TestContactJSON(t *testing.T) {
+	hs := spaSite(t)
+	tok := hs.jsonToken(t)
+	hs.clock.add(5 * time.Second)
+
+	demo := url.Values{"ft": {tok}, "topic": {"demo"}, "name": {"Ravi"}, "email": {"ravi@example.com"},
+		"business": {"Ravi Fashion"}, "phone": {"9812345678"}, "message": {"City: Pune\nSells: Clothing"}}
+	rec, body := hs.postJSON(t, demo, "198.51.100.30")
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, true, body["ok"])
+	require.Len(t, hs.store.contacts, 1)
+	require.Equal(t, "Ravi Fashion", hs.store.contacts[0].business)
+	require.Equal(t, 1, hs.queued, "the notification mail is queued")
+
+	bad := url.Values{"ft": {tok}, "topic": {"demo"}, "name": {""}, "email": {"nope"}}
+	rec, body = hs.postJSON(t, bad, "198.51.100.31")
+	require.Equal(t, http.StatusUnprocessableEntity, rec.Code)
+	require.Equal(t, "invalid", body["error"])
+	errs, _ := body["errors"].(map[string]any)
+	require.Contains(t, errs, "name")
+	require.Contains(t, errs, "email")
+
+	spam := url.Values{"ft": {tok}, "topic": {"demo"}, "name": {"Bot"}, "email": {"bot@example.com"}, honeypot: {"http://spam"}}
+	rec, body = hs.postJSON(t, spam, "198.51.100.32")
+	require.Equal(t, http.StatusOK, rec.Code, "dropped spam looks sent")
+	require.Equal(t, true, body["ok"])
+	require.Len(t, hs.store.contacts, 1, "but nothing is stored")
+
+	fast := hs.jsonToken(t)
+	rec, _ = hs.postJSON(t, url.Values{"ft": {fast}, "name": {"Quick"}, "email": {"q@example.com"}}, "198.51.100.33")
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Len(t, hs.store.contacts, 1, "a form sent within 2 s of the token is dropped")
+
+	hs.clock.add(25 * time.Hour)
+	rec, body = hs.postJSON(t, demo, "198.51.100.34")
+	require.Equal(t, http.StatusUnprocessableEntity, rec.Code)
+	require.Equal(t, "expired", body["error"])
 }

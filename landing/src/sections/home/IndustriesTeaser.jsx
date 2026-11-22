@@ -13,7 +13,7 @@ export function IndustriesTeaser() {
               <span id="ind-title">One POS for every kind of shop</span>
             </SectionTitle>
             <p className="mt-3 text-[17px] leading-relaxed text-body">
-              If you sell from a counter, BillPiko fits. Switch on the tools your shop needs and leave the rest off.
+              If you sell from a counter, BilMitra fits. Switch on the tools your shop needs and leave the rest off.
             </p>
           </div>
           <Link

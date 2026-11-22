@@ -16,7 +16,7 @@ export function SafeByDesign() {
         <h2 id="safe-title" className="text-[28px] font-extrabold tracking-[-0.03em] text-ink sm:text-[32px]">
           Safe by design
         </h2>
-        <p className="mt-2 mb-7 text-body">Your shop&apos;s numbers are your business. We built BillPiko to protect them.</p>
+        <p className="mt-2 mb-7 text-body">Your shop&apos;s numbers are your business. We built BilMitra to protect them.</p>
         <ul className="grid grid-cols-[repeat(auto-fit,minmax(230px,1fr))] gap-4">
           {items.map((it) => (
             <li key={it.t} className="rounded-[18px] border border-line bg-white p-[22px]">

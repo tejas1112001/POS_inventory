@@ -358,10 +358,56 @@ func readContact(vals url.Values) (contactInput, map[string]string) {
 	return c, errs
 }
 
-// contactSubmit is POST /contact: a demo request or a question.
+// contactToken is GET /contact/token: a fresh signed time stamp for the
+// React site's demo form (the Go pages put it into the HTML instead). The
+// same spam checks then apply as for the Go form.
+func (s *Site) contactToken(w http.ResponseWriter, _ *http.Request) {
+	h := w.Header()
+	h.Set("Content-Type", "application/json")
+	h.Set("Cache-Control", "no-store")
+	h.Set("X-Robots-Tag", "noindex")
+	_ = json.NewEncoder(w).Encode(map[string]string{"token": s.token(formContact)})
+}
+
+// wantsJSON reports whether the caller is the React site's form (fetch with
+// "Accept: application/json"): it gets JSON instead of pages and redirects.
+func wantsJSON(r *http.Request) bool {
+	return strings.Contains(r.Header.Get("Accept"), "application/json")
+}
+
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	h := w.Header()
+	h.Set("Content-Type", "application/json")
+	h.Set("Cache-Control", "no-store")
+	h.Set("X-Robots-Tag", "noindex")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(v)
+}
+
+// contactSubmit is POST /contact: a demo request or a question. JSON
+// callers get 200 {"ok":true}, 422 {"error":"invalid","errors":{field:msg}}
+// or {"error":"expired"}, 429 {"error":"too_many_requests"} or 503.
+// Spam that is dropped gets the same 200 as a real request.
 func (s *Site) contactSubmit(w http.ResponseWriter, r *http.Request) {
+	js := wantsJSON(r)
+	tooMany := func(limiter string) {
+		if !js {
+			s.tooMany(w, r, limiter, s.d.Limits.Window)
+			return
+		}
+		s.limited(limiter)
+		w.Header().Set("Retry-After", strconv.Itoa(int(s.d.Limits.Window.Seconds())))
+		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "too_many_requests"})
+	}
+	sent := func() {
+		if js {
+			writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+			return
+		}
+		seeOther(w, r, "/contact/sent")
+	}
 	if over(s.contactIP, r, "contact:"+s.clientKey(r)) {
-		s.tooMany(w, r, "landing_contact_ip", s.d.Limits.Window)
+		tooMany("landing_contact_ip")
 		return
 	}
 	vals, dropped, ok := s.readForm(w, r, formContact)
@@ -369,11 +415,19 @@ func (s *Site) contactSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if dropped {
-		seeOther(w, r, "/contact/sent")
+		sent()
 		return
 	}
 	in, errs := readContact(vals)
 	again := func(alert string) {
+		if js {
+			body := map[string]any{"error": "invalid", "errors": errs}
+			if len(errs) == 0 {
+				body = map[string]any{"error": "expired"}
+			}
+			writeJSON(w, http.StatusUnprocessableEntity, body)
+			return
+		}
 		v := s.view(r, "Request a demo | "+s.d.PlatformName, "Request a demo.", "")
 		v.Noindex = true
 		v.Contact.Values, v.Contact.Errors, v.Contact.Alert = in.values(), errs, alert
@@ -388,12 +442,16 @@ func (s *Site) contactSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if over(s.contactAll, r, "contact:all") {
-		s.tooMany(w, r, "landing_contact_total", s.d.Limits.Window)
+		tooMany("landing_contact_total")
 		return
 	}
 	id, err := s.store.saveContact(r.Context(), in, s.d.ContactEmail)
 	if err != nil {
 		httpx.LoggerFrom(r.Context()).ErrorContext(r.Context(), "contact request not stored", slog.Any("err", err))
+		if js {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "unavailable"})
+			return
+		}
 		s.fail(w, r, http.StatusServiceUnavailable, "Please try again", "We could not take your message just now. Please try again in a few minutes.")
 		return
 	}
@@ -402,7 +460,7 @@ func (s *Site) contactSubmit(w http.ResponseWriter, r *http.Request) {
 	if s.d.ContactEmail != "" {
 		s.mailQueued(r.Context())
 	}
-	seeOther(w, r, "/contact/sent")
+	sent()
 }
 
 // ---------------------------------------------------------- Staff login

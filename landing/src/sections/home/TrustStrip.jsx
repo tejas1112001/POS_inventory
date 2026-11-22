@@ -3,7 +3,7 @@ import { Container } from '@/components/ui/Heading';
 
 export function TrustStrip() {
   return (
-    <section aria-label="Why shops choose BillPiko" className="border-b border-line bg-surface">
+    <section aria-label="Why shops choose BilMitra" className="border-b border-line bg-surface">
       <Container as="ul" className="flex flex-wrap justify-between gap-x-10 gap-y-6 py-7">
         {trustStrip.map(({ icon: Icon, label }) => (
           <li key={label} className="group flex flex-[1_1_220px] items-center gap-3">

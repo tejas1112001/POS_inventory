@@ -1,6 +1,6 @@
 # Landing Site Deployment
 
-Status as of 2026-11-19: **the React landing site (`landing/`) is not deployed yet.** Nothing in the repo builds or ships it. This note records what is live today, how the site must be served, and what is left before it can replace the current pages.
+Status 2026-11-22: **the React landing site is live on https://bilmitra.com** (brand BilMitra, option (a) below: posd serves `STATIC_DIR/landing`). Search engines are blocked in Nginx until the owner finishes the content (docs/DEPLOY_VPS.md). Done: build in `backend/deploy/vps/deploy.sh`, serving with real 404s and caching, demo form wired (`GET /contact/token` + JSON replies on `POST /contact`; the form now asks for an email, which the table requires), `GET /contact` owned by React when the build is present, sitemap lists the React routes, Go home page not served when the build is present. Still open: CI workflow for `landing/`, placeholders in `landing/src/content/site.js` (`[PHONE NUMBER]`, `[EMAIL]`, `[X]`). The sections below are the original plan.
 
 ## 1. What is live today
 

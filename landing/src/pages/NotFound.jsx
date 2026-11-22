@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/Button';
 import { Container } from '@/components/ui/Heading';
 
 export default function NotFound() {
-  usePageMeta('Page not found | BillPiko');
+  usePageMeta('Page not found | BilMitra');
   return (
     <section className="bg-night surface-glow">
       <Container className="py-28 text-center">
