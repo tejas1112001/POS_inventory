@@ -1,0 +1,10 @@
+[Unit]
+Description=BilMitra nightly database backup (01:30 India time)
+
+[Timer]
+OnCalendar=*-*-* 20:00:00 UTC
+RandomizedDelaySec=15m
+Persistent=true
+
+[Install]
+WantedBy=timers.target

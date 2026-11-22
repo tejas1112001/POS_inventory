@@ -1,0 +1,49 @@
+# Local S3-compatible storage for BilMitra (Versity S3 Gateway, posix
+# backend) on the shared VPS: product pictures and shop exports.
+# Owner-approved 2026-11-22 as the interim until Cloudflare R2.
+# Installed as /etc/systemd/system/bilmitra-s3.service.
+# Loopback only, TLS from the BilMitra internal CA (posd trusts it via
+# SSL_CERT_DIR). Data: /var/www/bilmitra/data/s3/<bucket>/<key>.
+[Unit]
+Description=BilMitra local S3 storage (versitygw)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=bilmitra-s3
+Group=bilmitra-s3
+EnvironmentFile=/etc/bilmitra-s3/env
+ExecStart=/opt/bilmitra-s3/versitygw --port 127.0.0.1:7070 --quiet --health /health posix /var/www/bilmitra/data/s3
+Restart=on-failure
+RestartSec=5
+MemoryHigh=150M
+MemoryMax=256M
+TasksMax=256
+LimitNOFILE=16384
+
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/var/www/bilmitra/data/s3
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+SystemCallArchitectures=native
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

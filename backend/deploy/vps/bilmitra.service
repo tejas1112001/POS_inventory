@@ -1,0 +1,57 @@
+# systemd unit for posd (API + workers) on the shared VPS.
+# Installed as /etc/systemd/system/bilmitra.service.
+[Unit]
+Description=BilMitra POS (posd: API + workers)
+Documentation=file:///var/www/bilmitra/current/README-DEPLOY.md
+After=network-online.target postgresql@18-bilmitra.service bilmitra-s3.service
+Wants=network-online.target bilmitra-s3.service
+Requires=postgresql@18-bilmitra.service
+
+[Service]
+Type=simple
+User=bilmitra
+Group=bilmitra
+WorkingDirectory=/var/www/bilmitra/current
+EnvironmentFile=/var/www/bilmitra/shared/.env
+Environment=STATIC_DIR=/var/www/bilmitra/current/static
+# Keep the Go heap well under MemoryMax on a 4 GB server shared with others.
+Environment=GOMEMLIMIT=300MiB
+# Trust the system CAs plus the BilMitra internal CA (local S3 storage TLS).
+Environment=SSL_CERT_DIR=/etc/ssl/certs:/var/www/bilmitra/shared/tls
+ExecStart=/var/www/bilmitra/current/bin/posd
+Restart=on-failure
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=60
+MemoryHigh=380M
+MemoryMax=512M
+TasksMax=256
+LimitNOFILE=16384
+
+# Hardening: posd needs no disk writes (files go to S3) and no privileges.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RemoveIPC=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

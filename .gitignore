@@ -40,3 +40,6 @@ frontend/dist-admin
 
 # Browser test output
 frontend/test-results/
+
+# Local test guide with live and test passwords: never commit (public repo).
+/TEST_GUIDE.md
