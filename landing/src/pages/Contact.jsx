@@ -21,7 +21,7 @@ const next = [
 ];
 
 export default function Contact() {
-  usePageMeta('Contact | BillPiko', 'Book a free BillPiko demo, call us, or open your own shop login.');
+  usePageMeta('Contact | BilMitra', 'Book a free BilMitra demo, call us, or open your own shop login.');
 
   return (
     <>
@@ -49,7 +49,7 @@ export default function Contact() {
           className="min-w-0 flex-[3_1_520px] scroll-mt-6 rounded-3xl border border-line bg-white p-6 shadow-[0_24px_60px_rgba(15,23,42,.08)] outline-none sm:p-9"
         >
           <h2 id="demo-title" className="text-[28px] font-extrabold tracking-[-0.02em] text-ink">Book a free demo</h2>
-          <p className="mt-2 mb-7 text-body">Tell us about your shop. We will show BillPiko with products like yours.</p>
+          <p className="mt-2 mb-7 text-body">Tell us about your shop. We will show BilMitra with products like yours.</p>
           <DemoForm />
         </section>
 

@@ -195,6 +195,18 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger, opts ...Opti
 		}
 	}
 
+	// The React marketing site (STATIC_DIR/landing). Without it the Go
+	// landing pages are served on the main address.
+	var landingSPA *httpx.SPA
+	if cfg.StaticDir != "" {
+		spa, err := httpx.NewSPA(filepath.Join(cfg.StaticDir, "landing"))
+		if err != nil {
+			log.Warn("landing build not served; the Go landing pages stay", slog.Any("err", err))
+		} else {
+			landingSPA = spa
+		}
+	}
+
 	network := httpx.Network{BaseDomain: cfg.BaseDomain, TrustedProxies: cfg.TrustedProxies}
 
 	env, err := envelope(cfg)
@@ -230,7 +242,7 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger, opts ...Opti
 	site, err := landing.New(landing.Deps{
 		Sessions: a.sessions, Network: network, PublicScheme: cfg.PublicScheme, PublicPort: cfg.PublicPort,
 		BaseDomain: cfg.BaseDomain, PlatformName: cfg.PlatformName, ContactEmail: cfg.ContactEmail,
-		FormKey: landing.FormKey(cfg.MasterKeys.Current().Bytes()), Metrics: a.metrics, Log: log,
+		FormKey: landing.FormKey(cfg.MasterKeys.Current().Bytes()), Metrics: a.metrics, Log: log, SPA: landingSPA,
 		MailQueued: func(ctx context.Context) {
 			if err := a.worker.EnqueueMail(ctx, nil, true); err != nil {
 				log.Warn("platform mail job not queued; the sweep will pick it up", slog.Any("err", err))

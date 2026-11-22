@@ -70,7 +70,7 @@ export function Bento() {
           <span id="bento-title">Everything your counter needs. Nothing it does not.</span>
         </SectionTitle>
         <p className="max-w-[420px] text-[17px] leading-relaxed text-body">
-          From the first bill of the morning to the stock check at night, BillPiko keeps every number in one place.
+          From the first bill of the morning to the stock check at night, BilMitra keeps every number in one place.
         </p>
       </div>
 

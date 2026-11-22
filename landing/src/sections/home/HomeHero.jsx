@@ -136,7 +136,7 @@ export function HomeHero() {
             <span className="text-brand-bright">All in one place.</span>
           </h1>
           <p className="mt-[22px] max-w-[520px] text-lg leading-relaxed text-slate-300">
-            BillPiko is a simple, fast point of sale for shops. Make GST bills, keep stock correct and see your
+            BilMitra is a simple, fast point of sale for shops. Make GST bills, keep stock correct and see your
             sales, all from your browser.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">

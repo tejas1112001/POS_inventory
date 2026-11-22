@@ -49,6 +49,16 @@ func NewSPA(dir string) (*SPA, error) {
 	return &SPA{fsys: root.FS()}, nil
 }
 
+// Has reports whether urlPath (like "/favicon.svg") is a file in the build.
+func (s *SPA) Has(urlPath string) bool {
+	name := strings.TrimPrefix(path.Clean("/"+urlPath), "/")
+	if name == "" {
+		return false
+	}
+	st, err := fs.Stat(s.fsys, name)
+	return err == nil && !st.IsDir()
+}
+
 func (s *SPA) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		WriteError(w, r, apperr.NotFound())

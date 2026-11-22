@@ -7,8 +7,8 @@ import { TrustStrip } from '@/sections/home/TrustStrip';
 
 export default function Home() {
   usePageMeta(
-    'BillPiko: billing, stock and GST in one place',
-    'BillPiko is a simple, fast point of sale for Indian shops. Make GST bills, keep stock correct and see your sales, all from your browser.',
+    'BilMitra: billing, stock and GST in one place',
+    'BilMitra is a simple, fast point of sale for Indian shops. Make GST bills, keep stock correct and see your sales, all from your browser.',
   );
   return (
     <>

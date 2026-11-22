@@ -21,7 +21,7 @@ export function Wordmark({ className }) {
 
 export function Logo({ className }) {
   return (
-    <Link to="/" aria-label="BillPiko home" className={cn('flex items-center gap-2.5 rounded-lg p-1', className)}>
+    <Link to="/" aria-label="BilMitra home" className={cn('flex items-center gap-2.5 rounded-lg p-1', className)}>
       <LogoMark />
       <Wordmark className="text-[21px]" />
     </Link>

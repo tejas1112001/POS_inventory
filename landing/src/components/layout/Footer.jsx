@@ -67,7 +67,7 @@ export function Footer() {
         </nav>
       </Container>
       <Container className="border-t border-slate-400/15 pt-5 pb-8 text-sm">
-        © {new Date().getFullYear()} BillPiko · {BASE_DOMAIN}
+        © {new Date().getFullYear()} BilMitra · {BASE_DOMAIN}
       </Container>
     </footer>
   );
