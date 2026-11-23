@@ -35,7 +35,7 @@ import {
 
 export const contact = {
   phone: '[PHONE NUMBER]',
-  email: '[EMAIL]@bilmitra.com',
+  email: '[EMAIL]@mintobill.com',
   city: 'Pune, Maharashtra',
   callbackHours: '[X]',
 };
@@ -53,7 +53,7 @@ export const nav = [
 export const heroPoints = [
   '14-day free trial',
   'Runs in the browser. Nothing to install.',
-  'Your own address: yourshop.bilmitra.com',
+  'Your own address: yourshop.mintobill.com',
 ];
 
 export const heroBill = [
@@ -94,7 +94,7 @@ export const bento = {
 };
 
 export const steps = [
-  { title: 'We set up your shop', body: 'You get your own address, yourshop.bilmitra.com, and logins for you and your staff.' },
+  { title: 'We set up your shop', body: 'You get your own address, yourshop.mintobill.com, and logins for you and your staff.' },
   { title: 'Add your products', body: 'Fill in our spreadsheet template and import your whole catalogue at once.' },
   { title: 'Start billing', body: 'Open the checkout on any computer and make your first GST bill.' },
 ];
@@ -107,7 +107,7 @@ export const tools = {
     label: 'Low-stock alerts',
     icon: BellRing,
     ready: true,
-    lead: 'Set a reorder level for each product. BilMitra tells you before you run out.',
+    lead: 'Set a reorder level for each product. MintoBill tells you before you run out.',
     pains: ['Items run out without warning.', 'Reordering is done from memory.'],
     wins: ['Reorder level per product', 'Alerts on the dashboard', 'Purchases and receiving', 'Spreadsheet import'],
     usedBy: ['Every shop'],
@@ -162,7 +162,7 @@ export const shopTypes = [
 
 export const featureTabs = [
   { id: 'selling', icon: ScanBarcode, title: 'Fast checkout', sub: 'Bill in seconds', kicker: 'Selling', h: 'Bill a full basket in seconds', body: 'Search or scan, pick the size or colour, and take payment. Put a bill on hold when a customer goes to get one more item.', points: ['Keyboard shortcuts', 'Held bills', 'Split payment', 'Part payment'] },
-  { id: 'gst', icon: ReceiptText, title: 'GST bills', sub: 'CGST, SGST and IGST', kicker: 'GST and bills', h: 'The right tax on every bill', body: 'BilMitra works out the tax for you. Same-state sales get CGST and SGST. Other-state sales get IGST.', points: ['Discount before tax', 'Gapless invoice numbers', 'Print, PDF, email'] },
+  { id: 'gst', icon: ReceiptText, title: 'GST bills', sub: 'CGST, SGST and IGST', kicker: 'GST and bills', h: 'The right tax on every bill', body: 'MintoBill works out the tax for you. Same-state sales get CGST and SGST. Other-state sales get IGST.', points: ['Discount before tax', 'Gapless invoice numbers', 'Print, PDF, email'] },
   { id: 'stock', icon: Package, title: 'Stock and history', sub: 'Never oversell', kicker: 'Stock', h: 'Know exactly what is on the shelf', body: 'Stock goes down with every sale and up with every purchase. Two counters can never sell the same last piece.', points: ['Stock per store', 'Full history', 'Low-stock alerts', 'Adjustments with reason'] },
   { id: 'dues', icon: HandCoins, title: 'Customers and dues', sub: 'Credit with limits', kicker: 'Customers', h: 'Give credit without losing track', body: 'Sell on credit to trusted customers, set a limit and record part payments. Statements are always ready.', points: ['Credit limits', 'Part payments', 'Statements', 'Exact refunds'] },
   { id: 'reports', icon: ChartColumn, title: 'Reports and Excel', sub: 'See your numbers', kicker: 'Reports', h: 'Your whole shop on one screen', body: 'Sales, purchases and stock in clear reports. Send any report to your accountant as an Excel file.', points: ['Live dashboard', 'Sales and purchase reports', 'Excel export'] },
@@ -208,9 +208,9 @@ export const compareRows = [
 ];
 
 export const faqs = [
-  ['Do I need to install anything?', 'No. BilMitra runs in your web browser. Open your shop address on any computer and log in.'],
+  ['Do I need to install anything?', 'No. MintoBill runs in your web browser. Open your shop address on any computer and log in.'],
   ['Is there a free trial?', 'Yes. Every new shop gets 14 days free. We set up the shop for you.'],
-  ['Does BilMitra take card or UPI payments?', 'No. You take payment the way you do today. BilMitra records how the customer paid, so your totals match.'],
+  ['Does MintoBill take card or UPI payments?', 'No. You take payment the way you do today. MintoBill records how the customer paid, so your totals match.'],
   ['Is my shop data private?', 'Yes. Each shop has its own separate data space. Your staff see only what their role allows.'],
   ['Can customers order online?', 'Your online catalogue shows your products and prices. Customers cannot order or pay online yet.'],
   ['What if I stop paying?', 'Your shop becomes read-only. Nothing is deleted without a warning, and you can export your data.'],

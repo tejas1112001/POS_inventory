@@ -16,8 +16,8 @@ export default function Industries() {
   const update = (next) => setParams(next, { replace: true, preventScrollReset: true });
 
   usePageMeta(
-    'Industries | BilMitra',
-    'Clothing, footwear, pharmacy, grocery, electronics and more. Switch on the BilMitra tools your shop needs.',
+    'Industries | MintoBill',
+    'Clothing, footwear, pharmacy, grocery, electronics and more. Switch on the MintoBill tools your shop needs.',
   );
 
   return (
@@ -25,7 +25,7 @@ export default function Industries() {
       <PageHero
         eyebrow="Industries"
         title="One POS for every kind of shop"
-        lead="Grocery, fashion, pharmacy, electronics and more. If you sell from a counter, BilMitra fits."
+        lead="Grocery, fashion, pharmacy, electronics and more. If you sell from a counter, MintoBill fits."
       />
       <ShopTypeGrid shop={shop?.slug} onPick={(slug) => update({ shop: slug })} />
       <ToolExplorer tool={tool} onSelect={(id) => update(shop ? { shop: shop.slug, tool: id } : { tool: id })} />

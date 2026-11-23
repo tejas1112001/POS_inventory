@@ -1,0 +1,12 @@
+[Unit]
+Description=MintoBill nightly database backup
+After=postgresql@18-mintobill.service
+Requires=postgresql@18-mintobill.service
+
+[Service]
+Type=oneshot
+User=postgres
+Group=postgres
+ExecStart=/usr/local/sbin/mintobill-backup
+Nice=10
+IOSchedulingClass=idle

@@ -11,7 +11,7 @@ export function CtaBand() {
             Ready to bill faster?
           </h2>
           <p className="mt-3 text-[17px] leading-relaxed text-slate-300">
-            Try BilMitra free for 14 days. We help you set up your shop.
+            Try MintoBill free for 14 days. We help you set up your shop.
           </p>
         </div>
         <div className="flex flex-wrap gap-3">

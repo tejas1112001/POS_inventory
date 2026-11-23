@@ -16,7 +16,7 @@ export function FindShop() {
         Find my shop
       </h2>
       <p className="mt-2 mb-5 text-[15px] leading-relaxed text-slate-300">
-        Already with BilMitra? Type your shop name to open your login page.
+        Already with MintoBill? Type your shop name to open your login page.
       </p>
       <label htmlFor={`${id}-in`} className="mb-1.5 block text-sm font-semibold text-slate-200">
         Shop name

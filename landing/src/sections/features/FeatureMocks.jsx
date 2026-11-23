@@ -303,7 +303,7 @@ export function CatalogueMock() {
       <div className="overflow-hidden rounded-[14px] border border-line">
         <div className="flex items-center gap-2.5 bg-slate-100 px-3.5 py-2.5">
           <Lock className="size-3.5 text-muted" aria-hidden="true" />
-          <span className="flex-1 rounded-lg bg-white px-3 py-1.5 text-[13px] text-slate-700">ravifashion.bilmitra.com</span>
+          <span className="flex-1 rounded-lg bg-white px-3 py-1.5 text-[13px] text-slate-700">ravifashion.mintobill.com</span>
         </div>
         <div className="p-[18px]">
           <div className="flex flex-wrap items-center justify-between gap-3">
