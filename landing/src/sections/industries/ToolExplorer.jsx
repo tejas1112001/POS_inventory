@@ -72,7 +72,7 @@ export function ToolExplorer({ tool, onSelect }) {
           <div className="mt-3.5 rounded-[18px] border border-blue-200 bg-brand-soft p-5">
             <h4 className="flex items-center gap-2 text-[13px] font-extrabold tracking-[0.08em] text-brand-strong uppercase">
               <Check className="size-4" strokeWidth={2.6} aria-hidden="true" />
-              How BilMitra helps
+              How MintoBill helps
             </h4>
             <ul className="mt-3 flex flex-col gap-2.5">
               {cur.wins.map((w) => (

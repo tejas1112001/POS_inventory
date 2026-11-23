@@ -1,10 +1,10 @@
 # Landing Site Deployment
 
-Status 2026-11-22: **the React landing site is live on https://bilmitra.com** (brand BilMitra, option (a) below: posd serves `STATIC_DIR/landing`). Search engines are blocked in Nginx until the owner finishes the content (docs/DEPLOY_VPS.md). Done: build in `backend/deploy/vps/deploy.sh`, serving with real 404s and caching, demo form wired (`GET /contact/token` + JSON replies on `POST /contact`; the form now asks for an email, which the table requires), `GET /contact` owned by React when the build is present, sitemap lists the React routes, Go home page not served when the build is present. Still open: CI workflow for `landing/`, placeholders in `landing/src/content/site.js` (`[PHONE NUMBER]`, `[EMAIL]`, `[X]`). The sections below are the original plan.
+Status 2026-11-22: **the React landing site is live** (on bilmitra.com until the move to https://mintobill.com in docs/DEPLOY_VPS.md §8; brand MintoBill, option (a) below: posd serves `STATIC_DIR/landing`). Search engines are blocked in Nginx until the owner finishes the content (docs/DEPLOY_VPS.md). Done: build in `backend/deploy/vps/deploy.sh`, serving with real 404s and caching, demo form wired (`GET /contact/token` + JSON replies on `POST /contact`; the form now asks for an email, which the table requires), `GET /contact` owned by React when the build is present, sitemap lists the React routes, Go home page not served when the build is present. Still open: CI workflow for `landing/`, placeholders in `landing/src/content/site.js` (`[PHONE NUMBER]`, `[EMAIL]`, `[X]`). The sections below are the original plan.
 
 ## 1. What is live today
 
-The main address (`<BASE_DOMAIN>`, host kind `HostApex`) is served by the Go app's own server-rendered pages in `backend/internal/landing`: Go templates plus an embedded `static/site.css`. The React BillPiko marketing site in `landing/` is separate and not wired into the app, Caddy or CI.
+The main address (`<BASE_DOMAIN>`, host kind `HostApex`) is served by the Go app's own server-rendered pages in `backend/internal/landing`: Go templates plus an embedded `static/site.css`. The React MintoBill marketing site in `landing/` is separate and not wired into the app, Caddy or CI.
 
 CI today: `.github/workflows/frontend.yml` (shop app and Super Admin console) and `go-backend.yml`. Neither touches `landing/`.
 

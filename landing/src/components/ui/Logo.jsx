@@ -14,14 +14,14 @@ export function LogoMark({ size = 34 }) {
 export function Wordmark({ className }) {
   return (
     <span className={cn('font-extrabold tracking-tight text-white', className)}>
-      Bill<span className="text-brand-bright">Piko</span>
+      Minto<span className="text-brand-bright">Bill</span>
     </span>
   );
 }
 
 export function Logo({ className }) {
   return (
-    <Link to="/" aria-label="BilMitra home" className={cn('flex items-center gap-2.5 rounded-lg p-1', className)}>
+    <Link to="/" aria-label="MintoBill home" className={cn('flex items-center gap-2.5 rounded-lg p-1', className)}>
       <LogoMark />
       <Wordmark className="text-[21px]" />
     </Link>

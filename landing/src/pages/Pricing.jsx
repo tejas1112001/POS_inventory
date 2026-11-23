@@ -121,7 +121,7 @@ function Faq() {
 
 export default function Pricing() {
   const [yearly, setYearly] = useState(false);
-  usePageMeta('Pricing | BilMitra', 'Simple plans with a 14-day free trial. Every plan has GST bills, stock and reports.');
+  usePageMeta('Pricing | MintoBill', 'Simple plans with a 14-day free trial. Every plan has GST bills, stock and reports.');
 
   return (
     <>

@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "BillPiko marketing site (billpiko.com)",
+  "description": "MintoBill marketing site (mintobill.com)",
   "scripts": {
     "dev": "vite --host",
     "build": "vite build",

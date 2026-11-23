@@ -1,44 +1,44 @@
 #!/usr/bin/env bash
-# One-time (idempotent) setup of BilMitra on the shared VPS. Run as root:
+# One-time (idempotent) setup of MintoBill on the shared VPS. Run as root:
 #   bash setup-server.sh <dir with the deploy/vps files>
-# Creates only BilMitra's own things: the bilmitra user, /var/www/bilmitra,
-# the 18/bilmitra PostgreSQL cluster on 127.0.0.1:5433 and the secrets in
-# /var/www/bilmitra/shared. It never edits another site, the shared "main"
+# Creates only MintoBill's own things: the mintobill user, /var/www/mintobill,
+# the 18/mintobill PostgreSQL cluster on 127.0.0.1:5433 and the secrets in
+# /var/www/mintobill/shared. It never edits another site, the shared "main"
 # PostgreSQL cluster, nginx.conf or the firewall. Secrets are never printed.
 set -euo pipefail
 umask 077
 
 SRC=${1:?usage: setup-server.sh <deploy/vps dir>}
-ROOT=/var/www/bilmitra
+ROOT=/var/www/mintobill
 SHARED=$ROOT/shared
 PGVER=18
-CLUSTER=bilmitra
+CLUSTER=mintobill
 PGPORT=5433
 PGETC=/etc/postgresql/$PGVER/$CLUSTER
-DB=bilmitra
+DB=mintobill
 
 log() { printf '== %s\n' "$*"; }
 
 # 1. Service user (no shell, no home login).
-if ! id bilmitra >/dev/null 2>&1; then
-    log "creating system user bilmitra"
-    useradd --system --home-dir $ROOT --no-create-home --shell /usr/sbin/nologin bilmitra
+if ! id mintobill >/dev/null 2>&1; then
+    log "creating system user mintobill"
+    useradd --system --home-dir $ROOT --no-create-home --shell /usr/sbin/nologin mintobill
 fi
 
 # 2. Directories.
 log "directories under $ROOT"
 install -d -m 0755 -o root -g root $ROOT $ROOT/releases $ROOT/acme $ROOT/maintenance
-install -d -m 0750 -o root -g bilmitra $SHARED $SHARED/tls
+install -d -m 0750 -o root -g mintobill $SHARED $SHARED/tls
 install -d -m 0700 -o postgres -g postgres $ROOT/backups
-install -m 0644 "$SRC/maintenance.html" $ROOT/maintenance/__bilmitra_unavailable.html
+install -m 0644 "$SRC/maintenance.html" $ROOT/maintenance/__mintobill_unavailable.html
 
 # 3. Private CA for the database TLS (sslmode=verify-full on loopback).
 if [ ! -f $SHARED/tls/ca.crt ]; then
-    log "creating BilMitra internal CA (database TLS)"
-    install -d -m 0700 /root/bilmitra-ca
+    log "creating MintoBill internal CA (database TLS)"
+    install -d -m 0700 /root/mintobill-ca
     openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -days 3650 \
-        -subj "/CN=BilMitra internal CA" -keyout /root/bilmitra-ca/ca.key -out /root/bilmitra-ca/ca.crt 2>/dev/null
-    install -m 0644 /root/bilmitra-ca/ca.crt $SHARED/tls/ca.crt
+        -subj "/CN=MintoBill internal CA" -keyout /root/mintobill-ca/ca.key -out /root/mintobill-ca/ca.crt 2>/dev/null
+    install -m 0644 /root/mintobill-ca/ca.crt $SHARED/tls/ca.crt
 fi
 
 # 4. Separate PostgreSQL cluster.
@@ -54,14 +54,14 @@ if [ ! -f $PGETC/tls/server.crt ]; then
     openssl req -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -subj "/CN=localhost" \
         -keyout $tmp/server.key -out $tmp/server.csr 2>/dev/null
     printf 'subjectAltName=DNS:localhost,IP:127.0.0.1\nextendedKeyUsage=serverAuth\n' >$tmp/ext
-    openssl x509 -req -in $tmp/server.csr -CA /root/bilmitra-ca/ca.crt -CAkey /root/bilmitra-ca/ca.key \
+    openssl x509 -req -in $tmp/server.csr -CA /root/mintobill-ca/ca.crt -CAkey /root/mintobill-ca/ca.key \
         -CAcreateserial -days 825 -extfile $tmp/ext -out $tmp/server.crt 2>/dev/null
     install -m 0644 -o postgres -g postgres $tmp/server.crt $PGETC/tls/server.crt
     install -m 0600 -o postgres -g postgres $tmp/server.key $PGETC/tls/server.key
     rm -rf "$tmp"
 fi
-install -m 0644 -o postgres -g postgres "$SRC/postgresql-bilmitra.conf" $PGETC/conf.d/bilmitra.conf
-install -m 0640 -o postgres -g postgres "$SRC/pg_hba-bilmitra.conf" $PGETC/pg_hba.conf
+install -m 0644 -o postgres -g postgres "$SRC/postgresql-mintobill.conf" $PGETC/conf.d/mintobill.conf
+install -m 0640 -o postgres -g postgres "$SRC/pg_hba-mintobill.conf" $PGETC/pg_hba.conf
 systemctl enable --quiet postgresql@$PGVER-$CLUSTER
 systemctl restart postgresql@$PGVER-$CLUSTER     # this cluster only
 pg_isready -q -h 127.0.0.1 -p $PGPORT
@@ -75,13 +75,13 @@ fi
 # 5. Secrets (generated here, once; never echoed).
 rand_hex() { openssl rand -hex 24; }
 rand_b64() { openssl rand -base64 32 | tr -d '\n'; }
-if [ ! -f /root/bilmitra-admin.env ]; then
+if [ ! -f /root/mintobill-admin.env ]; then
     log "setting the cluster's postgres password (admin login, kept in /root only)"
     pw=$(rand_hex)
     psql_c -d postgres <<<"ALTER ROLE postgres PASSWORD '$pw';"
     printf 'DATABASE_ADMIN_URL="postgres://postgres:%s@localhost:%s/%s?sslmode=verify-full&sslrootcert=%s"\n' \
-        "$pw" $PGPORT $DB $SHARED/tls/ca.crt >/root/bilmitra-admin.env
-    chmod 600 /root/bilmitra-admin.env
+        "$pw" $PGPORT $DB $SHARED/tls/ca.crt >/root/mintobill-admin.env
+    chmod 600 /root/mintobill-admin.env
 fi
 if [ ! -f $SHARED/.env ]; then
     log "writing $SHARED/.env with generated secrets"
@@ -100,17 +100,17 @@ if [ ! -f $SHARED/.env ]; then
         printf '%s\n' "$line"
     done <"$SRC/env.production.template" >$SHARED/.env
     if grep -q '@[A-Z_]*@' $SHARED/.env; then echo "unfilled placeholder in .env" >&2; exit 1; fi
-    chown root:bilmitra $SHARED/.env
+    chown root:mintobill $SHARED/.env
     chmod 0640 $SHARED/.env
 fi
 
 # 6. systemd units (installed, not started: deploy.sh starts posd).
-install -m 0644 "$SRC/bilmitra.service" /etc/systemd/system/bilmitra.service
-install -m 0644 "$SRC/bilmitra-backup.service" /etc/systemd/system/bilmitra-backup.service
-install -m 0644 "$SRC/bilmitra-backup.timer" /etc/systemd/system/bilmitra-backup.timer
-install -m 0755 "$SRC/bilmitra-backup.sh" /usr/local/sbin/bilmitra-backup
-install -m 0700 "$SRC/bilmitra-ctl.sh" /usr/local/sbin/bilmitra-ctl
+install -m 0644 "$SRC/mintobill.service" /etc/systemd/system/mintobill.service
+install -m 0644 "$SRC/mintobill-backup.service" /etc/systemd/system/mintobill-backup.service
+install -m 0644 "$SRC/mintobill-backup.timer" /etc/systemd/system/mintobill-backup.timer
+install -m 0755 "$SRC/mintobill-backup.sh" /usr/local/sbin/mintobill-backup
+install -m 0700 "$SRC/mintobill-ctl.sh" /usr/local/sbin/mintobill-ctl
 systemctl daemon-reload
-systemctl enable --quiet --now bilmitra-backup.timer
+systemctl enable --quiet --now mintobill-backup.timer
 
 log "done. Cluster: $(runuser -u postgres -- psql -XAt -p $PGPORT -c 'show server_version') on 127.0.0.1:$PGPORT"

@@ -1,24 +1,24 @@
 # systemd unit for posd (API + workers) on the shared VPS.
-# Installed as /etc/systemd/system/bilmitra.service.
+# Installed as /etc/systemd/system/mintobill.service.
 [Unit]
-Description=BilMitra POS (posd: API + workers)
-Documentation=file:///var/www/bilmitra/current/README-DEPLOY.md
-After=network-online.target postgresql@18-bilmitra.service bilmitra-s3.service
-Wants=network-online.target bilmitra-s3.service
-Requires=postgresql@18-bilmitra.service
+Description=MintoBill POS (posd: API + workers)
+Documentation=file:///var/www/mintobill/current/README-DEPLOY.md
+After=network-online.target postgresql@18-mintobill.service mintobill-s3.service
+Wants=network-online.target mintobill-s3.service
+Requires=postgresql@18-mintobill.service
 
 [Service]
 Type=simple
-User=bilmitra
-Group=bilmitra
-WorkingDirectory=/var/www/bilmitra/current
-EnvironmentFile=/var/www/bilmitra/shared/.env
-Environment=STATIC_DIR=/var/www/bilmitra/current/static
+User=mintobill
+Group=mintobill
+WorkingDirectory=/var/www/mintobill/current
+EnvironmentFile=/var/www/mintobill/shared/.env
+Environment=STATIC_DIR=/var/www/mintobill/current/static
 # Keep the Go heap well under MemoryMax on a 4 GB server shared with others.
 Environment=GOMEMLIMIT=300MiB
-# Trust the system CAs plus the BilMitra internal CA (local S3 storage TLS).
-Environment=SSL_CERT_DIR=/etc/ssl/certs:/var/www/bilmitra/shared/tls
-ExecStart=/var/www/bilmitra/current/bin/posd
+# Trust the system CAs plus the MintoBill internal CA (local S3 storage TLS).
+Environment=SSL_CERT_DIR=/etc/ssl/certs:/var/www/mintobill/shared/tls
+ExecStart=/var/www/mintobill/current/bin/posd
 Restart=on-failure
 RestartSec=5
 KillSignal=SIGTERM

@@ -10,7 +10,7 @@ export function ShopTypeGrid({ shop, onPick }) {
     <Container as="section" aria-labelledby="types-title" className="pt-16 pb-6">
       <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
         <h2 id="types-title" className="text-[28px] leading-[1.1] font-extrabold tracking-[-0.03em] text-ink sm:text-[34px]">
-          Shops that use a POS like BilMitra
+          Shops that use a POS like MintoBill
         </h2>
         <p className="max-w-[420px] text-[15px] text-body">Tap your shop type to see the tool that helps it most.</p>
       </div>

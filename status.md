@@ -1,3 +1,7 @@
+# Rename to MintoBill (2026-11-23)
+
+Domain is now mintobill.com. Branch `chore/rename-mintobill` (local, not pushed): every BilMitra/BillPiko name and bilmitra.com reference changed to MintoBill/mintobill.com (landing site, deploy files renamed, docs). Server not moved yet: run `backend/deploy/vps/migrate-to-mintobill.sh` after DNS for mintobill.com points at the VPS, then `deploy.sh` (docs/DEPLOY_VPS.md §8). bilmitra.com becomes a redirect.
+
 # Status, 2026-11-21
 
 Everything below is on GitHub `main` (pushed 2026-11-21, CI green at `9e1583a`). What is left: `REMAINING.md` (architecture review follow-up) and `NEXT_STEPS.md` (owner checks, pharmacy questions).
