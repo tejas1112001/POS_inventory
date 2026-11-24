@@ -5,7 +5,7 @@ import { Container } from '@/components/ui/Heading';
 export function CtaBand() {
   return (
     <Container as="section" aria-labelledby="cta-title" className="pb-24">
-      <div className="bg-night surface-glow flex flex-wrap items-center justify-between gap-7 rounded-[28px] px-6 py-12 sm:px-12 sm:py-14">
+      <div className="bg-night surface-glow flex flex-wrap items-center justify-between gap-7 rounded-[28px] px-5 py-10 sm:px-12 sm:py-14">
         <div className="max-w-[600px]">
           <h2 id="cta-title" className="text-[30px] leading-[1.1] font-extrabold tracking-[-0.03em] text-white sm:text-[38px]">
             Ready to bill faster?
@@ -14,7 +14,7 @@ export function CtaBand() {
             Try MintoBill free for 14 days. We help you set up your shop.
           </p>
         </div>
-        <div className="flex flex-wrap gap-3">
+        <div className="btn-row max-sm:w-full">
           <Button to="/contact#demo" size="lg">
             Book a free demo
             <ArrowRight className="size-[18px]" aria-hidden="true" />

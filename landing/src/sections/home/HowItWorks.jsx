@@ -12,11 +12,11 @@ export function HowItWorks() {
       <SectionTitle className="mt-3 mb-10">
         <span id="how-title">Start billing in three steps</span>
       </SectionTitle>
-      <ol className="flex flex-wrap gap-5">
+      <ol className="grid gap-8 md:grid-cols-3 md:gap-5">
         {steps.map((s, i) => {
           const Icon = icons[i];
           return (
-            <li key={s.title} className={`group relative flex-[1_1_300px] border-t-[3px] px-1 pt-6 ${borders[i]}`}>
+            <li key={s.title} className={`group relative border-t-[3px] px-1 pt-6 ${borders[i]}`}>
               {/* On hover a brand line runs across the top border. */}
               <span
                 aria-hidden="true"

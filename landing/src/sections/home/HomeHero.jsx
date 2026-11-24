@@ -23,7 +23,7 @@ function BillMockup() {
 
   return (
     // data-tilt: the whole mockup tilts toward the cursor; the badges float above it.
-    <div data-tilt="6" className="relative min-w-0 flex-[1_1_520px] pt-7 pb-8 transition-transform duration-300 ease-out transform-3d">
+    <div data-tilt="6" className="relative min-w-0 flex-[1_1_460px] pt-7 pb-8 transition-transform duration-300 ease-out transform-3d">
       <div aria-hidden="true" className="absolute inset-x-[30px] top-10 bottom-5 rounded-[40px] bg-brand opacity-30 blur-[90px]" />
 
       <div
@@ -45,20 +45,20 @@ function BillMockup() {
         <ul className="px-[22px] py-2">
           {heroBill.map((p, i) => (
             <li key={p.name} className="flex items-center gap-3.5 border-b border-dashed border-line py-3.5">
-              <span className="flex size-[42px] shrink-0 items-center justify-center rounded-[10px] bg-brand-soft text-brand">
+              <span className="flex size-[42px] shrink-0 items-center justify-center rounded-[10px] bg-brand-soft text-brand max-[379px]:hidden">
                 <p.icon className="size-5" strokeWidth={1.8} aria-hidden="true" />
               </span>
               <div className="min-w-0 flex-auto">
                 <p className="text-[15px] font-semibold">{p.name}</p>
                 <p className="truncate text-[13px] text-muted">{p.meta} · GST 5%</p>
               </div>
-              <div className="flex items-center overflow-hidden rounded-[10px] border border-slate-300">
+              <div className="flex shrink-0 items-center overflow-hidden rounded-[10px] border border-slate-300">
                 <button
                   type="button"
                   onClick={() => change(i, -1)}
                   disabled={qty[i] === 0}
                   aria-label={`Remove one ${p.name}`}
-                  className="flex size-11 items-center justify-center hover:bg-slate-50 disabled:text-slate-300 sm:size-9"
+                  className="flex size-11 shrink-0 items-center justify-center hover:bg-slate-50 disabled:text-slate-300 sm:size-9"
                 >
                   <Minus className="size-4" aria-hidden="true" />
                 </button>
@@ -70,7 +70,7 @@ function BillMockup() {
                   onClick={() => change(i, 1)}
                   disabled={qty[i] === p.max}
                   aria-label={`Add one ${p.name}`}
-                  className="flex size-11 items-center justify-center hover:bg-slate-50 disabled:text-slate-300 sm:size-9"
+                  className="flex size-11 shrink-0 items-center justify-center hover:bg-slate-50 disabled:text-slate-300 sm:size-9"
                 >
                   <Plus className="size-4" aria-hidden="true" />
                 </button>
@@ -122,24 +122,24 @@ export function HomeHero() {
   return (
     <section className="relative isolate bg-night text-slate-200">
       <HeroBackdrop />
-      <Container className="flex flex-wrap-reverse items-center gap-16 pt-14 pb-20 sm:pt-[72px] sm:pb-[104px]">
+      <Container className="flex flex-wrap-reverse items-center gap-12 pt-14 pb-20 sm:pt-[72px] sm:pb-[104px] xl:gap-16">
         <BillMockup />
 
-        <div className="min-w-0 flex-[1_1_420px]">
+        <div className="min-w-0 flex-[1_1_400px]">
           <p className="inline-flex items-center gap-2 rounded-full border border-blue-400/35 bg-blue-600/12 px-3.5 py-[7px] text-[13px] font-semibold text-blue-200">
             <span className="size-[7px] rounded-full bg-brand-bright" aria-hidden="true" />
             Point of sale for Indian retail
           </p>
-          <h1 className="mt-[22px] text-[40px] leading-[1.04] font-extrabold tracking-[-0.035em] text-white sm:text-5xl lg:text-[58px]">
+          <h1 className="mt-[22px] text-[34px] leading-[1.06] font-extrabold tracking-[-0.035em] text-white min-[380px]:text-[40px] sm:text-5xl xl:text-[58px]">
             Billing, stock and GST.
             <br />
             <span className="text-brand-bright">All in one place.</span>
           </h1>
-          <p className="mt-[22px] max-w-[520px] text-lg leading-relaxed text-slate-300">
+          <p className="mt-[22px] max-w-[520px] text-base leading-relaxed text-slate-300 sm:text-lg">
             MintoBill is a simple, fast point of sale for shops. Make GST bills, keep stock correct and see your
             sales, all from your browser.
           </p>
-          <div className="mt-8 flex flex-wrap gap-3">
+          <div className="btn-row mt-8">
             <Button to="/contact#demo" size="lg" className="font-bold">
               Book a free demo
               <ArrowRight className="size-[18px]" aria-hidden="true" />

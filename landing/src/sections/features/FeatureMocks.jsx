@@ -47,7 +47,7 @@ export function SellingMock() {
           <button
             type="button"
             onClick={() => setBill({ count: 0, total: 0 })}
-            className="min-h-9 rounded-full border border-slate-700 px-3.5 text-[13px] text-slate-300 hover:text-white"
+            className="min-h-10 rounded-full border border-slate-700 px-4 text-[13px] text-slate-300 hover:text-white sm:min-h-9 sm:px-3.5"
           >
             Clear
           </button>
@@ -310,7 +310,7 @@ export function CatalogueMock() {
             <strong className="text-lg text-ink">Ravi Fashion</strong>
             <span className="text-[13px] text-muted">FC Road, Pune · Open 10 am to 9 pm</span>
           </div>
-          <ul className="mt-3.5 grid grid-cols-[repeat(auto-fit,minmax(130px,1fr))] gap-3">
+          <ul className="mt-3.5 grid grid-cols-[repeat(auto-fit,minmax(112px,1fr))] gap-2.5 sm:gap-3">
             {catalogue.map((c) => (
               <li key={c.name} className="overflow-hidden rounded-xl border border-line">
                 <div className={cn('flex h-[84px] items-center justify-center text-ink', c.bg)}>

@@ -42,7 +42,7 @@ export function Footer() {
           <p className="mt-3.5 text-[15px] leading-relaxed">Billing, stock and GST for Indian shops. Made in Pune.</p>
         </div>
 
-        <nav aria-label="Footer" className="flex flex-wrap gap-12">
+        <nav aria-label="Footer" className="grid w-full grid-cols-3 gap-4 sm:flex sm:w-auto sm:flex-wrap sm:gap-12">
           {columns.map((c) => (
             <div key={c.title}>
               <h2 className="mb-1.5 text-[13px] font-bold tracking-[0.08em] text-slate-200 uppercase">{c.title}</h2>

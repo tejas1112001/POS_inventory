@@ -151,6 +151,18 @@
   }
 }
 
+/* A row of buttons; on phones (< 640 px) each takes the full width. */
+@utility btn-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  @media (width < 40rem) {
+    & > * {
+      flex: 1 1 100%;
+    }
+  }
+}
+
 /* Barcode stripes for the label preview. */
 @utility barcode {
   background: repeating-linear-gradient(

@@ -7,9 +7,16 @@ import { IconTile } from '@/components/ui/IconTile';
 
 const card = 'card-lift min-w-0 rounded-[22px] border';
 
-function SmallCard({ icon, title, body }) {
+// Grid placement. Desktop (6 columns): checkout 4 + GST 2, stock 3 +
+// receipts 3, reports 4 + dues 2, catalogue 3 + staff 3. Tablet (2
+// columns): customer dues moves up next to receipts and the reports card
+// goes after it, so the small cards always come in pairs.
+const SMALL_SPANS = ['sm:order-2 lg:order-none lg:col-span-2', 'sm:order-3 lg:order-none lg:col-span-3', 'sm:order-4 lg:order-none lg:col-span-3'];
+const MORE_SPANS = ['sm:order-5 lg:order-none lg:col-span-2', 'sm:order-7 lg:order-none lg:col-span-3', 'sm:order-8 lg:order-none lg:col-span-3'];
+
+function SmallCard({ icon, title, body, className }) {
   return (
-    <article className={cn(card, 'flex flex-[1_1_280px] flex-col gap-3.5 border-line bg-white p-7')}>
+    <article className={cn(card, 'flex flex-col gap-3.5 border-line bg-white p-6 sm:p-7', className)}>
       <IconTile icon={icon} />
       <h3 className="text-xl font-bold text-ink">{title}</h3>
       <p className="text-[15px] leading-relaxed text-body">{body}</p>
@@ -74,8 +81,8 @@ export function Bento() {
         </p>
       </div>
 
-      <div className="flex flex-wrap gap-5">
-        <article className={cn(card, 'flex flex-[2_1_560px] flex-col gap-[18px] border-ink bg-ink p-8 text-slate-200')}>
+      <div className="grid gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-6">
+        <article className={cn(card, 'flex flex-col gap-[18px] border-ink bg-ink p-6 text-slate-200 sm:order-1 sm:col-span-2 sm:p-8 lg:order-none lg:col-span-4')}>
           <IconTile icon={checkout.icon} tone="dark" />
           <h3 className="text-2xl font-bold text-white">{checkout.title}</h3>
           <p className="max-w-[520px] leading-relaxed text-slate-300">{checkout.body}</p>
@@ -88,11 +95,11 @@ export function Bento() {
           </ul>
         </article>
 
-        {small.map((c) => (
-          <SmallCard key={c.title} {...c} />
+        {small.map((c, i) => (
+          <SmallCard key={c.title} {...c} className={SMALL_SPANS[i]} />
         ))}
 
-        <article className={cn(card, 'flex flex-[2_1_560px] flex-wrap items-end gap-7 border-line bg-surface p-8')}>
+        <article className={cn(card, 'flex flex-wrap items-end gap-7 border-line bg-surface p-6 sm:order-6 sm:col-span-2 sm:p-8 lg:order-none lg:col-span-4')}>
           <div className="flex flex-[1_1_240px] flex-col gap-3.5">
             <IconTile icon={reports.icon} />
             <h3 className="text-2xl font-bold text-ink">{reports.title}</h3>
@@ -101,8 +108,8 @@ export function Bento() {
           <SalesChart />
         </article>
 
-        {more.map((c) => (
-          <SmallCard key={c.title} {...c} />
+        {more.map((c, i) => (
+          <SmallCard key={c.title} {...c} className={MORE_SPANS[i]} />
         ))}
       </div>
     </Container>
