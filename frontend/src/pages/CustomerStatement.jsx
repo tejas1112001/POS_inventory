@@ -2,12 +2,12 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft, Printer } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { ErrorState } from '@/components/kit/States';
 import { api } from '@/services/api';
 import { useShopSettings } from '@/hooks/useShopSettings';
 import { formatCurrency, formatDate, todayInShop } from '@/lib/format';
 import { addDays, formatDay } from '@/lib/payments';
+import { DropdownRangeDatePicker } from '@/components/ui/dropdown-range-date-picker';
 
 // CustomerStatement (S10 item 5): sales, payments, returns and the running
 // balance for a date range, with the opening balance carried in. Printed
@@ -37,14 +37,15 @@ export default function CustomerStatement() {
           <ArrowLeft className="size-4" aria-hidden="true" /> Account
         </Link>
         <div className="flex flex-wrap items-end gap-2">
-          <label className="space-y-1 text-xs font-medium">
-            From
-            <Input type="date" value={from} max={to} onChange={(e) => e.target.value && setFrom(e.target.value)} className="h-9" />
-          </label>
-          <label className="space-y-1 text-xs font-medium">
-            To
-            <Input type="date" value={to} min={from} onChange={(e) => e.target.value && setTo(e.target.value)} className="h-9" />
-          </label>
+          <DropdownRangeDatePicker
+            align="end"
+            clearable={false}
+            value={{ from, to }}
+            onChange={({ from: f, to: t }) => {
+              setFrom(f);
+              setTo(t);
+            }}
+          />
           <Button type="button" onClick={() => window.print()} disabled={!st}>
             <Printer className="size-4" aria-hidden="true" /> Print
           </Button>

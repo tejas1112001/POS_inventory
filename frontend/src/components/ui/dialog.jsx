@@ -44,6 +44,23 @@ function DialogOverlay({
   )
 }
 
+// The close button. When the dialog has a DialogHeader the button sits in
+// it (the header sticks, so the button stays in the corner while a long
+// dialog scrolls and covers no field); otherwise in the dialog's corner.
+const CloseSlot = React.createContext(null)
+
+function CloseButton() {
+  return (
+    <DialogPrimitive.Close
+      data-slot="dialog-close"
+      className="ring-offset-background focus:ring-ring data-[state=open]:bg-accent data-[state=open]:text-muted-foreground absolute top-4 right-4 z-30 flex size-9 items-center justify-center rounded-lg opacity-70 transition-[opacity,background-color] hover:bg-accent hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
+    >
+      <XIcon />
+      <span className="sr-only">Close</span>
+    </DialogPrimitive.Close>
+  )
+}
+
 // sheet: on phones (< 640 px) the dialog slides up from the bottom as a
 // sheet; from 640 px it is a centred dialog.
 const SHEET =
@@ -56,6 +73,7 @@ function DialogContent({
   sheet = false,
   ...props
 }) {
+  const [closeInHeader, setCloseInHeader] = React.useState(false)
   return (
     <DialogPortal data-slot="dialog-portal">
       <DialogOverlay />
@@ -68,28 +86,33 @@ function DialogContent({
         )}
         {...props}
       >
-        {children}
-        {showCloseButton && (
-          <DialogPrimitive.Close
-            data-slot="dialog-close"
-            className="ring-offset-background focus:ring-ring data-[state=open]:bg-accent data-[state=open]:text-muted-foreground fixed top-4 right-4 z-20 flex size-9 items-center justify-center rounded-lg opacity-70 transition-[opacity,background-color] hover:bg-accent hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
-          >
-            <XIcon />
-            <span className="sr-only">Close</span>
-          </DialogPrimitive.Close>
-        )}
+        <CloseSlot.Provider value={showCloseButton ? setCloseInHeader : null}>{children}</CloseSlot.Provider>
+        {showCloseButton && !closeInHeader && <CloseButton />}
       </DialogPrimitive.Content>
     </DialogPortal>
   )
 }
 
-function DialogHeader({ className, ...props }) {
+// Header and footer stick to the edges of the scrolling dialog. The dialog
+// has 24 px padding and sticky offsets count from inside it, hence -top-6
+// and -bottom-6: nothing scrolls into view above the title or below the
+// buttons.
+function DialogHeader({ className, children, ...props }) {
+  const register = React.useContext(CloseSlot)
+  React.useLayoutEffect(() => {
+    if (!register) return undefined
+    register(true)
+    return () => register(false)
+  }, [register])
   return (
     <div
       data-slot="dialog-header"
-      className={cn("sticky top-0 z-10 -mx-6 -mt-6 flex flex-col gap-2 bg-card px-6 pt-6 pb-2 pr-12 text-left", className)}
+      className={cn("sticky -top-6 z-10 -mx-6 -mt-6 flex flex-col gap-2 bg-card px-6 pt-6 pb-2 pr-12 text-left", className)}
       {...props}
-    />
+    >
+      {children}
+      {register && <CloseButton />}
+    </div>
   )
 }
 
@@ -98,7 +121,7 @@ function DialogFooter({ className, ...props }) {
     <div
       data-slot="dialog-footer"
       className={cn(
-        "sticky bottom-0 z-10 -mx-6 -mb-6 flex flex-col-reverse gap-2 border-t bg-card px-6 py-3 pb-[max(12px,env(safe-area-inset-bottom))] sm:flex-row sm:justify-end",
+        "sticky -bottom-6 z-10 -mx-6 -mb-6 flex flex-row justify-end gap-2 border-t bg-card px-6 py-3 pb-[max(12px,env(safe-area-inset-bottom))] max-sm:[&>*]:flex-1",
         className
       )}
       {...props}

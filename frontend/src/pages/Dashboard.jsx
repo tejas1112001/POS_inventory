@@ -38,6 +38,7 @@ import { formatCurrency, formatNumber, getFormatSettings, todayInShop } from '@/
 import { cn } from '@/lib/utils';
 import OnboardingCard from '@/components/dashboard/OnboardingCard';
 import { fmtQty } from '@/lib/qty';
+import { DropdownRangeDatePicker } from '@/components/ui/dropdown-range-date-picker';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, ArcElement, Filler, Tooltip);
 
@@ -326,11 +327,7 @@ export default function Dashboard() {
             onChange={(k) => setParam(k === 'custom' ? { range: 'custom', from, to } : { range: k === 'today' ? '' : k, from: '', to: '' })}
           />
           {rangeKey === 'custom' && (
-            <div className="flex items-center gap-1.5 text-sm">
-              <input type="date" aria-label="From" className="h-10 rounded-lg border border-input bg-card px-2 shadow-xs" value={from} max={to} onChange={(e) => e.target.value && setParam({ from: e.target.value })} />
-              <span className="text-muted-foreground">to</span>
-              <input type="date" aria-label="To" className="h-10 rounded-lg border border-input bg-card px-2 shadow-xs" value={to} min={from} max={today} onChange={(e) => e.target.value && setParam({ to: e.target.value })} />
-            </div>
+            <DropdownRangeDatePicker clearable={false} max={today} value={{ from, to }} onChange={({ from: f, to: t }) => setParam({ from: f, to: t })} />
           )}
         </div>
       </div>

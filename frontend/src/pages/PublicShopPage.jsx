@@ -415,7 +415,7 @@ export default function PublicShopPage({ slug, homeSlug = null, onMissing }) {
 
       {/* Product Details Modal / Drawer */}
       {selectedProduct && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex justify-center p-4 overflow-y-auto [&>*:last-child]:my-auto">
           <div className="relative max-w-2xl w-full bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl text-slate-100 max-h-[90vh] overflow-y-auto">
             <button
               type="button"

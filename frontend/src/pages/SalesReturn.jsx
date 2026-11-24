@@ -10,8 +10,8 @@ import FilterBar from '@/components/kit/FilterBar';
 import RowActions from '@/components/kit/RowActions';
 import StatusBadge from '@/components/kit/StatusBadge';
 import { EmptyState } from '@/components/kit/States';
-import DateBox from '@/components/kit/DateBox';
 import { formatCurrency, formatDate } from '@/lib/format';
+import { DropdownRangeDatePicker } from '@/components/ui/dropdown-range-date-picker';
 
 // Returns (/sales-return): items brought back, newest first. Search a
 // return number, an order number or a customer; filter by store and dates.
@@ -61,10 +61,11 @@ export default function SalesReturn() {
   ];
   const filters = stores.length > 1 ? [{ key: 'storeId', label: 'Store', allLabel: 'All stores', options: stores.map((s) => ({ value: String(s.id), label: s.name })) }] : [];
   const dates = (
-    <>
-      <DateBox label="From" value={list.values.startDate} max={list.values.endDate || undefined} onChange={(v) => list.setFilter('startDate', v)} />
-      <DateBox label="To" value={list.values.endDate} min={list.values.startDate || undefined} onChange={(v) => list.setFilter('endDate', v)} />
-    </>
+    <DropdownRangeDatePicker
+      placeholder="All dates"
+      value={{ from: list.values.startDate, to: list.values.endDate }}
+      onChange={({ from, to }) => list.setFilters({ startDate: from, endDate: to })}
+    />
   );
   const filtered = list.search || Object.values(list.values).some(Boolean);
 

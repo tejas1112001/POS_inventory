@@ -3,6 +3,7 @@ import { api } from '@/services/api';
 import { formatCurrency, todayInShop } from '@/lib/format';
 import { addDays, isRecorded, paymentLabel, RECORDED_HINT, RECORDED_LEGEND } from '@/lib/payments';
 import { InlineAlert } from '@/components/feedback/InlineAlert';
+import { DropdownRangeDatePicker } from '@/components/ui/dropdown-range-date-picker';
 
 // PaymentMethodsReport (S10 item 5): money taken per payment method in a
 // period, at the till and as payments against dues (reversals subtract).
@@ -35,16 +36,15 @@ export default function PaymentMethodsReport() {
         <h2 id="pm-h" className="text-base font-semibold">
           Sales by payment method
         </h2>
-        <div className="flex items-end gap-2 text-xs">
-          <label className="space-y-1 font-medium">
-            From
-            <input type="date" className="block h-9 rounded-lg border bg-card px-2" value={from} max={to} onChange={(e) => e.target.value && setFrom(e.target.value)} />
-          </label>
-          <label className="space-y-1 font-medium">
-            To
-            <input type="date" className="block h-9 rounded-lg border bg-card px-2" value={to} min={from} onChange={(e) => e.target.value && setTo(e.target.value)} />
-          </label>
-        </div>
+        <DropdownRangeDatePicker
+          align="end"
+          clearable={false}
+          value={{ from, to }}
+          onChange={({ from: f, to: t }) => {
+            setFrom(f);
+            setTo(t);
+          }}
+        />
       </div>
       {error && <InlineAlert>{error}</InlineAlert>}
       {rows && rows.length === 0 && <p className="px-4 py-6 text-sm text-muted-foreground">No payments in this period.</p>}

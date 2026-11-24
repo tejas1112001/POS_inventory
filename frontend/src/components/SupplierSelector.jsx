@@ -45,7 +45,7 @@ const SupplierSelector = ({ value, onChange }) => {
 
       {/* Modal to add new supplier */}
       {showModal && (
-        <div className="fixed inset-0 flex items-center justify-center z-50 bg-black bg-opacity-40">
+        <div className="fixed inset-0 z-50 flex justify-center overflow-y-auto overscroll-contain bg-[#0b2a32]/55 p-4 [&>*:last-child]:my-auto">
           <div className="bg-white p-6 rounded-lg shadow-md w-full max-w-sm">
             <h3 className="text-lg font-bold mb-4">Add New Supplier</h3>
             <input

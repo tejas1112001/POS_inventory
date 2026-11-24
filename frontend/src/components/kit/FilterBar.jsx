@@ -1,20 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CalendarRange } from 'lucide-react';
 import SearchBox from './SearchBox';
 import { FilterToolbar } from '@/components/ui/filter-toolbar';
-import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 // FilterBar: one line for every list page. A short search on the left, then
 // "Add filter" (a menu: pick a field, then a value) with the applied filters
 // as removable chips, then the page's buttons on the right.
 // filters: [{ key, label, options: [{ value, label }] }]; values: { key: value }.
-// extra: more controls (for example date boxes) next to Add filter; on
-// phones they move into a sheet behind a calendar button. extraActive counts
-// them as applied. actions: the page's buttons (New order, Add product…).
+// extra: more controls (the date range button) next to Add filter;
+// extraActive counts them as applied. actions: the page's buttons (New order, Add product…).
 export default function FilterBar({ search, onSearch, placeholder = 'Search…', filters = [], values = {}, onFilter, onClear, extra, extraActive = 0, actions }) {
   const [text, setText] = useState(search || '');
-  const [open, setOpen] = useState(false);
   useEffect(() => setText(search || ''), [search]);
 
   const fieldKey = filters.map((f) => `${f.key}:${f.options.length}`).join('|');
@@ -51,13 +46,7 @@ export default function FilterBar({ search, onSearch, placeholder = 'Search…',
           onClearAll={onClear}
           addFilter={fields.length ? { fields, onAdd: (chip) => onFilter(chip.id, chip.option), align: 'start' } : undefined}
         >
-          {extra && <div className="hidden flex-wrap items-center gap-2 sm:flex">{extra}</div>}
-          {extra && (
-            <Button type="button" variant="outline" size="icon" className="relative size-11 sm:hidden" aria-label="Dates" onClick={() => setOpen(true)}>
-              <CalendarRange className="size-4" aria-hidden="true" />
-              {extraActive > 0 && <span className="absolute -top-1 -right-1 size-2.5 rounded-full bg-primary" aria-hidden="true" />}
-            </Button>
-          )}
+          {extra}
           {extraActive > 0 && chips.length === 0 && (
             <button type="button" onClick={onClear} className="h-8 rounded-md px-1.5 text-[13px] font-semibold text-primary hover:underline">
               Clear all
@@ -66,19 +55,6 @@ export default function FilterBar({ search, onSearch, placeholder = 'Search…',
         </FilterToolbar>
       )}
       {actions && <div className="flex flex-wrap items-center gap-2 max-sm:w-full max-sm:[&>*]:flex-1 sm:ml-auto">{actions}</div>}
-      {extra && (
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogContent sheet>
-            <DialogHeader>
-              <DialogTitle>Dates</DialogTitle>
-            </DialogHeader>
-            <div className="grid gap-3">{extra}</div>
-            <Button type="button" className="h-11" onClick={() => setOpen(false)}>
-              Show results
-            </Button>
-          </DialogContent>
-        </Dialog>
-      )}
     </div>
   );
 }

@@ -33,7 +33,7 @@ const StoreModal = ({ showModal, setShowModal, onStoreCreated }) => {
   if (!showModal) return null;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-[#0b2a32]/55 flex items-center justify-center p-4" onClick={() => setShowModal(false)}>
+    <div className="fixed inset-0 z-50 flex justify-center overflow-y-auto overscroll-contain bg-[#0b2a32]/55 p-4 [&>*:last-child]:my-auto" onClick={() => setShowModal(false)}>
       <div className="relative w-full max-w-md">
         <div className="bg-white rounded-xl shadow-xl border border-gray-800 overflow-hidden" onClick={e => e.stopPropagation()}>
           {/* Modal Header */}

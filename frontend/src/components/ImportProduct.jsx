@@ -102,7 +102,7 @@ export default function ImportProduct({ showForm, setShowForm, onImportComplete 
   const stockText = (v) => (v.stock || []).filter((s) => s.qty > 0).map((s) => `${s.qty} at ${s.store}`).join(', ');
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0b2a32]/55 p-4" onClick={close}>
+    <div className="fixed inset-0 z-50 flex justify-center overflow-y-auto overscroll-contain bg-[#0b2a32]/55 p-4 [&>*:last-child]:my-auto" onClick={close}>
       <div
         role="dialog"
         aria-modal="true"
