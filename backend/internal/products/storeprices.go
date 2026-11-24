@@ -161,6 +161,15 @@ func (a *API) putStorePrices(w http.ResponseWriter, r *http.Request) {
 				return err
 			}
 		}
+		changed := make([]int64, 0, len(in.Prices))
+		for _, sp := range in.Prices {
+			if sp.Price.Valid {
+				changed = append(changed, sp.VariantID.V)
+			}
+		}
+		if err := refuseAboveMRP(ctx, tx, changed, checkStorePrices); err != nil {
+			return err
+		}
 		var ok bool
 		out, ok, err = loadOne(ctx, tx, id, loadOpts{})
 		if err == nil && !ok {

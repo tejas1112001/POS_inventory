@@ -37,10 +37,11 @@ type VariantJSON struct {
 	Price       decimal.Decimal `json:"price"`
 	Cost        decimal.Decimal `json:"cost"`
 	Weight      decimal.Decimal `json:"weight"`
-	// MRP is the printed maximum retail price, tax included (null: none).
-	// AboveMRP: the price with its tax is above it (a warning, never
-	// refused).
+	// MRP is the printed maximum retail price, tax included (null: none),
+	// for MRPPack base units. AboveMRP: the price with its tax is above it
+	// (saved before the strict rule: the sale refuses it, pharmacy plan §6.2).
 	MRP              *decimal.Decimal `json:"mrp"`
+	MRPPack          decimal.Decimal  `json:"mrpPack"`
 	AboveMRP         bool             `json:"aboveMrp"`
 	Attributes       map[string]any   `json:"attributes"`
 	ExpiryDate       *string          `json:"expiryDate"`
@@ -178,7 +179,7 @@ const (
 		WHERE p.id = ANY($1) AND p.deleted_at IS NULL`
 	qLoadVariants = `SELECT v.id, v.sku::text, v.item_barcode, coalesce(sp.price, v.price), v.cost, v.weight, v.attributes,
 		to_char(v.expiry_date, 'YYYY-MM-DD'), to_char(v.manufactured_date, 'YYYY-MM-DD'), v.product_id, v.created_by, v.created_at,
-		v.updated_at, v.mrp, CASE WHEN sp.price IS NOT NULL THEN v.price END, v.scale_code
+		v.updated_at, v.mrp, v.mrp_pack, CASE WHEN sp.price IS NOT NULL THEN v.price END, v.scale_code
 		FROM product_variants v LEFT JOIN store_prices sp ON sp.variant_id = v.id AND sp.store_id = $2
 		WHERE v.product_id = ANY($1) AND v.deleted_at IS NULL ORDER BY v.id`
 	qLoadStorePrices = `SELECT sp.variant_id, sp.store_id, s.name, sp.price FROM store_prices sp
@@ -236,7 +237,7 @@ func load(ctx context.Context, tx tenancy.TenantTx, ids []int64, o loadOpts) ([]
 	for rows.Next() {
 		var v VariantJSON
 		if err := rows.Scan(&v.ID, &v.SKU, &v.ItemBarcode, &v.Price, &v.Cost, &v.Weight, &v.Attributes, &v.ExpiryDate,
-			&v.ManufacturedDate, &v.ProductID, &v.CreatedBy, &v.CreatedAt, &v.UpdatedAt, &v.MRP, &v.BasePrice, &v.ScaleCode); err != nil {
+			&v.ManufacturedDate, &v.ProductID, &v.CreatedBy, &v.CreatedAt, &v.UpdatedAt, &v.MRP, &v.MRPPack, &v.BasePrice, &v.ScaleCode); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -252,7 +253,7 @@ func load(ctx context.Context, tx tenancy.TenantTx, ids []int64, o loadOpts) ([]
 			if p.Tax != nil {
 				rate = *p.Tax
 			}
-			v.AboveMRP = pricing.AboveMRP(v.Price, rate, p.inclusive, v.MRP)
+			v.AboveMRP = pricing.AboveMRP(v.Price, rate, p.inclusive, v.MRP, v.MRPPack)
 			p.ProductVariants = append(p.ProductVariants, v)
 			variantOwner[v.ID] = p
 			variantIDs = append(variantIDs, v.ID)

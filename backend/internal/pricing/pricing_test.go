@@ -145,13 +145,53 @@ func TestRandomCartsAreConsistent(t *testing.T) {
 }
 
 func TestAboveMRP(t *testing.T) {
+	one := d("1")
 	m := d("118")
-	require.False(t, AboveMRP(d("100"), d("18"), false, &m), "exclusive 100 + 18% = 118 is at MRP")
-	require.True(t, AboveMRP(d("100.01"), d("18"), false, &m), "exclusive 100.01 + 18% is above MRP")
-	require.False(t, AboveMRP(d("118"), d("18"), true, &m), "inclusive 118 is at MRP")
-	require.True(t, AboveMRP(d("118.01"), d("18"), true, &m), "inclusive 118.01 is above MRP")
-	require.False(t, AboveMRP(d("1000"), d("18"), true, nil), "no MRP")
+	require.False(t, AboveMRP(d("100"), d("18"), false, &m, one), "exclusive 100 + 18% = 118 is at MRP")
+	require.True(t, AboveMRP(d("100.01"), d("18"), false, &m, one), "exclusive 100.01 + 18% is above MRP")
+	require.False(t, AboveMRP(d("118"), d("18"), true, &m, one), "inclusive 118 is at MRP")
+	require.True(t, AboveMRP(d("118.01"), d("18"), true, &m, one), "inclusive 118.01 is above MRP")
+	require.False(t, AboveMRP(d("1000"), d("18"), true, nil, one), "no MRP")
 	eq(t, "59", TaxInclusive(d("50"), d("18"), false), "tax added")
+
+	// Pharmacy plan §6.2: MRP printed per pack.
+	strip := d("35")
+	require.False(t, AboveMRP(d("3.5"), d("0"), true, &strip, d("10")), "₹3.50 a tablet: strip ₹35.00 = MRP")
+	require.True(t, AboveMRP(d("3.51"), d("0"), true, &strip, d("10")), "₹3.51 a tablet: strip ₹35.10")
+	require.True(t, AboveMRP(d("33"), d("12"), false, &strip, d("1")), "₹33 + 12% = ₹36.96 above ₹35")
+	fifteen := d("25")
+	require.False(t, AboveMRP(d("1.66"), d("0"), true, &fifteen, d("15")), "₹1.66 a tablet of a ₹25/15 strip")
+	require.True(t, AboveMRP(d("1.6667"), d("0"), true, &fifteen, d("15")), "one loose tablet would cost ₹1.67, its share is ₹1.66")
+	require.True(t, AboveMRP(d("1.67"), d("0"), true, &fifteen, d("15")), "strip of 15 at ₹1.67 = ₹25.05")
+}
+
+// TestLineMRP is the examples table of the pharmacy plan §6.2.
+func TestLineMRP(t *testing.T) {
+	part := func(mrp, pack, q string) MRPPart {
+		return MRPPart{MRP: d(mrp), Pack: d(pack), Qty: qty.Must(q)}
+	}
+	cases := []struct {
+		name  string
+		parts []MRPPart
+		want  string
+	}{
+		{"1 tablet of a ₹35/10 strip", []MRPPart{part("35", "10", "1")}, "3.5"},
+		{"3 tablets", []MRPPart{part("35", "10", "3")}, "10.5"},
+		{"1 strip", []MRPPart{part("35", "10", "10")}, "35"},
+		{"1 box of 100", []MRPPart{part("35", "10", "100")}, "350"},
+		{"1 tablet of a ₹25/15 strip rounds down", []MRPPart{part("25", "15", "1")}, "1.66"},
+		{"2 tablets of a ₹25/15 strip", []MRPPart{part("25", "15", "2")}, "3.33"},
+		{"a whole ₹25/15 strip is exact", []MRPPart{part("25", "15", "15")}, "25"},
+		{"two batches, different MRPs", []MRPPart{part("35", "10", "6"), part("38", "10", "4")}, "36.2"},
+		{"two batches, different packs", []MRPPart{part("25", "15", "5"), part("25", "15", "10"), part("35", "10", "10")}, "60"},
+		{"thirds that sum to a whole", []MRPPart{part("1", "3", "1"), part("2", "3", "1")}, "1"},
+		{"pack 0 means 1", []MRPPart{part("12.5", "0", "2")}, "25"},
+		{"half a kilo", []MRPPart{part("80", "1", "0.5")}, "40"},
+		{"nothing", nil, "0"},
+	}
+	for _, c := range cases {
+		eq(t, c.want, LineMRP(c.parts), c.name)
+	}
 }
 
 // M3: CGST + UTGST splits like CGST + SGST (the UTGST half in SGST).

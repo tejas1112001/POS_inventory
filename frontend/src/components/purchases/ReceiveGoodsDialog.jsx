@@ -17,7 +17,7 @@ const smallCls =
   'h-11 w-full min-w-0 rounded-md border border-input bg-background px-2 text-base outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 sm:h-8 sm:text-sm';
 
 const outstanding = (i) => Math.max(0, roundQty((Number(i.quantity) || 0) - (Number(i.received_qty) || 0)));
-const emptyBatch = () => ({ batchNo: '', expiry: '', mrp: '', quantity: '' });
+const emptyBatch = () => ({ batchNo: '', expiry: '', mrp: '', mrpPack: '', quantity: '' });
 
 // ReceiveGoodsDialog (industry P1 item 8, A16): what arrived now, per
 // purchase line, up to what is still outstanding. A scan (SKU or barcode)
@@ -104,7 +104,9 @@ export default function ReceiveGoodsDialog({ purchase, onClose, onDone }) {
               quantity: num(i.id),
               batches: batches[i.id]
                 .filter((b) => Number(b.quantity) > 0)
-                .map((b) => ({ batchNo: b.batchNo, expiry: b.expiry, mrp: b.mrp === '' ? null : b.mrp, quantity: Number(b.quantity) })),
+                .map((b) => ({ batchNo: b.batchNo, expiry: b.expiry, mrp: b.mrp === '' ? null : b.mrp,
+                  ...(Number(b.mrpPack) > 0 ? { mrpPack: Number(b.mrpPack) } : {}),
+                  quantity: Number(b.quantity) })),
             }
           : { purchaseItemId: i.id, quantity: num(i.id) }
       );
@@ -196,7 +198,7 @@ export default function ReceiveGoodsDialog({ purchase, onClose, onDone }) {
                         ))}
                         <div className="mt-2 space-y-2">
                           {batches[i.id].map((b, j) => (
-                            <div key={j} className="grid grid-cols-2 gap-2 sm:grid-cols-[1fr_8rem_6rem_5rem_auto]">
+                            <div key={j} className="grid grid-cols-2 gap-2 sm:grid-cols-[1fr_8rem_6rem_4.5rem_5rem_auto]">
                               <input
                                 className={smallCls}
                                 aria-label={`Batch number ${j + 1}: ${i.product_name}`}
@@ -220,6 +222,15 @@ export default function ReceiveGoodsDialog({ purchase, onClose, onDone }) {
                                 inputMode="decimal"
                                 value={b.mrp}
                                 onChange={(e) => setBatch(i.id, j, 'mrp', e.target.value)}
+                              />
+                              <input
+                                className={smallCls}
+                                aria-label={`MRP is for how many units, batch ${j + 1}: ${i.product_name}`}
+                                title="How many units the printed MRP is for (10 for a strip of 10). Empty: the product's."
+                                placeholder="for units"
+                                inputMode="decimal"
+                                value={b.mrpPack}
+                                onChange={(e) => setBatch(i.id, j, 'mrpPack', e.target.value)}
                               />
                               <input
                                 type="number"

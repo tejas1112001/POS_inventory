@@ -131,6 +131,11 @@ export default function Products() {
         description="What you sell. Each product has one or more options (size, colour…) with their own SKU, price and stock."
         actions={
           <div className="flex flex-wrap gap-2">
+            {hasPermission('products', 'edit') && (
+              <Button type="button" variant="outline" className="max-sm:h-11" onClick={() => navigate('/products/above-mrp')}>
+                Prices above MRP
+              </Button>
+            )}
             {hasPermission('products', 'import') && (
               <Button type="button" variant="outline" className="max-sm:h-11" onClick={() => setImporting(true)}>
                 <Upload className="size-4" aria-hidden="true" /> Import CSV

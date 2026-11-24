@@ -311,7 +311,11 @@ type variantRow struct {
 	taxType       *string
 	taxRate       *decimal.Decimal
 	mrp           *decimal.Decimal // the variant's MRP; a batch's MRP wins (lineMRP)
+	mrpPack       decimal.Decimal  // base units the MRP is printed for (00046)
 	fractional    bool             // H3: sold in part units
+	// needsMRP: a batch-tracked product of a pharmacy shop, which cannot
+	// be sold without an MRP (pharmacy plan §6.2).
+	needsMRP bool
 }
 
 const (
@@ -319,7 +323,8 @@ const (
 		LEFT JOIN product_variants v ON v.product_id = p.id AND v.deleted_at IS NULL
 		WHERE p.id = ANY($1) AND p.deleted_at IS NULL GROUP BY p.id`
 	// The price is the store's (store_prices) when it has one, else the variant's.
-	qVariants = `SELECT v.id, v.product_id, v.sku::text, coalesce(sp.price, v.price), p.name, p.status, p.tax_type, p.tax_rate, v.mrp, p.allow_fraction
+	qVariants = `SELECT v.id, v.product_id, v.sku::text, coalesce(sp.price, v.price), p.name, p.status, p.tax_type, p.tax_rate, v.mrp, v.mrp_pack, p.allow_fraction,
+		p.tracks_batches AND (SELECT business_type FROM settings WHERE id = 1) = 'pharmacy'
 		FROM product_variants v JOIN products p ON p.id = v.product_id
 		LEFT JOIN store_prices sp ON sp.variant_id = v.id AND sp.store_id = $2
 		WHERE v.id = ANY($1) AND v.deleted_at IS NULL AND p.deleted_at IS NULL`
@@ -385,7 +390,8 @@ func resolve(ctx context.Context, tx tenancy.TenantTx, lines []line, storeID int
 	byID := map[int64]variantRow{}
 	for rows.Next() {
 		var v variantRow
-		if err := rows.Scan(&v.id, &v.productID, &v.sku, &v.price, &v.productName, &v.status, &v.taxType, &v.taxRate, &v.mrp, &v.fractional); err != nil {
+		if err := rows.Scan(&v.id, &v.productID, &v.sku, &v.price, &v.productName, &v.status, &v.taxType, &v.taxRate, &v.mrp, &v.mrpPack, &v.fractional,
+			&v.needsMRP); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -621,8 +627,8 @@ func nextReference(ctx context.Context, tx tenancy.TenantTx, prefix string) (str
 // dimensions (industry P1 item 4, DB8); NULL otherwise.
 const qInsertItem = `INSERT INTO order_items (sale_id, product_id, variant_id, product_name, sku, quantity, unit_price,
 		catalog_price, discount, tax_type, tax_rate, tax_amount, cgst, sgst, igst, subtotal, mrp, mrp_amount, unit_name, unit_factor, unit_qty,
-		unit_id, hsn_code, variant_label)
-	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22,
+		unit_id, mrp_pack, hsn_code, variant_label)
+	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23,
 		(SELECT hsn_code FROM products WHERE id = $2),
 		(SELECT string_agg(CASE WHEN d.k = 'size' AND coalesce(p.attributes ->> 'size_system', '') <> ''
 		          THEN (p.attributes ->> 'size_system') || ' ' ELSE '' END || (v.attributes ->> d.k), ' / ' ORDER BY d.ord)
@@ -633,15 +639,20 @@ const qInsertItem = `INSERT INTO order_items (sale_id, product_id, variant_id, p
 
 // insertItems writes the order lines in one batch (one round trip) and
 // returns their IDs in line order. Each line keeps its MRP at sale time,
-// from the batches it is sold from (sb) or the variant.
+// from the batches it is sold from (sb) or the variant. Every sale line
+// is written here (sale, edit, exchange), so the MRP rule (checkMRP) is
+// applied here and no path can skip it.
 func insertItems(ctx context.Context, tx tenancy.TenantTx, saleID int64, p priced, sb saleBatches) ([]int64, error) {
+	if err := checkMRP(p, sb); err != nil {
+		return nil, err
+	}
 	b := &pgx.Batch{}
 	for i, l := range p.lines {
-		unitMRP, mrpAmount := lineMRP(l, sb.sold[i])
+		m := lineMRP(l, sb.sold[i])
 		un, uf, uq := l.line.unit.columns()
 		b.Queue(qInsertItem, saleID, l.v.productID, l.v.id, l.v.productName, l.v.sku, l.qty, l.unit,
-			l.catalog, l.q.Discount, l.taxType, l.taxRate, l.q.Tax, l.q.CGST, l.q.SGST, l.q.IGST, l.q.Total, unitMRP, mrpAmount, un, uf, uq,
-			l.line.unit.unitID())
+			l.catalog, l.q.Discount, l.taxType, l.taxRate, l.q.Tax, l.q.CGST, l.q.SGST, l.q.IGST, l.q.Total, m.unit, m.amount, un, uf, uq,
+			l.line.unit.unitID(), m.pack)
 	}
 	br := tx.SendBatch(ctx, b)
 	ids := make([]int64, len(p.lines))
@@ -654,45 +665,113 @@ func insertItems(ctx context.Context, tx tenancy.TenantTx, saleID int64, p price
 	return ids, br.Close()
 }
 
-// lineMRP is a line's MRP: one unit's (nil when unknown or when its
-// batches carry different MRPs) and the whole line's, summed over its
-// batches (nil when any unit has none). A batch's MRP wins over the
+// mrpOf is a line's MRP. unit and pack: the printed MRP and the pack it
+// is printed for, when all its batches share them (nil otherwise).
+// amount: the most the whole line may cost (pricing.LineMRP), nil when
+// any of it has no MRP.
+type mrpOf struct {
+	unit, pack, amount *decimal.Decimal
+}
+
+// lineMRP is a line's MRP at sale time, summed over its batches. A
+// batch's MRP wins over the variant's; a batch with none takes the
 // variant's.
-func lineMRP(l pricedLine, sold []batches.Sold) (unit, amount *decimal.Decimal) {
+func lineMRP(l pricedLine, sold []batches.Sold) mrpOf {
+	var parts []pricing.MRPPart
 	if len(sold) == 0 {
 		if l.v.mrp == nil {
-			return nil, nil
+			return mrpOf{}
 		}
-		a := l.v.mrp.Mul(l.qty.Decimal())
-		return l.v.mrp, &a
+		parts = []pricing.MRPPart{{MRP: *l.v.mrp, Pack: l.v.mrpPack, Qty: l.qty}}
 	}
-	total := decimal.Zero
-	same := true
 	for _, s := range sold {
-		m := s.MRP
+		m, pack := s.MRP, s.MRPPack
 		if m == nil {
-			m = l.v.mrp
+			m, pack = l.v.mrp, l.v.mrpPack
 		}
 		if m == nil {
-			return nil, nil
+			return mrpOf{}
 		}
-		if unit == nil {
-			unit = m
-		} else if !unit.Equal(*m) {
+		parts = append(parts, pricing.MRPPart{MRP: *m, Pack: pack, Qty: s.Qty})
+	}
+	var out mrpOf
+	same := true
+	for i, pt := range parts {
+		if i > 0 && (!pt.MRP.Equal(parts[0].MRP) || !packOne(pt.Pack).Equal(packOne(parts[0].Pack))) {
 			same = false
 		}
-		total = total.Add(m.Mul(s.Qty.Decimal()))
 	}
-	if !same {
-		unit = nil
+	if same {
+		u, pk := parts[0].MRP, packOne(parts[0].Pack)
+		out.unit, out.pack = &u, &pk
 	}
-	return unit, &total
+	a := pricing.LineMRP(parts)
+	out.amount = &a
+	return out
+}
+
+// packOne is a pack size, 1 when unset.
+func packOne(p decimal.Decimal) decimal.Decimal {
+	if !p.IsPositive() {
+		return decimal.NewFromInt(1)
+	}
+	return p
+}
+
+// packOf is the pack kept with a copied MRP: nil when there is no MRP.
+func packOf(mrp *decimal.Decimal, pack decimal.Decimal) *decimal.Decimal {
+	if mrp == nil {
+		return nil
+	}
+	p := packOne(pack)
+	return &p
 }
 
 // aboveMRP reports whether a line costs the customer more than its MRP
-// (tax and the discount share included). Warned about, never refused.
+// (tax and the discount share included).
 func aboveMRP(total decimal.Decimal, mrpAmount *decimal.Decimal) bool {
 	return mrpAmount != nil && total.GreaterThan(*mrpAmount)
+}
+
+// mrpProblem is one line the MRP rule refuses.
+type mrpProblem struct {
+	Index       int              `json:"index"`
+	VariantID   int64            `json:"variantId"`
+	ProductName string           `json:"productName"`
+	Total       decimal.Decimal  `json:"total"`
+	MRPAmount   *decimal.Decimal `json:"mrpAmount"` // nil: the product has no MRP (MRP_REQUIRED)
+}
+
+// mrpProblems lists the lines above their MRP, and the lines of a
+// pharmacy's batch-tracked products that have no MRP (pharmacy plan §6.2).
+func mrpProblems(p priced, sb saleBatches) (above, missing []mrpProblem) {
+	for i, l := range p.lines {
+		m := lineMRP(l, sb.sold[i])
+		pr := mrpProblem{Index: i, VariantID: l.v.id, ProductName: l.v.productName, Total: l.q.Total, MRPAmount: m.amount}
+		switch {
+		case aboveMRP(l.q.Total, m.amount):
+			above = append(above, pr)
+		case m.amount == nil && l.v.needsMRP:
+			missing = append(missing, pr)
+		}
+	}
+	return above, missing
+}
+
+// checkMRP refuses a sale with a line above its MRP (409 ABOVE_MRP) or a
+// pharmacy medicine without one (409 MRP_REQUIRED). Details: the lines.
+func checkMRP(p priced, sb saleBatches) error {
+	above, missing := mrpProblems(p, sb)
+	if len(above) > 0 {
+		l := above[0]
+		return apperr.Conflict(apperr.CodeAboveMRP, l.ProductName+": "+mrpWarning(l.Total, *l.MRPAmount)+" Lower the price or add a discount.").
+			WithDetails(map[string]any{"lines": above})
+	}
+	if len(missing) > 0 {
+		return apperr.Conflict(apperr.CodeMRPRequired, missing[0].ProductName+" has no MRP. Add the MRP to the product or its batch before selling it.").
+			WithDetails(map[string]any{"lines": missing})
+	}
+	return nil
 }
 
 // mrpWarning is the line warning for a line above its MRP.

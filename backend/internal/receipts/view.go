@@ -145,10 +145,11 @@ const (
 			i.cgst, i.sgst, i.igst, i.subtotal, v.attributes, i.variant_label, i.hsn_code,
 			(SELECT string_agg(x.t || CASE WHEN x.n > 1 THEN ' × ' || x.quantity ELSE '' END, '; ' ORDER BY x.e NULLS LAST, x.b)
 			 FROM (SELECT CASE WHEN ob.is_unknown THEN 'No batch' ELSE 'Batch ' || ob.batch_no END
-					|| coalesce(' · Exp ' || to_char(ob.expiry_date, 'MM/YYYY'), '') || coalesce(' · MRP ' || to_char(ob.mrp, 'FM9999999990.00'), '') AS t,
+					|| coalesce(' · Exp ' || to_char(ob.expiry_date, 'MM/YYYY'), '') || coalesce(' · MRP ' || to_char(ob.mrp, 'FM9999999990.00')
+						|| CASE WHEN ob.mrp_pack IS NOT NULL AND ob.mrp_pack <> 1 THEN '/' || trim_scale(ob.mrp_pack) ELSE '' END, '') AS t,
 					ob.quantity, ob.expiry_date AS e, ob.batch_id AS b, count(*) OVER () AS n
 				FROM order_item_batches ob WHERE ob.order_item_id = i.id) x),
-			i.mrp, i.mrp_amount, i.unit_name, i.unit_qty
+			i.mrp, i.mrp_amount, i.unit_name, i.unit_qty, i.mrp_pack
 		FROM order_items i LEFT JOIN product_variants v ON v.id = i.variant_id
 		WHERE i.sale_id = $1 ORDER BY i.id`
 	qLogo = `SELECT storage_key FROM files WHERE id = $1`
@@ -330,12 +331,12 @@ func Load(ctx context.Context, tx tenancy.TenantTx, receiptID int64) (View, erro
 			cgst, sgst, igst                *decimal.Decimal
 			attrs                           []byte
 			label, hsn, batch               *string
-			mrp, mrpAmount                  *decimal.Decimal
+			mrp, mrpAmount, mrpPack         *decimal.Decimal
 			unitName                        *string
 			unitQty                         *qty.Q
 		)
 		if err := rows.Scan(&name, &sku, &n, &unit, &ldisc, &rate, &ltax, &cgst, &sgst, &igst, &ltotal, &attrs, &label, &hsn, &batch,
-			&mrp, &mrpAmount, &unitName, &unitQty); err != nil {
+			&mrp, &mrpAmount, &unitName, &unitQty, &mrpPack); err != nil {
 			return v, err
 		}
 		// The sale-time label ("M / Blue", industry P1 item 4) wins over
@@ -354,6 +355,9 @@ func Load(ctx context.Context, tx tenancy.TenantTx, receiptID int64) (View, erro
 			// A batch line already names its batch's MRP.
 			if mrp != nil && !strings.Contains(ln.Batch, "MRP") {
 				ln.MRP = f.Money(*mrp)
+				if mrpPack != nil && !mrpPack.Equal(decimal.NewFromInt(1)) {
+					ln.MRP += "/" + mrpPack.String() // printed per pack: "₹35.00/10"
+				}
 			}
 			if mrpAmount != nil {
 				mrpTotal, mrpPaid = mrpTotal.Add(*mrpAmount), mrpPaid.Add(ltotal)

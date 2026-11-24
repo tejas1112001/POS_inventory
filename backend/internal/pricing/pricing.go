@@ -155,8 +155,10 @@ func split(tax decimal.Decimal, mode string, exp int32) (cgst, sgst, igst *decim
 	}
 }
 
-// MRP (maximum retail price) is the most one unit may cost the customer,
-// tax included. Selling above it is warned about, never refused.
+// MRP (maximum retail price) is the most the customer may pay, tax
+// included. Selling above it is refused (pharmacy compliance plan §6.2).
+// An MRP is printed for a pack of base units (a strip of 10 tablets: pack
+// 10); pack 1 is one base unit.
 
 // TaxInclusive is one unit's price with its tax: the price itself when it
 // already includes the tax, else price × (1 + rate/100).
@@ -167,9 +169,64 @@ func TaxInclusive(price, rate decimal.Decimal, inclusive bool) decimal.Decimal {
 	return price.Add(price.Mul(rate).Div(hundred))
 }
 
-// AboveMRP reports whether one unit at price costs more than mrp once tax
-// is added. A nil mrp is never exceeded. Compared at 2 decimals, as MRP is
-// stored.
-func AboveMRP(price, rate decimal.Decimal, inclusive bool, mrp *decimal.Decimal) bool {
-	return mrp != nil && TaxInclusive(price, rate, inclusive).Round(2).GreaterThan(*mrp)
+// MRPPart is a quantity taken at one printed MRP (one batch of a line).
+type MRPPart struct {
+	MRP  decimal.Decimal
+	Pack decimal.Decimal // base units the MRP is printed for; zero or less means 1
+	Qty  qty.Q
+}
+
+// mrpEpsilon absorbs the last digit of a non-terminating division (₹25.00
+// for 15 tablets × 15) so an exact paisa is not rounded down by one.
+var mrpEpsilon = decimal.New(1, -12)
+
+// LineMRP is the most a line made of parts may cost: Σ qty × MRP ÷ pack,
+// computed exactly, then rounded down to the paisa, so a customer never
+// pays even part of a paisa above MRP. Parts printed for the same pack are
+// summed before dividing, which keeps the usual cases exact.
+func LineMRP(parts []MRPPart) decimal.Decimal {
+	type group struct{ pack, num decimal.Decimal }
+	var groups []*group
+	for _, pt := range parts {
+		pack := pt.Pack
+		if !pack.IsPositive() {
+			pack = decimal.NewFromInt(1)
+		}
+		var g *group
+		for _, x := range groups {
+			if x.pack.Equal(pack) {
+				g = x
+				break
+			}
+		}
+		if g == nil {
+			g = &group{pack: pack}
+			groups = append(groups, g)
+		}
+		g.num = g.num.Add(pt.Qty.Decimal().Mul(pt.MRP))
+	}
+	total := decimal.Zero
+	for _, g := range groups {
+		total = total.Add(g.num.DivRound(g.pack, 20))
+	}
+	return total.Add(mrpEpsilon).RoundFloor(2)
+}
+
+// AboveMRP reports whether a price per base unit, with tax, breaks an MRP
+// printed for pack base units: the whole pack costs more than the MRP, or
+// one base unit sold loose costs more than its share (LineMRP of one
+// unit). Compared at 2 decimals, as money is charged. A nil mrp is never
+// exceeded; a zero or negative pack means 1.
+func AboveMRP(price, rate decimal.Decimal, inclusive bool, mrp *decimal.Decimal, pack decimal.Decimal) bool {
+	if mrp == nil {
+		return false
+	}
+	if !pack.IsPositive() {
+		pack = decimal.NewFromInt(1)
+	}
+	withTax := TaxInclusive(price, rate, inclusive)
+	if withTax.Mul(pack).Round(2).GreaterThan(*mrp) {
+		return true
+	}
+	return withTax.Round(2).GreaterThan(LineMRP([]MRPPart{{MRP: *mrp, Pack: pack, Qty: qty.Int(1)}}))
 }

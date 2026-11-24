@@ -67,11 +67,11 @@ func TestBatchImport(t *testing.T) {
 	// expired row (reported, not imported), one near-expiry row (imported,
 	// warned), MM/YYYY dates.
 	good := workbook(t, hdr,
-		[]string{"Para 500", "BI-PARA", "8901234500011", "30", "18", "12", "P1", monthYear, "01/2025", "32", "", "10"},
-		[]string{"Para 500", "BI-PARA", "8901234500011", "30", "18", "12", "P2", soon, "", "31", "", "4"},
-		[]string{"Para 500", "BI-PARA", "8901234500011", "30", "18", "12", "P1", monthYear, "", "32", slug2, "6"},
-		[]string{"Para 500", "BI-PARA", "8901234500011", "30", "18", "12", "OLD", exp(-3), "", "", "", "7"},
-		[]string{"Cough syrup", "BI-SYR", "", "90", "60", "12", "S1", exp(400), "", "95", slug2, "3"},
+		[]string{"Para 500", "BI-PARA", "8901234500011", "25", "18", "12", "P1", monthYear, "01/2025", "32", "", "10"},
+		[]string{"Para 500", "BI-PARA", "8901234500011", "25", "18", "12", "P2", soon, "", "31", "", "4"},
+		[]string{"Para 500", "BI-PARA", "8901234500011", "25", "18", "12", "P1", monthYear, "", "32", slug2, "6"},
+		[]string{"Para 500", "BI-PARA", "8901234500011", "25", "18", "12", "OLD", exp(-3), "", "", "", "7"},
+		[]string{"Cough syrup", "BI-SYR", "", "80", "60", "12", "S1", exp(400), "", "95", slug2, "3"},
 	)
 	r = uploadFile(t, l, tok, "good.xlsx", good, true)
 	require.Equal(t, 200, r.Code, r.Raw)

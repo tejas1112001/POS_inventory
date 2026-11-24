@@ -18,6 +18,7 @@ import { usePos } from '@/hooks/usePos';
 import { useShopSettings } from '@/hooks/useShopSettings';
 import { isRetryable, newIdempotencyKey, priceChanges } from '@/lib/checkout';
 import { formatCurrency } from '@/lib/format';
+import { mrpText } from '@/lib/mrp';
 import { beep, findByCode } from '@/lib/scan';
 import { useScanner } from '@/hooks/useScanner';
 import { cn } from '@/lib/utils';
@@ -195,9 +196,12 @@ export default function Checkout() {
     } else if (!usable.length) c.setProblem(`Nothing matches "${search.trim()}".`);
   };
 
+  // Strict MRP (pharmacy plan §6.2): a line above its MRP, or a pharmacy
+  // medicine with no MRP, cannot be paid for; the server refuses it too.
+  const mrpBlocked = (c.quote?.data?.lines || []).some((x) => x.aboveMrp || x.mrpRequired);
   const openPay = useCallback(() => {
-    if (lines.length && c.quoteReady) setPayOpen(true);
-  }, [lines.length, c.quoteReady]);
+    if (lines.length && c.quoteReady && !mrpBlocked) setPayOpen(true);
+  }, [lines.length, c.quoteReady, mrpBlocked]);
 
   // Held bills (S10 item 7): park the cart, or load a parked one.
   const holdBill = async (label) => {
@@ -438,12 +442,15 @@ export default function Checkout() {
                         <p className="text-xs text-slate-600 tabular-nums dark:text-slate-300">
                           {l.unitId ? `${formatCurrency(l.price * l.factor)} per ${l.unitName}` : `${formatCurrency(l.price)} each`}
                           {ql && Number(ql.taxRate) > 0 ? ` · tax ${Number(ql.taxRate)}%` : ''}
-                          {ql?.mrp != null ? ` · MRP ${formatCurrency(ql.mrp)}` : ''}
+                          {ql?.mrp != null ? ` · MRP ${mrpText(ql.mrp, ql.mrpPack, formatCurrency)}` : ''}
                         </p>
                         {ql?.aboveMrp && (
-                          <p className="mt-0.5 text-xs font-medium text-warning-fg">
-                            Above MRP: {formatCurrency(ql.total)} for MRP {formatCurrency(ql.mrpAmount)}. The sale is still allowed.
+                          <p className="mt-0.5 text-xs font-medium text-danger">
+                            Above MRP: {formatCurrency(ql.total)} for MRP {formatCurrency(ql.mrpAmount)}. Lower the price or add a discount to sell it.
                           </p>
+                        )}
+                        {ql?.mrpRequired && (
+                          <p className="mt-0.5 text-xs font-medium text-danger">No MRP recorded. Add the MRP to the product or its batch to sell it.</p>
                         )}
                         {ql?.batches?.length > 0 && (
                           <div className="mt-0.5 text-xs text-slate-600 dark:text-slate-300">
@@ -599,7 +606,10 @@ export default function Checkout() {
             </button>
           </InlineAlert>
         )}
-        <Button className="h-12 w-full text-base font-bold" disabled={!lines.length || !c.quoteReady || !!q?.batchProblem} onClick={openPay}>
+        {mrpBlocked && (
+          <InlineAlert className="text-xs">A line is above its MRP or has no MRP. Fix it to take payment.</InlineAlert>
+        )}
+        <Button className="h-12 w-full text-base font-bold" disabled={!lines.length || !c.quoteReady || !!q?.batchProblem || mrpBlocked} onClick={openPay}>
           <Banknote className="size-5" aria-hidden="true" /> PAY {formatCurrency(total)}
           <span className="hidden text-xs font-normal lg:inline">F10</span>
         </Button>

@@ -38,11 +38,15 @@ type quoteLine struct {
 	// the line's warnings. Empty for untracked products.
 	Batches  []ItemBatchJSON `json:"batches"`
 	Warnings []string        `json:"warnings"`
-	// MRP of one unit (null when unknown or the batches differ) and of the
-	// line; AboveMRP: the line total is above it (a warning only).
-	MRP       *decimal.Decimal `json:"mrp"`
-	MRPAmount *decimal.Decimal `json:"mrpAmount"`
-	AboveMRP  bool             `json:"aboveMrp"`
+	// MRP as printed and the pack (base units) it is printed for (null
+	// when unknown or the batches differ), and the most the line may cost.
+	// AboveMRP: the line costs more; MRPRequired: a pharmacy medicine with
+	// no MRP. Either refuses the sale (pharmacy plan §6.2).
+	MRP         *decimal.Decimal `json:"mrp"`
+	MRPPack     *decimal.Decimal `json:"mrpPack"`
+	MRPAmount   *decimal.Decimal `json:"mrpAmount"`
+	AboveMRP    bool             `json:"aboveMrp"`
+	MRPRequired bool             `json:"mrpRequired"`
 }
 
 type quoteJSON struct {
@@ -165,9 +169,14 @@ func (a *API) quote(w http.ResponseWriter, r *http.Request) {
 				Batches: soldJSON(sb.sold[i]), Warnings: lineWarnings(sb.sold[i])}
 			ql.UnitName, ql.UnitFactor, ql.UnitQty = l.line.unit.columns()
 			ql.UnitID = l.line.unit.unitID()
-			ql.MRP, ql.MRPAmount = lineMRP(l, sb.sold[i])
+			m := lineMRP(l, sb.sold[i])
+			ql.MRP, ql.MRPPack, ql.MRPAmount = m.unit, m.pack, m.amount
 			if ql.AboveMRP = aboveMRP(l.q.Total, ql.MRPAmount); ql.AboveMRP {
-				ql.Warnings = append(ql.Warnings, mrpWarning(l.q.Total, *ql.MRPAmount))
+				ql.Warnings = append(ql.Warnings, mrpWarning(l.q.Total, *ql.MRPAmount)+" The sale is refused until the price is at or below the MRP.")
+			}
+			ql.MRPRequired = m.amount == nil && l.v.needsMRP
+			if ql.MRPRequired {
+				ql.Warnings = append(ql.Warnings, "No MRP recorded. Add the MRP to the product or its batch before selling it.")
 			}
 			out.Lines = append(out.Lines, ql)
 		}

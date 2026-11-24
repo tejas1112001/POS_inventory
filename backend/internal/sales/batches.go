@@ -100,8 +100,8 @@ func insertSoldBatches(ctx context.Context, tx tenancy.TenantTx, itemIDs []int64
 		}
 		for _, id := range order {
 			r := merged[id]
-			if _, err := tx.Exec(ctx, `INSERT INTO order_item_batches (order_item_id, batch_id, quantity, chosen, is_unknown, batch_no, expiry_date, mrp)
-				VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`, itemIDs[i], id, r.s.Qty, r.chosen, r.s.Unknown, r.s.BatchNo, r.s.Expiry, r.s.MRP); err != nil {
+			if _, err := tx.Exec(ctx, `INSERT INTO order_item_batches (order_item_id, batch_id, quantity, chosen, is_unknown, batch_no, expiry_date, mrp, mrp_pack)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`, itemIDs[i], id, r.s.Qty, r.chosen, r.s.Unknown, r.s.BatchNo, r.s.Expiry, r.s.MRP, packOf(r.s.MRP, r.s.MRPPack)); err != nil {
 				return err
 			}
 		}

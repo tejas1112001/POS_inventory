@@ -24,8 +24,9 @@ func bline(item any, qty int, batches ...map[string]any) map[string]any {
 	return l
 }
 
+// bat is a received batch; a pharmacy needs its MRP (pharmacy plan §6.2).
 func bat(no, expiry string, qty int) map[string]any {
-	return map[string]any{"batchNo": no, "expiry": expiry, "quantity": qty}
+	return map[string]any{"batchNo": no, "expiry": expiry, "quantity": qty, "mrp": 500}
 }
 
 // pharmacyShop provisions a shop with the pharmacy preset (batch_expiry on).

@@ -168,6 +168,10 @@ type importResult struct {
 
 var errDryRun = errors.New("dry run")
 
+// errImportRows rolls back an import whose rows failed a check made while
+// the products were being written (the MRP rule).
+var errImportRows = errors.New("import rows failed")
+
 // ---- A12: templates ----
 
 func (a *API) importTemplate(w http.ResponseWriter, r *http.Request) {
@@ -775,6 +779,7 @@ func (a *API) runImport(ctx context.Context, t tenancy.Tenant, uid int64, raw []
 			if ph.file {
 				variantRows = g.rows[:1] // one variant; the rows are its batches
 			}
+			errsBefore := len(rowErrs)
 			for i, ir := range variantRows {
 				cv := cleanVariant{sku: ir.vals["sku"], price: ir.price, cost: ir.cost, mrp: ir.mrp, attributes: []byte("{}")}
 				// The product's tax comes from its first row.
@@ -782,8 +787,21 @@ func (a *API) runImport(ctx context.Context, t tenancy.Tenant, uid int64, raw []
 				if c.taxType != nil {
 					inclusive = *c.taxType == "Inclusive"
 				}
-				if pricing.AboveMRP(ir.price, first.taxRate, inclusive, ir.mrp) {
-					warn(ir.line, "mrp", "The price with tax is above the MRP. The product is imported; check the price.")
+				// Strict MRP (pharmacy plan §6.2): the variant's MRP, or in the
+				// pharmacy template each batch's; MRPs import for one base unit.
+				one := decimal.NewFromInt(1)
+				if pricing.AboveMRP(ir.price, first.taxRate, inclusive, ir.mrp, one) {
+					addErr(ir.line, "price", "The price with tax is above the MRP. Lower the price or correct the MRP.")
+				}
+				if ph.file {
+					for _, br := range g.rows {
+						if br.b.expired { // not imported
+							continue
+						}
+						if pricing.AboveMRP(ir.price, first.taxRate, inclusive, br.b.mrp, one) {
+							addErr(br.line, "price", "The price with tax is above this batch's MRP. Lower the price or correct the MRP.")
+						}
+					}
 				}
 				if len(g.checked.Dims) > 0 {
 					cv.attrMap = g.checked.Variants[i]
@@ -809,6 +827,9 @@ func (a *API) runImport(ctx context.Context, t tenancy.Tenant, uid int64, raw []
 				c.variants = append(c.variants, cv)
 				pp.Variants = append(pp.Variants, pv)
 			}
+			if len(rowErrs) > errsBefore { // above MRP: reported, the import is rolled back below
+				continue
+			}
 			pid, err := createProductWith(ctx, tx, c, nil, uid, inventory.ReasonImport, "product.import_create")
 			if err != nil {
 				return err
@@ -833,6 +854,9 @@ func (a *API) runImport(ctx context.Context, t tenancy.Tenant, uid int64, raw []
 				res.Preview = append(res.Preview, pp)
 			}
 		}
+		if len(rowErrs) > 0 { // found while building (above MRP): nothing is imported
+			return errImportRows
+		}
 		if err := startImportTracking(ctx, tx, tracked, uid); err != nil {
 			return err
 		}
@@ -845,6 +869,9 @@ func (a *API) runImport(ctx context.Context, t tenancy.Tenant, uid int64, raw []
 		}
 		return nil
 	})
+	if errors.Is(err, errImportRows) {
+		res, err = importResult{}, nil
+	}
 	if errors.Is(err, errDryRun) {
 		res.DryRun = true
 		err = nil
