@@ -114,6 +114,7 @@ export const TITLES = {
   '/add-sales-return': 'New return',
   '/invoices': 'Invoices & dues',
   '/products': 'Products',
+  '/products/above-mrp': 'Prices above MRP',
   '/add-product': 'Add product',
   '/inventory': 'Stock',
   '/stock-adjustments': 'Adjustments & history',

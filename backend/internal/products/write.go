@@ -41,7 +41,10 @@ type variantIn struct {
 	Weight      money.Dec `json:"weight"`
 	// MRP is the printed maximum retail price, tax included. Left out: kept
 	// as it is (older clients never clear it); null clears it.
-	MRP              money.Dec      `json:"mrp"`
+	MRP money.Dec `json:"mrp"`
+	// MRPPack is the number of base units the MRP is printed for (a strip
+	// of 10 tablets: 10). Left out: kept (new variants: 1).
+	MRPPack          money.Dec      `json:"mrpPack"`
 	Attributes       map[string]any `json:"attributes"`
 	ExpiryDate       money.Date     `json:"expiryDate"`
 	ManufacturedDate money.Date     `json:"manufacturedDate"`
@@ -86,6 +89,7 @@ type productIn struct {
 	ItemBarcode      *string    `json:"itemBarcode"`
 	Price            money.Dec  `json:"price"`
 	MRP              money.Dec  `json:"mrp"`
+	MRPPack          money.Dec  `json:"mrpPack"`
 	Quantity         qty.In     `json:"quantity"`
 	QuantityAlert    qty.In     `json:"quantityAlert"`
 	StoreID          money.Int  `json:"storeId"`
@@ -137,7 +141,8 @@ type cleanVariant struct {
 	barcode              *string
 	price, cost, weight  decimal.Decimal
 	mrp                  *decimal.Decimal
-	mrpSet               bool // false: an update keeps the variant's MRP
+	mrpSet               bool             // false: an update keeps the variant's MRP
+	mrpPack              *decimal.Decimal // nil: kept (new variants: 1)
 	attributes           []byte
 	attrMap              map[string]any
 	expiry, manufactured *string
@@ -283,7 +288,7 @@ func validate(in productIn) (clean, error) {
 	variants := in.Variants
 	if c.productType == "single" && len(variants) == 0 && in.SKU != nil {
 		// Old add form: single product at the top level.
-		v := variantIn{SKU: *in.SKU, ItemBarcode: in.ItemBarcode, Price: in.Price, MRP: in.MRP,
+		v := variantIn{SKU: *in.SKU, ItemBarcode: in.ItemBarcode, Price: in.Price, MRP: in.MRP, MRPPack: in.MRPPack,
 			ExpiryDate: in.ExpiryDate, ManufacturedDate: in.ManufacturedDate}
 		if in.StoreID.Valid {
 			v.Inventories = []inventoryIn{{StoreID: in.StoreID, Qty: in.Quantity, QuantityAlert: in.QuantityAlert}}
@@ -356,6 +361,13 @@ func validateVariant(f fieldErrs, prefix string, v variantIn) (cleanVariant, err
 			m := v.MRP.D.Round(2)
 			cv.mrp = &m
 		}
+	}
+	if v.MRPPack.Set && v.MRPPack.Valid {
+		pk := v.MRPPack.D
+		if !pk.IsPositive() || pk.GreaterThan(maxMRPPack) || !pk.Round(3).Equal(pk) {
+			f.add(prefix+".mrpPack", "The MRP pack must be a number of units above 0 with at most 3 decimals.")
+		}
+		cv.mrpPack = &pk
 	}
 	if len(v.Attributes) > 20 {
 		f.add(prefix+".attributes", "at most 20 attributes")
@@ -494,13 +506,15 @@ const (
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, NULLIF($20, 0),
 		$21::jsonb, $22::text[], $23) RETURNING id`
 	qInsertVariant = `INSERT INTO product_variants (product_id, sku, item_barcode, price, cost, weight, attributes, expiry_date,
-		manufactured_date, created_by, mrp) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::date, $9::date, NULLIF($10, 0), $11) RETURNING id`
+		manufactured_date, created_by, mrp, mrp_pack) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::date, $9::date, NULLIF($10, 0), $11,
+		coalesce($12, 1)) RETURNING id`
 	qUpdateProduct = `UPDATE products SET name = $2, description = $3, slug = $4, status = $5, image_file_id = $6, selling_type = $7,
 		tax_type = $8, tax_rate = $9, hsn_code = $10, discount_type = $11, discount_value = $12, warranties = $13,
 		barcode_symbology = $14, category_id = $15, sub_category_id = $16, brand_id = $17, unit_id = $18, supplier_id = $19,
 		attributes = $20::jsonb, variant_dims = $21::text[], article_no = $22, updated_at = now() WHERE id = $1`
 	qUpdateVariant = `UPDATE product_variants SET sku = $2, item_barcode = $3, price = $4, cost = $5, weight = $6, attributes = $7,
-		expiry_date = $8::date, manufactured_date = $9::date, mrp = CASE WHEN $10 THEN $11 ELSE mrp END, updated_at = now()
+		expiry_date = $8::date, manufactured_date = $9::date, mrp = CASE WHEN $10 THEN $11 ELSE mrp END,
+		mrp_pack = coalesce($12, mrp_pack), updated_at = now()
 		WHERE id = $1 AND deleted_at IS NULL`
 )
 
@@ -511,9 +525,12 @@ func insertVariant(ctx context.Context, tx tenancy.TenantTx, productID int64, v 
 	}
 	var id int64
 	err := tx.QueryRow(ctx, qInsertVariant, productID, v.sku, v.barcode, v.price, v.cost, v.weight, string(v.attributes),
-		v.expiry, v.manufactured, userID, v.mrp).Scan(&id)
+		v.expiry, v.manufactured, userID, v.mrp, v.mrpPack).Scan(&id)
 	if err != nil {
 		return 0, skuConflict(err)
+	}
+	if err := refuseAboveMRP(ctx, tx, []int64{id}, checkVariantPrice); err != nil {
+		return 0, err
 	}
 	for _, inv := range v.inventories {
 		if _, err := inventory.Set(ctx, tx, inv.storeID, id, inv.qty, inv.alert, reason, inventory.Ref{Type: "product", ID: productID}, userID); err != nil {
@@ -549,9 +566,10 @@ func createProductWith(ctx context.Context, tx tenancy.TenantTx, c clean, img *u
 }
 
 type existingVariant struct {
-	id    int64
-	price decimal.Decimal
-	mrp   *decimal.Decimal
+	id      int64
+	price   decimal.Decimal
+	mrp     *decimal.Decimal
+	mrpPack decimal.Decimal
 }
 
 // updateProduct applies C-14: variant IDs must belong to the product,
@@ -575,14 +593,14 @@ func updateProduct(ctx context.Context, tx tenancy.TenantTx, id int64, c clean, 
 	if err := applyAttributes(ctx, tx, &c, curAttrs, curDims, curArticle); err != nil {
 		return err
 	}
-	rows, err := tx.Query(ctx, `SELECT id, price, mrp FROM product_variants WHERE product_id = $1 AND deleted_at IS NULL FOR UPDATE`, id)
+	rows, err := tx.Query(ctx, `SELECT id, price, mrp, mrp_pack FROM product_variants WHERE product_id = $1 AND deleted_at IS NULL FOR UPDATE`, id)
 	if err != nil {
 		return err
 	}
 	existing := map[int64]existingVariant{}
 	for rows.Next() {
 		var v existingVariant
-		if err := rows.Scan(&v.id, &v.price, &v.mrp); err != nil {
+		if err := rows.Scan(&v.id, &v.price, &v.mrp, &v.mrpPack); err != nil {
 			rows.Close()
 			return err
 		}
@@ -635,8 +653,24 @@ func updateProduct(ctx context.Context, tx tenancy.TenantTx, id int64, c clean, 
 			return err
 		}
 		if _, err := tx.Exec(ctx, qUpdateVariant, v.id, v.sku, v.barcode, v.price, v.cost, v.weight, string(v.attributes),
-			v.expiry, v.manufactured, v.mrpSet, v.mrp); err != nil {
+			v.expiry, v.manufactured, v.mrpSet, v.mrp, v.mrpPack); err != nil {
 			return skuConflict(err)
+		}
+		// A changed price, MRP or pack must stay at or below the MRP; a
+		// lower MRP also covers the variant's store prices.
+		old := existing[v.id]
+		mrpChanged := v.mrpSet && !sameDec(old.mrp, v.mrp) || v.mrpPack != nil && !v.mrpPack.Equal(old.mrpPack)
+		what := 0
+		if !old.price.Equal(v.price) || mrpChanged {
+			what |= checkVariantPrice
+		}
+		if mrpChanged {
+			what |= checkStorePrices
+		}
+		if what != 0 {
+			if err := refuseAboveMRP(ctx, tx, []int64{v.id}, what); err != nil {
+				return err
+			}
 		}
 		if old := existing[v.id]; !old.price.Equal(v.price) {
 			if err := audit.Write(ctx, tx, audit.Entry{ActorID: userID, Action: "product.price_change", Entity: "variant",

@@ -1,9 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { api } from '../../services/api';
-import { toast } from '../../../shared/toast/store';
 import { useShopSettings } from '../../hooks/useShopSettings';
 import { formatCurrency } from '../../lib/format';
-import { mrpBody, mrpWarning } from '../../lib/mrp';
+import { mrpBody, mrpPackBody, mrpWarning } from '../../lib/mrp';
 import EntityForm from './EntityForm';
 import ProductUnitsEditor from './ProductUnitsEditor';
 import { unitRowsFromProduct, unitsPayload, unitsProblem } from '../../lib/productUnits';
@@ -62,6 +61,7 @@ const buildVariantsPayload = (product, values) => {
       itemBarcode: values.itemBarcode || variants[0].itemBarcode,
       price: values.price === '' ? variants[0].price : Number(values.price),
       mrp: mrpBody(values.mrp), // other variants leave mrp out: the server keeps theirs
+      mrpPack: mrpPackBody(values.mrpPack),
     };
 
     if (updatedInventory) {
@@ -151,6 +151,7 @@ export default function EditProductForm({ product, onSaved, onCancel }) {
       itemBarcode: primaryVariant?.itemBarcode || '',
       price: primaryVariant?.price ?? '',
       mrp: primaryVariant?.mrp ?? '',
+      mrpPack: primaryVariant?.mrpPack ?? 1,
       quantity: primaryInventory?.qty ?? '',
       quantityAlert: primaryInventory?.quantityAlert ?? '',
       storeId: primaryInventory?.storeId || '',
@@ -299,7 +300,14 @@ export default function EditProductForm({ product, onSaved, onCancel }) {
         label: 'MRP',
         type: 'number',
         placeholder: 'Printed maximum retail price, tax included (optional)',
-        warn: (v) => mrpWarning({ price: v.price, mrp: v.mrp, taxRate: v.tax, taxType: v.taxType, pricesIncludeTax }, formatCurrency),
+        warn: (v) =>
+          mrpWarning({ price: v.price, mrp: v.mrp, mrpPack: v.mrpPack, taxRate: v.tax, taxType: v.taxType, pricesIncludeTax }, formatCurrency),
+      },
+      {
+        name: 'mrpPack',
+        label: 'MRP is for how many units',
+        type: 'number',
+        placeholder: '1 (10 for a strip of 10 tablets)',
       },
       {
         name: 'storeId',
@@ -358,12 +366,9 @@ export default function EditProductForm({ product, onSaved, onCancel }) {
       variants: buildVariantsPayload(product, values),
     };
 
-    return api.put(`/api/products/${product.id}`, payload).then((saved) => {
-      if ((saved?.ProductVariants || []).some((v) => v.aboveMrp)) {
-        toast.warning('The price with tax is above the MRP. The product is saved and can be sold; check the price.');
-      }
-      return saved;
-    });
+    // A price above MRP is refused by the server (409 ABOVE_MRP, its
+    // message names the price and the MRP).
+    return api.put(`/api/products/${product.id}`, payload);
   };
 
   if (!product) {

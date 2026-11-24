@@ -32,12 +32,14 @@ func storeIDs(t *testing.T, l, tok string) []float64 {
 }
 
 // addFormSingle is exactly what AddProduct.jsx sends for a single product.
+// Its MRP (500, above the 120.50 + 18 % = 142.19 it sells at) lets pharmacy
+// shops sell it: they refuse a medicine without an MRP (pharmacy plan §6.2).
 func addFormSingle(sku string, store float64, qty int) map[string]any {
 	return map[string]any{
 		"name": "Product " + sku, "description": "d", "categoryId": "", "subCategoryId": "", "brandId": "", "unitId": "",
 		"productType": "single", "taxType": "Exclusive", "tax": "18", "createdBy": 1, "discountType": "", "discountValue": "",
 		"warranties": "", "barcodeSymbology": "", "sellingType": "POS", "image": nil, "supplierId": "", "slug": "",
-		"variants": []map[string]any{{"sku": sku, "itemBarcode": "BC" + sku, "price": 120.5, "cost": 0, "weight": 0,
+		"variants": []map[string]any{{"sku": sku, "itemBarcode": "BC" + sku, "price": 120.5, "cost": 0, "weight": 0, "mrp": 500,
 			"attributes": map[string]any{}, "expiryDate": nil, "manufacturedDate": nil,
 			"inventories": []map[string]any{{"storeId": fmt.Sprint(store), "qty": qty, "quantityAlert": 2}}}},
 		"sku": sku, "price": "120.5", "quantity": fmt.Sprint(qty), "storeId": fmt.Sprint(store), "itemBarcode": "BC" + sku, "quantityAlert": "2",

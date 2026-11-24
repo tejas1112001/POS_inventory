@@ -47,6 +47,7 @@ type Arrival struct {
 	Expiry  time.Time
 	Mfg     *time.Time
 	MRP     *decimal.Decimal
+	MRPPack *decimal.Decimal // base units MRP is printed for; nil: the variant's
 	Cost    *decimal.Decimal
 }
 
@@ -72,10 +73,10 @@ func Resolve(ctx context.Context, tx tenancy.TenantTx, variantID int64, a Arriva
 		return 0, false, ErrReservedNo
 	}
 	var id int64
-	err := tx.QueryRow(ctx, `INSERT INTO batches (variant_id, batch_no, expiry_date, mfg_date, mrp, cost, created_by)
-		VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, 0))
+	err := tx.QueryRow(ctx, `INSERT INTO batches (variant_id, batch_no, expiry_date, mfg_date, mrp, cost, created_by, mrp_pack)
+		VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, 0), coalesce($8, (SELECT mrp_pack FROM product_variants WHERE id = $1), 1))
 		ON CONFLICT (variant_id, batch_no) DO NOTHING RETURNING id`,
-		variantID, a.BatchNo, a.Expiry, a.Mfg, a.MRP, a.Cost, userID).Scan(&id)
+		variantID, a.BatchNo, a.Expiry, a.Mfg, a.MRP, a.Cost, userID, a.MRPPack).Scan(&id)
 	if err == nil {
 		return id, true, nil
 	}
@@ -90,8 +91,10 @@ func Resolve(ctx context.Context, tx tenancy.TenantTx, variantID int64, a Arriva
 	if exp == nil || !exp.Equal(a.Expiry) {
 		return 0, false, ErrExpiryMismatch
 	}
-	if _, err := tx.Exec(ctx, `UPDATE batches SET mrp = coalesce(mrp, $2), cost = coalesce(cost, $3), updated_at = now()
-		WHERE id = $1 AND (mrp IS NULL AND $2::numeric IS NOT NULL OR cost IS NULL AND $3::numeric IS NOT NULL)`, id, a.MRP, a.Cost); err != nil {
+	if _, err := tx.Exec(ctx, `UPDATE batches SET mrp_pack = CASE WHEN mrp IS NULL AND $2::numeric IS NOT NULL
+			THEN coalesce($4, (SELECT mrp_pack FROM product_variants WHERE id = batches.variant_id), 1) ELSE mrp_pack END,
+		mrp = coalesce(mrp, $2), cost = coalesce(cost, $3), updated_at = now()
+		WHERE id = $1 AND (mrp IS NULL AND $2::numeric IS NOT NULL OR cost IS NULL AND $3::numeric IS NOT NULL)`, id, a.MRP, a.Cost, a.MRPPack); err != nil {
 		return 0, false, err
 	}
 	return id, false, nil

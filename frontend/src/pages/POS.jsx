@@ -9,7 +9,7 @@ import PriceChangedDialog from '../components/PriceChangedDialog';
 import { useShopSettings } from '../hooks/useShopSettings';
 import { usePos } from '../hooks/usePos';
 import { isRetryable, newIdempotencyKey, priceChanges } from '../lib/checkout';
-import { aboveMrp } from '../lib/mrp';
+import { aboveMrp, mrpText } from '../lib/mrp';
 import { api } from '../services/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -237,6 +237,7 @@ export default function POS() {
             price: Number(fresh.price),
             unitPrice: fresh.price,
             mrp: fresh.mrp ?? null,
+            mrpPack: fresh.mrpPack ?? 1,
             aboveMrp: Boolean(fresh.aboveMrp),
             quantity: 1,
             maxQty: available,
@@ -321,7 +322,7 @@ export default function POS() {
         if (!byVariant.has(l.variantId)) return l;
         const price = Number(byVariant.get(l.variantId));
         const taxRate = Number(String(l.tax ?? '').match(/(\d+(\.\d+)?)/)?.[1] || 0);
-        const above = aboveMrp({ price, mrp: l.mrp, taxRate, taxType: l.taxType, pricesIncludeTax: settings?.pricesIncludeTax });
+        const above = aboveMrp({ price, mrp: l.mrp, mrpPack: l.mrpPack, taxRate, taxType: l.taxType, pricesIncludeTax: settings?.pricesIncludeTax });
         return { ...l, unitPrice: byVariant.get(l.variantId), price, aboveMrp: above };
       })
     );
@@ -370,9 +371,9 @@ export default function POS() {
                       <p className="truncate text-sm font-medium">{l.name}</p>
                       {l.label && <p className="truncate text-xs text-muted-foreground">{l.label}</p>}
                       <p className="text-xs text-muted-foreground tabular-nums">
-                        {formatCurrency(l.price)} each{l.mrp != null ? ` · MRP ${formatCurrency(l.mrp)}` : ''}
+                        {formatCurrency(l.price)} each{l.mrp != null ? ` · MRP ${mrpText(l.mrp, l.mrpPack, formatCurrency)}` : ''}
                       </p>
-                      {l.aboveMrp && <p className="mt-0.5 text-xs font-medium text-warning-fg">Price with tax is above MRP. The sale is still allowed.</p>}
+                      {l.aboveMrp && <p className="mt-0.5 text-xs font-medium text-danger">Price with tax is above MRP. The sale is refused unless a discount brings it to the MRP.</p>}
                       {l.maxQty <= 0 ? (
                         <p className="mt-0.5 text-xs font-medium text-danger-fg">Not in stock at this store</p>
                       ) : (

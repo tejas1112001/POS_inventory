@@ -18,6 +18,7 @@ import BatchesCard from '@/components/products/BatchesCard';
 import PrintLabelsDialog from '@/components/products/PrintLabelsDialog';
 import { useModules } from '@/hooks/useModules';
 import { formatCurrency, formatNumber } from '@/lib/format';
+import { mrpText } from '@/lib/mrp';
 import { cn } from '@/lib/utils';
 import { addQty, fmtQty } from '@/lib/qty';
 
@@ -167,8 +168,8 @@ export default function ProductDetail() {
                   <td className="px-4 py-2 text-muted-foreground">{v.sku}</td>
                   <td className="px-3 py-2 text-right tabular-nums">{formatCurrency(v.price)}</td>
                   <td className={cn('px-3 py-2 text-right tabular-nums', v.aboveMrp && 'font-medium text-warning-fg')}>
-                    {v.mrp != null ? formatCurrency(v.mrp) : '—'}
-                    {v.aboveMrp && <span className="block text-xs">Price is above MRP</span>}
+                    {v.mrp != null ? mrpText(v.mrp, v.mrpPack, formatCurrency) : '—'}
+                    {v.aboveMrp && <span className="block text-xs">Price is above MRP: it cannot be sold until fixed</span>}
                   </td>
                   {hasPermission('products', 'edit') && <td className="hidden px-3 py-2 text-right tabular-nums md:table-cell">{formatCurrency(v.cost)}</td>}
                   {storeIds.map((sid) => {

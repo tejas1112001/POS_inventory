@@ -14,7 +14,7 @@ import { usePermission } from '../hooks/usePermission';
 import { api } from '../services/api';
 import { useShopSettings } from '../hooks/useShopSettings';
 import { formatCurrency } from '../lib/format';
-import { mrpBody, mrpWarning } from '../lib/mrp';
+import { mrpBody, mrpPackBody, mrpWarning } from '../lib/mrp';
 import { qtyStep, roundQty } from '../lib/qty';
 import { checkWizard, formValues, stepClass } from '../lib/wizard';
 import { unitsPayload, unitsProblem } from '../lib/productUnits';
@@ -44,14 +44,14 @@ const AddProduct = () => {
   const [showSupplierModal, setShowSupplierModal] = useState(false);
   const { currentStep, goNext, goBack, goToStep } = useFormWizard(4);
   const { settings } = useShopSettings();
-  // Warnings for a price above its MRP, by row ('single', 1, 2). Saving is
-  // still allowed: MRP is only warned about.
+  // Warnings for a price above its MRP, by row ('single', 1, 2). The
+  // server refuses to save such a price (pharmacy plan §6.2).
   const [mrpWarn, setMrpWarn] = useState({});
   const checkMrp = (form) => {
     const val = (n) => form.elements.namedItem(n)?.value ?? '';
     const tax = { taxType: val('taxType'), taxRate: val('tax'), pricesIncludeTax: settings?.pricesIncludeTax };
     const w = {};
-    const single = mrpWarning({ price: val('price'), mrp: val('mrp'), ...tax }, formatCurrency);
+    const single = mrpWarning({ price: val('price'), mrp: val('mrp'), mrpPack: val('mrpPack'), ...tax }, formatCurrency);
     if (single) w.single = single;
     for (const i of [1, 2]) {
       const m = mrpWarning({ price: val(`variantPrice${i}`), mrp: val(`variantMrp${i}`), ...tax }, formatCurrency);
@@ -145,6 +145,7 @@ const AddProduct = () => {
           itemBarcode: data.itemBarcode || '',
           price: parseFloat(data.price) || 0,
           mrp: mrpBody(data.mrp),
+          mrpPack: mrpPackBody(data.mrpPack),
           cost: 0,
           weight: 0,
           attributes: {},
@@ -214,11 +215,8 @@ const AddProduct = () => {
         productData.quantityAlert = data.quantityAlert;
       }
       
-      const saved = await api.post('/api/products', productData);
+      await api.post('/api/products', productData);
       toast.success('Product added.');
-      if ((saved?.ProductVariants || []).some((v) => v.aboveMrp)) {
-        toast.warning('The price with tax is above the MRP. The product is saved and can be sold; check the price.');
-      }
       navigate('/products');
     } catch (error) {
       console.error('Error creating product:', error);
@@ -589,7 +587,20 @@ const AddProduct = () => {
                     placeholder="Printed maximum retail price, tax included (optional)"
                     aria-describedby="mrpWarn"
                   />
-                  {mrpWarn.single && <p id="mrpWarn" className="mt-1 text-xs text-amber-700">{mrpWarn.single}</p>}
+                  {mrpWarn.single && <p id="mrpWarn" className="mt-1 text-xs text-danger">{mrpWarn.single}</p>}
+                </div>
+
+                <div>
+                  <label htmlFor="mrpPack" className="block text-sm font-medium text-gray-700 mb-1">
+                    MRP is for how many units
+                  </label>
+                  <input
+                    id="mrpPack"
+                    name="mrpPack"
+                    type="number"
+                    step="any" min="0" className="w-full px-3 py-2 border border-gray-600 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="1 (10 for a strip of 10 tablets)"
+                  />
                 </div>
                 
                 <div>
@@ -736,7 +747,7 @@ const AddProduct = () => {
                             placeholder="Optional"
                             aria-describedby="variantMrpWarn1"
                           />
-                          {mrpWarn[1] && <p id="variantMrpWarn1" className="mt-1 text-xs text-amber-700">{mrpWarn[1]}</p>}
+                          {mrpWarn[1] && <p id="variantMrpWarn1" className="mt-1 text-xs text-danger">{mrpWarn[1]}</p>}
                         </td>
                         <td className="px-4 py-3 flex space-x-2">
                           <button className="p-1 text-black hover:bg-blue-50 rounded">
@@ -795,7 +806,7 @@ const AddProduct = () => {
                             placeholder="Optional"
                             aria-describedby="variantMrpWarn2"
                           />
-                          {mrpWarn[2] && <p id="variantMrpWarn2" className="mt-1 text-xs text-amber-700">{mrpWarn[2]}</p>}
+                          {mrpWarn[2] && <p id="variantMrpWarn2" className="mt-1 text-xs text-danger">{mrpWarn[2]}</p>}
                         </td>
                         <td className="px-4 py-3 flex space-x-2">
                           <button className="p-1 text-black hover:bg-blue-50 rounded">

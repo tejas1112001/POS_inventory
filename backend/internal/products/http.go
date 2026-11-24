@@ -628,6 +628,7 @@ func (a *API) Mount(rt *rbac.Router) {
 	req := rbac.Require
 	rt.Handle(http.MethodGet, "/products", req("products", "view"), a.list)
 	rt.Handle(http.MethodGet, "/products/pos", req("pos", "view"), a.pos)
+	rt.Handle(http.MethodGet, "/products/above-mrp", req("products", "edit"), a.aboveMRP) // pharmacy plan §6.2
 	rt.Handle(http.MethodGet, "/products/{id}", req("products", "view"), a.getOne)
 	rt.Handle(http.MethodGet, "/products/barcode/{barcode}", req("pos", "view"), a.barcode)
 	rt.Handle(http.MethodPost, "/products", req("products", "create").Uploads(), a.create)

@@ -87,6 +87,8 @@ const (
 	CodeNearExpiry         = "NEAR_EXPIRY"        // industry P3 item 2: receiving a batch close to expiry needs a confirmation
 	CodeBatchNotSellable   = "BATCH_NOT_SELLABLE" // industry P3 item 3: expired, recalled or too close to expiry
 	CodeBatchRequired      = "BATCH_REQUIRED"     // a stock count scan of a batch-tracked product needs its batch
+	CodeAboveMRP           = "ABOVE_MRP"          // a sale line or a price costs more than its MRP (pharmacy plan §6.2)
+	CodeMRPRequired        = "MRP_REQUIRED"       // a pharmacy shop's batch-tracked product has no MRP
 )
 
 // Validation reports field errors.

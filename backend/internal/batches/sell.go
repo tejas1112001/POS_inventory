@@ -42,6 +42,7 @@ type Sold struct {
 	BatchNo string
 	Expiry  *time.Time
 	MRP     *decimal.Decimal
+	MRPPack decimal.Decimal // base units MRP is printed for (00046)
 	Qty     qty.Q
 	Chosen  bool
 	Unknown bool
@@ -65,16 +66,17 @@ type sellRow struct {
 	no      string
 	expiry  *time.Time
 	mrp     *decimal.Decimal
+	mrpPack decimal.Decimal
 	unknown bool
 	status  string
 	qty     qty.Q // left to sell in this request
 }
 
 const (
-	qSellRows = `SELECT b.id, b.batch_no::text, b.expiry_date, b.mrp, b.is_unknown, b.status, s.qty
+	qSellRows = `SELECT b.id, b.batch_no::text, b.expiry_date, b.mrp, b.mrp_pack, b.is_unknown, b.status, s.qty
 		FROM batch_stock s JOIN batches b ON b.id = s.batch_id
 		WHERE s.store_id = $1 AND b.variant_id = $2 AND s.qty > 0 ORDER BY s.batch_id`
-	qSellRowsLock = `SELECT b.id, b.batch_no::text, b.expiry_date, b.mrp, b.is_unknown, b.status, s.qty
+	qSellRowsLock = `SELECT b.id, b.batch_no::text, b.expiry_date, b.mrp, b.mrp_pack, b.is_unknown, b.status, s.qty
 		FROM batch_stock s JOIN batches b ON b.id = s.batch_id
 		WHERE s.store_id = $1 AND b.variant_id = $2 AND s.qty > 0 ORDER BY s.batch_id FOR UPDATE OF s FOR SHARE OF b`
 	qBatchOf = `SELECT variant_id, batch_no::text FROM batches WHERE id = $1`
@@ -95,7 +97,7 @@ func sellRows(ctx context.Context, tx tenancy.TenantTx, store, variant int64, lo
 	var out []*sellRow
 	for rows.Next() {
 		r := &sellRow{}
-		if err := rows.Scan(&r.id, &r.no, &r.expiry, &r.mrp, &r.unknown, &r.status, &r.qty); err != nil {
+		if err := rows.Scan(&r.id, &r.no, &r.expiry, &r.mrp, &r.mrpPack, &r.unknown, &r.status, &r.qty); err != nil {
 			return nil, err
 		}
 		out = append(out, r)
@@ -192,7 +194,7 @@ func Allocate(ctx context.Context, tx tenancy.TenantTx, st Settings, store int64
 			}
 			r.qty = r.qty.Sub(p.Qty)
 			rest = rest.Sub(p.Qty)
-			got = append(got, Sold{BatchID: r.id, BatchNo: r.no, Expiry: r.expiry, MRP: r.mrp, Qty: p.Qty, Chosen: true, Unknown: r.unknown})
+			got = append(got, Sold{BatchID: r.id, BatchNo: r.no, Expiry: r.expiry, MRP: r.mrp, MRPPack: r.mrpPack, Qty: p.Qty, Chosen: true, Unknown: r.unknown})
 		}
 		if rest.IsPositive() {
 			order := make([]*sellRow, 0, len(rs))
@@ -237,7 +239,7 @@ func Allocate(ctx context.Context, tx tenancy.TenantTx, st Settings, store int64
 				}
 				r.qty = r.qty.Sub(take)
 				rest = rest.Sub(take)
-				got = append(got, Sold{BatchID: r.id, BatchNo: r.no, Expiry: r.expiry, MRP: r.mrp, Qty: take, Unknown: r.unknown})
+				got = append(got, Sold{BatchID: r.id, BatchNo: r.no, Expiry: r.expiry, MRP: r.mrp, MRPPack: r.mrpPack, Qty: take, Unknown: r.unknown})
 			}
 		}
 		for _, s := range got {

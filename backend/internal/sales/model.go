@@ -73,6 +73,7 @@ type ItemJSON struct {
 	// MRP at sale time: one unit's (null when unknown or the batches
 	// differ) and the line's; AboveMRP: the line was charged more.
 	MRP       *decimal.Decimal `json:"mrp"`
+	MRPPack   *decimal.Decimal `json:"mrpPack"` // base units MRP is printed for
 	MRPAmount *decimal.Decimal `json:"mrpAmount"`
 	AboveMRP  bool             `json:"aboveMrp"`
 }
@@ -83,6 +84,7 @@ type ItemBatchJSON struct {
 	BatchNo  string           `json:"batchNo"`
 	Expiry   *string          `json:"expiry"`
 	MRP      *decimal.Decimal `json:"mrp"`
+	MRPPack  *decimal.Decimal `json:"mrpPack"`
 	Quantity qty.Q            `json:"quantity"`
 	Chosen   bool             `json:"chosen"`
 	Unknown  bool             `json:"unknown"`
@@ -159,11 +161,11 @@ const (
 		WHERE s.id = ANY($1)`
 	qLoadItems = `SELECT i.id, i.sale_id, i.product_id, i.variant_id, i.product_name, i.sku, i.quantity, i.unit_price,
 			i.catalog_price, i.discount, i.tax_type, i.tax_rate, i.tax_amount, i.cgst, i.sgst, i.igst, i.subtotal,
-			i.created_at, v.attributes, i.mrp, i.mrp_amount,
+			i.created_at, v.attributes, i.mrp, i.mrp_pack, i.mrp_amount,
 			coalesce((SELECT sum(r.quantity) FROM return_items r WHERE r.order_item_id = i.id), 0), i.variant_label, i.hsn_code,
 			i.unit_name, i.unit_factor, i.unit_qty, i.unit_id,
 			coalesce((SELECT jsonb_agg(jsonb_build_object('batchId', ob.batch_id, 'batchNo', ob.batch_no, 'expiry', to_char(ob.expiry_date, 'YYYY-MM-DD'),
-				'mrp', ob.mrp, 'quantity', ob.quantity, 'chosen', ob.chosen, 'unknown', ob.is_unknown) ORDER BY ob.expiry_date NULLS LAST, ob.batch_id)
+				'mrp', ob.mrp, 'mrpPack', ob.mrp_pack, 'quantity', ob.quantity, 'chosen', ob.chosen, 'unknown', ob.is_unknown) ORDER BY ob.expiry_date NULLS LAST, ob.batch_id)
 				FROM order_item_batches ob WHERE ob.order_item_id = i.id), '[]'::jsonb)
 		FROM order_items i LEFT JOIN product_variants v ON v.id = i.variant_id
 		WHERE i.sale_id = ANY($1) ORDER BY i.sale_id, i.id`
@@ -214,7 +216,7 @@ func load(ctx context.Context, tx tenancy.TenantTx, ids []int64) ([]SaleJSON, er
 		var attrs []byte
 		if err := rows.Scan(&it.ID, &it.SaleID, &it.ProductID, &it.VariantID, &it.ProductName, &it.SKU, &it.Quantity, &it.UnitPrice,
 			&it.CatalogPrice, &it.Discount, &it.TaxType, &it.TaxRate, &it.TaxAmount, &it.CGST, &it.SGST, &it.IGST, &it.Subtotal,
-			&it.CreatedAt, &attrs, &it.MRP, &it.MRPAmount, &it.ReturnedQty, &it.VariantLabel, &it.HSN,
+			&it.CreatedAt, &attrs, &it.MRP, &it.MRPPack, &it.MRPAmount, &it.ReturnedQty, &it.VariantLabel, &it.HSN,
 			&it.UnitName, &it.UnitFactor, &it.UnitQty, &it.UnitID, &it.Batches); err != nil {
 			rows.Close()
 			return nil, err

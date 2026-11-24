@@ -12,6 +12,7 @@ import { ConfirmProvider } from './components/feedback/ConfirmDialog';
 import Dashboard from './pages/Dashboard';
 import Products from './pages/Products';
 import ProductDetail from './pages/ProductDetail';
+import AboveMrpReport from './pages/AboveMrpReport';
 import AddProduct from './pages/AddProduct';
 import Orders from './pages/Orders';
 import OrderDetail from './pages/OrderDetail';
@@ -98,6 +99,7 @@ function AppRoutes() {
       <Route path="/categories" element={<ProtectedLayout module="categories" action="view"><Categories /></ProtectedLayout>} />
       <Route path="/add-category" element={<ProtectedLayout module="categories" action="create"><Categories startNew /></ProtectedLayout>} />
       <Route path="/products" element={<ProtectedLayout module="products" action="view"><Products /></ProtectedLayout>} />
+      <Route path="/products/above-mrp" element={<ProtectedLayout module="products" action="edit"><AboveMrpReport /></ProtectedLayout>} />
       <Route path="/products/:id" element={<ProtectedLayout module="products" action="view"><ProductDetail /></ProtectedLayout>} />
       <Route path="/add-product" element={<ProtectedLayout module="products" action="create"><AddProduct /></ProtectedLayout>} />
       <Route path="/brands" element={<ProtectedLayout module="brands" action="view"><Brands /></ProtectedLayout>} />

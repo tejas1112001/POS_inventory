@@ -85,6 +85,7 @@ type PreviewBatch struct {
 type pharmacyImport struct {
 	file     bool // the file has batch columns
 	moduleOn bool
+	needMRP  bool // a pharmacy shop: every batch needs its MRP (pharmacy plan §6.2)
 	settings batches.Settings
 }
 
@@ -110,7 +111,10 @@ func pharmacyFile(ctx context.Context, tx tenancy.TenantTx, header []string, ind
 	if industry {
 		return ph, []RowError{{Row: 1, Field: "file", Message: "The pharmacy template has no article_no or attribute columns."}}, nil
 	}
-	ph.settings, err = batches.LoadSettings(ctx, tx)
+	if ph.settings, err = batches.LoadSettings(ctx, tx); err != nil {
+		return ph, nil, err
+	}
+	err = tx.QueryRow(ctx, `SELECT business_type = 'pharmacy' FROM settings WHERE id = 1`).Scan(&ph.needMRP)
 	return ph, nil, err
 }
 
@@ -164,6 +168,8 @@ func checkBatchRow(ir *importRow, ph pharmacyImport, addErr, warn func(int, stri
 			d = d.Round(2)
 			ir.b.mrp = &d
 		}
+	} else if ph.needMRP && !ir.b.expired { // an expired row is not imported
+		addErr(line, "mrp", "mrp is required: a pharmacy cannot sell a medicine without its MRP.")
 	}
 }
 

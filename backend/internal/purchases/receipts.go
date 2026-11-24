@@ -264,6 +264,12 @@ func checkBatches(ctx context.Context, tx tenancy.TenantTx, lines []want, info f
 	if err != nil {
 		return nil, err
 	}
+	// Pharmacy plan §6.2: a pharmacy cannot sell a medicine without its
+	// MRP, so each batch received needs the MRP printed on it.
+	var needMRP bool
+	if err := tx.QueryRow(ctx, `SELECT business_type = 'pharmacy' FROM settings WHERE id = 1`).Scan(&needMRP); err != nil {
+		return nil, err
+	}
 	f := map[string]string{}
 	var near []map[string]any
 	for i := range lines {
@@ -290,6 +296,9 @@ func checkBatches(ctx context.Context, tx tenancy.TenantTx, lines []want, info f
 		for j := range l.batches {
 			b := &l.batches[j]
 			sum = sum.Add(b.qty)
+			if needMRP && b.arrival.MRP == nil {
+				f[b.field+".mrp"] = "Enter the MRP printed on this batch."
+			}
 			exp := b.arrival.Expiry
 			switch {
 			case st.Expired(exp):
@@ -383,6 +392,13 @@ func parseBatches(in []batchIn, field string, f map[string]string) []batchWant {
 			v := b.MRP.D.Round(2)
 			w.arrival.MRP = &v
 		}
+		if b.MRPPack.Set && b.MRPPack.Valid {
+			pk := b.MRPPack.D
+			if !pk.IsPositive() || pk.GreaterThan(decimal.NewFromInt(1_000_000)) || !pk.Round(3).Equal(pk) {
+				f[k+".mrpPack"] = "The MRP pack must be a number of units above 0 with at most 3 decimals."
+			}
+			w.arrival.MRPPack = &pk
+		}
 		if !b.Quantity.Valid || !b.Quantity.V.IsPositive() || b.Quantity.V.Greater(qty.Int(maxQty)) {
 			f[k+".quantity"] = "Quantity must be above 0."
 		}
@@ -399,10 +415,13 @@ const maxBatchesPerLine = 50
 
 // batchIn is one batch of a receipt line (industry P3 item 2, A26).
 type batchIn struct {
-	BatchNo  string    `json:"batchNo"`
-	Expiry   string    `json:"expiry"`
-	MfgDate  *string   `json:"mfgDate"`
-	MRP      money.Dec `json:"mrp"`
+	BatchNo string    `json:"batchNo"`
+	Expiry  string    `json:"expiry"`
+	MfgDate *string   `json:"mfgDate"`
+	MRP     money.Dec `json:"mrp"`
+	// MRPPack: the base units the MRP is printed for (a strip of 10: 10).
+	// Left out: the product's MRP pack.
+	MRPPack  money.Dec `json:"mrpPack"`
 	Quantity qty.In    `json:"quantity"`
 }
 
@@ -427,6 +446,7 @@ type ReceiptBatchJSON struct {
 	BatchNo            string           `json:"batchNo"`
 	Expiry             *string          `json:"expiry"`
 	MRP                *decimal.Decimal `json:"mrp"`
+	MRPPack            decimal.Decimal  `json:"mrpPack"`
 	Quantity           qty.Q            `json:"quantity"`
 	NearExpiryAccepted bool             `json:"nearExpiryAccepted"`
 }
@@ -511,7 +531,7 @@ func receiptBatches(ctx context.Context, tx tenancy.TenantTx, rcs []ReceiptJSON)
 	if len(ids) == 0 {
 		return nil
 	}
-	rows, err := tx.Query(ctx, `SELECT rb.receipt_item_id, rb.batch_id, b.batch_no::text, to_char(b.expiry_date, 'YYYY-MM-DD'), b.mrp,
+	rows, err := tx.Query(ctx, `SELECT rb.receipt_item_id, rb.batch_id, b.batch_no::text, to_char(b.expiry_date, 'YYYY-MM-DD'), b.mrp, b.mrp_pack,
 			rb.quantity, rb.near_expiry_accepted
 		FROM purchase_receipt_batches rb JOIN batches b ON b.id = rb.batch_id
 		WHERE rb.receipt_item_id = ANY($1) ORDER BY rb.receipt_item_id, b.expiry_date, rb.batch_id`, ids)
@@ -522,7 +542,7 @@ func receiptBatches(ctx context.Context, tx tenancy.TenantTx, rcs []ReceiptJSON)
 	for rows.Next() {
 		var ri int64
 		var b ReceiptBatchJSON
-		if err := rows.Scan(&ri, &b.BatchID, &b.BatchNo, &b.Expiry, &b.MRP, &b.Quantity, &b.NearExpiryAccepted); err != nil {
+		if err := rows.Scan(&ri, &b.BatchID, &b.BatchNo, &b.Expiry, &b.MRP, &b.MRPPack, &b.Quantity, &b.NearExpiryAccepted); err != nil {
 			return err
 		}
 		l := at[ri]

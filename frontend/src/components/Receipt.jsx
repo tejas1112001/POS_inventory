@@ -6,6 +6,7 @@ import { usePermission } from '@/context/PermissionContext';
 import { usePos } from '@/hooks/usePos';
 import { useShopSettings } from '@/hooks/useShopSettings';
 import { formatCurrency, formatDateTime } from '@/lib/format';
+import { mrpText } from '@/lib/mrp';
 import { unitQtyText } from '@/lib/saleUnits';
 import { receiptGst } from '@/lib/gstReceipt';
 import { useGstStates } from '@/lib/gst';
@@ -191,12 +192,12 @@ function ReceiptBody({ sale, store, settings, businessName, taxLabel, logoUrl, n
                     <span key={b.batchId} className="rc-sku">
                       {b.unknown ? 'No batch' : `Batch ${b.batchNo}`}
                       {b.expiry ? ` · Exp ${b.expiry.slice(5, 7)}/${b.expiry.slice(0, 4)}` : ''}
-                      {b.mrp != null ? ` · MRP ${Number(b.mrp).toFixed(2)}` : ''}
+                      {b.mrp != null ? ` · MRP ${mrpText(b.mrp, b.mrpPack)}` : ''}
                       {i.batches.length > 1 ? ` × ${fmtQty(b.quantity)}` : ''}
                     </span>
                   ))}
                   {showMrp && i.mrp != null && !(i.batches || []).some((b) => b.mrp != null) && (
-                    <span className="rc-sku">MRP {formatCurrency(i.mrp)}</span>
+                    <span className="rc-sku">MRP {mrpText(i.mrp, i.mrpPack, formatCurrency)}</span>
                   )}
                   {/* H3: sold in another unit; Qty and the price stay in base units ("24 × price"). */}
                   {i.unitName && <span className="rc-sku">{unitQtyText(i)}</span>}
