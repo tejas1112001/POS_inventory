@@ -1,28 +1,56 @@
 @import "tailwindcss";
-@import "@fontsource-variable/inter";
+@import "@fontsource-variable/manrope";
 
 /* Design tokens. Components use these names, not raw hex values. */
 @theme {
-  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  /* Teal & Cream (the shop app's palette): deep teal #123b45, fresh teal
+     #20b6a4, ivory #f4f2e9, amber #f2b544; Manrope. */
+  --font-sans: "Manrope Variable", ui-sans-serif, system-ui, sans-serif;
 
-  --color-night: #0b1220; /* dark hero, header, footer */
-  --color-ink: #0f172a; /* headings, dark cards */
-  --color-body: #475569; /* paragraph text on white (7.5:1) */
-  --color-muted: #64748b; /* small captions on white (4.8:1) */
-  --color-line: #e2e8f0; /* card borders */
-  --color-surface: #f8fafc; /* light section background */
+  --color-night: #0b2a32; /* dark hero, header, footer */
+  --color-ink: #123b45; /* headings, dark cards */
+  --color-body: #3e5a61; /* paragraph text on white (7.4:1) */
+  --color-muted: #566b70; /* small captions on white (5.7:1) */
+  --color-line: #e6e3d8; /* card borders */
+  --color-surface: #f4f2e9; /* ivory section background */
 
-  --color-brand: #2563eb;
-  --color-brand-strong: #1d4ed8;
-  --color-brand-bright: #60a5fa; /* brand on dark backgrounds */
-  --color-brand-soft: #eff6ff;
+  --color-brand: #17807a; /* 4.8:1 with white text */
+  --color-brand-strong: #12665f;
+  --color-brand-bright: #3fd0bd; /* brand on dark backgrounds */
+  --color-brand-soft: #e7f5f2;
 
-  --color-ok: #34d399; /* checks on dark */
-  --color-ok-strong: #065f46; /* success text on light */
-  --color-ok-soft: #ecfdf5;
-  --color-warn: #f59e0b;
-  --color-warn-strong: #9a3412;
-  --color-warn-soft: #fff7ed;
+  --color-ok: #5fd4a8; /* checks on dark */
+  --color-ok-strong: #116149; /* success text on light */
+  --color-ok-soft: #e8f6ef;
+  --color-warn: #f2b544; /* amber */
+  --color-warn-strong: #8a4b06;
+  --color-warn-soft: #fdf3dc;
+
+  /* The components use Tailwind's blue and slate scales directly; remap
+     them so every accent is teal and every grey is teal-tinted. */
+  --color-blue-50: #effaf8;
+  --color-blue-100: #d8f2ed;
+  --color-blue-200: #b1e5dc;
+  --color-blue-300: #7fd6c8;
+  --color-blue-400: #45c2b0;
+  --color-blue-500: #20b6a4;
+  --color-blue-600: #17807a;
+  --color-blue-700: #136963;
+  --color-blue-800: #11544f;
+  --color-blue-900: #103f3c;
+  --color-blue-950: #0a2a28;
+
+  --color-slate-50: #f8f7f1;
+  --color-slate-100: #f0eee5;
+  --color-slate-200: #dbe8e6;
+  --color-slate-300: #b9cbc9;
+  --color-slate-400: #8ca5a5;
+  --color-slate-500: #627a7d;
+  --color-slate-600: #4b6469;
+  --color-slate-700: #36535a;
+  --color-slate-800: #23414a;
+  --color-slate-900: #123b45;
+  --color-slate-950: #0b2a32;
 }
 
 @layer base {
@@ -32,8 +60,8 @@
   }
 
   body {
-    background-color: #ffffff;
-    color: #334155;
+    background-color: #fcfbf7;
+    color: #36535a;
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -47,7 +75,7 @@
   }
 
   :focus-visible {
-    outline: 2px solid #3b82f6;
+    outline: 2px solid #20b6a4;
     outline-offset: 2px;
   }
 
@@ -71,7 +99,7 @@
   }
 }
 
-/* Dark surface with a soft blue glow that follows the cursor; InteractiveLayer sets --mx / --my. */
+/* Dark surface with a soft teal glow that follows the cursor; InteractiveLayer sets --mx / --my. */
 @utility surface-glow {
   position: relative;
   isolation: isolate;
@@ -82,7 +110,7 @@
     z-index: -1;
     border-radius: inherit;
     pointer-events: none;
-    background: radial-gradient(420px circle at var(--mx, 50%) var(--my, 50%), rgba(59, 130, 246, 0.18), transparent 70%);
+    background: radial-gradient(420px circle at var(--mx, 50%) var(--my, 50%), rgba(32, 182, 164, 0.18), transparent 70%);
     opacity: 0;
     transition: opacity 300ms ease-out;
   }
@@ -106,7 +134,7 @@
     z-index: -1;
     border-radius: inherit;
     pointer-events: none;
-    background: radial-gradient(260px circle at var(--mx, 50%) var(--my, 50%), rgba(59, 130, 246, 0.13), transparent 70%);
+    background: radial-gradient(260px circle at var(--mx, 50%) var(--my, 50%), rgba(32, 182, 164, 0.13), transparent 70%);
     opacity: 0;
     transition: opacity 200ms ease-out;
   }
@@ -114,7 +142,7 @@
     opacity: 1;
   }
   &:hover {
-    border-color: #93c5fd;
+    border-color: #7fd6c8;
   }
   @media (prefers-reduced-motion: no-preference) {
     &:hover {
@@ -127,11 +155,11 @@
 @utility barcode {
   background: repeating-linear-gradient(
     90deg,
-    #0f172a 0 2px,
+    #123b45 0 2px,
     #fff 2px 4px,
-    #0f172a 4px 5px,
+    #123b45 4px 5px,
     #fff 5px 8px,
-    #0f172a 8px 11px,
+    #123b45 8px 11px,
     #fff 11px 12px
   );
 }
@@ -175,7 +203,7 @@
   content: "";
   position: absolute;
   inset: 0;
-  border: 1.5px solid rgba(59, 130, 246, 0.75);
+  border: 1.5px solid rgba(32, 182, 164, 0.75);
   border-radius: 9999px;
   transition:
     transform 200ms ease-out,
@@ -185,8 +213,8 @@
 }
 .cursor-ring[data-state="link"]::after {
   transform: scale(1.55);
-  border-color: rgba(59, 130, 246, 0.45);
-  background-color: rgba(59, 130, 246, 0.1);
+  border-color: rgba(32, 182, 164, 0.45);
+  background-color: rgba(32, 182, 164, 0.1);
 }
 .cursor-ring[data-state="text"]::after {
   opacity: 0;
@@ -205,7 +233,7 @@
   width: 90px;
   height: 90px;
   margin: -45px 0 0 -45px;
-  border: 2px solid rgba(59, 130, 246, 0.6);
+  border: 2px solid rgba(32, 182, 164, 0.6);
   border-radius: 9999px;
   pointer-events: none;
   animation: click-ripple 550ms ease-out forwards;
@@ -235,7 +263,7 @@
   left: -12%;
   width: min(760px, 60vw);
   aspect-ratio: 1;
-  background: radial-gradient(circle, rgba(37, 99, 235, 0.55), transparent 65%);
+  background: radial-gradient(circle, rgba(23, 128, 122, 0.6), transparent 65%);
   --ax: 14vw;
   --ay: 12vh;
 }
@@ -244,7 +272,7 @@
   right: -18%;
   width: min(680px, 55vw);
   aspect-ratio: 1;
-  background: radial-gradient(circle, rgba(99, 102, 241, 0.45), transparent 65%);
+  background: radial-gradient(circle, rgba(242, 181, 68, 0.26), transparent 65%);
   animation-duration: 28s;
   --ax: -12vw;
   --ay: 16vh;
@@ -254,7 +282,7 @@
   left: 28%;
   width: min(820px, 65vw);
   aspect-ratio: 1.6;
-  background: radial-gradient(ellipse, rgba(14, 165, 233, 0.35), transparent 65%);
+  background: radial-gradient(ellipse, rgba(32, 182, 164, 0.35), transparent 65%);
   animation-duration: 32s;
   --ax: -16vw;
   --ay: -10vh;
@@ -277,7 +305,7 @@
   height: 560px;
   margin: -280px 0 0 -280px;
   border-radius: 9999px;
-  background: radial-gradient(circle, rgba(56, 189, 248, 0.28), rgba(37, 99, 235, 0.12) 40%, transparent 65%);
+  background: radial-gradient(circle, rgba(63, 208, 189, 0.26), rgba(23, 128, 122, 0.12) 40%, transparent 65%);
   mix-blend-mode: screen;
   opacity: 0;
   transform: translate(var(--hx, 50vw), var(--hy, 50%));

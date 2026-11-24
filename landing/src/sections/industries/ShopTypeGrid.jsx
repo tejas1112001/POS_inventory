@@ -25,7 +25,7 @@ export function ShopTypeGrid({ shop, onPick }) {
                 onClick={() => onPick(slug)}
                 className={cn(
                   'flex min-h-[84px] w-full items-center gap-3.5 rounded-[18px] border p-[18px] text-left',
-                  on ? 'border-ink bg-ink shadow-[0_12px_30px_rgba(15,23,42,.18)]' : 'card-lift border-line bg-white',
+                  on ? 'border-ink bg-ink shadow-[0_12px_30px_rgba(18,59,69,.18)]' : 'card-lift border-line bg-white',
                 )}
               >
                 <span className={cn('flex size-11 shrink-0 items-center justify-center rounded-xl', tint)}>

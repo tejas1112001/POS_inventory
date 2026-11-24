@@ -95,7 +95,7 @@ export function ToolExplorer({ tool, onSelect }) {
 
         <div className="relative min-w-0 flex-[1.3_1_480px]">
           <div aria-hidden="true" className="absolute inset-[30px] rounded-[40px] bg-brand opacity-15 blur-[80px]" />
-          <div className="relative rounded-[22px] border border-line bg-white p-4 shadow-[0_24px_60px_rgba(15,23,42,.12)] sm:p-6">
+          <div className="relative rounded-[22px] border border-line bg-white p-4 shadow-[0_24px_60px_rgba(18,59,69,.12)] sm:p-6">
             <Mock />
           </div>
         </div>

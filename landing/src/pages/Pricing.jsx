@@ -24,7 +24,7 @@ function PlanCard({ plan, period }) {
     <article
       className={cn(
         'flex flex-[1_1_300px] flex-col gap-4 rounded-3xl border p-8',
-        f ? 'bg-night surface-glow border-brand shadow-[0_24px_60px_rgba(37,99,235,.25)]' : 'card-lift border-line bg-white',
+        f ? 'bg-night surface-glow border-brand shadow-[0_24px_60px_rgba(23,128,122,.25)]' : 'card-lift border-line bg-white',
       )}
     >
       <div className="flex items-center justify-between gap-2.5">

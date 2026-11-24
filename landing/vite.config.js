@@ -10,18 +10,18 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
 
 /**
- * Preload the Latin Inter font in the built index.html. The file name is
+ * Preload the Latin Manrope font in the built index.html. The file name is
  * hashed, so it is looked up in the bundle; without this the browser only
  * finds the font after the CSS has downloaded.
  */
-function preloadInter() {
+function preloadFont() {
   return {
-    name: 'preload-inter-latin',
+    name: 'preload-manrope-latin',
     apply: 'build',
     transformIndexHtml: {
       order: 'post',
       handler(_html, ctx) {
-        const file = Object.keys(ctx.bundle ?? {}).find((f) => /inter-latin-wght-normal-[\w-]+\.woff2$/.test(f));
+        const file = Object.keys(ctx.bundle ?? {}).find((f) => /manrope-latin-wght-normal-[\w-]+\.woff2$/.test(f));
         if (!file) return [];
         return [
           {
@@ -86,7 +86,7 @@ export default defineConfig({
   resolve: {
     alias: { '@': path.resolve(__dirname, './src') },
   },
-  plugins: [lucideDevIcons(), react(), tailwindcss(), preloadInter()],
+  plugins: [lucideDevIcons(), react(), tailwindcss(), preloadFont()],
   server: {
     host: true,
     // 5173 is the shop app (frontend/).

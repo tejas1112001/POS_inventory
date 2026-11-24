@@ -23,6 +23,8 @@ Follow-up 5: filter line controls smaller (search, Add filter, date button and t
 
 Business type is console-only (2026-11-24): a shop can no longer change its own type (`PUT /api/settings/business` answers 403 for a different `businessType`; the owner still switches modules). New console action **Change business type** (`POST /api/platform/tenants/{id}/business-type`, tenants:edit + step-up): sets the type in the shop's database (`settings.SetBusinessType`: the type's recommended modules the plan allows, starting data, batch tracking follows the batch module, shop audit as a system change naming the console user), updates the console's copy and writes the platform audit. Shop Settings shows the type read-only. Isolation tests switch types through the console now.
 
+Landing site on Teal & Cream (2026-11-24): `landing/src/styles/index.css` tokens (night #0b2a32, ink #123b45, brand #17807a, ivory surface #f4f2e9, amber warn #f2b544), Tailwind blue and slate scales remapped to teal and teal-grey, Manrope instead of Inter (preloaded), the app's teal "M" logo (on an ivory tile) and favicon, canvas effects and shadows retinted, amber second aurora in the hero.
+
 Not done: the landing site (`landing/`) is still the old blue theme.
 
 # Rename to MintoBill (2026-11-23)

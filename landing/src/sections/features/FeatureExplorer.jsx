@@ -43,7 +43,7 @@ export function FeatureExplorer() {
                 className={cn(
                   'flex min-h-16 items-center gap-3.5 rounded-2xl border px-[18px] py-4 text-left transition-colors duration-150',
                   on
-                    ? 'border-ink bg-ink text-white shadow-[0_12px_30px_rgba(15,23,42,.18)]'
+                    ? 'border-ink bg-ink text-white shadow-[0_12px_30px_rgba(18,59,69,.18)]'
                     : 'card-lift border-line bg-white text-ink',
                 )}
               >
@@ -77,7 +77,7 @@ export function FeatureExplorer() {
               ))}
             </ul>
           </div>
-          <div className="rounded-[18px] border border-line bg-white p-4 shadow-[0_20px_50px_rgba(15,23,42,.08)] sm:p-[22px]">
+          <div className="rounded-[18px] border border-line bg-white p-4 shadow-[0_20px_50px_rgba(18,59,69,.08)] sm:p-[22px]">
             <Mock />
           </div>
         </div>

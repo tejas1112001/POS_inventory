@@ -89,7 +89,7 @@ export default function HeroParticles() {
             const near = 1 - Math.hypot((a.x + b.x) / 2 - mx, (a.y + b.y) / 2 - my) / LIGHT;
             if (near > 0) alpha += near * close * 0.55;
           }
-          ctx.strokeStyle = `rgba(96, 165, 250, ${alpha.toFixed(3)})`;
+          ctx.strokeStyle = `rgba(63, 208, 189, ${alpha.toFixed(3)})`;
           ctx.beginPath();
           ctx.moveTo(a.x, a.y);
           ctx.lineTo(b.x, b.y);
@@ -101,7 +101,7 @@ export default function HeroParticles() {
         for (const p of parts) {
           const d = Math.hypot(p.x - mx, p.y - my);
           if (d >= REACH) continue;
-          ctx.strokeStyle = `rgba(125, 211, 252, ${((1 - d / REACH) * 0.35).toFixed(3)})`;
+          ctx.strokeStyle = `rgba(127, 214, 200, ${((1 - d / REACH) * 0.35).toFixed(3)})`;
           ctx.beginPath();
           ctx.moveTo(p.x, p.y);
           ctx.lineTo(mx, my);
@@ -111,7 +111,7 @@ export default function HeroParticles() {
 
       for (const p of parts) {
         const near = inside ? Math.max(0, 1 - Math.hypot(p.x - mx, p.y - my) / LIGHT) : 0;
-        ctx.fillStyle = `rgba(191, 219, 254, ${(0.35 + near * 0.6).toFixed(3)})`;
+        ctx.fillStyle = `rgba(216, 242, 237, ${(0.35 + near * 0.6).toFixed(3)})`;
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.r + near * 1.6, 0, Math.PI * 2);
         ctx.fill();
@@ -120,7 +120,7 @@ export default function HeroParticles() {
       rings = rings.filter((r) => now - r.t < RING_LIFE);
       for (const r of rings) {
         const k = (now - r.t) / RING_LIFE;
-        ctx.strokeStyle = `rgba(125, 211, 252, ${(0.6 * (1 - k)).toFixed(3)})`;
+        ctx.strokeStyle = `rgba(127, 214, 200, ${(0.6 * (1 - k)).toFixed(3)})`;
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.arc(r.x, r.y, 20 + k * SHOCK, 0, Math.PI * 2);

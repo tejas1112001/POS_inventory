@@ -46,7 +46,7 @@ export default function Contact() {
           id="demo"
           tabIndex={-1}
           aria-labelledby="demo-title"
-          className="min-w-0 flex-[3_1_520px] scroll-mt-6 rounded-3xl border border-line bg-white p-6 shadow-[0_24px_60px_rgba(15,23,42,.08)] outline-none sm:p-9"
+          className="min-w-0 flex-[3_1_520px] scroll-mt-6 rounded-3xl border border-line bg-white p-6 shadow-[0_24px_60px_rgba(18,59,69,.08)] outline-none sm:p-9"
         >
           <h2 id="demo-title" className="text-[28px] font-extrabold tracking-[-0.02em] text-ink">Book a free demo</h2>
           <p className="mt-2 mb-7 text-body">Tell us about your shop. We will show MintoBill with products like yours.</p>

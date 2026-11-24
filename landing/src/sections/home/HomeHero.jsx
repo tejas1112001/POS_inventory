@@ -29,7 +29,7 @@ function BillMockup() {
       <div
         role="group"
         aria-label="Sample bill. Try changing the quantities."
-        className="relative overflow-hidden rounded-[20px] border border-line bg-white text-ink shadow-[0_30px_80px_rgba(2,6,23,.55)]"
+        className="relative overflow-hidden rounded-[20px] border border-line bg-white text-ink shadow-[0_30px_80px_rgba(6,30,36,.55)]"
       >
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line bg-surface px-[22px] py-[18px]">
           <div>
@@ -102,13 +102,13 @@ function BillMockup() {
         </div>
       </div>
 
-      <div className="absolute top-0 right-[18px] flex translate-z-10 items-center gap-2.5 rounded-[14px] border border-blue-400/40 bg-ink px-3.5 py-2.5 text-slate-200 shadow-[0_12px_30px_rgba(2,6,23,.5)]">
+      <div className="absolute top-0 right-[18px] flex translate-z-10 items-center gap-2.5 rounded-[14px] border border-blue-400/40 bg-ink px-3.5 py-2.5 text-slate-200 shadow-[0_12px_30px_rgba(6,30,36,.5)]">
         <TriangleAlert className="size-4 text-warn" aria-hidden="true" />
         <span className="text-[13px]">
           <strong className="text-white">Running Shoes UK 9</strong> · {SHOES_IN_STOCK - qty[1]} left
         </span>
       </div>
-      <div className="absolute bottom-0 left-[18px] flex translate-z-10 items-center gap-2.5 rounded-[14px] border border-emerald-400/40 bg-ink px-3.5 py-2.5 text-slate-200 shadow-[0_12px_30px_rgba(2,6,23,.5)]">
+      <div className="absolute bottom-0 left-[18px] flex translate-z-10 items-center gap-2.5 rounded-[14px] border border-emerald-400/40 bg-ink px-3.5 py-2.5 text-slate-200 shadow-[0_12px_30px_rgba(6,30,36,.5)]">
         <ReceiptText className="size-[18px] text-ok" aria-hidden="true" />
         <span className="text-[13px]">
           GST invoice ready · <strong className="text-white">CGST + SGST</strong>

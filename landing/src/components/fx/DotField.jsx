@@ -45,7 +45,7 @@ export function DotField({ calm }) {
       // Dots drift a little slower than the page when scrolling.
       const shift = (window.scrollY * 0.3) % GAP;
       const lit = [];
-      ctx.fillStyle = 'rgba(148, 163, 184, 0.45)';
+      ctx.fillStyle = 'rgba(140, 165, 165, 0.45)';
       for (let x = GAP / 2; x < w; x += GAP) {
         if (x > left && x < right) continue;
         for (let y = GAP / 2 - shift; y < h + GAP; y += GAP) {
@@ -75,17 +75,17 @@ export function DotField({ calm }) {
 
       for (let i = 0; i < lit.length; i += 3) {
         const s = lit[i + 2];
-        ctx.fillStyle = `rgba(59, 130, 246, ${(0.3 + s * 0.7).toFixed(3)})`;
+        ctx.fillStyle = `rgba(32, 182, 164, ${(0.3 + s * 0.7).toFixed(3)})`;
         ctx.beginPath();
         ctx.arc(lit[i], lit[i + 1], 0.9 + s * 2.2, 0, Math.PI * 2);
         ctx.fill();
       }
 
-      ctx.font = '600 15px "Inter Variable", system-ui, sans-serif';
+      ctx.font = '600 15px "Manrope Variable", system-ui, sans-serif';
       ctx.textAlign = 'center';
       for (const b of bits) {
         const t = (now - b.t) / 1000;
-        ctx.fillStyle = `rgba(37, 99, 235, ${(1 - (now - b.t) / BIT_LIFE).toFixed(3)})`;
+        ctx.fillStyle = `rgba(23, 128, 122, ${(1 - (now - b.t) / BIT_LIFE).toFixed(3)})`;
         ctx.fillText(b.ch, b.x + b.vx * t, b.y + b.vy * t + 260 * t * t);
       }
 
