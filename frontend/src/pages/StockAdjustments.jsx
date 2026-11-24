@@ -1,3 +1,4 @@
+import TabBar from '@/components/kit/TabBar';
 import Pagination from '@/components/kit/Pagination';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2, Minus, Plus } from 'lucide-react';
@@ -51,18 +52,15 @@ export default function StockAdjustments() {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div role="tablist" className="flex gap-1 border-b">
-          <Tab active={tab === 'adjustments'} onClick={() => setTab('adjustments')}>
-            Adjustments
-          </Tab>
-          {canHistory && (
-            <Tab active={tab === 'history'} onClick={() => setTab('history')}>
-              Stock history
-            </Tab>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          <select className={cn(fieldCls, 'w-48')} value={storeId} onChange={(e) => setStoreId(e.target.value)} aria-label="Store">
+        <TabBar
+          label="Stock changes"
+          tabs={[{ key: 'adjustments', label: 'Adjustments' }, canHistory && { key: 'history', label: 'Stock history' }].filter(Boolean)}
+          value={tab}
+          onChange={setTab}
+          className="max-sm:w-[calc(100%+1.5rem)]"
+        />
+        <div className="flex items-center gap-2 max-sm:w-full">
+          <select className={cn(fieldCls, 'w-48 max-sm:flex-1')} value={storeId} onChange={(e) => setStoreId(e.target.value)} aria-label="Store">
             <option value="">All stores</option>
             {stores.map((s) => (
               <option key={s.id} value={s.id}>
@@ -99,20 +97,6 @@ export default function StockAdjustments() {
   );
 }
 
-function Tab({ active, onClick, children }) {
-  return (
-    <button
-      role="tab"
-      type="button"
-      aria-selected={active}
-      onClick={onClick}
-      className={cn('-mb-px border-b-2 px-4 py-2 text-sm font-medium', active ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground')}
-    >
-      {children}
-    </button>
-  );
-}
-
 function usePaged(path, deps) {
   const [page, setPage] = useState(1);
   const [state, setState] = useState({ rows: [], total: 0, loading: true, error: '' });
@@ -140,11 +124,11 @@ function Table({ head, children, loading, error, empty }) {
   if (error) return <Notice notice={{ kind: 'error', text: error }} />;
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-sm">
+      <table className="w-full min-w-[640px] text-sm">
         <thead>
           <tr className="border-b text-left text-xs text-muted-foreground">
             {head.map((h, i) => (
-              <th key={h || i} className={cn('px-2 py-2 font-medium', i >= head.length - 3 && 'text-right')}>
+              <th key={h || i} className={cn('whitespace-nowrap px-2 py-2 font-medium', i >= head.length - 3 && 'text-right')}>
                 {h}
               </th>
             ))}
@@ -214,7 +198,6 @@ function HistoryList({ storeId, storeName, reload }) {
   return (
     <SectionCard>
       <div className="pt-4">
-        <p className="mb-2 text-xs text-muted-foreground">Every change to stock: sales, returns, purchases, adjustments and imports.</p>
         <Table head={['Date', 'Product', 'Store', 'Reason', '', 'Change', 'Stock after', '']} loading={loading} error={error} empty={rows.length === 0}>
           {rows.map((m) => (
             <tr key={m.id}>

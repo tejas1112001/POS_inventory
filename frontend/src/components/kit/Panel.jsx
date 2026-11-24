@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils';
 // Panel: a titled card (moodboard dashboard panels). id labels the section.
 export default function Panel({ title, id, action, description, className, children }) {
   return (
-    <section className={cn('flex flex-col rounded-2xl border bg-card p-4 shadow-xs', className)} aria-labelledby={id}>
+    <section className={cn('flex min-w-0 flex-col rounded-2xl border bg-card p-4 shadow-xs', className)} aria-labelledby={id}>
       <div className="mb-3 flex min-h-9 items-center justify-between gap-2">
         <div className="min-w-0">
           <h2 id={id} className="truncate text-base font-bold">

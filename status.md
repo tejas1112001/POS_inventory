@@ -13,6 +13,8 @@ Branch `ui/teal-theme` (local, not pushed). Shop app and platform console restyl
 
 Follow-up 2026-11-24: tighter spacing (shell, topbar, cards, console); page buttons moved onto the FilterBar line on every list page (`FilterBar actions`); Storefront page rebuilt on PageHeader/Panel/FormField/FilterBar/DataTable with a new `TogglePill`; double page padding removed (Settings, Billing, Stock adjustments, Write-offs, form pages).
 
+Follow-up 2: page intro lines removed (PageHeader, ListPageLayout, record configs, console headers, Roles/Add role headings); reusable `TabBar` (Settings, Reports, Adjustments; tabs no longer collapse on phones); dashboard panels no longer overflow on phones (Panel min-w-0, phone list for recent sales); data tables scroll instead of squeezing on phones; old black buttons/overlays themed; purchase report total as a StatCard.
+
 Not done: the landing site (`landing/`) is still the old blue theme.
 
 # Rename to MintoBill (2026-11-23)

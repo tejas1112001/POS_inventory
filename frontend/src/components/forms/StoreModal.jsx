@@ -33,7 +33,7 @@ const StoreModal = ({ showModal, setShowModal, onStoreCreated }) => {
   if (!showModal) return null;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 flex items-center justify-center p-4" onClick={() => setShowModal(false)}>
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-[#0b2a32]/55 flex items-center justify-center p-4" onClick={() => setShowModal(false)}>
       <div className="relative w-full max-w-md">
         <div className="bg-white rounded-xl shadow-xl border border-gray-800 overflow-hidden" onClick={e => e.stopPropagation()}>
           {/* Modal Header */}
@@ -104,7 +104,7 @@ const StoreModal = ({ showModal, setShowModal, onStoreCreated }) => {
                 </button>
                 <button 
                   type="submit"
-                  className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800"
+                  className="px-4 py-2 bg-primary bg-primary-gradient text-primary-foreground rounded-lg hover:brightness-95"
                 >
                   Create Store
                 </button>

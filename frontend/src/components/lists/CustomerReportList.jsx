@@ -165,7 +165,6 @@ export default function CustomerReportList({ reports }) {
   return (
     <ListPageLayout
       title="Customer Report"
-      description="Manage your customer reports"
       controlButtons={<ListControlButtons buttons={customControlButtons} />}
       filterRow={
         <div className="grid grid-cols-1 gap-4 md:grid-cols-12">

@@ -296,6 +296,16 @@ body,
 }
 
 @layer base {
+  /* Phones: a data table inside a sideways scroller keeps readable
+     columns and scrolls, instead of squeezing every column. Tables with
+     their own min-w-* utility win (utilities come after base). */
+  @media (max-width: 639px) {
+    .overflow-x-auto > table,
+    .overflow-auto > table.pos-table {
+      min-width: 36rem;
+    }
+  }
+
   * {
     @apply border-border outline-ring/50;
   }

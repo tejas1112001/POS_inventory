@@ -84,7 +84,7 @@ export default function Audit() {
   const [applied, setApplied] = useState('');
   return (
     <div className="stack">
-      <PageHeader title="Audit log" description="Who did what, and when." />
+      <PageHeader title="Audit log" />
       {!can('audit:view_all') && <Notice kind="info">Your role shows only your own actions.</Notice>}
       <form
         className="row"

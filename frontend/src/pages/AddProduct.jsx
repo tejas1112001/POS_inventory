@@ -1,6 +1,5 @@
 import { toast } from '../../shared/toast/store';
 import React, { useState, useEffect } from 'react';
-import PageHeader from '../components/forms/PageHeader';
 import FormFooter from '../components/forms/FormFooter';
 import FormPageLayout, { FormCard, FormBody } from '../components/forms/FormPageLayout';
 import FormStepper from '../components/forms/FormStepper';
@@ -254,7 +253,6 @@ const AddProduct = () => {
 
   return (
     <FormPageLayout>
-      <PageHeader />
 
       <form className="flex min-h-0 flex-1 flex-col" onSubmit={handleSubmit} onInput={(e) => checkMrp(e.currentTarget)} onChange={(e) => checkMrp(e.currentTarget)} noValidate>
         <FormCard>
@@ -354,7 +352,7 @@ const AddProduct = () => {
                     className="w-full px-3 py-2 border border-gray-600 rounded-l-lg focus:ring-blue-500 focus:border-blue-500"
                     placeholder="Enter SKU"
                   />
-                  <button type="button" className="px-4 py-2 bg-black text-white rounded-r-lg hover:bg-blue-700"
+                  <button type="button" className="px-4 py-2 bg-primary bg-primary-gradient text-primary-foreground rounded-r-lg hover:brightness-95"
                   onClick={(e) => {
                     const skuInput = e.target.closest('div').querySelector('input[name="sku"]');
                     skuInput.value = generateSKU();
@@ -469,7 +467,7 @@ const AddProduct = () => {
                     className="w-full px-3 py-2 border border-gray-600 rounded-l-lg focus:ring-blue-500 focus:border-blue-500"
                     placeholder="Enter barcode"
                   />
-                  <button type="button" className="px-4 py-2 bg-black text-white rounded-r-lg hover:bg-blue-700">
+                  <button type="button" className="px-4 py-2 bg-primary bg-primary-gradient text-primary-foreground rounded-r-lg hover:brightness-95">
                     Generate
                   </button>
                 </div>
@@ -679,7 +677,7 @@ const AddProduct = () => {
                       <option>Size</option>
                       <option>Material</option>
                     </select>
-                    <button className="ml-3 p-2 bg-black text-white rounded-lg hover:bg-blue-700">
+                    <button className="ml-3 p-2 bg-primary bg-primary-gradient text-primary-foreground rounded-lg hover:brightness-95">
                       <PlusCircleIcon className="w-5 h-5" />
                     </button>
                   </div>

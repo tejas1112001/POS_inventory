@@ -139,23 +139,15 @@ export default function AddRole() {
 
   return (
     <FormPageLayout>
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate('/roles')}
+            aria-label="Back to roles"
             className="rounded-lg border p-2 hover:bg-accent transition-colors"
           >
             <ArrowLeft className="h-5 w-5" />
           </button>
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
-              <ShieldCheck className="h-6 w-6 text-primary" />
-              {isEditing ? `Edit Role: ${roleName}` : 'Create Custom Role'}
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              Define role details and toggle menu-wise and action-wise permissions.
-            </p>
-          </div>
         </div>
 
         <div className="flex gap-2">

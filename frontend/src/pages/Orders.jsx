@@ -7,7 +7,6 @@ import { api } from '@/services/api';
 import usePagedList from '@/hooks/usePagedList';
 import DataTable from '@/components/kit/DataTable';
 import FilterBar from '@/components/kit/FilterBar';
-import PageHeader from '@/components/kit/PageHeader';
 import RowActions from '@/components/kit/RowActions';
 import StatusBadge from '@/components/kit/StatusBadge';
 import { EmptyState } from '@/components/kit/States';
@@ -77,9 +76,6 @@ export default function Orders() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <PageHeader
-        description="Every sale, newest first. Open an order for its items, payments, returns and receipt."
-      />
       <FilterBar
         actions={
           hasPermission('sales', 'create') && (

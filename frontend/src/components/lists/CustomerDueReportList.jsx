@@ -165,7 +165,6 @@ export default function CustomerDueReportList({ reports }) {
   return (
     <ListPageLayout
       title="Customer Due Report"
-      description="Manage your customer due reports"
       controlButtons={<ListControlButtons buttons={customControlButtons} />}
       filterRow={
         <div className="grid grid-cols-1 gap-4 md:grid-cols-12">

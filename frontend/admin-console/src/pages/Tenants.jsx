@@ -79,7 +79,6 @@ export default function Tenants() {
     <div className="stack">
       <PageHeader
         title="Tenants"
-        description="Every shop on the platform: search, filter and open one."
         actions={
           can('tenants:create') && (
             <Button variant="primary" onClick={() => setCreating(true)}>

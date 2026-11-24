@@ -6,7 +6,8 @@ import { ShieldCheck, Plus, Edit, Trash2, Users, CheckCircle2 } from 'lucide-rea
 import ListPageShell from '../components/layout/ListPageShell';
 import ListPageLayout from '../components/ListComponents/ListPageLayout';
 import ListControlButtons from '../components/ListComponents/ListControlButtons';
-import SearchInput from '../components/ListComponents/SearchInput';
+import FilterBar from '@/components/kit/FilterBar';
+import { Button } from '@/components/ui/button';
 import { usePermission } from '../hooks/usePermission';
 import { api } from '../services/api';
 
@@ -73,46 +74,32 @@ export default function Roles() {
 
   return (
     <ListPageShell>
-      <div className="space-y-6">
-        {/* Header bar */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
-              <ShieldCheck className="h-7 w-7 text-primary" />
-              Role & Permission Management
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              Manage custom roles, assign module permissions, and control user access across the application.
-            </p>
-          </div>
-          {hasPermission('roles', 'create') && (
-            <button
-              onClick={() => navigate('/add-role')}
-              className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-[color-mix(in_oklch,var(--primary),black_12%)] transition-all"
-            >
-              <Plus className="h-4 w-4" />
-              Create Custom Role
-            </button>
-          )}
-        </div>
-
+      <div className="space-y-3">
         {error && (
           <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
             {error}
           </div>
         )}
 
-        {/* Search */}
-        <div className="w-full max-w-md">
-          <SearchInput search={search} setSearch={setSearch} placeholder="Search roles..." />
-        </div>
+        <FilterBar
+          search={search}
+          onSearch={setSearch}
+          placeholder="Search roles…"
+          actions={
+            hasPermission('roles', 'create') && (
+              <Button type="button" className="max-sm:h-11" onClick={() => navigate('/add-role')}>
+                <Plus className="size-4" aria-hidden="true" /> New role
+              </Button>
+            )
+          }
+        />
 
         {/* Roles Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
           {filteredRoles.map((role) => (
             <div
               key={role.id}
-              className="relative flex flex-col justify-between rounded-xl border bg-card p-6 shadow-xs hover:shadow-md transition-shadow"
+              className="relative flex flex-col justify-between rounded-2xl border bg-card p-4 shadow-xs transition-shadow hover:shadow-md"
             >
               <div>
                 <div className="flex items-center justify-between gap-2 mb-3">

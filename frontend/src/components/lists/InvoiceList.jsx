@@ -107,7 +107,6 @@ export default function InvoiceList({ invoices }) {
   return (
     <ListPageLayout
       title="Invoices"
-      description="Manage your stock invoices"
       controlButtons={<ListControlButtons buttons={controlButtons} />}
       filters={
         <>

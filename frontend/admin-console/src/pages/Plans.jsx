@@ -26,7 +26,6 @@ export default function Plans() {
     <div className="stack">
       <PageHeader
         title="Plans"
-        description="Prices, limits and modules of each subscription plan."
         actions={
           can('plans:manage') && (
             <Button variant="primary" onClick={() => setEditing({})}>

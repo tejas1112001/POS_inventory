@@ -12,6 +12,8 @@ import { api } from '@/services/api';
 import { formatDate, formatCurrency } from '@/lib/format';
 import { unitQtyText } from '@/lib/saleUnits';
 import { fmtQty } from '@/lib/qty';
+import { ShoppingBag } from 'lucide-react';
+import StatCard from '../kit/StatCard';
 
 const n = (v) => Number(v) || 0;
 
@@ -88,7 +90,6 @@ export default function PurchaseReportList() {
   return (
     <ListPageLayout
       title="Purchase Report"
-      description={`Purchased lines. Total shown: ${formatCurrency(total)}. Cancelled purchases are left out.`}
       controlButtons={<ListControlButtons buttons={controlButtons} />}
       filters={<SearchInput search={search} setSearch={setSearch} placeholder="Search purchase reports..." />}
       filterRow={
@@ -106,7 +107,14 @@ export default function PurchaseReportList() {
           <ReportExportButtons path="/api/purchase/report/export" qs={qs} name="purchase-report" />
         </div>
       }
-      extraContent={error && <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</div>}
+      extraContent={
+        <>
+          {error && <div role="alert" className="mb-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</div>}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <StatCard icon={ShoppingBag} tone="deep" label="Purchased (cancelled left out)" value={formatCurrency(total)} />
+          </div>
+        </>
+      }
       table={table}
       isLoading={loading}
       emptyState={emptyState}

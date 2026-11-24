@@ -50,15 +50,14 @@ const named = (noun, nounPlural, endpoint, module) => ({
   ),
 });
 
-export const categoryConfig = { ...named('Category', 'Categories', '/api/categories', 'categories'), description: 'Group products for the till and the online shop.' };
-export const brandConfig = { ...named('Brand', 'Brands', '/api/brands', 'brands'), description: 'Brands shown on products and in reports.' };
+export const categoryConfig = { ...named('Category', 'Categories', '/api/categories', 'categories') };
+export const brandConfig = { ...named('Brand', 'Brands', '/api/brands', 'brands') };
 
 export const unitConfig = {
   endpoint: '/api/units',
   module: 'units',
   noun: 'Unit',
   nounPlural: 'Units',
-  description: 'How products are counted (piece, pack, box).',
   columns: [
     { id: 'name', header: 'Name', card: 'title', cell: (r) => r.name },
     { id: 'short', header: 'Short name', card: 'subtitle', cell: (r) => dash(r.short_name) },
@@ -112,7 +111,6 @@ export const customerConfig = {
   module: 'customers',
   noun: 'Customer',
   nounPlural: 'Customers',
-  description: 'People you sell to. Their email is used for receipts.',
   searchHint: 'Search name, phone or email…',
   columns: [
     name,
@@ -153,7 +151,6 @@ export const supplierConfig = {
   module: 'suppliers',
   noun: 'Supplier',
   nounPlural: 'Suppliers',
-  description: 'Who you buy stock from.',
   searchHint: 'Search name, phone or email…',
   columns: [
     name,

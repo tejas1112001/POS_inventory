@@ -9,7 +9,6 @@ import { toast } from '../../../shared/toast/store';
 import usePagedList from '@/hooks/usePagedList';
 import DataTable from './DataTable';
 import FilterBar from './FilterBar';
-import PageHeader from './PageHeader';
 import RowActions from './RowActions';
 import { EmptyState } from './States';
 import { FormSheet, STATUS_OPTIONS } from './Form';
@@ -17,11 +16,11 @@ import { FormSheet, STATUS_OPTIONS } from './Form';
 // RecordsPage: a server-paged list with search, a status filter, add/edit
 // in a sheet and delete with confirmation. Used by categories, brands,
 // units, customers and suppliers.
-//   config: { endpoint, module, noun, nounPlural, description, searchHint,
+//   config: { endpoint, module, noun, nounPlural, searchHint,
 //             columns, fields(row), defaults(row), payload(values, row),
 //             extraActions(row, navigate) — more row actions, optional }
 export default function RecordsPage({ config, startNew = false }) {
-  const { endpoint, module, noun, nounPlural, description, searchHint, columns, fields, defaults, payload } = config;
+  const { endpoint, module, noun, nounPlural, searchHint, columns, fields, defaults, payload } = config;
   const { hasPermission } = usePermission();
   const confirm = useConfirm();
   const navigate = useNavigate();
@@ -71,9 +70,6 @@ export default function RecordsPage({ config, startNew = false }) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <PageHeader
-        description={description}
-      />
       <FilterBar
         actions={
           can('create') && (

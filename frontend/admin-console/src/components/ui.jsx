@@ -222,13 +222,10 @@ export function ThemeToggle() {
 }
 
 // PageHeader: the page title, an optional line under it and actions.
-export function PageHeader({ title, description, actions }) {
+export function PageHeader({ title, actions }) {
   return (
     <div className="page-header">
-      <div>
-        <h1>{title}</h1>
-        {description && <p className="muted">{description}</p>}
-      </div>
+      <h1>{title}</h1>
       {actions && <div className="row">{actions}</div>}
     </div>
   );

@@ -1,3 +1,4 @@
+import TabBar from '@/components/kit/TabBar';
 import { Link } from 'react-router-dom';
 import React, { useState } from 'react';
 import { Palette, Check, Moon, Sun } from 'lucide-react';
@@ -35,27 +36,7 @@ export default function Settings() {
 
   return (
     <div className="flex h-full flex-col gap-3">
-      <div role="tablist" className="-mx-3 flex gap-1 overflow-x-auto border-b px-3 sm:mx-0 sm:px-0">
-        {tabs.map((t) => t.to ? (
-          <Link key={t.key} to={t.to} className="-mb-px inline-flex min-h-11 items-center whitespace-nowrap border-b-2 border-transparent px-4 text-sm font-semibold text-muted-foreground hover:text-foreground">
-            {t.label}
-          </Link>
-        ) : (
-          <button
-            key={t.key}
-            role="tab"
-            type="button"
-            aria-selected={tab === t.key}
-            onClick={() => setTab(t.key)}
-            className={cn(
-              '-mb-px min-h-11 whitespace-nowrap border-b-2 px-4 text-sm font-semibold',
-              tab === t.key ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'
-            )}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <TabBar label="Settings" tabs={tabs.map((t) => (t.to ? { ...t, plain: true } : t))} value={tab} onChange={setTab} />
       {tab === 'shop' && (
         <div className="space-y-3">
           <BusinessSettings canManage={hasPermission('modules', 'manage')} />
@@ -81,8 +62,7 @@ function Appearance() {
   const { theme, setTheme, mode, setMode } = useTheme();
   return (
     <SectionCard title="Appearance">
-      <p className="mb-3 text-sm text-muted-foreground">Light or dark screens, and the accent colour for buttons and highlights. Both apply to this browser only.</p>
-      <div className="mb-5 grid max-w-sm grid-cols-2 gap-2" role="radiogroup" aria-label="Mode">
+      <div className="mb-4 grid max-w-sm grid-cols-2 gap-2" role="radiogroup" aria-label="Mode">
         <ChoiceButton selected={mode === 'light'} icon={Sun} onClick={() => setMode('light')}>
           Light
         </ChoiceButton>

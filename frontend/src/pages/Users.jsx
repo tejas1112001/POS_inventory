@@ -9,7 +9,6 @@ import { toast } from '../../shared/toast/store';
 import usePagedList from '@/hooks/usePagedList';
 import DataTable from '@/components/kit/DataTable';
 import FilterBar from '@/components/kit/FilterBar';
-import PageHeader from '@/components/kit/PageHeader';
 import RowActions from '@/components/kit/RowActions';
 import StatusBadge from '@/components/kit/StatusBadge';
 import { EmptyState } from '@/components/kit/States';
@@ -97,9 +96,6 @@ export default function Users() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <PageHeader
-        description="People who sign in to this shop. Their role decides what they can see and do."
-      />
       <FilterBar
         actions={
           can('create') && (

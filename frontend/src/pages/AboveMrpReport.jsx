@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import PageHeader from '@/components/kit/PageHeader';
 import { EmptyState, ErrorState, LoadingRows } from '@/components/kit/States';
 import { InlineAlert } from '@/components/feedback/InlineAlert';
 import { formatCurrency } from '@/lib/format';
@@ -33,7 +32,6 @@ export default function AboveMrpReport() {
   const rows = data?.rows || [];
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
-      <PageHeader description="Prices above their MRP, and medicines with no MRP. The till refuses these until the price or the MRP is fixed." />
       {error && <ErrorState message={error} onRetry={load} />}
       {!data && !error && <LoadingRows rows={4} />}
       {data && rows.length === 0 && <EmptyState title="Every price is at or below its MRP">Nothing to fix.</EmptyState>}

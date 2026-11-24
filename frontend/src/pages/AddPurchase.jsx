@@ -1,6 +1,5 @@
 import { toast } from '../../shared/toast/store';
 import React, { useState, useEffect } from 'react';
-import PageHeader from '../components/forms/PageHeader';
 import FormFooter from '../components/forms/FormFooter';
 import FormPageLayout, { FormCard, FormBody } from '../components/forms/FormPageLayout';
 import FormStepper from '../components/forms/FormStepper';
@@ -202,7 +201,6 @@ const AddPurchase = () => {
 
   return (
     <FormPageLayout>
-      <PageHeader />
 
       <form className="flex min-h-0 flex-1 flex-col" onSubmit={handleSubmit}>
         <FormCard>

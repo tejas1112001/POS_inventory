@@ -5,7 +5,6 @@ import ListPagination from './ListPagination';
 
 export default function ListPageLayout({
   title: _title,
-  description,
   filters,
   filterRow,
   controlButtons,
@@ -24,10 +23,6 @@ export default function ListPageLayout({
       <div className="shrink-0 pb-2">
         <div className="flex flex-col gap-2">
           <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-            {description && (
-              <p className="shrink-0 text-xs text-muted-foreground">{description}</p>
-            )}
-
             <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center lg:justify-end">
               {filters && (
                 <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end [&>*]:w-full sm:[&>*]:w-auto">

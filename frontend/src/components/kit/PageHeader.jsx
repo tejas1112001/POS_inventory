@@ -1,13 +1,12 @@
-// PageHeader: the page's description and its actions. The page title is
-// already in the top bar, so it is not repeated here.
-export default function PageHeader({ description, actions, children }) {
+// PageHeader: the page's actions, at the right. The page title is in the
+// top bar and pages carry no intro line, so it renders nothing without
+// actions or children.
+export default function PageHeader({ actions, children }) {
+  if (!actions && !children) return null;
   return (
-    <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-      <div className="min-w-0">
-        {description && <p className="text-sm text-muted-foreground">{description}</p>}
-        {children}
-      </div>
-      {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+    <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+      <div className="min-w-0">{children}</div>
+      {actions && <div className="flex flex-wrap items-center gap-2 max-sm:w-full max-sm:[&>*]:flex-1">{actions}</div>}
     </div>
   );
 }

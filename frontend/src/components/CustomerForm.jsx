@@ -66,7 +66,7 @@ export default function CustomerForm({ isOpen, onClose, onAddCustomer }) {
   // --- END OF MODIFICATIONS ---
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-[#0b2a32]/55 flex items-center justify-center p-4">
       <div 
         className="fixed inset-0"
         onClick={onClose}
@@ -129,7 +129,7 @@ export default function CustomerForm({ isOpen, onClose, onAddCustomer }) {
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800"
+              className="px-4 py-2 bg-primary bg-primary-gradient text-primary-foreground rounded-lg hover:brightness-95"
             >
               Submit
             </button>

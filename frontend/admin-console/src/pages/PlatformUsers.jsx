@@ -129,7 +129,6 @@ export default function PlatformUsers() {
     <div className="stack">
       <PageHeader
         title="Platform users"
-        description="Staff who can sign in to this console, and their roles."
         actions={
           <Button variant="primary" onClick={() => setDialog({ kind: 'add' })}>
             Add user

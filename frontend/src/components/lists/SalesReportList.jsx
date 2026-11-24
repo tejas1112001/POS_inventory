@@ -112,7 +112,6 @@ export default function SalesReportList() {
   return (
     <ListPageLayout
       title="Sales Report"
-      description="Sold lines with returns netted. Voided sales are left out."
       controlButtons={<ListControlButtons buttons={[...controlButtons, { icon: <PrinterIcon className="h-5 w-5" />, onClick: () => window.print(), title: 'Print' }]} />}
       extraContent={
         <>

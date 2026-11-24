@@ -3,7 +3,6 @@ import { toast } from '../../shared/toast/store';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PlusCircleIcon, XMarkIcon } from '@heroicons/react/24/outline';
-import PageHeader from '../components/forms/PageHeader';
 import FormFooter from '../components/forms/FormFooter';
 import FormPageLayout, { FormCard, FormBody } from '../components/forms/FormPageLayout';
 import FormStepper from '../components/forms/FormStepper';
@@ -151,7 +150,6 @@ export default function AddSales() {
 
   return (
     <FormPageLayout>
-      <PageHeader />
       <form className="flex min-h-0 flex-1 flex-col" onSubmit={submit} noValidate>
         <FormCard>
           <FormBody>

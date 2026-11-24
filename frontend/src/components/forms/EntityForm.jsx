@@ -213,7 +213,7 @@ export default function EntityForm({
         </button>
         <button
           type="submit"
-          className="inline-flex justify-center rounded-md border border-transparent bg-black px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 disabled:opacity-60"
+          className="inline-flex justify-center rounded-lg border border-transparent bg-primary bg-primary-gradient px-4 py-2 text-sm font-semibold text-primary-foreground hover:brightness-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-60"
           disabled={isSubmitting}
         >
           {isSubmitting ? 'Saving...' : submitLabel}

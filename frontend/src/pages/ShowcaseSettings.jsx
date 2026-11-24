@@ -240,7 +240,6 @@ export default function ShowcaseSettings() {
   return (
     <div className="flex flex-col gap-3">
       <PageHeader
-        description="Your public shop page: its details and which products customers can see."
         actions={
           <>
             {stores.length > 1 && (

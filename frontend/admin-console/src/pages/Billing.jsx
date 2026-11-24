@@ -52,7 +52,7 @@ export default function Billing() {
 
   return (
     <div className="stack">
-      <PageHeader title="Billing" description="Subscriptions, invoices and payments across shops." />
+      <PageHeader title="Billing" />
       <Tabs tabs={TABS} value={tab} onChange={setTab} />
       {tab === 'expiring' && (
         <label className="row">

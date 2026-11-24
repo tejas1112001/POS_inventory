@@ -6,7 +6,6 @@ import { toast } from '../../shared/toast/store';
 import usePagedList from '@/hooks/usePagedList';
 import DataTable from '@/components/kit/DataTable';
 import FilterBar from '@/components/kit/FilterBar';
-import PageHeader from '@/components/kit/PageHeader';
 import RowActions from '@/components/kit/RowActions';
 import StatusBadge from '@/components/kit/StatusBadge';
 import { EmptyState } from '@/components/kit/States';
@@ -103,7 +102,6 @@ export default function Inventory() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <PageHeader description="How many of each product are in each store. Use Adjustments to add or remove with a reason." />
       <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
         {tiles.map((t) => (
           <button

@@ -48,7 +48,6 @@ export default function WriteOffs() {
       <SectionCard
         icon={Trash2}
         title="Write-offs"
-        description="Units of batches that left the shop for good: expired, damaged, recalled or returned to the supplier. To write off, open a batch in Batches & expiry."
       >
         <div className="mb-3 max-w-xs">
           <SelectField id="wo-store" label="Store" value={storeId} onChange={setStoreId}

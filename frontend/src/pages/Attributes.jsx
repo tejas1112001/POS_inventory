@@ -97,7 +97,6 @@ export default function Attributes() {
   return (
     <div>
       <PageHeader
-        description="Define attributes such as Size, Colour and Season once. Products use them as their variant dimensions (size × colour) or as product details."
         actions={
           hasPermission('attributes', 'create') && (
             <Button type="button" onClick={() => open(null)} className="max-sm:h-11">
