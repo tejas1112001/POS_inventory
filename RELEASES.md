@@ -1,7 +1,10 @@
 # Releases
 
-Production releases of MintoBill (mintobill.com). Each one has a Git tag on
-GitHub and a folder on the VPS under `/var/www/bilmitra/releases/<server id>`
+Production releases of MintoBill (mintobill.com), numbered with Semantic
+Versioning (https://semver.org): `vMAJOR.MINOR.PATCH`. MAJOR for changes that
+break existing shops, data or integrations; MINOR for new features; PATCH for
+fixes and small layout changes. Each release has a Git tag on GitHub and a
+folder on the VPS under `/var/www/bilmitra/releases/<server id>`
 (the server still uses the BilMitra folder and service names until
 `migrate-to-mintobill.sh` is run; see docs/DEPLOY_VPS.md §8).
 
@@ -10,12 +13,12 @@ folder and restarting `bilmitra` (the VPS keeps the five newest folders).
 
 | Tag | Date | Commit | Server id | Status |
 |---|---|---|---|---|
-| `v2026.11.24.3` | 2026-11-24 | `ad12ab6` | `20261124112651-ad12ab6` | **Live** |
-| `v2026.11.24.2` | 2026-11-24 | `2c74dc8` | `20261124100645-2c74dc8` | Replaced (rollback target) |
-| `v2026.11.24.1` | 2026-11-24 | `28cb2c1` | `20261124032824-28cb2c1` | Replaced |
-| `v2026.11.22` | 2026-11-22 | `08024c4` | `20261122-08024c4-landing` | Replaced |
+| `v1.2.1` | 2026-11-24 | `ad12ab6` | `20261124112651-ad12ab6` | **Live** |
+| `v1.2.0` | 2026-11-24 | `2c74dc8` | `20261124100645-2c74dc8` | Replaced (rollback target) |
+| `v1.1.0` | 2026-11-24 | `28cb2c1` | `20261124032824-28cb2c1` | Replaced |
+| `v1.0.0` | 2026-11-22 | `08024c4` | `20261122-08024c4-landing` | Replaced |
 
-## v2026.11.24.3 (live)
+## v1.2.1 (live)
 
 Landing site layout fixes. No database changes.
 
@@ -24,7 +27,7 @@ Landing site layout fixes. No database changes.
 - Sticky header; the phone menu opens over the page with a dimmed backdrop
   instead of pushing the page down, and locks page scroll while open.
 
-## v2026.11.24.2
+## v1.2.0
 
 Teal & Cream redesign and console-only business type. No database changes.
 
@@ -39,7 +42,7 @@ Teal & Cream redesign and console-only business type. No database changes.
   and laptops.
 - Design references in `frontend/ui_images/`.
 
-## v2026.11.24.1
+## v1.1.0
 
 Pharmacy strict MRP and the MintoBill rename. Tenant migration 00046.
 
@@ -49,7 +52,8 @@ Pharmacy strict MRP and the MintoBill rename. Tenant migration 00046.
 - Decimal quantities on the remaining screens.
 - VPS deploy files (PR #28).
 
-## v2026.11.22
+## v1.0.0
 
-Landing release (server folder `20261122-08024c4-landing`) at the merge of
-PR #27 (seed tool) and the dependency updates (#21, #22, #25).
+First production release: the landing release (server folder
+`20261122-08024c4-landing`) at the merge of PR #27 (seed tool) and the
+dependency updates (#21, #22, #25).
