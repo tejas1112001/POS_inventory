@@ -21,7 +21,7 @@ export default function FilterBar({ search, onSearch, placeholder = 'Search…',
         {stack && f.label}
         <select
           aria-label={f.label}
-          className="h-11 rounded-md border bg-background px-3 text-sm sm:h-9"
+          className="h-11 rounded-lg border border-input bg-card px-3 text-sm shadow-xs sm:h-10"
           value={values[f.key] || ''}
           onChange={(e) => onFilter(f.key, e.target.value)}
         >
@@ -49,7 +49,7 @@ export default function FilterBar({ search, onSearch, placeholder = 'Search…',
             }}
             placeholder={placeholder}
             aria-label={placeholder.replace(/…$/, '')}
-            className="h-11 w-full rounded-md border bg-background pr-3 pl-9 text-base sm:h-9 sm:text-sm"
+            className="h-11 w-full rounded-lg border border-input bg-card pr-3 pl-9 text-base shadow-xs outline-none transition-[border-color,box-shadow] focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-ring/25 sm:h-10 sm:text-sm"
           />
         </div>
         {(filters.length > 0 || extra) && (
@@ -71,7 +71,7 @@ export default function FilterBar({ search, onSearch, placeholder = 'Search…',
               key={f.key}
               type="button"
               onClick={() => onFilter(f.key, '')}
-              className="inline-flex min-h-8 items-center gap-1 rounded-full bg-accent px-3 text-accent-foreground"
+              className="inline-flex min-h-8 items-center gap-1 rounded-full bg-accent px-3 font-medium text-accent-foreground"
               aria-label={`Remove filter ${f.label}: ${f.options.find((o) => o.value === values[f.key])?.label}`}
             >
               {f.options.find((o) => o.value === values[f.key])?.label}

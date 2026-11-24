@@ -11,10 +11,10 @@ import { api } from '@/services/api';
 import { toast } from '../../../shared/toast/store';
 
 const inputCls =
-  'h-11 w-24 rounded-md border border-input bg-background px-2 text-right text-base tabular-nums outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 sm:h-9 sm:text-sm';
+  'h-11 w-24 rounded-lg border border-input bg-card px-2 text-right text-base tabular-nums outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-ring/25 sm:h-9 sm:text-sm';
 
 const smallCls =
-  'h-11 w-full min-w-0 rounded-md border border-input bg-background px-2 text-base outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 sm:h-8 sm:text-sm';
+  'h-11 w-full min-w-0 rounded-lg border border-input bg-card px-2 text-base outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-ring/25 sm:h-8 sm:text-sm';
 
 const outstanding = (i) => Math.max(0, roundQty((Number(i.quantity) || 0) - (Number(i.received_qty) || 0)));
 const emptyBatch = () => ({ batchNo: '', expiry: '', mrp: '', mrpPack: '', quantity: '' });
@@ -290,7 +290,7 @@ export default function ReceiveGoodsDialog({ purchase, onClose, onDone }) {
         <label className="block text-sm">
           <span className="mb-1 block font-medium">Note (optional)</span>
           <input
-            className="h-11 w-full rounded-md border border-input bg-background px-3 text-base outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 sm:h-9 sm:text-sm"
+            className="h-11 w-full rounded-lg border border-input bg-card px-3 text-base outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-ring/25 sm:h-9 sm:text-sm"
             value={note}
             maxLength={1000}
             placeholder="For example the delivery note number"

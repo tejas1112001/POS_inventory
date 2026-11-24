@@ -124,7 +124,7 @@ export default function PurchaseDetail() {
       )}
 
       <div className="grid gap-4 xl:grid-cols-3">
-        <section className="overflow-hidden rounded-lg border bg-card shadow-xs xl:col-span-2" aria-labelledby="pitems-h">
+        <section className="overflow-hidden rounded-2xl border bg-card shadow-xs xl:col-span-2" aria-labelledby="pitems-h">
           <h2 id="pitems-h" className="border-b px-4 py-3 text-base font-semibold">
             Items
           </h2>
@@ -163,7 +163,7 @@ export default function PurchaseDetail() {
             </table>
           </div>
         </section>
-        <section className="rounded-lg border bg-card p-4 shadow-xs" aria-labelledby="ptot-h">
+        <section className="rounded-2xl border bg-card p-4 shadow-xs" aria-labelledby="ptot-h">
           <h2 id="ptot-h" className="mb-2 text-base font-semibold">
             Totals
           </h2>
@@ -177,7 +177,7 @@ export default function PurchaseDetail() {
         </section>
       </div>
       {receipts.length > 0 && (
-        <section className="overflow-hidden rounded-lg border bg-card shadow-xs" aria-labelledby="prc-h">
+        <section className="overflow-hidden rounded-2xl border bg-card shadow-xs" aria-labelledby="prc-h">
           <h2 id="prc-h" className="border-b px-4 py-3 text-base font-semibold">
             Goods received
           </h2>

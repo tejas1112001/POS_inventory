@@ -140,7 +140,7 @@ export default function ProductDetail() {
         </div>
       </div>
 
-      <section className="overflow-hidden rounded-lg border bg-card shadow-xs" aria-labelledby="opts-h">
+      <section className="overflow-hidden rounded-2xl border bg-card shadow-xs" aria-labelledby="opts-h">
         <h2 id="opts-h" className="border-b px-4 py-3 text-base font-semibold">
           {many ? `${variants.length} options` : 'Price and stock'}
         </h2>
@@ -192,7 +192,7 @@ export default function ProductDetail() {
         {!storeIds.length && <p className="px-4 py-3 text-sm text-muted-foreground">No stock recorded in any store yet.</p>}
       </section>
 
-      <section className="rounded-lg border bg-card p-4 shadow-xs" aria-labelledby="details-h">
+      <section className="rounded-2xl border bg-card p-4 shadow-xs" aria-labelledby="details-h">
         <h2 id="details-h" className="mb-3 text-base font-semibold">
           Details
         </h2>

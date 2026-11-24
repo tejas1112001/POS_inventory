@@ -9,7 +9,7 @@ import { api } from '@/services/api';
 import { toast } from '../../../shared/toast/store';
 
 const inputCls =
-  'h-11 w-full rounded-md border border-input bg-background px-3 text-base outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 sm:h-9 sm:text-sm';
+  'h-11 w-full rounded-lg border border-input bg-card px-3 text-base outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-ring/25 sm:h-9 sm:text-sm';
 
 const FIELDS = [
   ['name', 'Product name'],
@@ -212,7 +212,7 @@ function LayoutDialog({ initial, onClose, onSave, indexKey }) {
               <legend className="mb-1 text-sm font-medium">On each label</legend>
               <div className="flex flex-wrap gap-2">
                 {FIELDS.map(([k, label]) => (
-                  <label key={k} className="flex items-center gap-1.5 rounded-md border px-2 py-1 text-sm">
+                  <label key={k} className="flex items-center gap-1.5 rounded-lg border px-2 py-1 text-sm">
                     <input type="checkbox" className="size-4" checked={l.fields.includes(k)} onChange={() => toggleField(k)} />
                     {label}
                   </label>

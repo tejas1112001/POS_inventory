@@ -19,7 +19,7 @@ import { toast } from '../../shared/toast/store';
 import { fmtQty, parseQty, qtyHint } from '@/lib/qty';
 
 const inputCls =
-  'h-11 w-full rounded-md border border-input bg-background px-3 text-base outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 sm:h-9 sm:text-sm';
+  'h-11 w-full rounded-lg border border-input bg-card px-3 text-base outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-ring/25 sm:h-9 sm:text-sm';
 
 const signed = (n) => (n > 0 ? `+${fmtQty(n)}` : fmtQty(n));
 const itemName = (l) => `${l.productName}${l.label ? ` · ${l.label}` : ''}`;

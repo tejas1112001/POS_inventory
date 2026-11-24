@@ -30,7 +30,7 @@ export default function PaymentMethodsReport() {
   const taken = (rows || []).filter((r) => r.method !== 'credit').reduce((s, r) => s + Number(r.amount), 0);
 
   return (
-    <section className="rounded-lg border bg-card shadow-xs" aria-labelledby="pm-h">
+    <section className="rounded-2xl border bg-card shadow-xs" aria-labelledby="pm-h">
       <div className="flex flex-wrap items-end justify-between gap-2 border-b px-4 py-3">
         <h2 id="pm-h" className="text-base font-semibold">
           Sales by payment method
@@ -38,11 +38,11 @@ export default function PaymentMethodsReport() {
         <div className="flex items-end gap-2 text-xs">
           <label className="space-y-1 font-medium">
             From
-            <input type="date" className="block h-9 rounded-md border bg-card px-2" value={from} max={to} onChange={(e) => e.target.value && setFrom(e.target.value)} />
+            <input type="date" className="block h-9 rounded-lg border bg-card px-2" value={from} max={to} onChange={(e) => e.target.value && setFrom(e.target.value)} />
           </label>
           <label className="space-y-1 font-medium">
             To
-            <input type="date" className="block h-9 rounded-md border bg-card px-2" value={to} min={from} onChange={(e) => e.target.value && setTo(e.target.value)} />
+            <input type="date" className="block h-9 rounded-lg border bg-card px-2" value={to} min={from} onChange={(e) => e.target.value && setTo(e.target.value)} />
           </label>
         </div>
       </div>

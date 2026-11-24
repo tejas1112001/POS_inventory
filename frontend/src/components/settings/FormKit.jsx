@@ -96,7 +96,7 @@ export function Notice({ notice }) {
     <div
       role={notice.kind === 'error' ? 'alert' : 'status'}
       className={cn(
-        'rounded-md border px-3 py-2 text-sm',
+        'rounded-lg border px-3 py-2 text-sm',
         notice.kind === 'error'
           ? 'border-destructive/30 bg-destructive/10 text-destructive'
           : 'border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'

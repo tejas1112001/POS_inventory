@@ -32,25 +32,25 @@ export default function DataTable({
         {/* Table: 640 px and up */}
         <div className="hidden sm:block">
           <table className="w-full text-sm" aria-label={label} aria-busy={loading || undefined}>
-            <thead className="sticky top-0 z-[1] bg-muted text-left text-xs font-medium uppercase tracking-wide text-slate-600 dark:text-slate-300">
+            <thead className="sticky top-0 z-[1] bg-muted text-left text-xs font-semibold text-muted-foreground">
               <tr>
                 {columns.map((c) => (
-                  <th key={c.id} scope="col" className={cn('px-4 py-2.5 font-medium', c.align === 'right' && 'text-right', c.className)}>
+                  <th key={c.id} scope="col" className={cn('border-b px-4 py-3 font-semibold', c.align === 'right' && 'text-right', c.className)}>
                     {c.header}
                   </th>
                 ))}
                 {actions && (
-                  <th scope="col" className="w-12 px-2">
+                  <th scope="col" className="w-12 border-b px-2">
                     <span className="sr-only">Actions</span>
                   </th>
                 )}
               </tr>
             </thead>
-            <tbody className="divide-y">
+            <tbody className="divide-y divide-border/70">
               {rows.map((r) => (
-                <tr key={rowKey(r)} className="hover:bg-muted/40">
+                <tr key={rowKey(r)} className="transition-colors duration-150 hover:bg-accent/40">
                   {columns.map((c) => (
-                    <td key={c.id} className={cn('px-4 py-2.5 align-middle', c.align === 'right' && 'text-right tabular-nums', c.className)}>
+                    <td key={c.id} className={cn('px-4 py-3 align-middle', c.align === 'right' && 'text-right tabular-nums', c.className)}>
                       {c.cell(r)}
                     </td>
                   ))}
@@ -94,7 +94,7 @@ export default function DataTable({
   // The rows scroll inside the table area (sticky header); the pager stays
   // pinned under it. Pages give the table the remaining height.
   return (
-    <section className="flex min-h-[16rem] flex-1 flex-col overflow-hidden rounded-lg border bg-card">
+    <section className="flex min-h-[16rem] flex-1 flex-col overflow-hidden rounded-2xl border bg-card shadow-xs">
       <div className="min-h-0 flex-1 overflow-auto scrollbar-thin">{body()}</div>
       {!error && total > 0 && (
         <Pagination label={label} total={total} page={page} size={size} pageSizes={pageSizes} onPage={onPage} onSize={onSize} />

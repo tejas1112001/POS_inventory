@@ -14,7 +14,7 @@ export function InlineAlert({ kind = 'error', title, children, onClose, classNam
   const k = KINDS[kind] || KINDS.error;
   const Icon = k.icon;
   return (
-    <div role={k.role} className={cn('flex items-start gap-2 rounded-md border px-3 py-2 text-sm', k.cls, className)}>
+    <div role={k.role} className={cn('flex items-start gap-2 rounded-lg border px-3 py-2 text-sm', k.cls, className)}>
       <Icon className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
       <div className="min-w-0 flex-1">
         {title && <p className="font-semibold">{title}</p>}

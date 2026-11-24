@@ -7,6 +7,9 @@ import { InlineAlert } from '@/components/feedback/InlineAlert';
 import { formatCurrency, todayInShop } from '@/lib/format';
 import { addDays, methodLabel } from '@/lib/payments';
 import { cn } from '@/lib/utils';
+import TotalCard from '@/components/kit/TotalCard';
+import ChoiceButton from '@/components/kit/ChoiceButton';
+import QuickButton from '@/components/kit/QuickButton';
 import { parseAmount } from './useCheckout';
 import { api } from '@/services/api';
 
@@ -191,11 +194,8 @@ export default function PaymentSheet({ open, onClose, total, customerEmail = '',
           <div className="grid gap-5 md:grid-cols-2">
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-2">
-                <div className="rounded-lg bg-accent px-4 py-3">
-                  <p className="text-xs font-medium text-accent-foreground">Total</p>
-                  <p className="text-2xl font-bold tabular-nums text-navy">{formatCurrency(total)}</p>
-                </div>
-                <div className={cn('rounded-lg px-4 py-3', left > 0 ? 'bg-warning-bg' : 'bg-success-bg')}>
+                <TotalCard label="Total" value={formatCurrency(total)} />
+                <div className={cn('rounded-xl px-4 py-3', left > 0 ? 'bg-warning-bg' : 'bg-success-bg')}>
                   <p className="text-xs font-medium">Left to pay</p>
                   <p className="text-2xl font-bold tabular-nums">{formatCurrency(left)}</p>
                 </div>
@@ -247,21 +247,21 @@ export default function PaymentSheet({ open, onClose, total, customerEmail = '',
               {cash && (
                 <>
                   <div className="grid grid-cols-4 gap-2" role="group" aria-label="Quick cash">
-                    <button type="button" onClick={() => setEntry(left.toFixed(2))} className="min-h-10 rounded-md border bg-card text-sm font-medium hover:bg-muted">
+                    <QuickButton onClick={() => setEntry(left.toFixed(2))}>
                       Exact
-                    </button>
+                    </QuickButton>
                     {NOTES.map((n) => (
-                      <button key={n} type="button" onClick={() => setEntry(String(n))} className="min-h-10 rounded-md border bg-card text-sm font-medium tabular-nums hover:bg-muted">
+                      <QuickButton key={n} onClick={() => setEntry(String(n))}>
                         {formatCurrency(n)}
-                      </button>
+                      </QuickButton>
                     ))}
                   </div>
                   {/* Keypad for touch screens with room for it. */}
                   <div className="hidden grid-cols-3 gap-2 [@media(pointer:coarse)_and_(min-height:760px)]:grid" role="group" aria-label="Keypad">
                     {KEYS.map((k) => (
-                      <button key={k} type="button" onClick={() => press(k)} aria-label={k === 'del' ? 'Delete last digit' : k} className="flex min-h-11 items-center justify-center rounded-md border bg-card text-lg font-semibold tabular-nums hover:bg-muted">
+                      <QuickButton key={k} onClick={() => press(k)} aria-label={k === 'del' ? 'Delete last digit' : k} className="flex min-h-11 items-center justify-center text-lg">
                         {k === 'del' ? <Delete className="size-5" aria-hidden="true" /> : k}
-                      </button>
+                      </QuickButton>
                     ))}
                   </div>
                   {entry !== '' && (
@@ -282,25 +282,19 @@ export default function PaymentSheet({ open, onClose, total, customerEmail = '',
                 <legend className="mb-1.5 text-sm font-medium">Payment method</legend>
                 <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Payment method">
                   {types.map(({ value: v, label, icon: Icon }) => (
-                    <button
+                    <ChoiceButton
                       key={v}
-                      type="button"
-                      role="radio"
-                      aria-checked={type === v}
+                      selected={type === v}
+                      icon={Icon}
                       onClick={() => {
                         setType(v);
                         setEntry('');
                         setReference('');
                         setError('');
                       }}
-                      className={cn(
-                        'flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-md border text-sm font-medium',
-                        type === v ? 'border-primary bg-primary text-primary-foreground' : 'bg-card hover:bg-muted'
-                      )}
                     >
-                      <Icon className="size-4" aria-hidden="true" />
                       {label}
-                    </button>
+                    </ChoiceButton>
                   ))}
                 </div>
               </fieldset>
@@ -342,11 +336,11 @@ export default function PaymentSheet({ open, onClose, total, customerEmail = '',
                 <div className="grid gap-3">
                   <div className="space-y-1.5">
                     <label htmlFor="pay-note" className="text-sm font-medium">Payment note</label>
-                    <textarea id="pay-note" rows={2} maxLength={1000} value={paymentNote} onChange={(e) => setPaymentNote(e.target.value)} className="w-full rounded-md border border-input bg-card px-3 py-2 text-sm" />
+                    <textarea id="pay-note" rows={2} maxLength={1000} value={paymentNote} onChange={(e) => setPaymentNote(e.target.value)} className="w-full rounded-lg border border-input bg-card px-3 py-2 text-sm" />
                   </div>
                   <div className="space-y-1.5">
                     <label htmlFor="sale-note" className="text-sm font-medium">Sale note</label>
-                    <textarea id="sale-note" rows={2} maxLength={1000} value={saleNote} onChange={(e) => setSaleNote(e.target.value)} className="w-full rounded-md border border-input bg-card px-3 py-2 text-sm" />
+                    <textarea id="sale-note" rows={2} maxLength={1000} value={saleNote} onChange={(e) => setSaleNote(e.target.value)} className="w-full rounded-lg border border-input bg-card px-3 py-2 text-sm" />
                   </div>
                 </div>
               ) : (

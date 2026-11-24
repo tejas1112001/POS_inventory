@@ -67,7 +67,7 @@ test.describe('Phase 3 flows', () => {
       const cart = page.getByRole('complementary', { name: 'Current sale' });
       await expect(cart.getByText(p.name)).toBeVisible();
       // The server prices the cart: 150 + 18 % = 177.
-      const pay = cart.getByRole('button', { name: /PAY/ });
+      const pay = cart.getByRole('button', { name: /^Pay /i });
       await expect(pay).toBeEnabled({ timeout: 10_000 });
       await expect(pay).toContainText('177');
       expect(serious(await new AxeBuilder({ page }).include('main').analyze()), 'axe on the checkout').toEqual([]);

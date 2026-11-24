@@ -12,7 +12,7 @@ import { api } from '@/services/api';
 import { toast } from '../../shared/toast/store';
 
 const inputCls =
-  'h-11 w-full rounded-md border border-input bg-background px-3 text-base outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-[invalid=true]:border-danger sm:h-9 sm:text-sm';
+  'h-11 w-full rounded-lg border border-input bg-card px-3 text-base outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-ring/25 aria-[invalid=true]:border-danger sm:h-9 sm:text-sm';
 
 const LEVELS = { product: 'Product (one value per product, e.g. Season)', variant: 'Variant (a dimension, e.g. Size)' };
 const KINDS = { choice: 'Choose from a list', text: 'Free text' };
@@ -110,7 +110,7 @@ export default function Attributes() {
       {!error && !rows && <LoadingRows />}
       {rows && rows.length === 0 && <EmptyState title="No attributes yet">Add Size and Colour to build size and colour variants.</EmptyState>}
       {rows && rows.length > 0 && (
-        <div className="overflow-x-auto rounded-lg border bg-card shadow-xs">
+        <div className="overflow-x-auto rounded-2xl border bg-card shadow-xs">
           <table className="w-full text-sm">
             <thead className="bg-muted text-left text-xs uppercase tracking-wide text-slate-600 dark:text-slate-300">
               <tr>
@@ -203,7 +203,7 @@ export default function Attributes() {
                 <label className="grid gap-1.5 text-sm font-medium">
                   Choices <span className="text-xs font-normal text-muted-foreground">One per line, in the order they should appear.</span>
                   <textarea
-                    className="min-h-32 w-full rounded-md border border-input bg-background px-3 py-2 text-base sm:text-sm"
+                    className="min-h-32 w-full rounded-lg border border-input bg-card px-3 py-2 text-base sm:text-sm"
                     value={editing.choicesText}
                     onChange={set('choicesText')}
                     aria-invalid={!!fields.choices}

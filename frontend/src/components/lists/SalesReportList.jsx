@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { PrinterIcon, CurrencyDollarIcon, ArrowUturnLeftIcon, BanknotesIcon, CubeIcon } from '@heroicons/react/24/outline';
+import StatCard from '../kit/StatCard';
 import { useUI } from '../ListComponents/useUI';
 import { indexColumn } from '../ListComponents/columnHelpers';
 import ListPageLayout from '../ListComponents/ListPageLayout';
@@ -86,10 +87,10 @@ export default function SalesReportList() {
     [filteredData]
   );
   const summary = [
-    { title: 'Sold', value: formatCurrency(totals.sold), icon: CurrencyDollarIcon, color: 'bg-green-500' },
-    { title: 'Returned', value: formatCurrency(totals.returned), icon: ArrowUturnLeftIcon, color: 'bg-orange-500' },
-    { title: 'Net sales', value: formatCurrency(totals.net), icon: BanknotesIcon, color: 'bg-blue-500' },
-    { title: 'Items sold', value: fmtQty(totals.qty), icon: CubeIcon, color: 'bg-purple-500' },
+    { title: 'Sold', value: formatCurrency(totals.sold), icon: CurrencyDollarIcon, tone: 'teal' },
+    { title: 'Returned', value: formatCurrency(totals.returned), icon: ArrowUturnLeftIcon, tone: 'warn' },
+    { title: 'Net sales', value: formatCurrency(totals.net), icon: BanknotesIcon, tone: 'deep' },
+    { title: 'Items sold', value: fmtQty(totals.qty), icon: CubeIcon, tone: 'amber' },
   ];
 
   const { table, controlButtons, emptyState } = useUI({
@@ -118,17 +119,7 @@ export default function SalesReportList() {
         {error && <div role="alert" className="mb-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</div>}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {summary.map((item) => (
-            <div key={item.title} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-border dark:bg-card">
-              <div className="flex items-center">
-                <span className={`${item.color} mr-4 rounded-full p-3`}>
-                  <item.icon className="h-6 w-6 text-white" />
-                </span>
-                <div>
-                  <p className="text-sm font-medium text-gray-600 dark:text-muted-foreground">{item.title}</p>
-                  <h3 className="text-xl font-bold">{loading ? '…' : item.value}</h3>
-                </div>
-              </div>
-            </div>
+            <StatCard key={item.title} icon={item.icon} tone={item.tone} label={item.title} value={loading ? '…' : item.value} />
           ))}
         </div>
         </>

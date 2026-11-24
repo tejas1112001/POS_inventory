@@ -47,7 +47,7 @@ export function ConfirmProvider({ children }) {
                   Type <strong className="font-mono">{state.typeToConfirm}</strong> to confirm
                 </span>
                 <input
-                  className="h-11 rounded-md border border-input bg-transparent px-3 text-base sm:h-9 sm:text-sm"
+                  className="h-11 rounded-lg border border-input bg-transparent px-3 text-base sm:h-9 sm:text-sm"
                   value={typed}
                   onChange={(e) => setTyped(e.target.value)}
                   autoComplete="off"

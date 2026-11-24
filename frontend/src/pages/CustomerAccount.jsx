@@ -102,7 +102,7 @@ export default function CustomerAccount() {
         <Tile label="Credit left" value={dues.available == null ? '—' : formatCurrency(dues.available)} />
       </section>
       {credit && !credit.walkIn && (Number(credit.balance) > 0 || credit.entries.length > 0 || credit.canAdjust) && (
-        <section className="overflow-hidden rounded-lg border bg-card shadow-xs" aria-labelledby="sc-h">
+        <section className="overflow-hidden rounded-2xl border bg-card shadow-xs" aria-labelledby="sc-h">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3">
             <h3 id="sc-h" className="text-base font-semibold">
               Store credit: <span className="tabular-nums">{formatCurrency(credit.balance)}</span>
@@ -142,7 +142,7 @@ export default function CustomerAccount() {
         <InlineAlert kind="info">The shop still owes {dues.name} {formatCurrency(dues.owedByShop)} from returns not yet refunded.</InlineAlert>
       )}
 
-      <section className="overflow-hidden rounded-lg border bg-card shadow-xs" aria-labelledby="open-h">
+      <section className="overflow-hidden rounded-2xl border bg-card shadow-xs" aria-labelledby="open-h">
         <h3 id="open-h" className="border-b px-4 py-3 text-base font-semibold">
           Unpaid sales <span className="font-normal text-muted-foreground">(oldest due first; payments pay these in this order)</span>
         </h3>
@@ -186,7 +186,7 @@ export default function CustomerAccount() {
         )}
       </section>
 
-      <section className="overflow-hidden rounded-lg border bg-card shadow-xs" aria-labelledby="pay-h">
+      <section className="overflow-hidden rounded-2xl border bg-card shadow-xs" aria-labelledby="pay-h">
         <h3 id="pay-h" className="border-b px-4 py-3 text-base font-semibold">
           Payments received against dues
         </h3>
@@ -289,7 +289,7 @@ function CreditDialog({ id, name, balance, onClose, onDone }) {
 
 function Tile({ label, value, tone = '', action = null }) {
   return (
-    <div className="rounded-lg border bg-card px-4 py-3 shadow-xs">
+    <div className="rounded-2xl border bg-card px-4 py-3 shadow-xs">
       <div className="flex items-center justify-between gap-2">
         <p className="text-xs font-medium text-muted-foreground">{label}</p>
         {action}
@@ -387,7 +387,7 @@ function CollectDialog({ id, dues, onClose, onDone }) {
       </label>
       <label className="block space-y-1 text-sm font-medium">
         Method
-        <select value={method} onChange={(e) => setMethod(e.target.value)} className="h-10 w-full rounded-md border border-input bg-card px-3 text-sm">
+        <select value={method} onChange={(e) => setMethod(e.target.value)} className="h-10 w-full rounded-lg border border-input bg-card px-3 text-sm">
           {COLLECT_METHODS.map((m) => (
             <option key={m} value={m}>
               {methodLabel(m)}

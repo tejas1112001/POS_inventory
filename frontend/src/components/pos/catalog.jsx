@@ -1,6 +1,6 @@
 // Shared pieces of the checkout screens (old POS and the new checkout):
 // stock helpers, product tiles, category pills and the "Choose option" sheet.
-import { Lock, Star } from 'lucide-react';
+import { Lock, Plus, Star } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ProductImage } from '@/components/shared/product-image';
 import { formatCurrency } from '@/lib/format';
@@ -10,8 +10,8 @@ import { productStock, variantLabel, variantStock, variantsOf } from './stock';
 const LOW = 5; // "3 left" from this number down
 
 export function StockBadge({ qty }) {
-  if (qty <= 0) return <span className="rounded bg-danger-bg px-1.5 py-0.5 text-[11px] font-medium text-danger-fg">Out of stock</span>;
-  if (qty <= LOW) return <span className="rounded bg-warning-bg px-1.5 py-0.5 text-[11px] font-medium text-warning-fg">{qty} left</span>;
+  if (qty <= 0) return <span className="rounded-md bg-danger-bg px-1.5 py-0.5 text-[11px] font-semibold text-danger-fg">Out of stock</span>;
+  if (qty <= LOW) return <span className="rounded-md bg-warning-bg px-1.5 py-0.5 text-[11px] font-semibold text-warning-fg">{qty} left</span>;
   return null;
 }
 
@@ -22,8 +22,8 @@ export function CategoryPill({ active, onClick, children }) {
       onClick={onClick}
       aria-pressed={active}
       className={cn(
-        'inline-flex min-h-9 shrink-0 items-center gap-1 rounded-full px-4 text-sm font-medium transition-colors',
-        active ? 'bg-primary text-primary-foreground' : 'bg-card text-foreground ring-1 ring-border hover:bg-muted'
+        'inline-flex min-h-9 shrink-0 items-center gap-1 rounded-full px-4 text-sm font-semibold transition-colors duration-150',
+        active ? 'bg-primary bg-primary-gradient text-primary-foreground shadow-xs' : 'bg-card text-foreground ring-1 ring-border hover:bg-accent hover:text-accent-foreground'
       )}
     >
       {children}
@@ -44,34 +44,41 @@ export function ProductTile({ product, lockedByOther: locked, onPick, inCart = 0
         type="button"
         onClick={() => !disabled && onPick(product)}
         disabled={disabled}
-        className="group flex h-full w-full flex-col overflow-hidden rounded-lg border bg-card text-left shadow-xs transition hover:border-primary/40 hover:shadow-sm focus-visible:outline-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-55"
+        className="group flex h-full w-full flex-col overflow-hidden rounded-xl border bg-card text-left shadow-xs transition-[border-color,box-shadow] duration-150 hover:border-primary/50 hover:shadow-sm focus-visible:outline-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-55"
       >
-        <div className="relative aspect-[4/3] w-full bg-muted">
+        <div className="relative aspect-[4/3] w-full bg-muted/60">
           <ProductImage name={product.name} src={product.image} className="!h-full !w-full rounded-none text-lg" size={0} />
           {variants.length > 1 && (
-            <span className="absolute top-1.5 left-1.5 rounded bg-white/95 px-1.5 py-0.5 text-[11px] font-medium text-slate-700 shadow-xs">
+            <span className="absolute top-1.5 left-1.5 rounded-md bg-card px-1.5 py-0.5 text-[11px] font-semibold text-foreground shadow-xs">
               {variants.length} options
             </span>
           )}
           {inCart > 0 && (
-            <span className="absolute right-1.5 bottom-1.5 rounded-full bg-primary px-2 py-0.5 text-[11px] font-semibold text-primary-foreground tabular-nums shadow-xs">
+            <span className="absolute right-1.5 bottom-1.5 rounded-full bg-primary bg-primary-gradient px-2 py-0.5 text-[11px] font-semibold text-primary-foreground tabular-nums shadow-xs">
               {inCart} in cart
             </span>
           )}
           {locked && (
-            <span className="absolute inset-0 flex items-center justify-center bg-white/70">
-              <span className="inline-flex items-center gap-1 rounded bg-slate-800 px-2 py-1 text-xs font-medium text-white">
+            <span className="absolute inset-0 flex items-center justify-center bg-card/75">
+              <span className="inline-flex items-center gap-1 rounded bg-[#123b45] px-2 py-1 text-xs font-medium text-white">
                 <Lock className="size-3" aria-hidden="true" /> In use
               </span>
             </span>
           )}
         </div>
-        <div className="flex flex-1 flex-col gap-1 p-2">
-          <p className="line-clamp-2 min-h-[2.5em] text-sm leading-tight font-medium text-foreground">{product.name}</p>
+        <div className="flex flex-1 flex-col gap-0.5 p-2.5">
+          <p className="line-clamp-2 min-h-[2.5em] text-sm leading-tight font-semibold text-navy">{product.name}</p>
           {product.category && <p className="truncate text-xs text-muted-foreground">{product.category}</p>}
-          <div className="mt-auto flex items-center justify-between gap-1 pt-1">
-            <span className="font-semibold tabular-nums text-foreground">{formatCurrency(product.price)}</span>
-            <StockBadge qty={stock} />
+          <div className="mt-auto flex items-end justify-between gap-1 pt-1">
+            <span className="min-w-0">
+              <span className="block font-bold tabular-nums text-foreground">{formatCurrency(product.price)}</span>
+              {stock > LOW ? <span className="block text-[11px] font-semibold text-success">In stock</span> : <StockBadge qty={stock} />}
+            </span>
+            {!disabled && (
+              <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-amber-gradient text-[#3d2600] shadow-xs transition-transform duration-150 group-hover:scale-105" aria-hidden="true">
+                <Plus className="size-4" strokeWidth={2.6} />
+              </span>
+            )}
           </div>
         </div>
       </button>
@@ -81,7 +88,7 @@ export function ProductTile({ product, lockedByOther: locked, onPick, inCart = 0
           onClick={() => onToggleFavourite(product.id)}
           aria-pressed={!!favourite}
           aria-label={favourite ? `Remove ${product.name} from favourites` : `Add ${product.name} to favourites`}
-          className="absolute top-1 right-1 flex size-9 items-center justify-center rounded-full bg-white/90 text-slate-500 shadow-xs hover:text-amber-500 sm:size-8"
+          className="absolute top-1 right-1 flex size-9 items-center justify-center rounded-full bg-card/95 text-muted-foreground shadow-xs hover:text-amber-500 sm:size-8"
         >
           <Star className={cn('size-4', favourite && 'fill-amber-400 text-amber-500')} aria-hidden="true" />
         </button>
@@ -114,7 +121,7 @@ export function VariantSheet({ product, lines, onPick, onClose }) {
                       onPick(product, v);
                       onClose();
                     }}
-                    className="flex min-h-14 w-full items-center justify-between gap-3 rounded-lg border bg-card px-3 py-2 text-left hover:border-primary hover:bg-accent disabled:cursor-not-allowed disabled:opacity-55"
+                    className="flex min-h-14 w-full items-center justify-between gap-3 rounded-xl border bg-card px-3 py-2 text-left transition-colors hover:border-primary hover:bg-accent disabled:cursor-not-allowed disabled:opacity-55"
                   >
                     <span className="min-w-0">
                       <span className="block truncate font-medium">{variantLabel(v)}</span>

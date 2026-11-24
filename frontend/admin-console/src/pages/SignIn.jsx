@@ -4,6 +4,7 @@ import { useSession } from '../session';
 import { Button, Check, Notice, TextInput } from '../components/ui';
 import Qr from '../components/Qr';
 import styles from './SignIn.module.css';
+import BrandMark from '../../../shared/brand/BrandMark';
 
 const MIN_PASSWORD = 14; // the server's rule for console accounts
 
@@ -118,8 +119,15 @@ export default function SignIn() {
   return (
     <main className={styles.page}>
       <div className={`card ${styles.card}`}>
-        <h1>Platform console</h1>
-        <p className="muted">For platform staff only.</p>
+        <div className={styles.brand}>
+          <span className={styles.mark}>
+            <BrandMark size={30} />
+          </span>
+          <div>
+            <h1>Platform console</h1>
+            <p className="muted">MintoBill · for platform staff only.</p>
+          </div>
+        </div>
 
         {step === 'invite' && (
           <form onSubmit={acceptInvite} className="stack">

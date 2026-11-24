@@ -23,7 +23,7 @@ const SECTIONS = [
   { key: 'recalled', label: 'Recalled with stock', tone: 'text-destructive' },
 ];
 const WINDOWS = ['30', '60', '90', '180'];
-const selectCls = 'h-11 rounded-md border border-input bg-background px-3 text-base sm:h-9 sm:text-sm';
+const selectCls = 'h-11 rounded-lg border border-input bg-card px-3 text-base sm:h-9 sm:text-sm';
 
 // ExpiryReport (industry P3 item 7, A33): what is expired, about to
 // expire, quarantined or recalled, per batch and store, with cost and MRP
@@ -111,7 +111,7 @@ export default function ExpiryReport() {
                     aria-pressed={section === s.key}
                     onClick={() => setSection(s.key)}
                     className={cn(
-                      'rounded-lg border bg-card p-3 text-left shadow-xs hover:border-primary/40',
+                      'rounded-2xl border bg-card p-3 text-left shadow-xs hover:border-primary/40',
                       section === s.key && 'border-primary ring-1 ring-primary'
                     )}
                   >

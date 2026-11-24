@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api';
 import { useSession } from '../session';
 import ActionDialog from '../components/ActionDialog';
-import { Button, Modal, Notice, StatusBadge, Table } from '../components/ui';
+import { Button, Modal, Notice, StatusBadge, Table, PageHeader } from '../components/ui';
 import { formatDateTime } from '../lib/format';
 
 const ROLES = [
@@ -127,12 +127,15 @@ export default function PlatformUsers() {
 
   return (
     <div className="stack">
-      <div className="row-between">
-        <h1>Platform users</h1>
-        <Button variant="primary" onClick={() => setDialog({ kind: 'add' })}>
-          Add user
-        </Button>
-      </div>
+      <PageHeader
+        title="Platform users"
+        description="Staff who can sign in to this console, and their roles."
+        actions={
+          <Button variant="primary" onClick={() => setDialog({ kind: 'add' })}>
+            Add user
+          </Button>
+        }
+      />
       <Notice kind="error">{error}</Notice>
       <Table
         loading={rows === null}

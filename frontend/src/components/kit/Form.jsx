@@ -8,7 +8,7 @@ import { useImageSrc } from '@/components/shared/auth-image';
 import { cn } from '@/lib/utils';
 
 const inputCls =
-  'h-11 w-full rounded-md border border-input bg-background px-3 text-base outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-[invalid=true]:border-danger sm:h-9 sm:text-sm';
+  'h-11 w-full rounded-lg border border-input bg-card px-3 text-base outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-ring/25 aria-[invalid=true]:border-danger sm:h-9 sm:text-sm';
 
 // FormSheet: a form in a dialog (a bottom sheet on phones). onSubmit gets
 // the values and returns a promise; server field errors ({ fields }) are
@@ -161,7 +161,7 @@ export function ImageField({ name, label, current }) {
           <div className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-md border bg-muted">
             {preview ? <img src={preview} alt="" className="size-full object-cover" /> : <ImagePlus className="size-5 text-muted-foreground" aria-hidden="true" />}
           </div>
-          <label htmlFor={id} className="inline-flex min-h-11 cursor-pointer items-center rounded-md border px-3 text-sm font-medium hover:bg-accent sm:min-h-9">
+          <label htmlFor={id} className="inline-flex min-h-11 cursor-pointer items-center rounded-lg border px-3 text-sm font-medium hover:bg-accent sm:min-h-9">
             {preview ? 'Change picture' : 'Choose picture'}
             <input id={id} type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" aria-describedby={describedBy} onChange={(e) => pick(e.target.files?.[0])} />
           </label>

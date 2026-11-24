@@ -8,7 +8,7 @@ import { usePermission } from '@/context/PermissionContext';
 import { formatCurrency } from '@/lib/format';
 import { api } from '@/services/api';
 
-const selectCls = 'h-11 rounded-md border border-input bg-background px-3 text-base sm:h-9 sm:text-sm';
+const selectCls = 'h-11 rounded-lg border border-input bg-card px-3 text-base sm:h-9 sm:text-sm';
 const pad = (n) => String(n).padStart(2, '0');
 const month = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
 
@@ -173,7 +173,7 @@ export default function GstReturns() {
             ))}
             <section aria-label="GSTR-3B summary" className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
               {tiles.map(([label, v]) => (
-                <div key={label} className="rounded-lg border bg-card p-3 shadow-xs">
+                <div key={label} className="rounded-2xl border bg-card p-3 shadow-xs">
                   <p className="text-xs text-muted-foreground">{label}</p>
                   <p className="text-lg font-semibold tabular-nums">{formatCurrency(v)}</p>
                 </div>
@@ -183,7 +183,7 @@ export default function GstReturns() {
               GSTR-3B 3.1(a) and (c), net of credit notes: {g.invoiceCount} invoice{g.invoiceCount === 1 ? '' : 's'}, {g.creditNoteCount} credit note
               {g.creditNoteCount === 1 ? '' : 's'}.
             </p>
-            <section className="overflow-hidden rounded-lg border bg-card shadow-xs" aria-label="GSTR-1 sections">
+            <section className="overflow-hidden rounded-2xl border bg-card shadow-xs" aria-label="GSTR-1 sections">
               <table className="w-full text-sm">
                 <thead className="bg-muted text-left text-xs uppercase tracking-wide text-slate-600 dark:text-slate-300">
                   <tr>

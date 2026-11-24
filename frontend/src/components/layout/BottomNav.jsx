@@ -25,12 +25,12 @@ export default function BottomNav({ onMore }) {
   const item = 'flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 text-[11px] font-medium';
 
   return (
-    <nav aria-label="Quick menu" className="fixed inset-x-0 bottom-0 z-30 flex border-t bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
+    <nav aria-label="Quick menu" className="fixed inset-x-0 bottom-0 z-30 flex border-t bg-card pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_16px_-8px_rgb(18_59_69/0.18)] md:hidden">
       {tabs.map(({ to, label, icon: Icon }) => (
         <NavLink
           key={to}
           to={to}
-          className={({ isActive }) => cn(item, isActive || pathname.startsWith(`${to}/`) ? 'text-primary' : 'text-muted-foreground')}
+          className={({ isActive }) => cn(item, isActive || pathname.startsWith(`${to}/`) ? 'font-semibold text-primary' : 'text-muted-foreground')}
         >
           <Icon className="size-5" aria-hidden="true" />
           {label}

@@ -1,4 +1,7 @@
 import { useEffect, useId, useRef } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
+import { Moon, Sun } from 'lucide-react';
+import { isDark, selectMode, toggleMode } from '../store';
 import styles from './Modal.module.css';
 
 // Small UI kit for the console. Everything renders text through React, so
@@ -204,5 +207,46 @@ export function Facts({ items }) {
           </div>
         ))}
     </dl>
+  );
+}
+
+// ThemeToggle: light / dark switch (state in the Redux store).
+export function ThemeToggle() {
+  const dispatch = useDispatch();
+  const dark = isDark(useSelector(selectMode));
+  return (
+    <button type="button" className="icon-btn" onClick={() => dispatch(toggleMode())} aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'} title={dark ? 'Light mode' : 'Dark mode'}>
+      {dark ? <Sun size={18} aria-hidden="true" /> : <Moon size={18} aria-hidden="true" />}
+    </button>
+  );
+}
+
+// PageHeader: the page title, an optional line under it and actions.
+export function PageHeader({ title, description, actions }) {
+  return (
+    <div className="page-header">
+      <div>
+        <h1>{title}</h1>
+        {description && <p className="muted">{description}</p>}
+      </div>
+      {actions && <div className="row">{actions}</div>}
+    </div>
+  );
+}
+
+// StatCard: an icon tile, a label and a figure (console KPI cards).
+export function StatCard({ icon: Icon, label, value, tone = 'teal' }) {
+  return (
+    <div className="stat-card">
+      {Icon && (
+        <span className={`icon-tile icon-tile-${tone}`} aria-hidden="true">
+          <Icon size={22} />
+        </span>
+      )}
+      <div>
+        <p className="stat-label">{label}</p>
+        <p className="stat-value">{value}</p>
+      </div>
+    </div>
   );
 }

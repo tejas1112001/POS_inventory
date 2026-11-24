@@ -29,7 +29,7 @@ export default function ScannerSettings() {
           Test scan
           <input
             id="scanner-test"
-            className="block h-10 w-full rounded-md border bg-card px-3 font-normal"
+            className="block h-10 w-full rounded-lg border bg-card px-3 font-normal"
             value={typed}
             onChange={(e) => setTyped(e.target.value)}
             placeholder="Click here, then scan"
@@ -44,7 +44,7 @@ export default function ScannerSettings() {
             min="10"
             max="200"
             step="5"
-            className="block h-10 w-full rounded-md border bg-card px-3 font-normal"
+            className="block h-10 w-full rounded-lg border bg-card px-3 font-normal"
             value={gap}
             onChange={(e) => save(e.target.value)}
           />

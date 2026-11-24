@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, query } from '../api';
-import { Notice, StatusBadge, Table, Tabs } from '../components/ui';
+import { Notice, StatusBadge, Table, Tabs, PageHeader } from '../components/ui';
 import { formatDate, formatDateTime, money } from '../lib/format';
 
 const TABS = [
@@ -52,7 +52,7 @@ export default function Billing() {
 
   return (
     <div className="stack">
-      <h1>Billing</h1>
+      <PageHeader title="Billing" description="Subscriptions, invoices and payments across shops." />
       <Tabs tabs={TABS} value={tab} onChange={setTab} />
       {tab === 'expiring' && (
         <label className="row">

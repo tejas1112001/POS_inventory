@@ -1,23 +1,51 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { AlertTriangle, ArrowDownRight, ArrowUpRight, Ban, CalendarClock, CalendarX, CreditCard, PackageX, ShieldAlert, ShoppingCart, Truck, Users } from 'lucide-react';
-import { Bar, Line } from 'react-chartjs-2';
-import { BarElement, CategoryScale, Chart as ChartJS, Filler, LinearScale, LineElement, PointElement, Tooltip } from 'chart.js';
+import {
+  AlertTriangle,
+  Ban,
+  Banknote,
+  CalendarClock,
+  CalendarX,
+  CreditCard,
+  Hand,
+  HandCoins,
+  Package,
+  PackageX,
+  Percent,
+  ReceiptText,
+  ShieldAlert,
+  ShoppingCart,
+  Truck,
+  Undo2,
+  Users,
+  Wallet,
+} from 'lucide-react';
+import { Bar, Doughnut, Line } from 'react-chartjs-2';
+import { ArcElement, BarElement, CategoryScale, Chart as ChartJS, Filler, LinearScale, LineElement, PointElement, Tooltip } from 'chart.js';
 import { Button } from '@/components/ui/button';
 import { api } from '@/services/api';
 import { usePos } from '@/hooks/usePos';
 import { usePermission } from '@/context/PermissionContext';
+import { useTheme } from '@/context/ThemeContext';
 import { ErrorState } from '@/components/kit/States';
+import StatCard from '@/components/kit/StatCard';
+import MetricCard from '@/components/kit/MetricCard';
+import ActionCard from '@/components/kit/ActionCard';
+import Panel, { ViewAllLink } from '@/components/kit/Panel';
+import SegmentedControl from '@/components/kit/SegmentedControl';
+import { LowStockList, RecentSalesTable } from '@/components/dashboard/DashboardLists';
 import { formatCurrency, formatNumber, getFormatSettings, todayInShop } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import OnboardingCard from '@/components/dashboard/OnboardingCard';
 import { fmtQty } from '@/lib/qty';
 
-ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, Filler, Tooltip);
+ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, ArcElement, Filler, Tooltip);
 
-const BLUE = '#2563eb';
-const NAVY = '#0f172a';
-const GRID = '#e2e8f0';
+// Teal & Cream chart palette (moodboard): fresh teal, deep teal, amber,
+// mint, then softer tints. Each slice also has a legend row with its share,
+// so colour is never the only cue.
+const SLICES_LIGHT = ['#20b6a4', '#123b45', '#f2b544', '#8fd9cd', '#17807a', '#f6d48f', '#5f7377', '#c9ece6'];
+const SLICES_DARK = ['#20b6a4', '#8fd9cd', '#f2b544', '#2b8f87', '#c9ece6', '#f6d48f', '#9db3b3', '#17807a'];
 
 // Dates are YYYY-MM-DD in the shop's time zone.
 const addDays = (d, n) => {
@@ -51,71 +79,36 @@ function change(now, before) {
   return { text: `${pct >= 0 ? '+' : ''}${pct.toFixed(Math.abs(pct) < 10 ? 1 : 0)}%`, up: pct >= 0 };
 }
 
-function Stat({ label, value, delta, hint, to, big }) {
-  const body = (
-    <div className={cn('flex h-full flex-col gap-1 rounded-lg border bg-card p-4 shadow-xs', to && 'hover:border-primary/40')}>
-      <p className="text-sm text-muted-foreground">{label}</p>
-      <p className={cn('font-bold tabular-nums text-navy', big ? 'text-2xl' : 'text-xl')}>{value}</p>
-      <div className="mt-auto flex items-center gap-2 text-xs">
-        {delta && (
-          <span className={cn('inline-flex items-center gap-0.5 font-medium', delta.up ? 'text-success-fg' : 'text-danger-fg')}>
-            {delta.up ? <ArrowUpRight className="size-3.5" aria-hidden="true" /> : <ArrowDownRight className="size-3.5" aria-hidden="true" />}
-            {delta.text}
-          </span>
-        )}
-        {hint && <span className="text-muted-foreground">{hint}</span>}
-      </div>
-    </div>
-  );
-  return to ? (
-    <Link to={to} className="block rounded-lg focus-visible:outline-2 focus-visible:outline-ring">
-      {body}
-    </Link>
-  ) : (
-    body
-  );
-}
-
-function ActionCard({ icon: Icon, tone = 'info', title, value, text, to }) {
-  const tones = { info: 'bg-accent text-accent-foreground', warn: 'bg-warning-bg text-warning-fg', danger: 'bg-danger-bg text-danger-fg' };
-  return (
-    <Link to={to} className="flex items-center gap-3 rounded-lg border bg-card p-3 shadow-xs hover:border-primary/40 focus-visible:outline-2 focus-visible:outline-ring">
-      <span className={cn('flex size-10 shrink-0 items-center justify-center rounded-full', tones[tone])}>
-        <Icon className="size-5" aria-hidden="true" />
-      </span>
-      <span className="min-w-0">
-        <span className="block text-sm font-medium">{title}</span>
-        <span className="block truncate text-xs text-muted-foreground">
-          {value != null && <span className="font-semibold text-foreground tabular-nums">{formatNumber(value, 0)} </span>}
-          {text}
-        </span>
-      </span>
-    </Link>
-  );
-}
-
 function Skeleton() {
   return (
     <div className="space-y-4" aria-busy="true" aria-label="Loading the dashboard">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {[0, 1, 2, 3].map((i) => (
-          <div key={i} className="h-28 animate-pulse rounded-lg bg-muted" />
+          <div key={i} className="h-[104px] animate-pulse rounded-2xl bg-muted" />
         ))}
       </div>
-      <div className="h-72 animate-pulse rounded-lg bg-muted" />
+      <div className="grid gap-4 xl:grid-cols-3">
+        <div className="h-80 animate-pulse rounded-2xl bg-muted xl:col-span-2" />
+        <div className="h-80 animate-pulse rounded-2xl bg-muted" />
+      </div>
     </div>
   );
 }
 
-// Dashboard (UI S7): greeting, store and date range, today's figures with
-// the change against the previous period, money, the sales chart, top
-// products and action cards. Cashiers see their own sales only (server).
+// Dashboard (Teal & Cream): greeting, store and date range, the headline
+// figures with the change against the previous period, money, the revenue
+// trend, top products, recent orders, low stock and action cards. Cashiers
+// see their own sales only (server).
 export default function Dashboard() {
   const { currentUser, tenant } = usePos();
   const { hasPermission } = usePermission();
+  const { mode } = useTheme();
+  const dark = mode === 'dark';
   const [params, setParams] = useSearchParams();
   const [stores, setStores] = useState([]);
   const [data, setData] = useState(null);
+  const [recent, setRecent] = useState(null);
+  const [low, setLow] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [metric, setMetric] = useState('revenue');
@@ -166,6 +159,30 @@ export default function Dashboard() {
     };
   }, [from, to, storeId, tick]);
 
+  // The two short lists load next to the figures (5 rows each, in parallel).
+  const canSales = hasPermission('sales', 'view');
+  const canStock = hasPermission('inventory', 'view');
+  useEffect(() => {
+    let active = true;
+    const store = storeId ? `&storeId=${encodeURIComponent(storeId)}` : '';
+    const rowsOf = (res) => (Array.isArray(res) ? res : res?.data || []);
+    if (canSales) {
+      api
+        .get(`/api/sales?page=1&limit=5${store}`, { quiet: true })
+        .then((r) => active && setRecent(rowsOf(r)))
+        .catch(() => active && setRecent([]));
+    }
+    if (canStock) {
+      api
+        .get(`/api/inventory?page=1&limit=5&stockStatus=${encodeURIComponent('Low Stock')}${store}`, { quiet: true })
+        .then((r) => active && setLow(rowsOf(r)))
+        .catch(() => active && setLow([]));
+    }
+    return () => {
+      active = false;
+    };
+  }, [canSales, canStock, storeId, tick]);
+
   const firstName = (currentUser?.name || '').split(' ')[0];
   const x = data?.extra;
   const cur = x?.current;
@@ -174,7 +191,21 @@ export default function Dashboard() {
   const avg = (f) => (f && f.orders ? Number(f.revenue) / f.orders : 0);
   const series = x?.series || [];
   const top = data?.salesDistribution || [];
+  const topTotal = top.reduce((s, t) => s + (Number(t.value) || 0), 0);
   const rangeLabel = RANGES.find((r) => r.key === rangeKey)?.label;
+  const slices = dark ? SLICES_DARK : SLICES_LIGHT;
+
+  const tick_ = dark ? '#9db3b3' : '#566b70';
+  const grid = dark ? 'rgba(157, 179, 179, 0.14)' : '#ece9df';
+  const line = '#20b6a4';
+  const tooltip = {
+    backgroundColor: dark ? '#0b2c35' : '#123b45',
+    titleColor: '#ffffff',
+    bodyColor: '#e6f7f3',
+    padding: 10,
+    cornerRadius: 10,
+    displayColors: false,
+  };
 
   const chartData = {
     labels: series.map((s) => s.label),
@@ -182,37 +213,66 @@ export default function Dashboard() {
       {
         label: metric === 'revenue' ? 'Sales' : 'Orders',
         data: series.map((s) => Number(metric === 'revenue' ? s.revenue : s.orders)),
-        borderColor: BLUE,
-        backgroundColor: x?.granularity === 'month' ? BLUE : 'rgba(37, 99, 235, 0.12)',
+        borderColor: line,
+        borderWidth: 2.5,
+        backgroundColor:
+          x?.granularity === 'month'
+            ? line
+            : (ctx) => {
+                const { chart } = ctx;
+                const area = chart.chartArea;
+                if (!area) return 'rgba(32, 182, 164, 0.15)';
+                const g = chart.ctx.createLinearGradient(0, area.top, 0, area.bottom);
+                g.addColorStop(0, dark ? 'rgba(32, 182, 164, 0.35)' : 'rgba(32, 182, 164, 0.28)');
+                g.addColorStop(1, 'rgba(32, 182, 164, 0)');
+                return g;
+              },
         fill: x?.granularity !== 'month',
-        tension: 0.3,
-        pointRadius: series.length > 31 ? 0 : 3,
-        borderRadius: 4,
+        tension: 0.38,
+        pointRadius: (ctx) => (ctx.dataIndex === series.length - 1 ? 5 : series.length > 31 ? 0 : 2.5),
+        pointBackgroundColor: dark ? '#10353f' : '#ffffff',
+        pointBorderColor: line,
+        pointBorderWidth: 2,
+        pointHoverRadius: 6,
+        borderRadius: 6,
       },
     ],
   };
   const chartOptions = {
     responsive: true,
     maintainAspectRatio: false,
+    interaction: { mode: 'index', intersect: false },
     plugins: {
       legend: { display: false },
-      tooltip: { callbacks: { label: (c) => (metric === 'revenue' ? formatCurrency(c.parsed.y) : `${c.parsed.y} orders`) } },
+      tooltip: { ...tooltip, callbacks: { label: (c) => (metric === 'revenue' ? formatCurrency(c.parsed.y) : `${c.parsed.y} orders`) } },
     },
     scales: {
-      x: { grid: { display: false }, ticks: { color: '#64748b', maxRotation: 0, autoSkip: true, maxTicksLimit: 12 } },
-      y: { beginAtZero: true, grid: { color: GRID }, ticks: { color: '#64748b', precision: 0, callback: (v) => (metric === 'revenue' ? formatNumber(v, 0) : v) } },
+      x: { grid: { display: false }, border: { display: false }, ticks: { color: tick_, maxRotation: 0, autoSkip: true, maxTicksLimit: 12, font: { family: 'Manrope Variable', size: 11 } } },
+      y: {
+        beginAtZero: true,
+        grid: { color: grid },
+        border: { display: false },
+        ticks: { color: tick_, precision: 0, font: { family: 'Manrope Variable', size: 11 }, callback: (v) => (metric === 'revenue' ? formatNumber(v, 0) : v) },
+      },
     },
   };
   const topData = {
     labels: top.map((t) => t.category),
-    datasets: [{ data: top.map((t) => Number(t.value)), backgroundColor: NAVY, borderRadius: 4, barThickness: 18 }],
+    datasets: [
+      {
+        data: top.map((t) => Number(t.value)),
+        backgroundColor: top.map((_, i) => slices[i % slices.length]),
+        borderColor: dark ? '#10353f' : '#ffffff',
+        borderWidth: 3,
+        hoverOffset: 4,
+      },
+    ],
   };
   const topOptions = {
-    indexAxis: 'y',
     responsive: true,
     maintainAspectRatio: false,
-    plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => formatCurrency(c.parsed.x) } } },
-    scales: { x: { beginAtZero: true, grid: { color: GRID }, ticks: { color: '#64748b', callback: (v) => formatNumber(v, 0) } }, y: { grid: { display: false }, ticks: { color: '#334155' } } },
+    cutout: '70%',
+    plugins: { legend: { display: false }, tooltip: { ...tooltip, displayColors: true, callbacks: { label: (c) => ` ${formatCurrency(c.parsed)}` } } },
   };
 
   const actions = [];
@@ -236,18 +296,21 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+    <div className="space-y-5">
+      <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
         <div>
-          <h2 className="text-xl font-semibold">
+          <h2 className="flex items-center gap-2 text-2xl font-extrabold tracking-tight">
             {greeting()}
             {firstName ? `, ${firstName}` : ''}
+            <Hand className="size-6 -rotate-12 text-amber-brand" aria-hidden="true" />
           </h2>
-          <p className="text-sm text-muted-foreground">{ownOnly ? 'Your own sales.' : 'Sales of the whole shop.'}</p>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            {ownOnly ? 'Here is how your own sales are doing.' : 'Here’s what’s happening at your store.'}
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {stores.length > 1 && (
-            <select aria-label="Store" className="h-10 rounded-md border bg-card px-2 text-sm" value={storeId} onChange={(e) => setParam({ store: e.target.value })}>
+            <select aria-label="Store" className="h-10 rounded-lg border border-input bg-card px-3 text-sm font-medium shadow-xs" value={storeId} onChange={(e) => setParam({ store: e.target.value })}>
               <option value="">All stores</option>
               {stores.map((s) => (
                 <option key={s.id} value={s.id}>
@@ -256,42 +319,40 @@ export default function Dashboard() {
               ))}
             </select>
           )}
-          <div className="no-scrollbar flex gap-1 overflow-x-auto rounded-lg bg-muted p-1" role="group" aria-label="Date range">
-            {RANGES.map((r) => (
-              <button
-                key={r.key}
-                type="button"
-                aria-pressed={rangeKey === r.key}
-                onClick={() => setParam(r.key === 'custom' ? { range: 'custom', from, to } : { range: r.key === 'today' ? '' : r.key, from: '', to: '' })}
-                className={cn('min-h-9 shrink-0 rounded-md px-3 text-sm font-medium', rangeKey === r.key ? 'bg-card text-foreground shadow-xs' : 'text-slate-600 hover:text-foreground dark:text-slate-300')}
-              >
-                {r.label}
-              </button>
-            ))}
-          </div>
+          <SegmentedControl
+            label="Date range"
+            options={RANGES.map((r) => ({ value: r.key, label: r.label }))}
+            value={rangeKey}
+            onChange={(k) => setParam(k === 'custom' ? { range: 'custom', from, to } : { range: k === 'today' ? '' : k, from: '', to: '' })}
+          />
           {rangeKey === 'custom' && (
-            <div className="flex items-center gap-1 text-sm">
-              <input type="date" aria-label="From" className="h-10 rounded-md border bg-card px-2" value={from} max={to} onChange={(e) => e.target.value && setParam({ from: e.target.value })} />
+            <div className="flex items-center gap-1.5 text-sm">
+              <input type="date" aria-label="From" className="h-10 rounded-lg border border-input bg-card px-2 shadow-xs" value={from} max={to} onChange={(e) => e.target.value && setParam({ from: e.target.value })} />
               <span className="text-muted-foreground">to</span>
-              <input type="date" aria-label="To" className="h-10 rounded-md border bg-card px-2" value={to} min={from} max={today} onChange={(e) => e.target.value && setParam({ to: e.target.value })} />
+              <input type="date" aria-label="To" className="h-10 rounded-lg border border-input bg-card px-2 shadow-xs" value={to} min={from} max={today} onChange={(e) => e.target.value && setParam({ to: e.target.value })} />
             </div>
           )}
         </div>
       </div>
 
       {error ? (
-        <ErrorState message={error} onRetry={() => setTick((n) => n + 1)} />
+        <div className="rounded-2xl border bg-card">
+          <ErrorState message={error} onRetry={() => setTick((n) => n + 1)} />
+        </div>
       ) : loading && !data ? (
         <Skeleton />
       ) : (
         cur && (
-          <div className={cn('space-y-4 transition-opacity', loading && 'opacity-60')} aria-busy={loading || undefined}>
+          <div className={cn('space-y-5 transition-opacity', loading && 'opacity-60')} aria-busy={loading || undefined}>
             {cur.orders === 0 && rangeKey === 'today' && hasPermission('pos', 'view') && (
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashed bg-card p-4">
-                <p className="text-sm text-muted-foreground">No sales yet today.</p>
-                <Button asChild>
+              <div className="relative flex flex-wrap items-center justify-between gap-3 overflow-hidden rounded-2xl bg-brand-gradient p-5 text-white shadow-sm">
+                <div>
+                  <p className="text-base font-bold">No sales yet today</p>
+                  <p className="text-sm text-white/85">Open the checkout to ring up the first bill.</p>
+                </div>
+                <Button asChild className="bg-white bg-none text-[#123b45] shadow-sm hover:bg-white hover:brightness-95">
                   <Link to="/pos">
-                    <ShoppingCart className="size-4" aria-hidden="true" /> Open Checkout
+                    <ShoppingCart className="size-4" aria-hidden="true" /> Open checkout
                   </Link>
                 </Button>
               </div>
@@ -299,40 +360,45 @@ export default function Dashboard() {
 
             <OnboardingCard />
 
-            <section aria-label={`${rangeLabel} figures`} className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-              <Stat big label="Net sales" value={formatCurrency(cur.net)} delta={prev && change(cur.net, prev.net)} hint={prev ? 'vs previous period' : 'after returns'} />
-              <Stat big label="Orders" value={formatNumber(cur.orders, 0)} delta={prev && change(cur.orders, prev.orders)} />
-              <Stat big label="Average bill" value={formatCurrency(avg(cur))} delta={prev && change(avg(cur), avg(prev))} />
-              <Stat big label="Items sold" value={fmtQty(cur.itemsSold)} delta={prev && change(cur.itemsSold, prev.itemsSold)} />
+            <section aria-label={`${rangeLabel} figures`} className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-4">
+              <StatCard icon={Wallet} label="Net sales" value={formatCurrency(cur.net)} delta={prev && change(cur.net, prev.net)} hint={prev ? 'vs previous period' : 'after returns'} />
+              <StatCard icon={ShoppingCart} label="Orders" value={formatNumber(cur.orders, 0)} delta={prev && change(cur.orders, prev.orders)} />
+              <StatCard icon={ReceiptText} tone="deep" label="Average bill" value={formatCurrency(avg(cur))} delta={prev && change(avg(cur), avg(prev))} />
+              <StatCard icon={Package} tone="amber" label="Items sold" value={fmtQty(cur.itemsSold)} delta={prev && change(cur.itemsSold, prev.itemsSold)} />
             </section>
 
-            <section aria-label="Money" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-              <Stat label="Collected" value={formatCurrency(cur.collected ?? cur.paid)} hint="Payments received, incl. dues" />
-              {!ownOnly && <Stat label="Due from customers" value={formatCurrency(cur.due)} hint={hasPermission('reports', 'view') ? 'See customer dues →' : undefined} to={hasPermission('reports', 'view') ? '/customer-due-report' : undefined} />}
-              <Stat label="Refunds" value={formatCurrency(cur.returns)} />
-              <Stat label="Discounts given" value={formatCurrency(cur.discounts)} />
+            <section aria-label="Money" className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <MetricCard icon={Banknote} label="Collected" value={formatCurrency(cur.collected ?? cur.paid)} hint="Payments received, incl. dues" />
+              {!ownOnly && <MetricCard icon={HandCoins} label="Due from customers" value={formatCurrency(cur.due)} hint={hasPermission('reports', 'view') ? 'See customer dues →' : undefined} to={hasPermission('reports', 'view') ? '/customer-due-report' : undefined} />}
+              <MetricCard icon={Undo2} label="Refunds" value={formatCurrency(cur.returns)} />
+              <MetricCard icon={Percent} label="Discounts given" value={formatCurrency(cur.discounts)} />
             </section>
 
-            {actions.length > 0 && <section aria-label="Needs attention" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{actions}</section>}
+            {actions.length > 0 && (
+              <section aria-label="Needs attention" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                {actions}
+              </section>
+            )}
 
             <div className="grid gap-4 xl:grid-cols-3">
-              <section className="rounded-lg border bg-card p-4 shadow-xs xl:col-span-2" aria-labelledby="sales-chart">
-                <div className="mb-3 flex items-center justify-between gap-2">
-                  <h2 id="sales-chart" className="text-base font-semibold">
-                    Sales by {x.granularity}
-                  </h2>
-                  <div className="flex rounded-md bg-muted p-0.5" role="group" aria-label="Chart shows">
-                    {[
-                      ['revenue', 'Revenue'],
-                      ['orders', 'Orders'],
-                    ].map(([k, l]) => (
-                      <button key={k} type="button" aria-pressed={metric === k} onClick={() => setMetric(k)} className={cn('min-h-8 rounded px-3 text-sm', metric === k ? 'bg-card font-medium shadow-xs' : 'text-slate-600 dark:text-slate-300')}>
-                        {l}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div className="h-64">
+              <Panel
+                id="sales-chart"
+                title={metric === 'revenue' ? 'Revenue trend' : 'Orders trend'}
+                description={`By ${x.granularity} · ${rangeLabel}`}
+                className="xl:col-span-2"
+                action={
+                  <SegmentedControl
+                    label="Chart shows"
+                    options={[
+                      { value: 'revenue', label: 'Revenue' },
+                      { value: 'orders', label: 'Orders' },
+                    ]}
+                    value={metric}
+                    onChange={setMetric}
+                  />
+                }
+              >
+                <div className="h-64 sm:h-72">
                   {series.length ? (
                     x.granularity === 'month' ? (
                       <Bar data={chartData} options={chartOptions} aria-label="Sales chart" role="img" />
@@ -343,20 +409,48 @@ export default function Dashboard() {
                     <p className="flex h-full items-center justify-center text-sm text-muted-foreground">No sales in this period.</p>
                   )}
                 </div>
-              </section>
-              <section className="rounded-lg border bg-card p-4 shadow-xs" aria-labelledby="top-products">
-                <h2 id="top-products" className="mb-3 text-base font-semibold">
-                  Top products
-                </h2>
-                <div className="h-64">
-                  {top.length ? (
-                    <Bar data={topData} options={topOptions} aria-label="Top products by sales" role="img" />
-                  ) : (
-                    <p className="flex h-full items-center justify-center text-sm text-muted-foreground">No sales in this period.</p>
-                  )}
-                </div>
-              </section>
+              </Panel>
+
+              <Panel id="top-products" title="Top products">
+                {top.length ? (
+                  <div className="flex flex-1 flex-col items-center gap-4 sm:flex-row xl:flex-col 2xl:flex-row">
+                    <div className="relative size-44 shrink-0">
+                      <Doughnut data={topData} options={topOptions} aria-label="Top products by sales" role="img" />
+                      <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
+                        <span className="text-base font-extrabold text-navy tabular-nums">{formatCurrency(topTotal)}</span>
+                        <span className="text-[11px] font-medium text-muted-foreground">Top sales</span>
+                      </div>
+                    </div>
+                    <ul className="w-full min-w-0 flex-1 space-y-2" aria-label="Share of top products">
+                      {top.map((t, i) => (
+                        <li key={`${t.category}-${i}`} className="flex items-center gap-2 text-sm">
+                          <span className="size-2.5 shrink-0 rounded-full" style={{ background: slices[i % slices.length] }} aria-hidden="true" />
+                          <span className="min-w-0 flex-1 truncate">{t.category}</span>
+                          <span className="font-semibold text-navy tabular-nums">{topTotal ? `${((Number(t.value) / topTotal) * 100).toFixed(1)}%` : '—'}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p className="flex h-64 items-center justify-center text-sm text-muted-foreground">No sales in this period.</p>
+                )}
+              </Panel>
             </div>
+
+            {(canSales || canStock) && (
+              <div className="grid gap-4 xl:grid-cols-3">
+                {canSales && (
+                  <Panel id="recent-sales" title="Recent transactions" className={cn(canStock ? 'xl:col-span-2' : 'xl:col-span-3')} action={<ViewAllLink to="/sales" label="View all orders" />}>
+                    {recent == null ? <div className="h-48 animate-pulse rounded-xl bg-muted" /> : <RecentSalesTable rows={recent} />}
+                  </Panel>
+                )}
+                {canStock && (
+                  <Panel id="low-stock" title="Low stock alerts" className={cn(!canSales && 'xl:col-span-3')} action={<ViewAllLink to={`/inventory?stockStatus=${encodeURIComponent('Low Stock')}`} label="View all low stock" />}>
+                    {low == null ? <div className="h-48 animate-pulse rounded-xl bg-muted" /> : <LowStockList rows={low} />}
+                  </Panel>
+                )}
+              </div>
+            )}
           </div>
         )
       )}

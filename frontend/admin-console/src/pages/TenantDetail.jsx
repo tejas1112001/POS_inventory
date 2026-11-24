@@ -5,7 +5,8 @@ import { api } from '../api';
 import { useSession } from '../session';
 import { useStepUp } from '../stepup';
 import ActionDialog from '../components/ActionDialog';
-import { Button, Facts, Modal, Notice, StatusBadge, Tabs } from '../components/ui';
+import { Activity, CalendarDays, HardDrive, Layers } from 'lucide-react';
+import { Button, Facts, Modal, Notice, StatCard, StatusBadge, Tabs } from '../components/ui';
 import { bytes, formatDate, formatDateTime } from '../lib/format';
 
 const LIVE = ['trialing', 'active', 'past_due', 'grace', 'read_only', 'cancelled'];
@@ -34,7 +35,7 @@ export default function TenantDetail({ extraTabs = [] }) {
   if (!tenant) {
     return (
       <div className="stack">
-        <Link to="/tenants">← Tenants</Link>
+        <Link to="/tenants" className="back-link">← Tenants</Link>
         {error ? <Notice kind="error">{error}</Notice> : <p className="muted">Loading…</p>}
       </div>
     );
@@ -45,7 +46,7 @@ export default function TenantDetail({ extraTabs = [] }) {
 
   return (
     <div className="stack">
-      <Link to="/tenants">← Tenants</Link>
+      <Link to="/tenants" className="back-link">← Tenants</Link>
       <div className="row-between">
         <div className="row">
           <h1>{tenant.name}</h1>
@@ -165,6 +166,12 @@ function Overview({ tenant: t, reload }) {
   return (
     <div className="stack">
       <Notice kind={notice?.kind}>{notice?.text}</Notice>
+      <div className="stat-grid">
+        <StatCard icon={Layers} label="Plan" value={t.plan || '—'} />
+        <StatCard icon={HardDrive} tone="deep" label="Storage" value={bytes(t.storageBytes)} />
+        <StatCard icon={Activity} label="Last activity" value={t.lastActivityAt ? formatDate(t.lastActivityAt) : 'None yet'} />
+        <StatCard icon={CalendarDays} tone="amber" label="Created" value={formatDate(t.createdAt)} />
+      </div>
       <div className="grid-2">
         <div className="card stack">
           <h2>Tenant</h2>

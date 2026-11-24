@@ -9,10 +9,10 @@ export function SectionCard({
   contentClassName,
 }) {
   return (
-    <Card className={cn("shadow-sm", className)}>
+    <Card className={cn("shadow-xs", className)}>
       {title && (
         <CardHeader className="flex flex-row items-center justify-between px-4 py-3 pb-2">
-          <CardTitle className="text-sm font-semibold">{title}</CardTitle>
+          <CardTitle className="text-[15px] font-bold">{title}</CardTitle>
           {action}
         </CardHeader>
       )}

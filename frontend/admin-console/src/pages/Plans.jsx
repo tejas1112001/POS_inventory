@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api';
 import { useSession } from '../session';
-import { Button, Check, Modal, Notice, Select, Table, TextInput } from '../components/ui';
+import { Button, Check, Modal, Notice, Select, Table, TextInput, PageHeader } from '../components/ui';
 import { money } from '../lib/format';
 import { FEATURES, LIMITS } from '../lib/plans';
 
@@ -24,14 +24,17 @@ export default function Plans() {
 
   return (
     <div className="stack">
-      <div className="row-between">
-        <h1>Plans</h1>
-        {can('plans:manage') && (
-          <Button variant="primary" onClick={() => setEditing({})}>
-            New plan
-          </Button>
-        )}
-      </div>
+      <PageHeader
+        title="Plans"
+        description="Prices, limits and modules of each subscription plan."
+        actions={
+          can('plans:manage') && (
+            <Button variant="primary" onClick={() => setEditing({})}>
+              New plan
+            </Button>
+          )
+        }
+      />
       <Notice kind="error">{error}</Notice>
       <Table
         loading={!plans && !error}

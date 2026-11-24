@@ -53,7 +53,7 @@ export default function CustomerStatement() {
 
       {error && <ErrorState message={error} onRetry={load} />}
       {st && (
-        <article className="rounded-lg border bg-card p-6 print:border-0 print:p-0" aria-label="Statement">
+        <article className="rounded-2xl border bg-card p-6 print:border-0 print:p-0" aria-label="Statement">
           <header className="flex flex-wrap justify-between gap-4 border-b pb-4">
             <div>
               <h1 className="text-xl font-bold">{settings?.businessName || 'Statement'}</h1>

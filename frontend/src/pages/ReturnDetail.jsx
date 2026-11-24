@@ -85,7 +85,7 @@ export default function ReturnDetail() {
         </div>
       </div>
 
-      <section className="rounded-lg border bg-card p-4 shadow-xs" aria-label="Return details">
+      <section className="rounded-2xl border bg-card p-4 shadow-xs" aria-label="Return details">
         <dl className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <Field label="Order">
             {r.sale_id ? (
@@ -121,7 +121,7 @@ export default function ReturnDetail() {
       </section>
 
       <div className="grid gap-4 xl:grid-cols-3">
-        <section className="overflow-hidden rounded-lg border bg-card shadow-xs xl:col-span-2" aria-labelledby="ritems-h">
+        <section className="overflow-hidden rounded-2xl border bg-card shadow-xs xl:col-span-2" aria-labelledby="ritems-h">
           <h2 id="ritems-h" className="border-b px-4 py-3 text-base font-semibold">
             Items returned
           </h2>
@@ -168,7 +168,7 @@ export default function ReturnDetail() {
             </table>
           </div>
         </section>
-        <section className="rounded-lg border bg-card p-4 shadow-xs" aria-labelledby="rtot-h">
+        <section className="rounded-2xl border bg-card p-4 shadow-xs" aria-labelledby="rtot-h">
           <h2 id="rtot-h" className="mb-2 text-base font-semibold">
             Refund
           </h2>

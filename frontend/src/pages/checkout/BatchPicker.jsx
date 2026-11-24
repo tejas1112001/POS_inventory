@@ -71,7 +71,7 @@ export default function BatchPicker({ line, storeId, onClose, onPick }) {
                       step={qtyStep(line.allowFraction)}
                       inputMode={line.allowFraction ? 'decimal' : 'numeric'}
                       aria-label={`Units from batch ${b.batchNo}`}
-                      className="h-11 w-20 rounded-md border border-input bg-background px-2 text-right tabular-nums sm:h-8"
+                      className="h-11 w-20 rounded-lg border border-input bg-card px-2 text-right tabular-nums sm:h-8"
                       value={qty[b.id] ?? ''}
                       onChange={(e) => setQty((cur) => ({ ...cur, [b.id]: e.target.value }))}
                     />

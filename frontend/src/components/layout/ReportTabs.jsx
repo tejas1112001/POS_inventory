@@ -26,7 +26,7 @@ export default function ReportTabs() {
               to={t.to}
               className={({ isActive }) =>
                 cn(
-                  '-mb-px inline-flex min-h-11 items-center border-b-2 px-4 text-sm font-medium',
+                  '-mb-px inline-flex min-h-11 items-center border-b-2 px-4 text-sm font-semibold transition-colors',
                   isActive ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'
                 )
               }

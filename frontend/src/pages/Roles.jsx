@@ -160,7 +160,7 @@ export default function Roles() {
                 {hasPermission('roles', 'edit') && (
                   <button
                     onClick={() => navigate(`/edit-role/${role.id}`)}
-                    className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-accent transition-colors"
+                    className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-accent transition-colors"
                   >
                     <Edit className="h-3.5 w-3.5" />
                     Edit Permissions

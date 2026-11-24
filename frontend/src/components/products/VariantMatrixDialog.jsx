@@ -11,7 +11,7 @@ import { mrpWarning } from '@/lib/mrp';
 import { toast } from '../../../shared/toast/store';
 
 const inputCls =
-  'h-11 w-full rounded-md border border-input bg-background px-3 text-base outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 sm:h-9 sm:text-sm';
+  'h-11 w-full rounded-lg border border-input bg-card px-3 text-base outline-none focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-ring/25 sm:h-9 sm:text-sm';
 
 // VariantMatrixDialog (industry P1 item 4, A8): pick the values of each
 // variant dimension, preview every combination (existing ones skipped),
@@ -86,7 +86,7 @@ export default function VariantMatrixDialog({ product, defs, onClose, onCreated 
                 {d.kind === 'choice' ? (
                   <div className="flex flex-wrap gap-2">
                     {d.choices.map((c) => (
-                      <label key={c} className="flex items-center gap-1.5 rounded-md border px-2 py-1 text-sm">
+                      <label key={c} className="flex items-center gap-1.5 rounded-lg border px-2 py-1 text-sm">
                         <input type="checkbox" className="size-4" checked={picked[k].includes(c)} onChange={() => toggle(k, c)} />
                         {c}
                       </label>

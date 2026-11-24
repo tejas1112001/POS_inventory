@@ -226,7 +226,7 @@ export default function AddRole() {
                     return (
                       <div
                         key={moduleName}
-                        className="rounded-lg border bg-card p-4 shadow-xs space-y-3"
+                        className="rounded-2xl border bg-card p-4 shadow-xs space-y-3"
                       >
                         <div className="flex items-center justify-between border-b pb-2">
                           <span className="font-bold text-sm text-card-foreground capitalize">
@@ -248,10 +248,10 @@ export default function AddRole() {
                               <label
                                 key={p.id}
                                 className={cn(
-                                  'flex items-center justify-between rounded-md border px-3 py-2 text-xs font-medium cursor-pointer transition-colors',
+                                  'flex items-center justify-between rounded-lg border px-3 py-2 text-xs font-medium cursor-pointer transition-colors',
                                   isChecked
                                     ? 'bg-primary/10 border-primary/30 text-primary font-semibold'
-                                    : 'bg-background border-border text-muted-foreground hover:bg-muted/50'
+                                    : 'bg-card border-border text-muted-foreground hover:bg-muted/50'
                                 )}
                               >
                                 <span className="capitalize">{p.action}</span>

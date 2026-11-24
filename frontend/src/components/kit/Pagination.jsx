@@ -15,7 +15,7 @@ function pageList(page, pages) {
 }
 
 const btn =
-  'inline-flex size-11 items-center justify-center rounded-md border bg-card text-sm font-medium tabular-nums hover:bg-muted disabled:pointer-events-none disabled:opacity-40 sm:size-8';
+  'inline-flex size-11 items-center justify-center rounded-lg border bg-card text-sm font-semibold tabular-nums transition-colors hover:border-primary/40 hover:bg-accent disabled:pointer-events-none disabled:opacity-40 sm:size-8';
 
 // Pagination: "1–25 of N", rows per page, first / previous / page numbers /
 // next / last. One component for every list (server pages or client pages).
@@ -32,7 +32,7 @@ export default function Pagination({ label = 'List', total, page, size, pageSize
         {onSize && (
           <label className="hidden items-center gap-2 text-muted-foreground sm:flex">
             Rows
-            <select className="h-8 rounded-md border bg-card px-2 text-foreground" value={size} onChange={(e) => onSize(Number(e.target.value))}>
+            <select className="h-8 rounded-lg border bg-card px-2 text-foreground" value={size} onChange={(e) => onSize(Number(e.target.value))}>
               {pageSizes.map((s) => (
                 <option key={s} value={s}>
                   {s}
@@ -62,7 +62,7 @@ export default function Pagination({ label = 'List', total, page, size, pageSize
               <button
                 key={p}
                 type="button"
-                className={cn(btn, p === page && 'border-primary bg-primary text-primary-foreground hover:bg-primary')}
+                className={cn(btn, p === page && 'border-transparent bg-primary bg-primary-gradient text-primary-foreground hover:bg-primary')}
                 aria-current={p === page ? 'page' : undefined}
                 aria-label={`Page ${p}`}
                 onClick={() => onPage(p)}

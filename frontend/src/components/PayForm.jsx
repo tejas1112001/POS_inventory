@@ -5,6 +5,9 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { formatCurrency } from '@/lib/format';
 import { cn } from '@/lib/utils';
+import TotalCard from '@/components/kit/TotalCard';
+import ChoiceButton from '@/components/kit/ChoiceButton';
+import QuickButton from '@/components/kit/QuickButton';
 
 // Payment types: the values are what the server stores (unchanged).
 const TYPES = [
@@ -86,10 +89,7 @@ export default function PayForm({ isOpen, onClose, total, onPaySubmit, customerE
           <div className="grid gap-5 md:grid-cols-2">
             {/* Left: amount */}
             <div className="space-y-4">
-              <div className="rounded-lg bg-accent px-4 py-3">
-                <p className="text-xs font-medium text-accent-foreground">Total to pay</p>
-                <p className="text-3xl font-bold tabular-nums text-navy">{totalText}</p>
-              </div>
+              <TotalCard label="Total to pay" value={totalText} large />
 
               {cash ? (
                 <>
@@ -114,18 +114,18 @@ export default function PayForm({ isOpen, onClose, total, onPaySubmit, customerE
                     />
                   </div>
                   <div className="grid grid-cols-4 gap-2" role="group" aria-label="Quick cash">
-                    <button type="button" onClick={() => setReceived(String(total.toFixed(2)))} className="col-span-1 min-h-10 rounded-md border bg-card text-sm font-medium hover:bg-muted">
+                    <QuickButton onClick={() => setReceived(String(total.toFixed(2)))}>
                       Exact
-                    </button>
+                    </QuickButton>
                     {QUICK.slice(0, 3).map((n) => (
-                      <button key={n} type="button" onClick={() => setReceived(String(n))} className="min-h-10 rounded-md border bg-card text-sm font-medium tabular-nums hover:bg-muted">
+                      <QuickButton key={n} onClick={() => setReceived(String(n))}>
                         {formatCurrency(n)}
-                      </button>
+                      </QuickButton>
                     ))}
                     {QUICK.slice(3).map((n) => (
-                      <button key={n} type="button" onClick={() => setReceived(String(n))} className="col-span-1 min-h-10 rounded-md border bg-card text-sm font-medium tabular-nums hover:bg-muted">
+                      <QuickButton key={n} onClick={() => setReceived(String(n))}>
                         {formatCurrency(n)}
-                      </button>
+                      </QuickButton>
                     ))}
                   </div>
                   <div
@@ -149,23 +149,17 @@ export default function PayForm({ isOpen, onClose, total, onPaySubmit, customerE
                 <legend className="mb-1.5 text-sm font-medium">Payment type</legend>
                 <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Payment type">
                   {TYPES.map(({ value, label, icon: Icon }) => (
-                    <button
+                    <ChoiceButton
                       key={value}
-                      type="button"
-                      role="radio"
-                      aria-checked={type === value}
+                      selected={type === value}
+                      icon={Icon}
                       onClick={() => {
                         setType(value);
                         setProblem('');
                       }}
-                      className={cn(
-                        'flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-md border text-sm font-medium',
-                        type === value ? 'border-primary bg-primary text-primary-foreground' : 'bg-card hover:bg-muted'
-                      )}
                     >
-                      <Icon className="size-4" aria-hidden="true" />
                       {label}
-                    </button>
+                    </ChoiceButton>
                   ))}
                 </div>
               </fieldset>
@@ -189,11 +183,11 @@ export default function PayForm({ isOpen, onClose, total, onPaySubmit, customerE
                 <div className="grid gap-3">
                   <div className="space-y-1.5">
                     <label htmlFor="pay-note" className="text-sm font-medium">Payment note</label>
-                    <textarea id="pay-note" rows={2} maxLength={1000} value={paymentNote} onChange={(e) => setPaymentNote(e.target.value)} className="w-full rounded-md border border-input bg-card px-3 py-2 text-sm" />
+                    <textarea id="pay-note" rows={2} maxLength={1000} value={paymentNote} onChange={(e) => setPaymentNote(e.target.value)} className="w-full rounded-lg border border-input bg-card px-3 py-2 text-sm" />
                   </div>
                   <div className="space-y-1.5">
                     <label htmlFor="sale-note" className="text-sm font-medium">Sale note</label>
-                    <textarea id="sale-note" rows={2} maxLength={1000} value={saleNote} onChange={(e) => setSaleNote(e.target.value)} className="w-full rounded-md border border-input bg-card px-3 py-2 text-sm" />
+                    <textarea id="sale-note" rows={2} maxLength={1000} value={saleNote} onChange={(e) => setSaleNote(e.target.value)} className="w-full rounded-lg border border-input bg-card px-3 py-2 text-sm" />
                   </div>
                 </div>
               ) : (

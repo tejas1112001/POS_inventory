@@ -39,11 +39,11 @@ export default function ListTable({
   }
 
   const headerCellClass =
-    'sticky top-0 z-10 border-b-2 border-border bg-muted/80 px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground backdrop-blur-sm';
+    'sticky top-0 z-10 border-b border-border bg-muted px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground';
 
   return (
     <>
-      <div className={cn('flex min-h-0 flex-col overflow-hidden rounded-lg border bg-card shadow-sm', className)}>
+      <div className={cn('flex min-h-0 flex-col overflow-hidden rounded-2xl border bg-card shadow-sm', className)}>
         <div
           className={cn(
             'relative isolate min-h-0 flex-1 overflow-auto scrollbar-thin',
@@ -78,15 +78,15 @@ export default function ListTable({
                 <tr
                   key={row.id}
                   className={cn(
-                    'transition-colors hover:bg-primary/[0.04]',
-                    rowIndex % 2 === 1 && 'bg-muted/25'
+                    'transition-colors duration-150 hover:bg-accent/40',
+                    rowIndex % 2 === 1 && 'bg-muted/30'
                   )}
                 >
                   {row.getVisibleCells().map(cell => (
                     <td
                       key={cell.id}
                       className={cn(
-                        'border-b border-border/50 px-3 py-2 text-sm text-foreground',
+                        'border-b border-border/60 px-3 py-2.5 text-sm text-foreground',
                         cell.column.id === 'select' && 'px-0',
                         cell.column.columnDef.meta?.align === 'center' ? 'text-center' : '',
                         cell.column.id !== 'select' && 'whitespace-nowrap'

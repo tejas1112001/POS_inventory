@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Search, Minus, Plus, Trash2, ShoppingCart, UserPlus, Banknote, X, Lock } from 'lucide-react';
+import { Search, Trash2, ShoppingCart, UserPlus, Banknote, X, Lock } from 'lucide-react';
 import CustomerForm from '../components/CustomerForm';
 import { InlineAlert } from '../components/feedback/InlineAlert';
 import { useConfirm } from '../components/feedback/ConfirmDialog';
@@ -21,6 +21,9 @@ import { lockedByOther as isLockedByOther, productStock, variantLabel, variantSt
 import { formatCurrency } from '@/lib/format';
 import { addQty, fmtQty } from '@/lib/qty';
 import { cn } from '@/lib/utils';
+import CartHeader from '@/components/kit/CartHeader';
+import QtyStepper from '@/components/kit/QtyStepper';
+import IconTile from '@/components/kit/IconTile';
 
 export default function POS() {
   const { currentUser } = usePos();
@@ -338,25 +341,19 @@ export default function POS() {
   const cart = (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex items-center justify-between border-b px-4 py-3 max-md:pr-14">
-        <div className="flex items-center gap-2">
-          <ShoppingCart className="size-5 text-primary" aria-hidden="true" />
-          <h2 className="text-base font-semibold">Current sale</h2>
-          {itemCount > 0 && <span className="rounded-full bg-muted px-2 text-xs font-medium tabular-nums">{itemCount}</span>}
-        </div>
-        <Button variant="ghost" size="sm" className="text-danger hover:text-danger" disabled={!lines.length} onClick={askClear}>
+        <CartHeader count={itemCount} />
+        <Button variant="ghost" size="sm" className="text-danger hover:bg-danger-bg hover:text-danger" disabled={!lines.length} onClick={askClear}>
           <X className="size-4" aria-hidden="true" /> Clear
         </Button>
       </div>
-      <div className="border-b bg-muted/40 px-4 py-2 text-xs">
+      <div className="border-b bg-muted/50 px-4 py-2 text-xs">
         <span className="text-muted-foreground">Customer: </span>
         <span className="font-medium">{selectedCustomerObj?.name || 'Walk-in Customer'}</span>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin">
         {lines.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center p-6 text-center">
-            <div className="mb-3 flex size-14 items-center justify-center rounded-full bg-muted text-muted-foreground">
-              <ShoppingCart className="size-6" aria-hidden="true" />
-            </div>
+            <IconTile icon={ShoppingCart} size="lg" className="mb-3" />
             <p className="text-sm font-medium">Cart is empty</p>
             <p className="mt-1 text-xs text-muted-foreground">Tap products to add them to the sale.</p>
           </div>
@@ -368,7 +365,7 @@ export default function POS() {
                 <div className="flex min-w-0 flex-1 flex-col">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">{l.name}</p>
+                      <p className="truncate text-sm font-semibold text-navy">{l.name}</p>
                       {l.label && <p className="truncate text-xs text-muted-foreground">{l.label}</p>}
                       <p className="text-xs text-muted-foreground tabular-nums">
                         {formatCurrency(l.price)} each{l.mrp != null ? ` · MRP ${mrpText(l.mrp, l.mrpPack, formatCurrency)}` : ''}
@@ -385,16 +382,13 @@ export default function POS() {
                     </Button>
                   </div>
                   <div className="mt-1 flex items-center justify-between">
-                    <div className="flex items-center gap-1">
-                      <Button variant="outline" size="icon" className="size-9" aria-label="One less" onClick={() => changeQuantity(l.key, -1)}>
-                        <Minus className="size-3.5" aria-hidden="true" />
-                      </Button>
-                      <span className="w-8 text-center text-sm font-semibold tabular-nums" aria-label="Quantity">{fmtQty(l.quantity)}</span>
-                      <Button variant="outline" size="icon" className="size-9" aria-label="One more" disabled={l.quantity >= l.maxQty} onClick={() => changeQuantity(l.key, 1)}>
-                        <Plus className="size-3.5" aria-hidden="true" />
-                      </Button>
-                    </div>
-                    <p className="text-sm font-semibold tabular-nums">{formatCurrency(l.price * l.quantity)}</p>
+                    <QtyStepper
+                      value={fmtQty(l.quantity)}
+                      onDecrease={() => changeQuantity(l.key, -1)}
+                      onIncrease={() => changeQuantity(l.key, 1)}
+                      increaseDisabled={l.quantity >= l.maxQty}
+                    />
+                    <p className="text-sm font-bold text-navy tabular-nums">{formatCurrency(l.price * l.quantity)}</p>
                   </div>
                 </div>
               </li>
@@ -402,7 +396,7 @@ export default function POS() {
           </ul>
         )}
       </div>
-      <div className="space-y-2 border-t bg-card p-4">
+      <div className="space-y-2 border-t bg-muted/40 p-4">
         <div className="flex items-center justify-between text-sm">
           <span className="text-muted-foreground">Subtotal</span>
           <span className="font-medium tabular-nums">{formatCurrency(subtotal)}</span>
@@ -424,11 +418,11 @@ export default function POS() {
           <span className="font-medium tabular-nums">{formatCurrency(tax)}</span>
         </div>
         <div className="flex items-center justify-between border-t pt-2">
-          <span className="text-sm font-semibold">Total</span>
-          <span className="text-xl font-bold tabular-nums text-navy">{formatCurrency(total)}</span>
+          <span className="text-base font-bold text-navy">Total</span>
+          <span className="text-2xl font-extrabold tabular-nums text-navy">{formatCurrency(total)}</span>
         </div>
-        <Button className="h-12 w-full text-base font-bold" disabled={!lines.length} onClick={() => setShowPayForm(true)}>
-          <Banknote className="size-5" aria-hidden="true" /> PAY {formatCurrency(total)}
+        <Button className="h-12 w-full rounded-xl text-base font-bold" disabled={!lines.length} onClick={() => setShowPayForm(true)}>
+          <Banknote className="size-5" aria-hidden="true" /> Pay {formatCurrency(total)}
         </Button>
       </div>
     </div>
@@ -438,7 +432,7 @@ export default function POS() {
     <div className="flex h-full min-h-0 flex-col overflow-hidden md:flex-row">
       {/* Products */}
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <div className="space-y-2 border-b bg-card p-3">
+        <div className="space-y-2.5 border-b bg-card p-3 sm:p-4">
           {error && <InlineAlert onClose={() => setError(null)}>{error}</InlineAlert>}
           <div className="flex flex-wrap items-center gap-2">
             <Select value={selectedStore} onValueChange={changeStore} disabled={stores.length === 0}>
@@ -473,14 +467,14 @@ export default function POS() {
             </div>
           </div>
           <div className="relative">
-            <Search className="pointer-events-none absolute top-1/2 left-3 size-5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+            <Search className="pointer-events-none absolute top-1/2 left-3.5 size-5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
             <Input
               type="search"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Search by name or SKU…"
               aria-label="Search products by name or SKU"
-              className="h-11 pl-10 text-base"
+              className="h-11 rounded-xl bg-muted/40 pl-11 text-base"
               onKeyDown={(e) => {
                 if (e.key !== 'Enter') return;
                 const q = searchTerm.trim().toLowerCase();
@@ -513,7 +507,7 @@ export default function POS() {
           </div>
         </div>
 
-        <div className={cn('min-h-0 flex-1 overflow-y-auto p-3 scrollbar-thin', lines.length && 'max-md:pb-24')}>
+        <div className={cn('min-h-0 flex-1 overflow-y-auto p-3 scrollbar-thin sm:p-4', lines.length && 'max-md:pb-24')}>
           {filteredProducts.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center text-center text-muted-foreground">
               <Search className="mb-2 size-8 opacity-40" aria-hidden="true" />
@@ -521,7 +515,7 @@ export default function POS() {
               <p className="mt-1 text-xs">Try another search or category.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6">
+            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6">
               {filteredProducts.map((p) => (
                 <ProductTile key={p.id} product={p} lockedByOther={lockedByOther(p)} onPick={pickProduct} />
               ))}
@@ -532,7 +526,7 @@ export default function POS() {
         {/* Phones: a cart bar instead of the side panel. */}
         {lines.length > 0 && (
           <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-card p-3 pb-[max(12px,env(safe-area-inset-bottom))] md:hidden">
-            <Button className="h-12 w-full justify-between text-base" onClick={() => setCartOpen(true)}>
+            <Button className="h-12 w-full justify-between rounded-xl text-base" onClick={() => setCartOpen(true)}>
               <span>
                 {itemCount} {itemCount === 1 ? 'item' : 'items'} · <span className="tabular-nums">{formatCurrency(total)}</span>
               </span>
@@ -543,7 +537,7 @@ export default function POS() {
       </div>
 
       {/* Cart panel: tablets and desktops */}
-      <aside className="hidden min-h-0 w-[340px] shrink-0 flex-col border-l bg-card md:flex lg:w-96" aria-label="Current sale">
+      <aside className="hidden min-h-0 w-[340px] shrink-0 flex-col border-l bg-card shadow-[-8px_0_24px_-16px_rgb(18_59_69/0.18)] md:flex lg:w-96" aria-label="Current sale">
         {cart}
       </aside>
 

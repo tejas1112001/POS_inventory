@@ -128,7 +128,7 @@ export default function OrderDetail() {
         </div>
       )}
 
-      <section className="rounded-lg border bg-card p-4 shadow-xs" aria-label="Order details">
+      <section className="rounded-2xl border bg-card p-4 shadow-xs" aria-label="Order details">
         <dl className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <Field label="Customer">{sale.customer?.name}</Field>
           <Field label="Store">{sale.Store?.name}</Field>
@@ -148,7 +148,7 @@ export default function OrderDetail() {
       </section>
 
       <div className="grid gap-4 xl:grid-cols-3">
-        <section className="overflow-hidden rounded-lg border bg-card shadow-xs xl:col-span-2" aria-labelledby="items-h">
+        <section className="overflow-hidden rounded-2xl border bg-card shadow-xs xl:col-span-2" aria-labelledby="items-h">
           <h2 id="items-h" className="border-b px-4 py-3 text-base font-semibold">
             Items
           </h2>
@@ -191,7 +191,7 @@ export default function OrderDetail() {
           </div>
         </section>
 
-        <section className="rounded-lg border bg-card p-4 shadow-xs" aria-labelledby="totals-h">
+        <section className="rounded-2xl border bg-card p-4 shadow-xs" aria-labelledby="totals-h">
           <h2 id="totals-h" className="mb-2 text-base font-semibold">
             Totals
           </h2>
@@ -220,7 +220,7 @@ export default function OrderDetail() {
       </div>
 
       {hasPermission('sales_returns', 'view') && (
-        <section className="rounded-lg border bg-card shadow-xs" aria-labelledby="returns-h">
+        <section className="rounded-2xl border bg-card shadow-xs" aria-labelledby="returns-h">
           <h2 id="returns-h" className="border-b px-4 py-3 text-base font-semibold">
             Returns
           </h2>

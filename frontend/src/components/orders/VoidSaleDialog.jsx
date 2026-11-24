@@ -67,7 +67,7 @@ export default function VoidSaleDialog({ sale, onClose, onVoided }) {
                 autoFocus
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
-                className="w-full rounded-md border border-input bg-card px-3 py-2 text-sm"
+                className="w-full rounded-lg border border-input bg-card px-3 py-2 text-sm"
                 placeholder="For example: entered twice, customer cancelled"
               />
             </div>

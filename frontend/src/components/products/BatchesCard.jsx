@@ -50,7 +50,7 @@ export default function BatchesCard({ product, canManage, onSaved }) {
   };
 
   return (
-    <section className="rounded-lg border bg-card p-4 shadow-xs" aria-labelledby="batches-h">
+    <section className="rounded-2xl border bg-card p-4 shadow-xs" aria-labelledby="batches-h">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h2 id="batches-h" className="text-base font-semibold">
           Batches and expiry

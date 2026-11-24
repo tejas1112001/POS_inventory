@@ -7,7 +7,7 @@ import { setShopSettings, useShopSettings } from '@/hooks/useShopSettings';
 import { toast } from '../../../shared/toast/store';
 
 const NEW_RULE = { prefix: '21', itemDigits: 5, value: 'weight', decimals: 3 };
-const sel = 'h-8 rounded-md border bg-background px-2 text-sm';
+const sel = 'h-8 rounded-lg border bg-card px-2 text-sm';
 
 // example is a sample code of a rule: 21 00042 01250 C.
 function example(r) {

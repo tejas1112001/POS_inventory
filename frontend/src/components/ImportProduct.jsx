@@ -129,7 +129,7 @@ export default function ImportProduct({ showForm, setShowForm, onImportComplete 
           <div className="flex flex-wrap items-end gap-2">
             <label className="grid gap-1.5 font-medium">
               Template
-              <select className="h-11 rounded-md border border-input bg-background px-3 sm:h-9" value={type} onChange={(e) => setType(e.target.value)}>
+              <select className="h-11 rounded-lg border border-input bg-card px-3 sm:h-9" value={type} onChange={(e) => setType(e.target.value)}>
                 {types.map(([k, label]) => (
                   <option key={k} value={k}>
                     {label}

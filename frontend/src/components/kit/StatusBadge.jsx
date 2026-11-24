@@ -18,7 +18,7 @@ const CLS = {
 export default function StatusBadge({ value }) {
   if (!value) return null;
   return (
-    <span className={cn('inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium', CLS[TONE[value] || 'muted'])}>
+    <span className={cn('inline-flex items-center whitespace-nowrap rounded-md px-2.5 py-1 text-xs leading-none font-semibold', CLS[TONE[value] || 'muted'])}>
       {value}
     </span>
   );

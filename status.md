@@ -1,3 +1,18 @@
+# Teal & Cream redesign (2026-11-24)
+
+Branch `ui/teal-theme` (local, not pushed). Shop app and platform console restyled to the moodboards in the repo root (deep teal #123B45, teal #20B6A4, ivory #F4F2E9, amber #F2B544, Manrope; light and dark).
+
+| Area | What |
+|---|---|
+| Tokens | `frontend/shared/tokens.css`, `frontend/src/index.css`: teal/cream tokens, brand gradients, Tailwind blue/sky/indigo/slate/gray remapped to the teal ramps, `.dark` overrides for older screens |
+| State | Redux Toolkit: shop `src/store` (mode, accent, sidebar, phone nav), console `admin-console/src/store.js` (mode, menu) |
+| Kit | Reusable `components/kit`: IconTile, StatCard, MetricCard, ActionCard, Panel, SegmentedControl, QtyStepper, ThemeToggle, CartHeader, TotalCard, ChoiceButton, QuickButton; shared `shared/brand/BrandMark` |
+| Shop | Sidebar, top bar (page search Ctrl+K, theme toggle), dashboard (KPI cards, revenue trend, top products, recent sales, low stock), POS/checkout, payment, sign-in, settings appearance, lists, dialogs, sales report cards |
+| Console | Teal sidebar layout, top bar, sign-in, page headers, tenant stat cards, tables, badges, modals, inline filters, dark mode |
+| Checks | eslint 0 errors; both vite builds; unit tests 32/32; screenshots light/dark, desktop/phone (mocked API, dev servers on 5173/5174 only) |
+
+Not done: the landing site (`landing/`) is still the old blue theme.
+
 # Rename to MintoBill (2026-11-23)
 
 Domain is now mintobill.com. Branch `chore/rename-mintobill` (local, not pushed): every BilMitra/BillPiko name and bilmitra.com reference changed to MintoBill/mintobill.com (landing site, deploy files renamed, docs). Server not moved yet: run `backend/deploy/vps/migrate-to-mintobill.sh` after DNS for mintobill.com points at the VPS, then `deploy.sh` (docs/DEPLOY_VPS.md §8). bilmitra.com becomes a redirect.

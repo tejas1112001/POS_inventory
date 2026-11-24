@@ -2,7 +2,7 @@ import { toast } from '../../../shared/toast/store';
 import { HoldDialog, RecallDialog } from './HeldBills';
 import { usePermission } from '@/context/PermissionContext';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Banknote, HelpCircle, ListRestart, Loader2, Minus, PauseCircle, Plus, RefreshCw, Search, ShoppingCart, Star, Trash2, User, X } from 'lucide-react';
+import { Banknote, HelpCircle, ListRestart, Loader2, PauseCircle, RefreshCw, Search, ShoppingCart, Star, Trash2, User, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
@@ -22,6 +22,9 @@ import { mrpText } from '@/lib/mrp';
 import { beep, findByCode } from '@/lib/scan';
 import { useScanner } from '@/hooks/useScanner';
 import { cn } from '@/lib/utils';
+import CartHeader from '@/components/kit/CartHeader';
+import QtyStepper from '@/components/kit/QtyStepper';
+import IconTile from '@/components/kit/IconTile';
 import { api } from '@/services/api';
 import useCheckout, { lineName } from './useCheckout';
 import PaymentSheet from './PaymentSheet';
@@ -383,11 +386,7 @@ export default function Checkout() {
   const cart = (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex items-center justify-between border-b px-4 py-3 max-md:pr-14">
-        <div className="flex items-center gap-2">
-          <ShoppingCart className="size-5 text-primary" aria-hidden="true" />
-          <h2 className="text-base font-semibold">Current sale</h2>
-          {itemCount > 0 && <span className="rounded-full bg-muted px-2 text-xs font-medium tabular-nums">{itemCount}</span>}
-        </div>
+        <CartHeader count={itemCount} />
         <div className="flex items-center gap-1">
           <Button variant="ghost" size="sm" disabled={!lines.length} onClick={() => setHolding(true)} title="Park this bill (F6)">
             <PauseCircle className="size-4" aria-hidden="true" /> Hold
@@ -395,12 +394,12 @@ export default function Checkout() {
           <Button variant="ghost" size="sm" onClick={() => setRecalling(true)} title="Held bills (F7)">
             <ListRestart className="size-4" aria-hidden="true" /> Recall
           </Button>
-          <Button variant="ghost" size="sm" className="text-danger hover:text-danger" disabled={!lines.length} onClick={askClear}>
+          <Button variant="ghost" size="sm" className="text-danger hover:bg-danger-bg hover:text-danger" disabled={!lines.length} onClick={askClear}>
             <X className="size-4" aria-hidden="true" /> Clear
           </Button>
         </div>
       </div>
-      <button type="button" onClick={() => setPickCustomer(true)} className="flex min-h-11 items-center justify-between gap-2 border-b bg-muted/40 px-4 py-2 text-left text-sm hover:bg-muted">
+      <button type="button" onClick={() => setPickCustomer(true)} className="flex min-h-11 items-center justify-between gap-2 border-b bg-muted/50 px-4 py-2 text-left text-sm transition-colors hover:bg-accent">
         <span className="flex min-w-0 items-center gap-2">
           <User className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
           <span className="truncate font-medium">{customer?.name || 'Walk-in Customer'}</span>
@@ -416,9 +415,7 @@ export default function Checkout() {
       <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin">
         {lines.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center p-6 text-center">
-            <div className="mb-3 flex size-14 items-center justify-center rounded-full bg-muted text-muted-foreground">
-              <ShoppingCart className="size-6" aria-hidden="true" />
-            </div>
+            <IconTile icon={ShoppingCart} size="lg" className="mb-3" />
             <p className="text-sm font-medium">Cart is empty</p>
             <p className="mt-1 text-xs text-muted-foreground">Search or tap products to add them.</p>
           </div>
@@ -437,7 +434,7 @@ export default function Checkout() {
                   <div className="flex min-w-0 flex-1 flex-col">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-medium">{l.name}</p>
+                        <p className="truncate text-sm font-semibold text-navy">{l.name}</p>
                         {l.label && <p className="truncate text-xs text-slate-600 dark:text-slate-300">{l.label}</p>}
                         <p className="text-xs text-slate-600 tabular-nums dark:text-slate-300">
                           {l.unitId ? `${formatCurrency(l.price * l.factor)} per ${l.unitName}` : `${formatCurrency(l.price)} each`}
@@ -503,38 +500,38 @@ export default function Checkout() {
                       </Button>
                     </div>
                     <div className="mt-1 flex items-center justify-between">
-                      <div className="flex items-center gap-1">
-                        <Button variant="outline" size="icon" className="size-9" aria-label={`One less ${lineName(l)}`} onClick={() => c.changeQuantity(l.key, -1)}>
-                          <Minus className="size-3.5" aria-hidden="true" />
-                        </Button>
-                        {editingQty === l.key ? (
-                          <Input
-                            autoFocus
-                            type="text"
-                            inputMode={l.allowFraction ? 'decimal' : 'numeric'}
-                            defaultValue={l.quantity}
-                            aria-label={`Quantity of ${lineName(l)}`}
-                            className="h-9 w-14 text-center tabular-nums"
-                            onFocus={(e) => e.target.select()}
-                            onBlur={(e) => {
-                              c.setQuantity(l.key, e.target.value);
-                              setEditingQty(null);
-                            }}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') e.currentTarget.blur();
-                              if (e.key === 'Escape') setEditingQty(null);
-                            }}
-                          />
-                        ) : (
-                          <button type="button" onClick={() => setEditingQty(l.key)} className="h-9 min-w-10 rounded-md px-1 text-center text-sm font-semibold tabular-nums hover:bg-muted" aria-label={`Quantity ${fmtQty(l.quantity)}${l.unitId ? ` ${l.unitName}` : ''}. Tap to type a quantity`}>
-                            {fmtQty(l.quantity)}
-                          </button>
-                        )}
-                        <Button variant="outline" size="icon" className="size-9" aria-label={`One more ${lineName(l)}`} disabled={lineBase({ ...l, quantity: addQty(l.quantity, 1) }) > l.maxQty} onClick={() => c.changeQuantity(l.key, 1)}>
-                          <Plus className="size-3.5" aria-hidden="true" />
-                        </Button>
-                      </div>
-                      <p className="text-sm font-semibold tabular-nums">{formatCurrency(ql ? ql.total : l.price * lineBase(l))}</p>
+                      <QtyStepper
+                        decreaseLabel={`One less ${lineName(l)}`}
+                        increaseLabel={`One more ${lineName(l)}`}
+                        onDecrease={() => c.changeQuantity(l.key, -1)}
+                        onIncrease={() => c.changeQuantity(l.key, 1)}
+                        increaseDisabled={lineBase({ ...l, quantity: addQty(l.quantity, 1) }) > l.maxQty}
+                      >
+                          {editingQty === l.key ? (
+                            <Input
+                              autoFocus
+                              type="text"
+                              inputMode={l.allowFraction ? 'decimal' : 'numeric'}
+                              defaultValue={l.quantity}
+                              aria-label={`Quantity of ${lineName(l)}`}
+                              className="h-9 w-14 text-center tabular-nums"
+                              onFocus={(e) => e.target.select()}
+                              onBlur={(e) => {
+                                c.setQuantity(l.key, e.target.value);
+                                setEditingQty(null);
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') e.currentTarget.blur();
+                                if (e.key === 'Escape') setEditingQty(null);
+                              }}
+                            />
+                          ) : (
+                            <button type="button" onClick={() => setEditingQty(l.key)} className="h-9 min-w-10 border-x px-1 text-center text-sm font-bold tabular-nums hover:bg-muted" aria-label={`Quantity ${fmtQty(l.quantity)}${l.unitId ? ` ${l.unitName}` : ''}. Tap to type a quantity`}>
+                              {fmtQty(l.quantity)}
+                            </button>
+                          )}
+                      </QtyStepper>
+                      <p className="text-sm font-bold text-navy tabular-nums">{formatCurrency(ql ? ql.total : l.price * lineBase(l))}</p>
                     </div>
                   </div>
                 </li>
@@ -543,7 +540,7 @@ export default function Checkout() {
           </ul>
         )}
       </div>
-      <div className="space-y-2 border-t bg-card p-4">
+      <div className="space-y-2 border-t bg-muted/40 p-4">
         <div className="flex items-center justify-between text-sm">
           <span className="text-muted-foreground">Subtotal</span>
           <span className="font-medium tabular-nums">{formatCurrency(q ? q.subtotal : estimate)}</span>
@@ -591,7 +588,7 @@ export default function Checkout() {
               </span>
             )}
           </span>
-          <span className={cn('text-xl font-bold tabular-nums text-navy', !q && 'text-muted-foreground')}>{formatCurrency(total)}</span>
+          <span className={cn('text-2xl font-extrabold tabular-nums text-navy', !q && 'text-muted-foreground')}>{formatCurrency(total)}</span>
         </div>
         {q?.batchProblem && (
           <InlineAlert className="text-xs">
@@ -609,8 +606,8 @@ export default function Checkout() {
         {mrpBlocked && (
           <InlineAlert className="text-xs">A line is above its MRP or has no MRP. Fix it to take payment.</InlineAlert>
         )}
-        <Button className="h-12 w-full text-base font-bold" disabled={!lines.length || !c.quoteReady || !!q?.batchProblem || mrpBlocked} onClick={openPay}>
-          <Banknote className="size-5" aria-hidden="true" /> PAY {formatCurrency(total)}
+        <Button className="h-12 w-full rounded-xl text-base font-bold" disabled={!lines.length || !c.quoteReady || !!q?.batchProblem || mrpBlocked} onClick={openPay}>
+          <Banknote className="size-5" aria-hidden="true" /> Pay {formatCurrency(total)}
           <span className="hidden text-xs font-normal lg:inline">F10</span>
         </Button>
       </div>
@@ -620,7 +617,7 @@ export default function Checkout() {
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden md:flex-row">
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <div className="space-y-2 border-b bg-card p-3">
+        <div className="space-y-2.5 border-b bg-card p-3 sm:p-4">
           {c.problem && <InlineAlert onClose={() => c.setProblem(null)}>{c.problem}</InlineAlert>}
           <div className="flex flex-wrap items-center gap-2">
             <Select value={c.storeId} onValueChange={c.changeStore} disabled={c.stores.length < 2}>
@@ -641,7 +638,7 @@ export default function Checkout() {
             </Button>
           </div>
           <div className="relative">
-            <Search className="pointer-events-none absolute top-1/2 left-3 size-5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+            <Search className="pointer-events-none absolute top-1/2 left-3.5 size-5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
             <Input
               ref={searchRef}
               autoFocus={finePointer()}
@@ -650,7 +647,7 @@ export default function Checkout() {
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Scan, or search by name, SKU or barcode · F2"
               aria-label="Search products by name, SKU or barcode"
-              className="h-11 pl-10 text-base"
+              className="h-11 rounded-xl bg-muted/40 pl-11 text-base"
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey) {
                   e.preventDefault();
@@ -676,7 +673,7 @@ export default function Checkout() {
           </div>
         </div>
 
-        <div className={cn('min-h-0 flex-1 overflow-y-auto p-3 scrollbar-thin', lines.length && 'max-md:pb-24')}>
+        <div className={cn('min-h-0 flex-1 overflow-y-auto p-3 scrollbar-thin sm:p-4', lines.length && 'max-md:pb-24')}>
           {shown.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center text-center text-muted-foreground">
               <Search className="mb-2 size-8 opacity-40" aria-hidden="true" />
@@ -684,7 +681,7 @@ export default function Checkout() {
               <p className="mt-1 text-xs">{category === 'fav' ? 'Tap the star on a product to add it.' : 'Try another search or category.'}</p>
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6">
+            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3 xl:grid-cols-4 2xl:grid-cols-6">
               {shown.map((p) => (
                 <ProductTile
                   key={p.id}
@@ -702,7 +699,7 @@ export default function Checkout() {
 
         {lines.length > 0 && (
           <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-card p-3 pb-[max(12px,env(safe-area-inset-bottom))] md:hidden">
-            <Button className="h-12 w-full justify-between text-base" onClick={() => setCartOpen(true)}>
+            <Button className="h-12 w-full justify-between rounded-xl text-base" onClick={() => setCartOpen(true)}>
               <span>
                 {itemCount} {itemCount === 1 ? 'item' : 'items'} · <span className="tabular-nums">{formatCurrency(total)}</span>
               </span>
@@ -712,7 +709,7 @@ export default function Checkout() {
         )}
       </div>
 
-      <aside className="hidden min-h-0 w-[360px] shrink-0 flex-col border-l bg-card md:flex lg:w-[420px]" aria-label="Current sale">
+      <aside className="hidden min-h-0 w-[360px] shrink-0 flex-col border-l bg-card shadow-[-8px_0_24px_-16px_rgb(18_59_69/0.18)] md:flex lg:w-[420px]" aria-label="Current sale">
         {cart}
       </aside>
 
@@ -796,7 +793,7 @@ function PlaceOfSupply({ c, gst, customer }) {
       <label className="flex items-center justify-between gap-2">
         <span className="text-muted-foreground">Place of supply</span>
         <select
-          className="h-7 max-w-[60%] rounded-md border bg-background px-1 text-xs"
+          className="h-7 max-w-[60%] rounded-lg border bg-card px-1 text-xs"
           value={place}
           onChange={(e) => c.setPlaceOfSupply(e.target.value === gst?.sellerState ? '' : e.target.value)}
           aria-label="Place of supply"

@@ -44,7 +44,7 @@ const Switch = React.forwardRef(
         >
           <span
             className={cn(
-              'pointer-events-none block size-5 rounded-full bg-background shadow-md ring-0 transition-transform duration-200 ease-in-out',
+              'pointer-events-none block size-5 rounded-full bg-white shadow-md ring-0 transition-transform duration-200 ease-in-out',
               checked ? 'translate-x-5' : 'translate-x-0'
             )}
           />

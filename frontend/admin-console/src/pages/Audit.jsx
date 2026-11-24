@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, query } from '../api';
 import { useSession } from '../session';
-import { Button, Notice, Table } from '../components/ui';
+import { Button, Notice, Table, PageHeader } from '../components/ui';
 import { formatDateTime } from '../lib/format';
 
 const PAGE = 100;
@@ -84,7 +84,7 @@ export default function Audit() {
   const [applied, setApplied] = useState('');
   return (
     <div className="stack">
-      <h1>Audit log</h1>
+      <PageHeader title="Audit log" description="Who did what, and when." />
       {!can('audit:view_all') && <Notice kind="info">Your role shows only your own actions.</Notice>}
       <form
         className="row"

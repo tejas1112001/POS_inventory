@@ -75,7 +75,7 @@ export default function BarcodesCard({ product, canEdit, onSaved }) {
   };
 
   return (
-    <section className="overflow-hidden rounded-lg border bg-card shadow-xs" aria-labelledby="bc-h">
+    <section className="overflow-hidden rounded-2xl border bg-card shadow-xs" aria-labelledby="bc-h">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3">
         <div>
           <h2 id="bc-h" className="text-base font-semibold">
@@ -102,7 +102,7 @@ export default function BarcodesCard({ product, canEdit, onSaved }) {
             <li key={i} className="flex flex-wrap items-center gap-2 px-4 py-2">
               {variants.length > 1 && (
                 <select
-                  className="h-8 rounded-md border bg-background px-2 text-sm"
+                  className="h-8 rounded-lg border bg-card px-2 text-sm"
                   value={r.variantId}
                   disabled={!canEdit}
                   onChange={(e) => set(i, { variantId: e.target.value })}
@@ -124,7 +124,7 @@ export default function BarcodesCard({ product, canEdit, onSaved }) {
                 aria-label={`Barcode ${i + 1}`}
               />
               <select
-                className="h-8 rounded-md border bg-background px-2 text-sm"
+                className="h-8 rounded-lg border bg-card px-2 text-sm"
                 value={r.unitId}
                 disabled={!canEdit || units.length === 0}
                 onChange={(e) => set(i, { unitId: e.target.value })}

@@ -95,7 +95,7 @@ export default function CustomerDueReportList({ reports }) {
         } else if (status === 'Unpaid') {
           badgeClass = 'bg-red-100 text-red-800';
         } else if (status === 'Overdue') {
-          badgeClass = 'bg-purple-100 text-purple-800';
+          badgeClass = 'bg-amber-soft text-[#7a4a05] dark:text-amber-brand';
         }
         
         return (

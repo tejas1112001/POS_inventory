@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, query } from '../api';
 import { useSession } from '../session';
-import { Button, Modal, Notice, Pager, Select, StatusBadge, Table, TextInput } from '../components/ui';
+import { Button, Modal, Notice, Pager, Select, StatusBadge, Table, TextInput, PageHeader } from '../components/ui';
 import { bytes, formatDate, formatDateTime } from '../lib/format';
 
 const STATUSES = ['', 'trialing', 'active', 'past_due', 'grace', 'cancelled', 'read_only', 'suspended', 'pending_deletion', 'provisioning', 'failed', 'deleted'];
@@ -77,14 +77,17 @@ export default function Tenants() {
 
   return (
     <div className="stack">
-      <div className="row-between">
-        <h1>Tenants</h1>
-        {can('tenants:create') && (
-          <Button variant="primary" onClick={() => setCreating(true)}>
-            New tenant
-          </Button>
-        )}
-      </div>
+      <PageHeader
+        title="Tenants"
+        description="Every shop on the platform: search, filter and open one."
+        actions={
+          can('tenants:create') && (
+            <Button variant="primary" onClick={() => setCreating(true)}>
+              New tenant
+            </Button>
+          )
+        }
+      />
       <div className="row">
         <input className="input" type="search" placeholder="Search name, subdomain or owner email" aria-label="Search tenants" value={search} onChange={(e) => setSearch(e.target.value)} />
         <select className="select" aria-label="Status" value={filters.status} onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value, page: 1 }))}>

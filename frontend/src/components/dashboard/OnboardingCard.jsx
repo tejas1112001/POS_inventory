@@ -47,7 +47,7 @@ export default function OnboardingCard() {
 
   const pct = Math.round((data.done / data.total) * 100);
   return (
-    <section className="rounded-lg border bg-card p-4 shadow-xs" aria-labelledby="onb-h">
+    <section className="rounded-2xl border bg-card p-4 shadow-xs" aria-labelledby="onb-h">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <h2 id="onb-h" className="flex items-center gap-2 text-base font-semibold">

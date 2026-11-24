@@ -482,7 +482,7 @@ export default function Receipt({ isOpen = true, onClose, sale: given, saleId, s
             <div className="flex w-full flex-wrap items-center gap-2">
               <label className="flex items-center gap-2 text-sm text-muted-foreground">
                 Paper
-                <select className="h-10 rounded-md border bg-card px-2 text-foreground" value={paperDef.value} onChange={(e) => choosePaper(e.target.value)}>
+                <select className="h-10 rounded-lg border bg-card px-2 text-foreground" value={paperDef.value} onChange={(e) => choosePaper(e.target.value)}>
                   {PAPERS.map((p) => (
                     <option key={p.value} value={p.value}>
                       {p.label}

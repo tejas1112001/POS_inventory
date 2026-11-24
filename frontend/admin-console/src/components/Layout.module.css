@@ -1,121 +1,310 @@
+/* Console layout (Teal & Cream): sidebar, top bar, page. Plain CSS (the
+   console's CSP allows only its own stylesheets). */
+
 .shell {
   display: flex;
   min-height: 100%;
-  flex-direction: column;
+  background: var(--bg);
+  background-image: var(--ds-gradient-page);
 }
 
-.top {
-  position: sticky;
-  top: 0;
-  z-index: 10;
+/* Sidebar */
+.side {
+  position: fixed;
+  inset: 0 auto 0 0;
+  z-index: 40;
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 16px;
-  padding: 10px 20px;
-  background: var(--navy);
-  color: #fff;
+  width: 248px;
+  flex-direction: column;
+  border-right: 1px solid var(--side-border);
+  background: var(--side-bg);
+  color: var(--side-text);
 }
 
 .brand {
-  font-weight: 700;
-  color: #fff;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 64px;
+  padding: 0 16px;
+}
+
+.brandText {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  line-height: 1.15;
+}
+
+.wordmark {
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--heading);
+}
+
+.wordmarkAccent {
+  color: var(--brand-accent-text);
+}
+
+.brandSub {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--side-muted);
 }
 
 .nav {
   display: flex;
   flex: 1;
-  flex-wrap: wrap;
-  gap: 4px;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+  padding: 8px 12px;
+}
+
+.section {
+  margin: 4px 12px 6px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--side-muted);
 }
 
 .link {
-  padding: 6px 12px;
-  border-radius: var(--radius);
-  color: #cbd5e1;
-  text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 42px;
+  padding: 0 12px;
+  border-radius: 12px;
+  color: var(--side-text);
   font-weight: 500;
+  text-decoration: none;
+  transition: background-color var(--ds-motion-fast), color var(--ds-motion-fast);
+}
+
+.link svg {
+  flex: none;
+  color: var(--side-muted);
 }
 
 .link:hover {
-  background: var(--slate);
-  color: #fff;
+  background: var(--side-hover);
+  color: var(--heading);
+}
+
+.link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 .active,
 .active:hover {
-  background: var(--slate);
-  color: #fff;
-  box-shadow: inset 0 -2px 0 #60a5fa;
+  background: var(--side-active);
+  color: var(--side-active-text);
+  font-weight: 700;
+  box-shadow: var(--ds-shadow-1);
 }
 
-.user {
+.active svg {
+  color: currentColor;
+}
+
+.userCard {
   display: flex;
   align-items: center;
   gap: 10px;
+  margin: 12px;
+  padding: 10px;
+  border: 1px solid var(--side-border);
+  border-radius: 16px;
+  background: var(--ds-gradient-card);
 }
 
-.user :global(.muted) {
-  color: #cbd5e1;
-}
-
-.user :global(.btn) {
-  background: transparent;
-  border-color: #475569;
+.avatar {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  background: var(--ds-gradient-brand);
   color: #fff;
+  font-size: 12px;
+  font-weight: 800;
 }
 
-.user :global(.btn:hover:not(:disabled)) {
-  border-color: #fff;
+.avatarSm {
+  width: 30px;
+  height: 30px;
+  font-size: 11px;
 }
 
-.main {
-  width: 100%;
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 20px;
+.userText {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.userEmail {
+  overflow: hidden;
+  color: var(--heading);
+  font-size: 13px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.userRole {
+  color: var(--side-muted);
+  font-size: 12px;
+  text-transform: capitalize;
+}
+
+.iconBtn {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background-color var(--ds-motion-fast), color var(--ds-motion-fast);
+}
+
+.iconBtn:hover {
+  background: var(--side-hover);
+  color: var(--heading);
+}
+
+.iconBtn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.signOut:hover {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.closeBtn {
+  display: none;
+  margin-left: auto;
+}
+
+/* Main column */
+.body {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  padding-left: 248px;
+}
+
+.top {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 64px;
+  padding: 0 32px;
+  border-bottom: 1px solid var(--border);
+  background: var(--topbar-bg);
+}
+
+.crumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.topRight {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+}
+
+.chip {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 12px 0 5px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+}
+
+.chipText {
+  max-width: 220px;
+  overflow: hidden;
+  color: var(--heading);
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .menuButton {
   display: none;
-  margin-left: auto;
-  min-height: 40px;
-  padding: 0 14px;
-  border: 1px solid #475569;
-  border-radius: var(--radius);
-  background: transparent;
-  color: #fff;
-  font: inherit;
-  font-weight: 500;
 }
 
-/* Phones: the menu folds into a drop-down; the user line wraps under it. */
-@media (max-width: 767px) {
-  .top {
-    gap: 8px;
-    padding: 10px 12px;
+.main {
+  width: 100%;
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 28px 32px 40px;
+}
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 35;
+  background: rgb(11 42 50 / 50%);
+}
+
+/* Tablets and phones: the sidebar slides in over the page. */
+@media (max-width: 1023px) {
+  .side {
+    transform: translateX(-100%);
+    transition: transform var(--ds-motion);
+    box-shadow: var(--ds-shadow-3);
   }
+  .sideOpen {
+    transform: none;
+  }
+  .closeBtn,
   .menuButton {
     display: inline-flex;
-    align-items: center;
   }
-  .nav {
-    display: none;
-    flex: 1 0 100%;
-    flex-direction: column;
-    gap: 2px;
+  .body {
+    padding-left: 0;
   }
-  .navOpen {
-    display: flex;
-  }
-  .link {
-    padding: 10px 12px;
-  }
-  .user {
-    flex: 1 0 100%;
-    justify-content: space-between;
+  .top {
+    padding: 0 16px;
   }
   .main {
-    padding: 12px;
+    padding: 20px 16px 32px;
+  }
+}
+
+@media (max-width: 640px) {
+  .chipText {
+    display: none;
+  }
+  .chip {
+    padding: 0 5px;
   }
 }

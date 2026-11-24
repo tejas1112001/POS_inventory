@@ -6,9 +6,9 @@ import { usePos } from '@/hooks/usePos';
 import { cn } from '@/lib/utils';
 
 const STYLE = {
-  info: 'border-sky-200 bg-sky-50 text-sky-900 dark:border-sky-900 dark:bg-sky-950 dark:text-sky-100',
-  warning: 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-100',
-  critical: 'border-red-200 bg-red-50 text-red-900 dark:border-red-900 dark:bg-red-950 dark:text-red-100',
+  info: 'border-transparent bg-info-bg text-info-fg',
+  warning: 'border-amber-brand/40 bg-warning-bg text-warning-fg',
+  critical: 'border-danger/30 bg-danger-bg text-danger-fg',
 };
 const ICON = { info: Info, warning: AlertTriangle, critical: ShieldAlert };
 const DISMISSED_KEY = 'dismissedBanners';
@@ -72,12 +72,12 @@ export default function BannerArea() {
   if (items.length === 0) return null;
 
   return (
-    <div className="space-y-2 px-4 pt-3 sm:px-6">
+    <div className="space-y-2 px-4 pt-3 sm:px-6 lg:px-8">
       {items.map((b) => {
         const Icon = ICON[b.level] || Info;
         const path = safePath(b.action?.path);
         return (
-          <div key={b.id} role={b.level === 'critical' ? 'alert' : 'status'} className={cn('flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs sm:gap-3 sm:py-2 sm:text-sm', STYLE[b.level] || STYLE.info)}>
+          <div key={b.id} role={b.level === 'critical' ? 'alert' : 'status'} className={cn('flex items-center gap-2 rounded-xl border px-3 py-1.5 text-xs sm:gap-3 sm:py-2 sm:text-sm', STYLE[b.level] || STYLE.info)}>
             <Icon className="size-4 shrink-0" />
             <span className="min-w-0 flex-1 line-clamp-2 sm:line-clamp-none">{b.message}</span>
             {path && b.action?.label && location.pathname !== path && (

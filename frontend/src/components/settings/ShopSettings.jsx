@@ -207,7 +207,7 @@ export default function ShopSettings({ canEdit }) {
                 <div className="flex size-14 items-center justify-center rounded-md border text-xs text-muted-foreground">None</div>
               )}
               {canEdit && (
-                <label className="cursor-pointer rounded-md border px-3 py-1.5 text-sm hover:bg-accent">
+                <label className="cursor-pointer rounded-lg border px-3 py-1.5 text-sm hover:bg-accent">
                   Choose image
                   <input type="file" accept={LOGO_TYPES.join(',')} className="sr-only" onChange={pickLogo} disabled={dis} />
                 </label>

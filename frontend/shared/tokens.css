@@ -1,45 +1,62 @@
 /* Design tokens shared by the shop app and the Super Admin console.
    Plain CSS custom properties (no run-time styles: the console's CSP only
    allows stylesheets from its own origin). Contrast of every text/background
-   pair is at least 4.5:1. */
+   pair is at least 4.5:1.
+
+   Theme: "Teal & Cream" (moodboard, Nov 2026) - deep teal #123B45, fresh
+   teal #20B6A4, ivory #F4F2E9, amber #F2B544. Manrope for text. */
 
 :root {
-  /* Brand palette (S4b). Contrast with white text: blue 5.2:1, navy 17.9:1.
-     Muted text is never lighter than #64748B (4.8:1 on white). */
-  --ds-navy: #0f172a;        /* sidebar, headings */
-  --ds-slate: #1e293b;       /* sidebar hover, secondary dark surfaces */
-  --ds-blue: #2563eb;        /* primary buttons, active items, links */
-  --ds-blue-hover: #1d4ed8;
-  --ds-bg: #f8fafc;          /* page background */
-  --ds-sidebar-text: #cbd5e1;
-  --ds-sidebar-muted: #94a3b8;
+  /* Brand palette. Contrast with white text: teal 4.8:1, deep teal 11.9:1.
+     Muted text is never lighter than #566B70 (4.9:1 on ivory). */
+  --ds-navy: #123b45;        /* headings ("deep teal") */
+  --ds-slate: #0e2e37;       /* dark surfaces ("primary dark") */
+  --ds-blue: #17807a;        /* primary buttons, active items, links */
+  --ds-blue-hover: #13665f;
+  --ds-teal: #20b6a4;        /* fresh teal: charts, highlights, icons */
+  --ds-teal-soft: #def2ee;
+  --ds-amber: #f2b544;
+  --ds-amber-soft: #fdf1d8;
+  --ds-ivory: #f4f2e9;
+  --ds-bg: #f4f2e9;          /* page background */
+  --ds-sidebar-text: #2f4a52;
+  --ds-sidebar-muted: #5f7377;
+
+  /* Gradients (brand mark, primary buttons, hero cards). */
+  --ds-gradient-brand: linear-gradient(135deg, #20b6a4 0%, #17807a 45%, #123b45 100%);
+  --ds-gradient-primary: linear-gradient(135deg, #1a8b82 0%, #146c69 55%, #123b45 100%);
+  --ds-gradient-amber: linear-gradient(135deg, #f6c766 0%, #f2b544 50%, #e39a2b 100%);
+  --ds-gradient-card: linear-gradient(145deg, #ffffff 0%, #ffffff 55%, #f1f8f5 100%);
+  --ds-gradient-page:
+    radial-gradient(1100px 520px at 100% -10%, rgb(32 182 164 / 0.10), transparent 60%),
+    radial-gradient(900px 480px at -10% 110%, rgb(242 181 68 / 0.08), transparent 60%);
 
   /* Status colours: solid (icons, borders), background, text on background. */
-  --ds-success: #15803d;
-  --ds-success-bg: #ecfdf3;
-  --ds-success-fg: #14532d;
-  --ds-info: #0369a1;
-  --ds-info-bg: #eff8ff;
-  --ds-info-fg: #0c4a6e;
-  --ds-warning: #b45309;
-  --ds-warning-bg: #fffbeb;
-  --ds-warning-fg: #78350f;
-  --ds-danger: #b91c1c;
-  --ds-danger-bg: #fef2f2;
-  --ds-danger-fg: #7f1d1d;
+  --ds-success: #12937f;
+  --ds-success-bg: #dcf3ed;
+  --ds-success-fg: #0b5a4f;
+  --ds-info: #1f6f8b;
+  --ds-info-bg: #e2f0f5;
+  --ds-info-fg: #134e63;
+  --ds-warning: #c27c0e;
+  --ds-warning-bg: #fdf0d5;
+  --ds-warning-fg: #7a4a05;
+  --ds-danger: #d92d2d;
+  --ds-danger-bg: #fde5e2;
+  --ds-danger-fg: #9b1c1c;
 
   --ds-surface: #ffffff;
-  --ds-text: #334155;
-  --ds-text-muted: #64748b;
-  --ds-border: #e2e8f0;
-  --ds-border-strong: #cbd5e1;
-  --ds-focus: #2563eb;
-  --ds-shadow-1: 0 1px 2px rgb(15 23 42 / 0.05);
-  --ds-shadow-2: 0 2px 6px -1px rgb(15 23 42 / 0.08), 0 1px 3px -1px rgb(15 23 42 / 0.05);
-  --ds-shadow-3: 0 10px 20px -6px rgb(15 23 42 / 0.14), 0 4px 8px -4px rgb(15 23 42 / 0.06);
+  --ds-text: #23414a;
+  --ds-text-muted: #566b70;
+  --ds-border: #e6e3d8;
+  --ds-border-strong: #d3cfc1;
+  --ds-focus: #17807a;
+  --ds-shadow-1: 0 1px 2px rgb(18 59 69 / 0.05);
+  --ds-shadow-2: 0 4px 14px -4px rgb(18 59 69 / 0.10), 0 1px 3px -1px rgb(18 59 69 / 0.06);
+  --ds-shadow-3: 0 16px 32px -12px rgb(18 59 69 / 0.20), 0 4px 10px -4px rgb(18 59 69 / 0.08);
 
   /* Type */
-  --ds-font: 'Inter Variable', Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --ds-font: 'Manrope Variable', Manrope, 'Inter Variable', Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --ds-text-xs: 0.75rem;
   --ds-text-sm: 0.875rem;
   --ds-text-md: 1rem;
@@ -56,61 +73,88 @@
   --ds-space-6: 24px;
   --ds-space-8: 32px;
   --ds-space-12: 48px;
-  --ds-radius-input: 6px;
-  --ds-radius-card: 10px;
-  --ds-radius-sheet: 16px;
+  --ds-radius-input: 10px;
+  --ds-radius-card: 16px;
+  --ds-radius-sheet: 20px;
   --ds-motion-fast: 150ms;
   --ds-motion: 250ms;
   --ds-touch: 44px;
   --ds-touch-pos: 48px;
 }
 
-/* Dark: the console follows the system setting; the shop app also has a
-   .dark class (its theme switch). */
+/* Dark ("same UI & flow"): the console follows the system setting unless a
+   .light/.dark class is set; the shop app always sets one (its theme
+   switch). */
 @media (prefers-color-scheme: dark) {
   :root:not(.light) {
-    --ds-success: #4ade80;
-    --ds-success-bg: #0f2a1b;
-    --ds-success-fg: #bbf7d0;
-    --ds-info: #38bdf8;
-    --ds-info-bg: #0b2333;
-    --ds-info-fg: #bae6fd;
-    --ds-warning: #fbbf24;
-    --ds-warning-bg: #2d1f06;
-    --ds-warning-fg: #fde68a;
+    --ds-navy: #eef6f4;
+    --ds-slate: #0b2c35;
+    --ds-teal-soft: #134a4e;
+    --ds-amber-soft: #3a2d10;
+    --ds-bg: #0a252d;
+    --ds-sidebar-text: #c5d8d6;
+    --ds-sidebar-muted: #8fa7a8;
+    --ds-gradient-card: linear-gradient(145deg, #11394330 0%, #10353f 40%, #0f3a3f 100%);
+    --ds-gradient-page:
+      radial-gradient(1100px 520px at 100% -10%, rgb(32 182 164 / 0.10), transparent 60%),
+      radial-gradient(900px 480px at -10% 110%, rgb(32 182 164 / 0.05), transparent 60%);
+    --ds-success: #34d1b8;
+    --ds-success-bg: #0f3a36;
+    --ds-success-fg: #b4f1e5;
+    --ds-info: #5cc3e6;
+    --ds-info-bg: #0f3242;
+    --ds-info-fg: #c4ebf7;
+    --ds-warning: #f2b544;
+    --ds-warning-bg: #3a2d10;
+    --ds-warning-fg: #fbe2a8;
     --ds-danger: #f87171;
-    --ds-danger-bg: #2c1010;
+    --ds-danger-bg: #3d1717;
     --ds-danger-fg: #fecaca;
-    --ds-surface: #1e293b;
-    --ds-text: #e2e8f0;
-    --ds-text-muted: #94a3b8;
-    --ds-border: #334155;
-    --ds-border-strong: #475569;
-    --ds-focus: #60a5fa;
-    --ds-bg: #0f172a;
+    --ds-surface: #10353f;
+    --ds-text: #dbe8e6;
+    --ds-text-muted: #9db3b3;
+    --ds-border: #1f4b55;
+    --ds-border-strong: #2b5c66;
+    --ds-focus: #3fc7b3;
+    --ds-shadow-1: 0 1px 2px rgb(0 0 0 / 0.25);
+    --ds-shadow-2: 0 4px 14px -4px rgb(0 0 0 / 0.35);
+    --ds-shadow-3: 0 16px 32px -12px rgb(0 0 0 / 0.5);
   }
 }
 
 .dark {
-  --ds-success: #4ade80;
-  --ds-success-bg: #0f2a1b;
-  --ds-success-fg: #bbf7d0;
-  --ds-info: #38bdf8;
-  --ds-info-bg: #0b2333;
-  --ds-info-fg: #bae6fd;
-  --ds-warning: #fbbf24;
-  --ds-warning-bg: #2d1f06;
-  --ds-warning-fg: #fde68a;
+  --ds-navy: #eef6f4;
+  --ds-slate: #0b2c35;
+  --ds-teal-soft: #134a4e;
+  --ds-amber-soft: #3a2d10;
+  --ds-bg: #0a252d;
+  --ds-sidebar-text: #c5d8d6;
+  --ds-sidebar-muted: #8fa7a8;
+  --ds-gradient-card: linear-gradient(145deg, #12404a 0%, #10353f 45%, #0f3a3f 100%);
+  --ds-gradient-page:
+    radial-gradient(1100px 520px at 100% -10%, rgb(32 182 164 / 0.10), transparent 60%),
+    radial-gradient(900px 480px at -10% 110%, rgb(32 182 164 / 0.05), transparent 60%);
+  --ds-success: #34d1b8;
+  --ds-success-bg: #0f3a36;
+  --ds-success-fg: #b4f1e5;
+  --ds-info: #5cc3e6;
+  --ds-info-bg: #0f3242;
+  --ds-info-fg: #c4ebf7;
+  --ds-warning: #f2b544;
+  --ds-warning-bg: #3a2d10;
+  --ds-warning-fg: #fbe2a8;
   --ds-danger: #f87171;
-  --ds-danger-bg: #2c1010;
+  --ds-danger-bg: #3d1717;
   --ds-danger-fg: #fecaca;
-  --ds-surface: #1e293b;
-  --ds-text: #e2e8f0;
-  --ds-text-muted: #94a3b8;
-  --ds-border: #334155;
-  --ds-border-strong: #475569;
-  --ds-focus: #60a5fa;
-  --ds-bg: #0f172a;
+  --ds-surface: #10353f;
+  --ds-text: #dbe8e6;
+  --ds-text-muted: #9db3b3;
+  --ds-border: #1f4b55;
+  --ds-border-strong: #2b5c66;
+  --ds-focus: #3fc7b3;
+  --ds-shadow-1: 0 1px 2px rgb(0 0 0 / 0.25);
+  --ds-shadow-2: 0 4px 14px -4px rgb(0 0 0 / 0.35);
+  --ds-shadow-3: 0 16px 32px -12px rgb(0 0 0 / 0.5);
 }
 
 @media (prefers-reduced-motion: reduce) {

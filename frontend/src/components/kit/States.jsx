@@ -1,13 +1,12 @@
 import { AlertCircle, Inbox, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import IconTile from './IconTile';
 
 export function EmptyState({ title = 'Nothing here yet', children, action }) {
   return (
     <div className="flex flex-col items-center px-4 py-12 text-center">
-      <div className="mb-3 flex size-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
-        <Inbox className="size-6" aria-hidden="true" />
-      </div>
-      <p className="font-medium text-foreground">{title}</p>
+      <IconTile icon={Inbox} size="lg" className="mb-3" />
+      <p className="font-semibold text-navy">{title}</p>
       {children && <p className="mt-1 max-w-sm text-sm text-muted-foreground">{children}</p>}
       {action && <div className="mt-4">{action}</div>}
     </div>
@@ -17,10 +16,8 @@ export function EmptyState({ title = 'Nothing here yet', children, action }) {
 export function ErrorState({ message, onRetry }) {
   return (
     <div role="alert" className="flex flex-col items-center px-4 py-12 text-center">
-      <div className="mb-3 flex size-12 items-center justify-center rounded-full bg-danger-bg text-danger">
-        <AlertCircle className="size-6" aria-hidden="true" />
-      </div>
-      <p className="font-medium text-foreground">The list could not be loaded</p>
+      <IconTile icon={AlertCircle} tone="danger" size="lg" className="mb-3" />
+      <p className="font-semibold text-navy">The list could not be loaded</p>
       <p className="mt-1 max-w-sm text-sm text-muted-foreground">{message}</p>
       {onRetry && (
         <Button type="button" variant="outline" className="mt-4" onClick={onRetry}>

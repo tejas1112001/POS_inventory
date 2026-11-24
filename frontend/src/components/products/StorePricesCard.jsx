@@ -52,7 +52,7 @@ export default function StorePricesCard({ product, stores, canEdit, onSaved }) {
   };
 
   return (
-    <section className="overflow-hidden rounded-lg border bg-card shadow-xs" aria-labelledby="sp-h">
+    <section className="overflow-hidden rounded-2xl border bg-card shadow-xs" aria-labelledby="sp-h">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3">
         <div>
           <h2 id="sp-h" className="text-base font-semibold">

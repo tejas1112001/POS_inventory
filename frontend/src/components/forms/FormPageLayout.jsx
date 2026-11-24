@@ -13,7 +13,7 @@ export function FormCard({ children, className }) {
   return (
     <div
       className={cn(
-        'flex min-h-0 flex-1 flex-col rounded-lg border bg-card shadow-sm',
+        'flex min-h-0 flex-1 flex-col rounded-2xl border bg-card shadow-sm',
         className
       )}
     >
