@@ -34,7 +34,7 @@ export default function Settings() {
   const [tab, setTab] = useState(tabs[0].key);
 
   return (
-    <div className="flex h-full flex-col gap-3 p-3 sm:p-4">
+    <div className="flex h-full flex-col gap-3">
       <div role="tablist" className="-mx-3 flex gap-1 overflow-x-auto border-b px-3 sm:mx-0 sm:px-0">
         {tabs.map((t) => t.to ? (
           <Link key={t.key} to={t.to} className="-mb-px inline-flex min-h-11 items-center whitespace-nowrap border-b-2 border-transparent px-4 text-sm font-semibold text-muted-foreground hover:text-foreground">

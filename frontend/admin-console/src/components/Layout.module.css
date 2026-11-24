@@ -217,7 +217,7 @@
   align-items: center;
   gap: 12px;
   height: 64px;
-  padding: 0 32px;
+  padding: 0 24px;
   border-bottom: 1px solid var(--border);
   background: var(--topbar-bg);
 }
@@ -265,7 +265,7 @@
   width: 100%;
   max-width: 1320px;
   margin: 0 auto;
-  padding: 28px 32px 40px;
+  padding: 20px 24px 32px;
 }
 
 .scrim {
@@ -293,10 +293,10 @@
     padding-left: 0;
   }
   .top {
-    padding: 0 16px;
+    padding: 0 12px;
   }
   .main {
-    padding: 20px 16px 32px;
+    padding: 14px 12px 24px;
   }
 }
 

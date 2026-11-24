@@ -11,6 +11,8 @@ Branch `ui/teal-theme` (local, not pushed). Shop app and platform console restyl
 | Console | Teal sidebar layout, top bar, sign-in, page headers, tenant stat cards, tables, badges, modals, inline filters, dark mode |
 | Checks | eslint 0 errors; both vite builds; unit tests 32/32; screenshots light/dark, desktop/phone (mocked API, dev servers on 5173/5174 only) |
 
+Follow-up 2026-11-24: tighter spacing (shell, topbar, cards, console); page buttons moved onto the FilterBar line on every list page (`FilterBar actions`); Storefront page rebuilt on PageHeader/Panel/FormField/FilterBar/DataTable with a new `TogglePill`; double page padding removed (Settings, Billing, Stock adjustments, Write-offs, form pages).
+
 Not done: the landing site (`landing/`) is still the old blue theme.
 
 # Rename to MintoBill (2026-11-23)

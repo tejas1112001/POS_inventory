@@ -151,7 +151,7 @@ export default function Topbar({ title, onOpenMobileMenu }) {
   };
 
   return (
-    <header className="z-20 flex h-16 shrink-0 items-center gap-3 border-b border-border/70 bg-card/85 px-3 sm:px-6 lg:px-8">
+    <header className="z-20 flex h-16 shrink-0 items-center gap-3 border-b border-border/70 bg-card/85 px-3 sm:px-4 lg:px-5">
       <Button variant="ghost" size="icon" className="size-10 lg:hidden" onClick={onOpenMobileMenu} aria-label="Open menu">
         <Menu className="size-5" />
       </Button>

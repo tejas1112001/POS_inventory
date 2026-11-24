@@ -63,6 +63,8 @@ export default function Purchases() {
     <div className="flex min-h-0 flex-1 flex-col">
       <PageHeader
         description="Stock bought from suppliers. Receiving a purchase adds its items to stock, once."
+      />
+      <FilterBar
         actions={
           hasPermission('purchases', 'create') && (
             <Button type="button" className="max-sm:h-11" onClick={() => navigate('/add-purchase')}>
@@ -70,8 +72,7 @@ export default function Purchases() {
             </Button>
           )
         }
-      />
-      <FilterBar search={list.search} onSearch={list.setSearch} placeholder="Search number or supplier…" filters={filters} values={list.values} onFilter={list.setFilter} onClear={list.clearFilters} />
+        search={list.search} onSearch={list.setSearch} placeholder="Search number or supplier…" filters={filters} values={list.values} onFilter={list.setFilter} onClear={list.clearFilters} />
       <DataTable
         label="Purchases"
         columns={columns}

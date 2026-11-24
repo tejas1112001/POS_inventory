@@ -7,8 +7,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 // [{ value, label }] }]. On phones the filters move into a sheet behind a
 // "Filters" button; active filters show as removable chips. extra: more
 // controls (for example date boxes), shown next to the selects and in the
-// phone sheet; extraActive counts them as active filters.
-export default function FilterBar({ search, onSearch, placeholder = 'Search…', filters = [], values = {}, onFilter, onClear, extra, extraActive = 0 }) {
+// phone sheet; extraActive counts them as active filters. actions: the
+// page's buttons (New order, Add product…), on the same line at the right;
+// on phones they take their own row under the search.
+export default function FilterBar({ search, onSearch, placeholder = 'Search…', filters = [], values = {}, onFilter, onClear, extra, extraActive = 0, actions }) {
   const [text, setText] = useState(search || '');
   const [open, setOpen] = useState(false);
   useEffect(() => setText(search || ''), [search]);
@@ -37,8 +39,8 @@ export default function FilterBar({ search, onSearch, placeholder = 'Search…',
 
   return (
     <div className="mb-3 space-y-2">
-      <div className="flex gap-2">
-        <div className="relative min-w-0 flex-1">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative min-w-0 flex-1 sm:min-w-[14rem]">
           <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
           <input
             type="search"
@@ -63,6 +65,7 @@ export default function FilterBar({ search, onSearch, placeholder = 'Search…',
             </Button>
           </>
         )}
+        {actions && <div className="flex flex-wrap items-center gap-2 max-sm:w-full max-sm:[&>*]:flex-1 sm:ml-auto">{actions}</div>}
       </div>
       {(activeCount > 0 || search) && (
         <div className="flex flex-wrap items-center gap-2 text-sm">

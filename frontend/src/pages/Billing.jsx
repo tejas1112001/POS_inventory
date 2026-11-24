@@ -145,7 +145,7 @@ export default function Billing() {
   const pending = safeUrl(sub.checkoutUrl);
 
   return (
-    <div className="flex flex-col gap-3 p-3 sm:p-4">
+    <div className="flex flex-col gap-3">
       {error && (
         <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
           {error}

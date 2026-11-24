@@ -129,8 +129,10 @@ export default function Products() {
     <div className="flex min-h-0 flex-1 flex-col">
       <PageHeader
         description="What you sell. Each product has one or more options (size, colour…) with their own SKU, price and stock."
+      />
+      <FilterBar
         actions={
-          <div className="flex flex-wrap gap-2">
+          <>
             {hasPermission('products', 'edit') && (
               <Button type="button" variant="outline" className="max-sm:h-11" onClick={() => navigate('/products/above-mrp')}>
                 Prices above MRP
@@ -146,10 +148,9 @@ export default function Products() {
                 <Plus className="size-4" aria-hidden="true" /> Add product
               </Button>
             )}
-          </div>
+          </>
         }
-      />
-      <FilterBar search={list.search} onSearch={list.setSearch} placeholder="Search name or SKU…" filters={filters} values={list.values} onFilter={list.setFilter} onClear={list.clearFilters} />
+        search={list.search} onSearch={list.setSearch} placeholder="Search name or SKU…" filters={filters} values={list.values} onFilter={list.setFilter} onClear={list.clearFilters} />
       <DataTable
         label="Products"
         columns={columns}

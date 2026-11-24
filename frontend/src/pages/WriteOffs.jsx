@@ -44,7 +44,7 @@ export default function WriteOffs() {
   }, [load]);
 
   return (
-    <div className="space-y-4 p-4">
+    <div className="space-y-3">
       <SectionCard
         icon={Trash2}
         title="Write-offs"

@@ -99,6 +99,8 @@ export default function Users() {
     <div className="flex min-h-0 flex-1 flex-col">
       <PageHeader
         description="People who sign in to this shop. Their role decides what they can see and do."
+      />
+      <FilterBar
         actions={
           can('create') && (
             <Button type="button" className="max-sm:h-11" onClick={() => setEditing({})}>
@@ -106,8 +108,6 @@ export default function Users() {
             </Button>
           )
         }
-      />
-      <FilterBar
         search={list.search}
         onSearch={list.setSearch}
         placeholder="Search name or email…"

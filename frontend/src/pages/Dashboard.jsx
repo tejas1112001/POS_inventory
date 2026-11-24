@@ -87,7 +87,7 @@ function Skeleton() {
           <div key={i} className="h-[104px] animate-pulse rounded-2xl bg-muted" />
         ))}
       </div>
-      <div className="grid gap-4 xl:grid-cols-3">
+      <div className="grid gap-3 xl:grid-cols-3">
         <div className="h-80 animate-pulse rounded-2xl bg-muted xl:col-span-2" />
         <div className="h-80 animate-pulse rounded-2xl bg-muted" />
       </div>
@@ -296,7 +296,7 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-3 sm:space-y-4">
       <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
         <div>
           <h2 className="flex items-center gap-2 text-2xl font-extrabold tracking-tight">
@@ -343,9 +343,9 @@ export default function Dashboard() {
         <Skeleton />
       ) : (
         cur && (
-          <div className={cn('space-y-5 transition-opacity', loading && 'opacity-60')} aria-busy={loading || undefined}>
+          <div className={cn('space-y-3 sm:space-y-4 transition-opacity', loading && 'opacity-60')} aria-busy={loading || undefined}>
             {cur.orders === 0 && rangeKey === 'today' && hasPermission('pos', 'view') && (
-              <div className="relative flex flex-wrap items-center justify-between gap-3 overflow-hidden rounded-2xl bg-brand-gradient p-5 text-white shadow-sm">
+              <div className="relative flex flex-wrap items-center justify-between gap-3 overflow-hidden rounded-2xl bg-brand-gradient p-4 text-white shadow-sm">
                 <div>
                   <p className="text-base font-bold">No sales yet today</p>
                   <p className="text-sm text-white/85">Open the checkout to ring up the first bill.</p>
@@ -360,7 +360,7 @@ export default function Dashboard() {
 
             <OnboardingCard />
 
-            <section aria-label={`${rangeLabel} figures`} className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-4">
+            <section aria-label={`${rangeLabel} figures`} className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <StatCard icon={Wallet} label="Net sales" value={formatCurrency(cur.net)} delta={prev && change(cur.net, prev.net)} hint={prev ? 'vs previous period' : 'after returns'} />
               <StatCard icon={ShoppingCart} label="Orders" value={formatNumber(cur.orders, 0)} delta={prev && change(cur.orders, prev.orders)} />
               <StatCard icon={ReceiptText} tone="deep" label="Average bill" value={formatCurrency(avg(cur))} delta={prev && change(avg(cur), avg(prev))} />
@@ -380,7 +380,7 @@ export default function Dashboard() {
               </section>
             )}
 
-            <div className="grid gap-4 xl:grid-cols-3">
+            <div className="grid gap-3 xl:grid-cols-3">
               <Panel
                 id="sales-chart"
                 title={metric === 'revenue' ? 'Revenue trend' : 'Orders trend'}
@@ -438,7 +438,7 @@ export default function Dashboard() {
             </div>
 
             {(canSales || canStock) && (
-              <div className="grid gap-4 xl:grid-cols-3">
+              <div className="grid gap-3 xl:grid-cols-3">
                 {canSales && (
                   <Panel id="recent-sales" title="Recent transactions" className={cn(canStock ? 'xl:col-span-2' : 'xl:col-span-3')} action={<ViewAllLink to="/sales" label="View all orders" />}>
                     {recent == null ? <div className="h-48 animate-pulse rounded-xl bg-muted" /> : <RecentSalesTable rows={recent} />}

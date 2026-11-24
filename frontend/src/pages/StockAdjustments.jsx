@@ -49,7 +49,7 @@ export default function StockAdjustments() {
   const storeName = useCallback((id) => stores.find((s) => s.id === id)?.name || '', [stores]);
 
   return (
-    <div className="flex flex-col gap-3 p-3 sm:p-4">
+    <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div role="tablist" className="flex gap-1 border-b">
           <Tab active={tab === 'adjustments'} onClick={() => setTab('adjustments')}>

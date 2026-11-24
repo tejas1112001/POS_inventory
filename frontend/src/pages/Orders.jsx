@@ -79,6 +79,8 @@ export default function Orders() {
     <div className="flex min-h-0 flex-1 flex-col">
       <PageHeader
         description="Every sale, newest first. Open an order for its items, payments, returns and receipt."
+      />
+      <FilterBar
         actions={
           hasPermission('sales', 'create') && (
             <Button type="button" className="max-sm:h-11" onClick={() => navigate('/add-sale')}>
@@ -86,8 +88,6 @@ export default function Orders() {
             </Button>
           )
         }
-      />
-      <FilterBar
         search={list.search}
         onSearch={list.setSearch}
         placeholder="Search order number or customer…"

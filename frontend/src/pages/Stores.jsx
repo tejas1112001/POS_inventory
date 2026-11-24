@@ -103,6 +103,8 @@ export default function Stores() {
     <div className="flex min-h-0 flex-1 flex-col">
       <PageHeader
         description="Your shops and stockrooms. Stock, sales and the checkout are kept per store."
+      />
+      <FilterBar
         actions={
           can('create') && (
             <Button type="button" className="max-sm:h-11" onClick={() => setEditing({})}>
@@ -110,8 +112,6 @@ export default function Stores() {
             </Button>
           )
         }
-      />
-      <FilterBar
         search={list.search}
         onSearch={list.setSearch}
         placeholder="Search name, address or phone…"

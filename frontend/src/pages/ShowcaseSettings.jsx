@@ -2,26 +2,18 @@ import { ProductImage } from '@/components/shared/product-image';
 import { useConfirm } from '../components/feedback/ConfirmDialog';
 import { toast } from '../../shared/toast/store';
 import React, { useState, useEffect } from 'react';
-import {
-  Globe,
-  Store as StoreIcon,
-  Check,
-  Copy,
-  ExternalLink,
-  QrCode,
-  Sparkles,
-  Eye,
-  EyeOff,
-  Search,
-  Filter,
-  Save,
-  RefreshCw,
-  Star,
-} from 'lucide-react';
-import { SectionCard } from '@/components/shared/section-card';
+import { Check, Copy, ExternalLink, Eye, EyeOff, Save, Sparkles, Star, Store as StoreIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
+import FormField, { formTextareaClass } from '@/components/forms/FormField';
+import DataTable from '@/components/kit/DataTable';
+import FilterBar from '@/components/kit/FilterBar';
+import IconTile from '@/components/kit/IconTile';
+import PageHeader from '@/components/kit/PageHeader';
+import Panel from '@/components/kit/Panel';
+import TogglePill from '@/components/kit/TogglePill';
+import { EmptyState, LoadingRows } from '@/components/kit/States';
 import { formatCurrency } from '@/lib/format';
 import { api } from '@/services/api';
 import { usePos } from '@/hooks/usePos';
@@ -50,7 +42,7 @@ export default function ShowcaseSettings() {
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('All');
+  const [statusFilter, setStatusFilter] = useState('');
 
   // Every store has its own showcase; pick which one to manage.
   const [stores, setStores] = useState([]);
@@ -182,38 +174,81 @@ export default function ShowcaseSettings() {
   const filteredProducts = products.filter((p) => {
     const matchesSearch =
       p.name.toLowerCase().includes(search.toLowerCase()) ||
-      p.category.toLowerCase().includes(search.toLowerCase());
+      (p.category || '').toLowerCase().includes(search.toLowerCase());
     if (statusFilter === 'Published') return matchesSearch && p.isPublished;
     if (statusFilter === 'Unpublished') return matchesSearch && !p.isPublished;
     if (statusFilter === 'Featured') return matchesSearch && p.isFeatured;
     return matchesSearch;
   });
 
-  if (loading) {
-    return <div className="p-8 text-center text-muted-foreground">Loading Showcase Settings...</div>;
-  }
+  const SHOW = [
+    { value: 'Published', label: 'Published' },
+    { value: 'Unpublished', label: 'Hidden' },
+    { value: 'Featured', label: 'Featured' },
+  ];
+  const columns = [
+    {
+      id: 'name',
+      header: 'Product',
+      card: 'title',
+      cell: (p) => (
+        <span className="flex items-center gap-3 font-medium text-navy">
+          <ProductImage name={p.name} src={p.image} size={32} rounded="rounded-lg" />
+          {p.name}
+        </span>
+      ),
+    },
+    { id: 'category', header: 'Category', card: 'subtitle', cell: (p) => <span className="text-muted-foreground">{p.category || 'Unassigned'}</span> },
+    { id: 'price', header: 'Price', card: 'meta', align: 'right', cell: (p) => <span className="font-semibold">{formatCurrency(p.price)}</span> },
+    {
+      id: 'published',
+      header: 'Online',
+      card: 'meta',
+      cell: (p) => (
+        <TogglePill
+          on={p.isPublished}
+          onClick={() => handleToggleProduct(p.id, 'isPublished', p.isPublished)}
+          onLabel="Published"
+          offLabel="Hidden"
+          icon={Eye}
+          offIcon={EyeOff}
+          label={`Show ${p.name} in the online shop`}
+        />
+      ),
+    },
+    {
+      id: 'featured',
+      header: 'Featured',
+      card: 'meta',
+      cell: (p) => (
+        <TogglePill
+          on={p.isFeatured}
+          onClick={() => handleToggleProduct(p.id, 'isFeatured', p.isFeatured)}
+          onLabel="Featured"
+          offLabel="Standard"
+          icon={Sparkles}
+          tone="amber"
+          label={`Feature ${p.name}`}
+        />
+      ),
+    },
+  ];
+  const slugHint = atHome
+    ? `Default store: ${window.location.origin}/ (also /shop/${saved.slug}). Lowercase letters, digits and dashes.`
+    : `${window.location.origin}/shop/${storeData.slug || 'your-shop'} · lowercase letters, digits and dashes.`;
 
   return (
-    <div className="flex h-full flex-col gap-6 p-4 sm:p-6 max-w-7xl mx-auto overflow-y-auto">
-      {/* Header */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b pb-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-            <Globe className="size-6 text-primary" />
-            Product Showcase Settings
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Manage your public shop profile and control which products are visible to physical store customers.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {stores.length > 1 && (
-            <label className="flex items-center gap-2 text-sm">
-              <span className="text-muted-foreground">Store</span>
+    <div className="flex flex-col gap-3">
+      <PageHeader
+        description="Your public shop page: its details and which products customers can see."
+        actions={
+          <>
+            {stores.length > 1 && (
               <select
+                aria-label="Store"
                 value={String(selectedStoreId)}
                 onChange={(e) => setPickedStoreId(Number(e.target.value))}
-                className="rounded-lg border border-input bg-card px-3 py-1.5 text-sm focus:outline-none"
+                className="h-10 rounded-lg border border-input bg-card px-3 text-sm shadow-xs"
               >
                 {stores.map((st) => (
                   <option key={st.id} value={String(st.id)}>
@@ -221,278 +256,149 @@ export default function ShowcaseSettings() {
                   </option>
                 ))}
               </select>
-            </label>
-          )}
-          <Button variant="outline" size="sm" onClick={copyLink} className="gap-2">
-            {copied ? <Check className="size-4 text-emerald-500" /> : <Copy className="size-4" />}
-            {copied ? 'Copied Link' : 'Copy Public Link'}
-          </Button>
-          <a href={publicUrl} target="_blank" rel="noopener noreferrer">
-            <Button size="sm" className="gap-2">
-              <ExternalLink className="size-4" />
-              Preview Public Shop
+            )}
+            <Button variant="outline" onClick={copyLink}>
+              {copied ? <Check className="size-4" aria-hidden="true" /> : <Copy className="size-4" aria-hidden="true" />}
+              {copied ? 'Link copied' : 'Copy link'}
             </Button>
-          </a>
-        </div>
-      </div>
+            <Button asChild>
+              <a href={publicUrl} target="_blank" rel="noopener noreferrer">
+                <ExternalLink className="size-4" aria-hidden="true" /> Preview shop
+              </a>
+            </Button>
+          </>
+        }
+      />
 
-      {/* Global Status & Share Banner */}
-      <div className="rounded-xl border bg-card p-5 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <div
-            className={`flex size-12 items-center justify-center rounded-xl ${
-              storeData.isPublicEnabled
-                ? 'bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/20'
-                : 'bg-muted text-muted-foreground'
-            }`}
-          >
-            <StoreIcon className="size-6" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h3 className="font-semibold text-lg">{storeData.name || 'Store Showcase'}</h3>
-              <span
-                className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${
-                  storeData.isPublicEnabled
-                    ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
-                    : 'bg-muted text-muted-foreground'
-                }`}
-              >
-                {storeData.isPublicEnabled ? 'Public Showcase Active' : 'Catalog Offline'}
-              </span>
-            </div>
-            <p className="text-xs text-muted-foreground mt-0.5 font-mono select-all">
-              {publicUrl}
-            </p>
-          </div>
+      {loading ? (
+        <div className="rounded-2xl border bg-card shadow-xs">
+          <LoadingRows rows={4} />
         </div>
-
-        <div className="flex flex-col items-start md:items-end gap-2 w-full md:w-auto">
-          <Switch
-            checked={storeData.isPublicEnabled}
-            onCheckedChange={(checked) => setStoreData({ ...storeData, isPublicEnabled: checked })}
-            label="Enable Public Showcase"
-          />
-          {home.isDefault ? (
-            <span className="text-xs px-2.5 py-0.5 rounded-full font-medium bg-amber-500/15 text-amber-700 dark:text-amber-400 flex items-center gap-1">
-              <Star className="size-3" />
-              Default store
-            </span>
-          ) : (
-            hasPermission('stores', 'edit') && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleSetDefault}
-                disabled={!canBeDefault || settingDefault}
-                title={canBeDefault ? undefined : 'Turn the public showcase on and save first.'}
-                className="gap-1.5 text-xs"
-              >
-                <Star className="size-3.5" />
-                {settingDefault ? 'Saving...' : 'Set as default store'}
-              </Button>
-            )
-          )}
-          {home.isDefault && home.homePage !== 'shop' && (
-            <p className="text-[11px] text-muted-foreground max-w-xs md:text-right">
-              The main address shows the staff sign-in. To show this shop there, choose Online shop in Settings, Home page.
-            </p>
-          )}
-        </div>
-      </div>
-
-      {/* Profile Settings */}
-      <SectionCard title="Shop Profile Details">
-        <form onSubmit={handleSaveProfile} className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="text-xs font-semibold uppercase text-muted-foreground mb-1 block">
-                Public URL Slug
-              </label>
-              <Input
-                value={storeData.slug}
-                onChange={(e) => setStoreData({ ...storeData, slug: toSlug(e.target.value) })}
-                placeholder="e.g. abc-fashion"
-                maxLength={60}
-                autoCapitalize="none"
-                spellCheck={false}
-              />
-              <p className="text-[11px] text-muted-foreground mt-1">
-                {atHome ? (
-                  <>
-                    Your store link: <span className="font-semibold text-foreground">{window.location.origin}/</span>{' '}
-                    (default store; {window.location.origin}/shop/{saved.slug} also opens it)
-                  </>
-                ) : (
-                  <>
-                    Your store link will be: {window.location.origin}/shop/
-                    <span className="font-semibold text-foreground">{storeData.slug || 'slug'}</span>
-                  </>
+      ) : (
+        <>
+          <Panel title="Status" id="shop-status">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div className="flex min-w-0 items-center gap-3">
+                <IconTile icon={StoreIcon} tone={storeData.isPublicEnabled ? 'teal' : 'muted'} />
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-semibold text-navy">{storeData.name || 'Online shop'}</span>
+                    <span
+                      className={
+                        storeData.isPublicEnabled
+                          ? 'rounded-md bg-teal-soft px-2 py-0.5 text-xs font-semibold text-primary dark:text-teal'
+                          : 'rounded-md bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground'
+                      }
+                    >
+                      {storeData.isPublicEnabled ? 'Live' : 'Offline'}
+                    </span>
+                    {home.isDefault && (
+                      <span className="inline-flex items-center gap-1 rounded-md bg-amber-soft px-2 py-0.5 text-xs font-semibold text-[#7a4a05] dark:text-amber-brand">
+                        <Star className="size-3" aria-hidden="true" /> Default store
+                      </span>
+                    )}
+                  </div>
+                  <p className="truncate font-mono text-xs text-muted-foreground select-all">{publicUrl}</p>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <Switch checked={storeData.isPublicEnabled} onCheckedChange={(checked) => setStoreData({ ...storeData, isPublicEnabled: checked })} label="Show the online shop" />
+                {!home.isDefault && hasPermission('stores', 'edit') && (
+                  <Button
+                    variant="outline"
+                    onClick={handleSetDefault}
+                    disabled={!canBeDefault || settingDefault}
+                    title={canBeDefault ? undefined : 'Turn the online shop on and save first.'}
+                  >
+                    <Star className="size-4" aria-hidden="true" />
+                    {settingDefault ? 'Saving…' : 'Make default store'}
+                  </Button>
                 )}
-              </p>
-              <p className="text-[11px] text-muted-foreground">Lowercase letters, digits and dashes.</p>
+              </div>
             </div>
-            <div>
-              <label className="text-xs font-semibold uppercase text-muted-foreground mb-1 block">
-                Contact Phone
-              </label>
-              <Input
-                value={storeData.phone}
-                onChange={(e) => setStoreData({ ...storeData, phone: e.target.value })}
-                placeholder="+92 300 1234567"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-semibold uppercase text-muted-foreground mb-1 block">
-                Physical Shop Address
-              </label>
-              <Input
-                value={storeData.address}
-                onChange={(e) => setStoreData({ ...storeData, address: e.target.value })}
-                placeholder="Shop 12, Main Market, Islamabad"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-semibold uppercase text-muted-foreground mb-1 block">
-                Opening Hours
-              </label>
-              <Input
-                value={storeData.openingHours}
-                onChange={(e) => setStoreData({ ...storeData, openingHours: e.target.value })}
-                placeholder="Mon - Sat: 10:00 AM - 9:00 PM, Sun: Closed"
-              />
-            </div>
-            <div className="md:col-span-2">
-              <label className="text-xs font-semibold uppercase text-muted-foreground mb-1 block">
-                Shop Description / Welcome Note
-              </label>
-              <textarea
-                rows={3}
-                value={storeData.description}
-                onChange={(e) => setStoreData({ ...storeData, description: e.target.value })}
-                className="w-full rounded-lg border border-input bg-card p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                placeholder="Welcome to our store! Browse our live product catalog and visit our physical branch to make your purchase."
-              />
-            </div>
-          </div>
-          <div className="flex justify-end pt-2">
-            <Button type="submit" disabled={saving} className="gap-2">
-              <Save className="size-4" />
-              {saving ? 'Saving...' : 'Save Profile Changes'}
-            </Button>
-          </div>
-        </form>
-      </SectionCard>
+            {home.isDefault && home.homePage !== 'shop' && (
+              <p className="mt-2 text-xs text-muted-foreground">The main address shows the staff sign-in. To show this shop there, choose Online shop in Settings, Home page.</p>
+            )}
+          </Panel>
 
-      {/* Product Publishing Manager */}
-      <SectionCard title="Product Publishing Control">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
-          <div className="flex items-center gap-2 flex-1 max-w-md">
-            <div className="relative w-full">
-              <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
-              <Input
-                placeholder="Search products to publish..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-9"
-              />
-            </div>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="rounded-lg border border-input bg-card px-3 py-2 text-sm focus:outline-none"
-            >
-              <option value="All">All Products</option>
-              <option value="Published">Published Only</option>
-              <option value="Unpublished">Unpublished Only</option>
-              <option value="Featured">Featured Only</option>
-            </select>
-          </div>
+          <Panel title="Shop details" id="shop-details">
+            <form onSubmit={handleSaveProfile} className="space-y-3">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <FormField label="Web address" htmlFor="sc-slug" hint={slugHint}>
+                  <Input
+                    id="sc-slug"
+                    value={storeData.slug}
+                    onChange={(e) => setStoreData({ ...storeData, slug: toSlug(e.target.value) })}
+                    placeholder="abc-fashion"
+                    maxLength={60}
+                    autoCapitalize="none"
+                    spellCheck={false}
+                  />
+                </FormField>
+                <FormField label="Phone" htmlFor="sc-phone">
+                  <Input id="sc-phone" value={storeData.phone} onChange={(e) => setStoreData({ ...storeData, phone: e.target.value })} placeholder="+91 98765 43210" inputMode="tel" />
+                </FormField>
+                <FormField label="Address" htmlFor="sc-address">
+                  <Input id="sc-address" value={storeData.address} onChange={(e) => setStoreData({ ...storeData, address: e.target.value })} placeholder="Shop 12, Main Market" />
+                </FormField>
+                <FormField label="Opening hours" htmlFor="sc-hours">
+                  <Input id="sc-hours" value={storeData.openingHours} onChange={(e) => setStoreData({ ...storeData, openingHours: e.target.value })} placeholder="Mon–Sat 10 am – 9 pm" />
+                </FormField>
+                <FormField label="Welcome note" htmlFor="sc-desc" className="md:col-span-2">
+                  <textarea
+                    id="sc-desc"
+                    rows={3}
+                    value={storeData.description}
+                    onChange={(e) => setStoreData({ ...storeData, description: e.target.value })}
+                    className={formTextareaClass}
+                    placeholder="Browse what we have in store today."
+                  />
+                </FormField>
+              </div>
+              <div className="flex justify-end">
+                <Button type="submit" disabled={saving}>
+                  <Save className="size-4" aria-hidden="true" />
+                  {saving ? 'Saving…' : 'Save details'}
+                </Button>
+              </div>
+            </form>
+          </Panel>
 
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handleBatchAction(true)}
-              className="gap-1.5 text-xs"
-            >
-              <Eye className="size-3.5" />
-              Publish All
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handleBatchAction(false)}
-              className="gap-1.5 text-xs text-muted-foreground"
-            >
-              <EyeOff className="size-3.5" />
-              Unpublish All
-            </Button>
-          </div>
-        </div>
-
-        <div className="overflow-x-auto rounded-lg border">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-muted/50 border-b text-xs uppercase font-semibold text-muted-foreground">
-              <tr>
-                <th className="p-3">Product Name</th>
-                <th className="p-3">Category</th>
-                <th className="p-3">POS Price</th>
-                <th className="p-3 text-center">Public Status</th>
-                <th className="p-3 text-center">Featured Badge</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {filteredProducts.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="p-6 text-center text-muted-foreground">
-                    No matching products found.
-                  </td>
-                </tr>
-              ) : (
-                filteredProducts.map((p) => (
-                  <tr key={p.id} className="hover:bg-muted/30 transition-colors">
-                    <td className="p-3 font-medium flex items-center gap-3">
-                      <ProductImage name={p.name} src={p.image} size={32} />
-                      <span>{p.name}</span>
-                    </td>
-                    <td className="p-3 text-muted-foreground">{p.category || 'Unassigned'}</td>
-                    <td className="p-3 font-semibold">{formatCurrency(p.price)}</td>
-                    <td className="p-3 text-center">
-                      <button
-                        type="button"
-                        onClick={() => handleToggleProduct(p.id, 'isPublished', p.isPublished)}
-                        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                          p.isPublished
-                            ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/25'
-                            : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                        }`}
-                      >
-                        {p.isPublished ? <Eye className="size-3.5" /> : <EyeOff className="size-3.5" />}
-                        {p.isPublished ? 'Published' : 'Unpublished'}
-                      </button>
-                    </td>
-                    <td className="p-3 text-center">
-                      <button
-                        type="button"
-                        onClick={() => handleToggleProduct(p.id, 'isFeatured', p.isFeatured)}
-                        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                          p.isFeatured
-                            ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400 hover:bg-amber-500/25'
-                            : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                        }`}
-                      >
-                        <Sparkles className="size-3.5" />
-                        {p.isFeatured ? 'Featured' : 'Standard'}
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </SectionCard>
+          <section aria-labelledby="shop-products" className="flex flex-col">
+            <h2 id="shop-products" className="mb-2 text-base font-bold text-navy">
+              Products in the online shop
+            </h2>
+            <FilterBar
+              search={search}
+              onSearch={setSearch}
+              placeholder="Search products…"
+              filters={[{ key: 'show', label: 'Show', allLabel: 'All products', options: SHOW }]}
+              values={{ show: statusFilter }}
+              onFilter={(_, v) => setStatusFilter(v)}
+              onClear={() => {
+                setSearch('');
+                setStatusFilter('');
+              }}
+              actions={
+                <>
+                  <Button variant="outline" onClick={() => handleBatchAction(true)}>
+                    <Eye className="size-4" aria-hidden="true" /> Publish all
+                  </Button>
+                  <Button variant="outline" onClick={() => handleBatchAction(false)}>
+                    <EyeOff className="size-4" aria-hidden="true" /> Hide all
+                  </Button>
+                </>
+              }
+            />
+            <DataTable
+              label="Online shop products"
+              columns={columns}
+              rows={filteredProducts}
+              empty={<EmptyState title="No matching products">Try another search or filter.</EmptyState>}
+            />
+          </section>
+        </>
+      )}
     </div>
   );
 }

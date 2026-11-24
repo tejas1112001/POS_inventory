@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils';
 
 export default function FormPageLayout({ children, className }) {
   return (
-    <div className={cn('form-page flex h-full flex-col gap-2 p-3 sm:p-4', className)}>
+    <div className={cn('form-page flex h-full flex-col gap-2', className)}>
       {children}
     </div>
   );

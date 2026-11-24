@@ -73,6 +73,8 @@ export default function RecordsPage({ config, startNew = false }) {
     <div className="flex min-h-0 flex-1 flex-col">
       <PageHeader
         description={description}
+      />
+      <FilterBar
         actions={
           can('create') && (
             <Button type="button" className="max-sm:h-11" onClick={() => setEditing({})}>
@@ -80,8 +82,6 @@ export default function RecordsPage({ config, startNew = false }) {
             </Button>
           )
         }
-      />
-      <FilterBar
         search={list.search}
         onSearch={list.setSearch}
         placeholder={searchHint || `Search ${nounPlural.toLowerCase()}…`}

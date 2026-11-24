@@ -10,7 +10,7 @@ export function AppShell({ children }) {
 
 export function PageWrapper({ children, className }) {
   return (
-    <div className={cn('w-full space-y-4 sm:space-y-6', className)}>
+    <div className={cn('w-full space-y-3 sm:space-y-4', className)}>
       {children}
     </div>
   );
@@ -39,7 +39,7 @@ export function MainLayout({
         <main
           className={cn(
             'flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto no-scrollbar',
-            fullBleed ? 'p-0' : 'p-4 sm:p-6 lg:px-8',
+            fullBleed ? 'p-0' : 'p-3 sm:p-4 lg:px-5',
             bottomNav && 'max-md:pb-24'
           )}
         >
