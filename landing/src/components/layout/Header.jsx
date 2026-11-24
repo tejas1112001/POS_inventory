@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
 import { nav } from '@/content/site';
@@ -17,19 +17,33 @@ const pill = ({ isActive }) =>
 
 export function Header() {
   const [open, setOpen] = useState(false);
+  const headerRef = useRef(null);
   const { pathname } = useLocation();
 
-  // Close the mobile menu on navigation and on Escape.
+  // Close the mobile menu on navigation, on Escape and when the window grows
+  // to the desktop layout. While it is open the page behind does not scroll.
   useEffect(() => setOpen(false), [pathname]);
   useEffect(() => {
     if (!open) return;
     const onKey = (e) => e.key === 'Escape' && setOpen(false);
+    const wide = window.matchMedia('(min-width: 64rem)');
+    const onWide = () => wide.matches && setOpen(false);
+    const { overflow } = document.body.style;
+    document.body.style.overflow = 'hidden';
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    wide.addEventListener('change', onWide);
+    return () => {
+      document.body.style.overflow = overflow;
+      window.removeEventListener('keydown', onKey);
+      wide.removeEventListener('change', onWide);
+    };
   }, [open]);
 
+  // The header is sticky at the top, so its height is where the menu starts.
+  const headerH = open ? (headerRef.current?.offsetHeight ?? 0) : 0;
+
   return (
-    <header className="bg-night surface-glow border-b border-slate-400/15 text-slate-200">
+    <header ref={headerRef} className="bg-night surface-glow sticky top-0 z-50 border-b border-slate-400/15 text-slate-200">
       <Container className="flex items-center justify-between gap-4 py-4">
         <Logo />
 
@@ -64,24 +78,38 @@ export function Header() {
         </button>
       </Container>
 
+      {/* The menu opens over the page (it does not push the page down); the
+          dimmed backdrop closes it. */}
       {open && (
-        <div id="mobile-menu" className="border-t border-slate-400/15 lg:hidden">
-          <Container as="nav" aria-label="Main" className="flex flex-col gap-1 py-4">
-            {nav.map((n) => (
-              <NavLink key={n.to} to={n.to} end={n.to === '/'} className={pill}>
-                {n.label}
-              </NavLink>
-            ))}
-            <div className="mt-3 flex flex-wrap gap-2.5 sm:hidden">
-              <Button to="/contact#find-shop" variant="ghost" className="flex-1">
-                Find my shop
-              </Button>
-              <Button to="/contact#demo" className="flex-1">
-                Book a demo
-              </Button>
-            </div>
-          </Container>
-        </div>
+        <>
+          <div
+            className="fixed inset-x-0 bottom-0 bg-night/60 backdrop-blur-[2px] lg:hidden"
+            style={{ top: headerH }}
+            aria-hidden="true"
+            onClick={() => setOpen(false)}
+          />
+          <div
+            id="mobile-menu"
+            className="bg-night absolute inset-x-0 top-full overflow-y-auto border-t border-slate-400/15 shadow-[0_24px_48px_-12px_rgba(6,30,36,0.6)] lg:hidden"
+            style={{ maxHeight: `calc(100dvh - ${headerH}px)` }}
+          >
+            <Container as="nav" aria-label="Main" className="flex flex-col gap-1 py-4">
+              {nav.map((n) => (
+                <NavLink key={n.to} to={n.to} end={n.to === '/'} className={pill}>
+                  {n.label}
+                </NavLink>
+              ))}
+              <div className="mt-3 flex flex-wrap gap-2.5 sm:hidden">
+                <Button to="/contact#find-shop" variant="ghost" className="flex-1">
+                  Find my shop
+                </Button>
+                <Button to="/contact#demo" className="flex-1">
+                  Book a demo
+                </Button>
+              </div>
+            </Container>
+          </div>
+        </>
       )}
     </header>
   );

@@ -28,10 +28,14 @@ export function SectionTitle({ children, className, as: Tag = 'h2' }) {
   );
 }
 
-/** Max-width page container with the standard side gutter. */
-export function Container({ children, className, as: Tag = 'div', ...rest }) {
+/**
+ * Page container with the standard side gutter: 16 px on phones, 24 px on
+ * tablets, 40-48 px on laptops; content up to 1344 px wide (1440 minus the
+ * gutters). `width` replaces the max width for narrow sections.
+ */
+export function Container({ children, className, width = 'max-w-[1440px]', as: Tag = 'div', ...rest }) {
   return (
-    <Tag className={cn('mx-auto w-full max-w-[1200px] px-4 sm:px-6', className)} {...rest}>
+    <Tag className={cn('mx-auto w-full px-4 sm:px-6 lg:px-10 xl:px-12', width, className)} {...rest}>
       {children}
     </Tag>
   );

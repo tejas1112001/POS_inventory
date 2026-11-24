@@ -57,6 +57,8 @@
   html {
     -webkit-text-size-adjust: 100%;
     scroll-behavior: smooth;
+    /* The header is sticky: keep #anchor targets clear of it. */
+    scroll-padding-top: 5.5rem;
   }
 
   body {
@@ -178,7 +180,7 @@
 
 /* ---- Mouse effects (see components/fx). ---- */
 
-/* Dots in the side gutters; the mask keeps them out of the 1200px content column. */
+/* Dots in the side gutters; the mask keeps them out of the 1440px content column. */
 .dot-field {
   position: fixed;
   inset: 0;
@@ -188,10 +190,10 @@
   pointer-events: none;
   mask-image: linear-gradient(
     to right,
-    #000 calc(50% - 690px),
-    transparent calc(50% - 600px),
-    transparent calc(50% + 600px),
-    #000 calc(50% + 690px)
+    #000 calc(50% - 790px),
+    transparent calc(50% - 700px),
+    transparent calc(50% + 700px),
+    #000 calc(50% + 790px)
   );
 }
 
