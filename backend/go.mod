@@ -15,7 +15,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.13.0
 	github.com/johnfercher/maroto/v2 v2.4.4
-	github.com/klauspost/compress v1.20.4
+	github.com/klauspost/compress v1.20.5
 	github.com/minio/minio-go/v7 v7.4.1
 	github.com/phpdave11/gofpdf v1.4.3
 	github.com/pressly/goose/v3 v3.30.1
