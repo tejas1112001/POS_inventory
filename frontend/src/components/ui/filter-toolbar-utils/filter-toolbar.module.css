@@ -28,7 +28,7 @@
 }
 .chip {
   display: inline-flex;
-  height: 2rem;
+  height: 1.875rem;
   align-items: center;
   gap: 2px;
   border-radius: 9999px;
@@ -128,12 +128,12 @@
   position: relative;
   z-index: 2;
   display: inline-flex;
-  height: 2.75rem;
+  height: 2.5rem;
   align-items: center;
   border-radius: var(--radius);
-  padding: 0 14px;
+  padding: 0 12px;
   color: var(--foreground);
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   font-weight: 600;
   white-space: nowrap;
 }
@@ -328,7 +328,7 @@
 
 @media (min-width: 640px) {
   .trigger {
-    height: 2.5rem;
+    height: 2.25rem;
   }
 }
 

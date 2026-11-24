@@ -63,6 +63,7 @@ export default function SalesReturn() {
   const dates = (
     <DropdownRangeDatePicker
       placeholder="All dates"
+      className="h-10 text-[13px] sm:h-9"
       value={{ from: list.values.startDate, to: list.values.endDate }}
       onChange={({ from, to }) => list.setFilters({ startDate: from, endDate: to })}
     />

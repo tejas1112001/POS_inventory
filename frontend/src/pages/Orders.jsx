@@ -69,6 +69,7 @@ export default function Orders() {
   const dates = (
     <DropdownRangeDatePicker
       placeholder="All dates"
+      className="h-10 text-[13px] sm:h-9"
       value={{ from: list.values.startDate, to: list.values.endDate }}
       onChange={({ from, to }) => list.setFilters({ startDate: from, endDate: to })}
     />
@@ -87,7 +88,7 @@ export default function Orders() {
         }
         search={list.search}
         onSearch={list.setSearch}
-        placeholder="Search order number or customer…"
+        placeholder="Search order or customer…"
         filters={filters}
         values={list.values}
         onFilter={list.setFilter}

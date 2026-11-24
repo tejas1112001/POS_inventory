@@ -19,6 +19,8 @@ Follow-up 3: one geometry for every page: top bar 56 px (sidebar brand row too) 
 
 Follow-up 4: date filters are one range button (`components/ui/dropdown-range-date-picker.jsx`: year and month dropdowns over a range calendar, Clear/Apply; new `components/ui/calendar.jsx` on react-day-picker 10 + date-fns) on Orders, Returns, the four reports, payment methods, customer statement and the dashboard's custom range; `DateBox` removed. Dialogs: the sticky header/footer now stick to the dialog edges (fields no longer show above the title or below the buttons), the close button sits in the sticky header, phone footers put the buttons side by side. Older custom modals (supplier, customer, store, warehouse, subcategory, import, supplier picker, shop page) no longer cut off their top on short screens.
 
+Follow-up 5: filter line controls smaller (search, Add filter, date button and the page buttons on that line: 36 px on desktop, 40 px on phones; search 224–256 px wide). Checkout keeps its 40 px search.
+
 Not done: the landing site (`landing/`) is still the old blue theme.
 
 # Rename to MintoBill (2026-11-23)

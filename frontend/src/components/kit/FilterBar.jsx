@@ -31,7 +31,8 @@ export default function FilterBar({ search, onSearch, placeholder = 'Search…',
   return (
     <div className="mb-3 flex flex-wrap items-center gap-2">
       <SearchBox
-        className="w-full sm:w-64 lg:w-72"
+        size="sm"
+        className="w-full sm:w-56 lg:w-64"
         value={text}
         onChange={(v) => {
           setText(v);
@@ -54,7 +55,7 @@ export default function FilterBar({ search, onSearch, placeholder = 'Search…',
           )}
         </FilterToolbar>
       )}
-      {actions && <div className="flex flex-wrap items-center gap-2 max-sm:w-full max-sm:[&>*]:flex-1 sm:ml-auto">{actions}</div>}
+      {actions && <div className="flex flex-wrap items-center gap-2 max-sm:w-full max-sm:[&>*]:flex-1 sm:ml-auto sm:[&>*]:h-9 sm:[&>*]:text-[13px]">{actions}</div>}
     </div>
   );
 }
