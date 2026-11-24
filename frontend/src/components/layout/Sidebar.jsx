@@ -47,7 +47,7 @@ export default function Sidebar({ mobileOpen, setMobileOpen, collapsed: controll
           mobileOpen ? 'translate-x-0 shadow-lg' : '-translate-x-full lg:translate-x-0'
         )}
       >
-        <div className={cn('flex h-16 shrink-0 items-center', collapsed ? 'justify-center px-2' : 'justify-between pr-2 pl-4')}>
+        <div className={cn('flex h-14 shrink-0 items-center', collapsed ? 'justify-center px-2' : 'justify-between pr-2 pl-4')}>
           {collapsed ? (
             <button
               type="button"

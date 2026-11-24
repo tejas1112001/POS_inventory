@@ -22,6 +22,7 @@ import { mrpText } from '@/lib/mrp';
 import { beep, findByCode } from '@/lib/scan';
 import { useScanner } from '@/hooks/useScanner';
 import { cn } from '@/lib/utils';
+import SearchBox from '@/components/kit/SearchBox';
 import CartHeader from '@/components/kit/CartHeader';
 import QtyStepper from '@/components/kit/QtyStepper';
 import IconTile from '@/components/kit/IconTile';
@@ -385,8 +386,24 @@ export default function Checkout() {
 
   const cart = (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex items-center justify-between border-b px-4 py-3 max-md:pr-14">
-        <CartHeader count={itemCount} />
+      <div className="flex items-center justify-between gap-2 border-b px-4 py-2.5 max-md:pr-14">
+        <CartHeader count={itemCount}>
+          <button
+            type="button"
+            onClick={() => setPickCustomer(true)}
+            title="Change customer (F4)"
+            className="-mx-1 inline-flex min-h-7 min-w-0 items-center gap-1.5 rounded-md px-1 font-medium text-foreground hover:bg-accent"
+          >
+            <User className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+            <span className="truncate">{customer?.name || 'Walk-in Customer'}</span>
+            {customer?.gstin && (
+              <span className="shrink-0 rounded bg-accent px-1.5 py-0.5 font-mono text-[11px] text-accent-foreground" title="Registered buyer: a B2B invoice">
+                B2B · {customer.gstin}
+              </span>
+            )}
+            <span className="sr-only">Change customer</span>
+          </button>
+        </CartHeader>
         <div className="flex items-center gap-1">
           <Button variant="ghost" size="sm" disabled={!lines.length} onClick={() => setHolding(true)} title="Park this bill (F6)">
             <PauseCircle className="size-4" aria-hidden="true" /> Hold
@@ -399,18 +416,6 @@ export default function Checkout() {
           </Button>
         </div>
       </div>
-      <button type="button" onClick={() => setPickCustomer(true)} className="flex min-h-11 items-center justify-between gap-2 border-b bg-muted/50 px-4 py-2 text-left text-sm transition-colors hover:bg-accent">
-        <span className="flex min-w-0 items-center gap-2">
-          <User className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-          <span className="truncate font-medium">{customer?.name || 'Walk-in Customer'}</span>
-          {customer?.gstin && (
-            <span className="shrink-0 rounded bg-accent px-1.5 py-0.5 font-mono text-[11px] text-accent-foreground" title="Registered buyer: a B2B invoice">
-              B2B · {customer.gstin}
-            </span>
-          )}
-        </span>
-        <span className="shrink-0 text-xs text-slate-600 dark:text-slate-300">Change · F4</span>
-      </button>
       <PlaceOfSupply c={c} gst={gst} customer={customer} />
       <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin">
         {lines.length === 0 ? (
@@ -617,11 +622,26 @@ export default function Checkout() {
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden md:flex-row">
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <div className="space-y-2.5 border-b bg-card p-3 sm:p-4">
+        <div className="space-y-2 px-3 pt-3 sm:px-4 sm:pt-4 lg:px-5">
           {c.problem && <InlineAlert onClose={() => c.setProblem(null)}>{c.problem}</InlineAlert>}
           <div className="flex flex-wrap items-center gap-2">
+            <SearchBox
+              ref={searchRef}
+              autoFocus={finePointer()}
+              className="w-full lg:w-auto lg:min-w-[14rem] lg:flex-1"
+              value={search}
+              onChange={setSearch}
+              placeholder="Scan, or search by name, SKU or barcode · F2"
+              label="Search products by name, SKU or barcode"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey) {
+                  e.preventDefault();
+                  onSearchEnter();
+                } else if (e.key === 'Escape') setSearch('');
+              }}
+            />
             <Select value={c.storeId} onValueChange={c.changeStore} disabled={c.stores.length < 2}>
-              <SelectTrigger className="h-10 w-full sm:w-[190px]" aria-label="Store">
+              <SelectTrigger className="h-10 min-w-0 flex-1 sm:w-[190px] sm:flex-none" aria-label="Store">
                 <SelectValue placeholder="Store" />
               </SelectTrigger>
               <SelectContent>
@@ -632,31 +652,11 @@ export default function Checkout() {
                 ))}
               </SelectContent>
             </Select>
-            <span className="hidden text-sm text-muted-foreground lg:inline">Cashier: {currentUser?.name}</span>
-            <Button type="button" variant="ghost" size="icon" className="ml-auto size-10" aria-label="Keyboard shortcuts" onClick={() => setHelp(true)}>
+            <Button type="button" variant="ghost" size="icon" className="size-10 shrink-0" aria-label="Keyboard shortcuts" onClick={() => setHelp(true)}>
               <HelpCircle className="size-5" aria-hidden="true" />
             </Button>
           </div>
-          <div className="relative">
-            <Search className="pointer-events-none absolute top-1/2 left-3.5 size-5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-            <Input
-              ref={searchRef}
-              autoFocus={finePointer()}
-              type="search"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Scan, or search by name, SKU or barcode · F2"
-              aria-label="Search products by name, SKU or barcode"
-              className="h-11 rounded-xl bg-muted/40 pl-11 text-base"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey) {
-                  e.preventDefault();
-                  onSearchEnter();
-                } else if (e.key === 'Escape') setSearch('');
-              }}
-            />
-          </div>
-          <div className="no-scrollbar -mx-3 flex gap-1.5 overflow-x-auto px-3 pb-1">
+          <div className="no-scrollbar -mx-3 flex gap-1.5 overflow-x-auto px-3 pb-1 sm:-mx-4 sm:px-4 lg:-mx-5 lg:px-5">
             <CategoryPill active={category === 'all'} onClick={() => setCategory('all')}>
               All
             </CategoryPill>
@@ -673,7 +673,7 @@ export default function Checkout() {
           </div>
         </div>
 
-        <div className={cn('min-h-0 flex-1 overflow-y-auto p-3 scrollbar-thin sm:p-4', lines.length && 'max-md:pb-24')}>
+        <div className={cn('min-h-0 flex-1 overflow-y-auto px-3 pt-2 pb-3 scrollbar-thin sm:px-4 sm:pb-4 lg:px-5', lines.length && 'max-md:pb-24')}>
           {shown.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center text-center text-muted-foreground">
               <Search className="mb-2 size-8 opacity-40" aria-hidden="true" />
@@ -709,7 +709,7 @@ export default function Checkout() {
         )}
       </div>
 
-      <aside className="hidden min-h-0 w-[360px] shrink-0 flex-col border-l bg-card shadow-[-8px_0_24px_-16px_rgb(18_59_69/0.18)] md:flex lg:w-[420px]" aria-label="Current sale">
+      <aside className="hidden min-h-0 w-[360px] shrink-0 flex-col overflow-hidden rounded-2xl border bg-card shadow-xs md:my-4 md:mr-4 md:flex lg:mr-5 lg:w-[420px]" aria-label="Current sale">
         {cart}
       </aside>
 

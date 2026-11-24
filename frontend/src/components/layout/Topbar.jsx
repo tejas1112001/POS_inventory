@@ -80,7 +80,7 @@ function PageJump() {
   const showList = open && term.length > 0;
 
   return (
-    <div className="relative hidden w-full max-w-sm md:block">
+    <div className="relative hidden w-full md:block">
       <Search className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
       <input
         ref={input}
@@ -151,16 +151,19 @@ export default function Topbar({ title, onOpenMobileMenu }) {
   };
 
   return (
-    <header className="z-20 flex h-16 shrink-0 items-center gap-3 border-b border-border/70 bg-card/85 px-3 sm:px-4 lg:px-5">
-      <Button variant="ghost" size="icon" className="size-10 lg:hidden" onClick={onOpenMobileMenu} aria-label="Open menu">
-        <Menu className="size-5" />
-      </Button>
+    <header className="z-20 flex h-14 shrink-0 items-center gap-3 border-b border-border/70 bg-card/85 px-3 sm:px-4 md:grid md:grid-cols-[minmax(0,1fr)_minmax(0,24rem)_minmax(0,1fr)] lg:px-5">
+      {/* Title left, page search in a fixed middle column (it never moves
+          between pages), actions right. */}
+      <div className="flex min-w-0 items-center gap-2">
+        <Button variant="ghost" size="icon" className="size-10 lg:hidden" onClick={onOpenMobileMenu} aria-label="Open menu">
+          <Menu className="size-5" />
+        </Button>
+        <h1 className="min-w-0 truncate text-lg font-bold tracking-tight">{title}</h1>
+      </div>
 
-      <h1 className="min-w-0 shrink-0 truncate text-lg font-bold tracking-tight sm:text-xl">{title}</h1>
+      <PageJump />
 
-      <div className="ml-auto flex min-w-0 flex-1 items-center justify-end gap-2 sm:gap-2.5">
-        <PageJump />
-
+      <div className="ml-auto flex min-w-0 items-center justify-end gap-2 sm:gap-2.5">
         {hasPermission('pos', 'view') && title !== 'Checkout' && (
           <Button asChild className="hidden h-10 rounded-full px-4 xl:inline-flex">
             <Link to="/pos">

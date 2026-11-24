@@ -15,6 +15,8 @@ Follow-up 2026-11-24: tighter spacing (shell, topbar, cards, console); page butt
 
 Follow-up 2: page intro lines removed (PageHeader, ListPageLayout, record configs, console headers, Roles/Add role headings); reusable `TabBar` (Settings, Reports, Adjustments; tabs no longer collapse on phones); dashboard panels no longer overflow on phones (Panel min-w-0, phone list for recent sales); data tables scroll instead of squeezing on phones; old black buttons/overlays themed; purchase report total as a StatCard.
 
+Follow-up 3: one geometry for every page: top bar 56 px (sidebar brand row too) with the page search in a fixed middle column; content starts 16 px under it, 20 px from the side on all pages, Checkout included (both checkout screens: controls on one row with no bar, cart as an inset card like the Orders table, customer shown in the cart header instead of its own strip). Shared `SearchBox` (FilterBar, both checkouts). New filter bar: short search left, then `components/ui/filter-toolbar.jsx` ("Add filter" grows into a field → value menu; applied filters as chips; Clear all), built into `FilterBar` so every list page has it with no page changes; date boxes stay inline (phones: behind a calendar button). Uses `motion` (new dependency, LazyMotion + domAnimation, about 41 kB gzip); its CSS module uses the app's theme tokens (the generic `:root` block from the component's source was not added: it would overwrite the teal theme).
+
 Not done: the landing site (`landing/`) is still the old blue theme.
 
 # Rename to MintoBill (2026-11-23)

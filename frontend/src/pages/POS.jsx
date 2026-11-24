@@ -21,6 +21,7 @@ import { lockedByOther as isLockedByOther, productStock, variantLabel, variantSt
 import { formatCurrency } from '@/lib/format';
 import { addQty, fmtQty } from '@/lib/qty';
 import { cn } from '@/lib/utils';
+import SearchBox from '@/components/kit/SearchBox';
 import CartHeader from '@/components/kit/CartHeader';
 import QtyStepper from '@/components/kit/QtyStepper';
 import IconTile from '@/components/kit/IconTile';
@@ -340,15 +341,13 @@ export default function POS() {
 
   const cart = (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex items-center justify-between border-b px-4 py-3 max-md:pr-14">
-        <CartHeader count={itemCount} />
+      <div className="flex items-center justify-between gap-2 border-b px-4 py-2.5 max-md:pr-14">
+        <CartHeader count={itemCount}>
+          <span className="truncate">{selectedCustomerObj?.name || 'Walk-in Customer'}</span>
+        </CartHeader>
         <Button variant="ghost" size="sm" className="text-danger hover:bg-danger-bg hover:text-danger" disabled={!lines.length} onClick={askClear}>
           <X className="size-4" aria-hidden="true" /> Clear
         </Button>
-      </div>
-      <div className="border-b bg-muted/50 px-4 py-2 text-xs">
-        <span className="text-muted-foreground">Customer: </span>
-        <span className="font-medium">{selectedCustomerObj?.name || 'Walk-in Customer'}</span>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin">
         {lines.length === 0 ? (
@@ -432,49 +431,15 @@ export default function POS() {
     <div className="flex h-full min-h-0 flex-col overflow-hidden md:flex-row">
       {/* Products */}
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <div className="space-y-2.5 border-b bg-card p-3 sm:p-4">
+        <div className="space-y-2 px-3 pt-3 sm:px-4 sm:pt-4 lg:px-5">
           {error && <InlineAlert onClose={() => setError(null)}>{error}</InlineAlert>}
           <div className="flex flex-wrap items-center gap-2">
-            <Select value={selectedStore} onValueChange={changeStore} disabled={stores.length === 0}>
-              <SelectTrigger className="h-10 w-full sm:w-[170px]" aria-label="Store">
-                <SelectValue placeholder="Select store" />
-              </SelectTrigger>
-              <SelectContent>
-                {stores.map((store) => (
-                  <SelectItem key={store.id} value={String(store.id)}>
-                    {store.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <div className="flex min-w-0 flex-1 gap-2">
-              <Select value={String(selectedCustomer || '')} onValueChange={setSelectedCustomer}>
-                <SelectTrigger className="h-10 min-w-0 flex-1" aria-label="Customer">
-                  <SelectValue placeholder="Select customer" />
-                </SelectTrigger>
-                <SelectContent>
-                  {customers.map((c) => (
-                    <SelectItem key={c.id} value={String(c.id)}>
-                      {c.name} {c.phone ? `(${c.phone})` : ''}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button variant="outline" className="h-10 shrink-0" onClick={() => setShowCustomerForm(true)}>
-                <UserPlus className="size-4" aria-hidden="true" /> <span className="hidden sm:inline">Add New</span>
-                <span className="sr-only sm:hidden">Add customer</span>
-              </Button>
-            </div>
-          </div>
-          <div className="relative">
-            <Search className="pointer-events-none absolute top-1/2 left-3.5 size-5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-            <Input
-              type="search"
+            <SearchBox
+              className="w-full lg:w-auto lg:min-w-[14rem] lg:flex-1"
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={setSearchTerm}
               placeholder="Search by name or SKU…"
-              aria-label="Search products by name or SKU"
-              className="h-11 rounded-xl bg-muted/40 pl-11 text-base"
+              label="Search products by name or SKU"
               onKeyDown={(e) => {
                 if (e.key !== 'Enter') return;
                 const q = searchTerm.trim().toLowerCase();
@@ -494,8 +459,38 @@ export default function POS() {
                 }
               }}
             />
+            <Select value={selectedStore} onValueChange={changeStore} disabled={stores.length === 0}>
+              <SelectTrigger className="h-10 w-full sm:w-[170px]" aria-label="Store">
+                <SelectValue placeholder="Select store" />
+              </SelectTrigger>
+              <SelectContent>
+                {stores.map((store) => (
+                  <SelectItem key={store.id} value={String(store.id)}>
+                    {store.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <div className="flex min-w-0 flex-1 gap-2 lg:w-[310px] lg:flex-none">
+              <Select value={String(selectedCustomer || '')} onValueChange={setSelectedCustomer}>
+                <SelectTrigger className="h-10 min-w-0 flex-1" aria-label="Customer">
+                  <SelectValue placeholder="Select customer" />
+                </SelectTrigger>
+                <SelectContent>
+                  {customers.map((c) => (
+                    <SelectItem key={c.id} value={String(c.id)}>
+                      {c.name} {c.phone ? `(${c.phone})` : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button variant="outline" className="h-10 shrink-0" onClick={() => setShowCustomerForm(true)}>
+                <UserPlus className="size-4" aria-hidden="true" /> <span className="hidden sm:inline">Add New</span>
+                <span className="sr-only sm:hidden">Add customer</span>
+              </Button>
+            </div>
           </div>
-          <div className="no-scrollbar -mx-3 flex gap-1.5 overflow-x-auto px-3 pb-1">
+          <div className="no-scrollbar -mx-3 flex gap-1.5 overflow-x-auto px-3 pb-1 sm:-mx-4 sm:px-4 lg:-mx-5 lg:px-5">
             <CategoryPill active={activeCategory === 'all'} onClick={() => setActiveCategory('all')}>
               All
             </CategoryPill>
@@ -507,7 +502,7 @@ export default function POS() {
           </div>
         </div>
 
-        <div className={cn('min-h-0 flex-1 overflow-y-auto p-3 scrollbar-thin sm:p-4', lines.length && 'max-md:pb-24')}>
+        <div className={cn('min-h-0 flex-1 overflow-y-auto px-3 pt-2 pb-3 scrollbar-thin sm:px-4 sm:pb-4 lg:px-5', lines.length && 'max-md:pb-24')}>
           {filteredProducts.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center text-center text-muted-foreground">
               <Search className="mb-2 size-8 opacity-40" aria-hidden="true" />
@@ -537,7 +532,7 @@ export default function POS() {
       </div>
 
       {/* Cart panel: tablets and desktops */}
-      <aside className="hidden min-h-0 w-[340px] shrink-0 flex-col border-l bg-card shadow-[-8px_0_24px_-16px_rgb(18_59_69/0.18)] md:flex lg:w-96" aria-label="Current sale">
+      <aside className="hidden min-h-0 w-[340px] shrink-0 flex-col overflow-hidden rounded-2xl border bg-card shadow-xs md:my-4 md:mr-4 md:flex lg:mr-5 lg:w-96" aria-label="Current sale">
         {cart}
       </aside>
 

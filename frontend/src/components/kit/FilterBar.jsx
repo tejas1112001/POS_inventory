@@ -1,105 +1,84 @@
-import { useEffect, useState } from 'react';
-import { Search, SlidersHorizontal, X } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { CalendarRange } from 'lucide-react';
+import SearchBox from './SearchBox';
+import { FilterToolbar } from '@/components/ui/filter-toolbar';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
-// FilterBar: search plus select filters. Filters: [{ key, label, options:
-// [{ value, label }] }]. On phones the filters move into a sheet behind a
-// "Filters" button; active filters show as removable chips. extra: more
-// controls (for example date boxes), shown next to the selects and in the
-// phone sheet; extraActive counts them as active filters. actions: the
-// page's buttons (New order, Add product…), on the same line at the right;
-// on phones they take their own row under the search.
+// FilterBar: one line for every list page. A short search on the left, then
+// "Add filter" (a menu: pick a field, then a value) with the applied filters
+// as removable chips, then the page's buttons on the right.
+// filters: [{ key, label, options: [{ value, label }] }]; values: { key: value }.
+// extra: more controls (for example date boxes) next to Add filter; on
+// phones they move into a sheet behind a calendar button. extraActive counts
+// them as applied. actions: the page's buttons (New order, Add product…).
 export default function FilterBar({ search, onSearch, placeholder = 'Search…', filters = [], values = {}, onFilter, onClear, extra, extraActive = 0, actions }) {
   const [text, setText] = useState(search || '');
   const [open, setOpen] = useState(false);
   useEffect(() => setText(search || ''), [search]);
 
-  const active = filters.filter((f) => values[f.key]);
-  const activeCount = active.length + extraActive;
-  const selects = (stack) =>
-    filters.map((f) => (
-      <label key={f.key} className={stack ? 'grid gap-1.5 text-sm font-medium' : undefined}>
-        {stack && f.label}
-        <select
-          aria-label={f.label}
-          className="h-11 rounded-lg border border-input bg-card px-3 text-sm shadow-xs sm:h-10"
-          value={values[f.key] || ''}
-          onChange={(e) => onFilter(f.key, e.target.value)}
-        >
-          <option value="">{f.allLabel || `All ${f.label.toLowerCase()}`}</option>
-          {f.options.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </select>
-      </label>
-    ));
+  const fieldKey = filters.map((f) => `${f.key}:${f.options.length}`).join('|');
+  const chipKey = filters.map((f) => `${f.key}=${values[f.key] || ''}`).join('|');
+  /* eslint-disable react-hooks/exhaustive-deps -- keyed by content: pages pass new arrays on every render */
+  const fields = useMemo(
+    () => filters.map((f) => ({ id: f.key, label: f.label, options: f.options.map((o) => ({ value: String(o.value), label: o.label })) })),
+    [fieldKey]
+  );
+  const chips = useMemo(
+    () =>
+      filters
+        .filter((f) => values[f.key])
+        .map((f) => ({ id: f.key, label: f.label, value: f.options.find((o) => String(o.value) === String(values[f.key]))?.label ?? String(values[f.key]) })),
+    [chipKey, fieldKey]
+  );
+  /* eslint-enable react-hooks/exhaustive-deps */
 
   return (
-    <div className="mb-3 space-y-2">
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative min-w-0 flex-1 sm:min-w-[14rem]">
-          <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-          <input
-            type="search"
-            value={text}
-            onChange={(e) => {
-              setText(e.target.value);
-              onSearch(e.target.value);
-            }}
-            placeholder={placeholder}
-            aria-label={placeholder.replace(/…$/, '')}
-            className="h-11 w-full rounded-lg border border-input bg-card pr-3 pl-9 text-base shadow-xs outline-none transition-[border-color,box-shadow] focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-ring/25 sm:h-10 sm:text-sm"
-          />
-        </div>
-        {(filters.length > 0 || extra) && (
-          <>
-            <div className="hidden flex-wrap gap-2 sm:flex">
-              {selects(false)}
-              {extra}
-            </div>
-            <Button type="button" variant="outline" className="h-11 sm:hidden" onClick={() => setOpen(true)}>
-              <SlidersHorizontal className="size-4" aria-hidden="true" /> Filters{activeCount ? ` (${activeCount})` : ''}
+    <div className="mb-3 flex flex-wrap items-center gap-2">
+      <SearchBox
+        className="w-full sm:w-64 lg:w-72"
+        value={text}
+        onChange={(v) => {
+          setText(v);
+          onSearch(v);
+        }}
+        placeholder={placeholder}
+      />
+      {(fields.length > 0 || extra) && (
+        <FilterToolbar
+          filters={chips}
+          onRemove={(id) => onFilter(id, '')}
+          onClearAll={onClear}
+          addFilter={fields.length ? { fields, onAdd: (chip) => onFilter(chip.id, chip.option), align: 'start' } : undefined}
+        >
+          {extra && <div className="hidden flex-wrap items-center gap-2 sm:flex">{extra}</div>}
+          {extra && (
+            <Button type="button" variant="outline" size="icon" className="relative size-11 sm:hidden" aria-label="Dates" onClick={() => setOpen(true)}>
+              <CalendarRange className="size-4" aria-hidden="true" />
+              {extraActive > 0 && <span className="absolute -top-1 -right-1 size-2.5 rounded-full bg-primary" aria-hidden="true" />}
             </Button>
-          </>
-        )}
-        {actions && <div className="flex flex-wrap items-center gap-2 max-sm:w-full max-sm:[&>*]:flex-1 sm:ml-auto">{actions}</div>}
-      </div>
-      {(activeCount > 0 || search) && (
-        <div className="flex flex-wrap items-center gap-2 text-sm">
-          {active.map((f) => (
-            <button
-              key={f.key}
-              type="button"
-              onClick={() => onFilter(f.key, '')}
-              className="inline-flex min-h-8 items-center gap-1 rounded-full bg-accent px-3 font-medium text-accent-foreground"
-              aria-label={`Remove filter ${f.label}: ${f.options.find((o) => o.value === values[f.key])?.label}`}
-            >
-              {f.options.find((o) => o.value === values[f.key])?.label}
-              <X className="size-3.5" aria-hidden="true" />
+          )}
+          {extraActive > 0 && chips.length === 0 && (
+            <button type="button" onClick={onClear} className="h-8 rounded-md px-1.5 text-[13px] font-semibold text-primary hover:underline">
+              Clear all
             </button>
-          ))}
-          <button type="button" onClick={onClear} className="min-h-8 px-1 text-primary underline-offset-2 hover:underline">
-            Clear filters
-          </button>
-        </div>
+          )}
+        </FilterToolbar>
       )}
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent sheet>
-          <DialogHeader>
-            <DialogTitle>Filters</DialogTitle>
-          </DialogHeader>
-          <div className="grid gap-3">
-            {selects(true)}
-            {extra && <div className="grid gap-3">{extra}</div>}
-          </div>
-          <Button type="button" className="h-11" onClick={() => setOpen(false)}>
-            Show results
-          </Button>
-        </DialogContent>
-      </Dialog>
+      {actions && <div className="flex flex-wrap items-center gap-2 max-sm:w-full max-sm:[&>*]:flex-1 sm:ml-auto">{actions}</div>}
+      {extra && (
+        <Dialog open={open} onOpenChange={setOpen}>
+          <DialogContent sheet>
+            <DialogHeader>
+              <DialogTitle>Dates</DialogTitle>
+            </DialogHeader>
+            <div className="grid gap-3">{extra}</div>
+            <Button type="button" className="h-11" onClick={() => setOpen(false)}>
+              Show results
+            </Button>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }
