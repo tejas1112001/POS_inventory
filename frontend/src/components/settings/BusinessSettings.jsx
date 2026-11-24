@@ -4,26 +4,24 @@ import { SectionCard } from '@/components/shared/section-card';
 import { api } from '@/services/api';
 import { usePos } from '@/hooks/usePos';
 import { loadShopSettings } from '@/hooks/useShopSettings';
-import { cn } from '@/lib/utils';
 import { Notice, SaveButton } from './FormKit';
 import { errorNotice } from './formUtils';
 
 // BusinessSettings: the shop's business type and industry modules
 // (industry P1 item 1; GET /api/modules, PUT /api/settings/business).
-// Choosing a type ticks its recommended modules; the owner can untick
-// them. Only modules:manage (the owner by default) can change it.
+// The type is read-only here: support sets it in the platform console
+// (which also switches on the type's modules). The owner (modules:manage)
+// can switch modules on and off.
 export default function BusinessSettings({ canManage }) {
   const { reloadMe } = usePos();
   const [data, setData] = useState(null);
   const [loadError, setLoadError] = useState(null);
-  const [type, setType] = useState('retail');
   const [mods, setMods] = useState([]);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState(null);
 
   const apply = (d) => {
     setData(d);
-    setType(d.businessType);
     setMods(d.modules.filter((m) => m.enabled).map((m) => m.key));
   };
 
@@ -46,14 +44,9 @@ export default function BusinessSettings({ canManage }) {
     );
   }
 
-  const entitled = new Set(data.modules.filter((m) => m.entitled).map((m) => m.key));
-  const pickType = (t) => {
-    setType(t);
-    setMods((data.recommended[t] || []).filter((k) => entitled.has(k)));
-  };
   const toggle = (k) => setMods((cur) => (cur.includes(k) ? cur.filter((x) => x !== k) : [...cur, k]));
   const original = data.modules.filter((m) => m.enabled).map((m) => m.key);
-  const changed = type !== data.businessType || mods.length !== original.length || mods.some((k) => !original.includes(k));
+  const changed = mods.length !== original.length || mods.some((k) => !original.includes(k));
 
   const save = async (e) => {
     e.preventDefault();
@@ -64,11 +57,11 @@ export default function BusinessSettings({ canManage }) {
     setBusy(true);
     setNotice(null);
     try {
-      await api.put('/api/settings/business', { businessType: type, modules: mods }, { quiet: true });
+      await api.put('/api/settings/business', { modules: mods }, { quiet: true });
       const fresh = await api.get('/api/modules', { quiet: true });
       apply(fresh);
       await Promise.all([reloadMe(), loadShopSettings(true)]);
-      toast.success('Business type saved.');
+      toast.success('Modules saved.');
     } catch (err) {
       setNotice(errorNotice(err));
     } finally {
@@ -77,31 +70,16 @@ export default function BusinessSettings({ canManage }) {
   };
 
   const dis = !canManage || busy;
+  const typeInfo = data.businessTypes.find((b) => b.key === data.businessType);
   return (
     <form onSubmit={save} noValidate>
       <SectionCard title="Business type">
-        <p className="mb-3 text-sm text-muted-foreground">
-          The type suggests modules and starting data; it never blocks anything. Turning a module off hides its screens and
-          keeps its data.
-        </p>
-        <div role="radiogroup" aria-label="Business type" className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-          {data.businessTypes.map((b) => (
-            <button
-              key={b.key}
-              type="button"
-              role="radio"
-              aria-checked={type === b.key}
-              disabled={dis}
-              onClick={() => pickType(b.key)}
-              className={cn(
-                'rounded-lg border-2 p-3 text-left transition-colors disabled:cursor-not-allowed',
-                type === b.key ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/40'
-              )}
-            >
-              <span className="block text-sm font-medium">{b.label}</span>
-              <span className="mt-1 block text-xs text-muted-foreground">{b.description}</span>
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border bg-muted/40 px-4 py-3">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold">{typeInfo?.label || data.businessType}</p>
+            {typeInfo?.description && <p className="text-xs text-muted-foreground">{typeInfo.description}</p>}
+          </div>
+          <p className="text-xs text-muted-foreground">Set by support. Contact them to change it.</p>
         </div>
 
         <h3 className="mb-2 mt-5 text-sm font-medium">Modules</h3>
@@ -135,9 +113,9 @@ export default function BusinessSettings({ canManage }) {
             <Notice notice={notice} />
           </div>
           {canManage ? (
-            <SaveButton busy={busy} disabled={!changed}>Save business type</SaveButton>
+            <SaveButton busy={busy} disabled={!changed}>Save modules</SaveButton>
           ) : (
-            <p className="text-sm text-muted-foreground">Only the owner can change the business type and modules.</p>
+            <p className="text-sm text-muted-foreground">Only the owner can change the modules.</p>
           )}
         </div>
       </SectionCard>

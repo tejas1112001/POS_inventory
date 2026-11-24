@@ -105,6 +105,7 @@ func (h *HTTP) mountConsole(r chi.Router) {
 		p.With(h.need(PermTenantsView)).Get("/tenants/{id}", h.getTenant)
 		p.With(h.need(PermTenantsEdit)).Patch("/tenants/{id}", h.patchTenant)
 		p.With(h.need(PermTenantsEdit), h.stepUpRequired).Post("/tenants/{id}/slug", h.renameSlug)
+		p.With(h.need(PermTenantsEdit), h.stepUpRequired).Post("/tenants/{id}/business-type", h.changeBusinessType)
 		p.With(h.need(PermTenantsSuspend), h.stepUpRequired).Post("/tenants/{id}/suspend", h.suspend)
 		p.With(h.need(PermTenantsSuspend), h.stepUpRequired).Post("/tenants/{id}/reactivate", h.reactivate)
 		p.With(h.need(PermTenantsDelete), h.stepUpRequired).Delete("/tenants/{id}", h.deleteTenant)
@@ -441,6 +442,23 @@ func (h *HTTP) renameSlug(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	v, err := h.svc.RenameSlug(r.Context(), actorFrom(r.Context()), chi.URLParam(r, "id"), in.Slug, h.meta(r))
+	if err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, v)
+}
+
+// changeBusinessType is POST /tenants/{id}/business-type {"businessType"}.
+func (h *HTTP) changeBusinessType(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		BusinessType string `json:"businessType"`
+	}
+	if err := httpx.DecodeJSON(r, &in); err != nil {
+		httpx.WriteError(w, r, err)
+		return
+	}
+	v, err := h.svc.ChangeBusinessType(r.Context(), actorFrom(r.Context()), chi.URLParam(r, "id"), in.BusinessType, h.meta(r))
 	if err != nil {
 		httpx.WriteError(w, r, err)
 		return

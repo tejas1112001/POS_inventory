@@ -71,7 +71,17 @@ function Overview({ tenant: t, reload }) {
   const [dialog, setDialog] = useState(null);
   const [invite, setInvite] = useState(null);
   const [notice, setNotice] = useState(null);
+  const [types, setTypes] = useState([]);
   const path = `/tenants/${encodeURIComponent(t.id)}`;
+
+  // The shop presets, for "Change business type" (the shop cannot change
+  // its own type; this is the only place it changes).
+  useEffect(() => {
+    api
+      .get('/business-types')
+      .then((list) => Array.isArray(list) && setTypes(list))
+      .catch(() => {});
+  }, []);
   const done = (text) => () => {
     setDialog(null);
     setNotice(null);
@@ -98,6 +108,25 @@ function Overview({ tenant: t, reload }) {
       submitLabel: 'Change subdomain',
       onSubmit: (v) => api.post(`${path}/slug`, { slug: v.slug.trim().toLowerCase() }),
       onDone: done('Subdomain changed.'),
+    },
+    businessType: {
+      title: 'Change business type',
+      intro:
+        "The shop gets the new type's recommended modules (only those its plan allows) and starting data. Nothing is deleted: modules that go off hide their screens and keep their data. The shop owner cannot change the type.",
+      fields: [
+        {
+          key: 'businessType',
+          label: 'Business type',
+          type: 'select',
+          required: true,
+          initial: t.businessType || 'retail',
+          options: (types.length ? types : [{ key: t.businessType || 'retail', label: t.businessType || 'retail' }]).map((b) => ({ value: b.key, label: b.label })),
+          hint: types.find((b) => b.key === t.businessType)?.description,
+        },
+      ],
+      submitLabel: 'Change type',
+      onSubmit: (v) => api.post(`${path}/business-type`, { businessType: v.businessType }),
+      onDone: done('Business type changed.'),
     },
     suspend: {
       title: 'Suspend tenant',
@@ -157,6 +186,7 @@ function Overview({ tenant: t, reload }) {
   const actions = [
     can('tenants:edit') && ['edit', 'Edit details'],
     can('tenants:edit') && live && ['slug', 'Change subdomain'],
+    can('tenants:edit') && live && ['businessType', 'Change business type'],
     can('tenants:suspend') && live && ['suspend', 'Suspend'],
     can('tenants:suspend') && t.status === 'suspended' && ['reactivate', 'Reactivate'],
     can('tenants:delete') && (live || t.status === 'suspended') && ['delete', 'Delete'],
@@ -181,7 +211,7 @@ function Overview({ tenant: t, reload }) {
               ['Owner', t.ownerEmail],
               ['Billing email', t.billingEmail],
               ['Plan', t.plan],
-              ['Business type', t.businessType],
+              ['Business type', types.find((b) => b.key === t.businessType)?.label || t.businessType],
               ['Created', formatDate(t.createdAt)],
               ['Last activity', t.lastActivityAt ? formatDateTime(t.lastActivityAt) : 'None yet'],
               ['Schema version', t.schemaVersion],

@@ -1,7 +1,7 @@
 package settings
 
 import (
-	"log/slog"
+	"context"
 	"net/http"
 	"slices"
 	"strings"
@@ -59,11 +59,15 @@ type businessIn struct {
 	Modules      *[]string `json:"modules"`
 }
 
+// errTypeByPlatform: the business type is set in the platform console only
+// (SetBusinessType); a shop, its owner included, cannot change it.
+var errTypeByPlatform = apperr.Forbidden(apperr.CodeForbidden, "The business type is set by support. Contact them to change it.")
+
 // putBusiness is PUT /api/settings/business (modules:manage, owner only by
-// default). Choosing a new type without a module list switches on the
-// type's recommended modules; a list replaces the set. A newly switched-on
-// module must be entitled. The type's starting data is seeded only where
-// none exists. Nothing is deleted when a module goes off.
+// default): the shop's module set. A list replaces the set; a newly
+// switched-on module must be entitled. Nothing is deleted when a module
+// goes off. A businessType other than the current one is refused (403):
+// only the platform console changes it.
 func (a *API) putBusiness(w http.ResponseWriter, r *http.Request) {
 	var in businessIn
 	if err := httpx.DecodeJSON(r, &in); err != nil {
@@ -74,10 +78,6 @@ func (a *API) putBusiness(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if in.BusinessType != nil {
 		v := strings.ToLower(strings.TrimSpace(*in.BusinessType))
-		if !modules.ValidType(v) {
-			httpx.WriteError(w, r, apperr.Invalid("businessType", "Use "+modules.TypeChoices()+"."))
-			return
-		}
 		in.BusinessType = &v
 	}
 	var wanted []string
@@ -102,15 +102,12 @@ func (a *API) putBusiness(w http.ResponseWriter, r *http.Request) {
 		if before.Modules == nil {
 			before.Modules = []string{}
 		}
-		after = before
-		if in.BusinessType != nil {
-			after.BusinessType = *in.BusinessType
+		if in.BusinessType != nil && *in.BusinessType != before.BusinessType {
+			return errTypeByPlatform
 		}
-		switch {
-		case in.Modules != nil:
+		after = before
+		if in.Modules != nil {
 			after.Modules = wanted
-		case after.BusinessType != before.BusinessType:
-			after.Modules = modules.Recommended(after.BusinessType)
 		}
 		for _, k := range after.Modules {
 			if !slices.Contains(before.Modules, k) && !slices.Contains(entitled, k) {
@@ -121,30 +118,8 @@ func (a *API) putBusiness(w http.ResponseWriter, r *http.Request) {
 		if after.BusinessType == before.BusinessType && slices.Equal(after.Modules, before.Modules) {
 			return nil
 		}
-		if _, err := tx.Exec(ctx, `UPDATE settings SET business_type = $1, modules = $2::text[], updated_at = now() WHERE id = 1`,
-			after.BusinessType, after.Modules); err != nil {
+		if err := writeShop(ctx, tx, before, after, p.UserID); err != nil {
 			return err
-		}
-		if after.BusinessType != before.BusinessType {
-			if err := modules.SeedPreset(ctx, tx, after.BusinessType); err != nil {
-				return err
-			}
-		}
-		// Industry P3 item 1 (§1.3): batch tracking starts or stops with the
-		// module for every product that has it switched on.
-		if was, is := slices.Contains(before.Modules, modules.BatchExpiry), slices.Contains(after.Modules, modules.BatchExpiry); was != is {
-			ids, err := inventory.TrackedProducts(ctx, tx)
-			if err != nil {
-				return err
-			}
-			if is {
-				err = inventory.StartTracking(ctx, tx, ids, p.UserID)
-			} else {
-				err = inventory.StopTracking(ctx, tx, ids, p.UserID)
-			}
-			if err != nil {
-				return err
-			}
 		}
 		return audit.Write(ctx, tx, audit.Entry{ActorID: p.UserID, Action: "settings.business_update", Entity: "settings", EntityID: "1",
 			Before:    map[string]any{"businessType": before.BusinessType, "modules": before.Modules},
@@ -156,15 +131,81 @@ func (a *API) putBusiness(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.d.Modules.Forget(t.ID)
+	httpx.WriteJSON(w, http.StatusOK, modules.SummaryOf(after, entitled))
+}
+
+// writeShop saves a new type and module set with their side effects: the
+// type's starting data is seeded where none exists, and (industry P3 item
+// 1, §1.3) batch tracking starts or stops with the batch module for every
+// product that has it switched on. userID 0: not a shop user (the console).
+func writeShop(ctx context.Context, tx tenancy.TenantTx, before, after modules.Shop, userID int64) error {
+	if _, err := tx.Exec(ctx, `UPDATE settings SET business_type = $1, modules = $2::text[], updated_at = now() WHERE id = 1`,
+		after.BusinessType, after.Modules); err != nil {
+		return err
+	}
 	if after.BusinessType != before.BusinessType {
-		// The console's copy (DB3). The tenant's own row is the truth; a
-		// failure here only delays console filtering until the next write.
-		if err := a.d.Sessions.InPlatformTx(ctx, tenancy.TxOptions{Access: tenancy.ReadWrite}, func(tx tenancy.PlatformTx) error {
-			_, err := tx.Exec(ctx, `UPDATE platform.tenants SET business_type = $2, updated_at = now() WHERE id = $1`, t.ID, after.BusinessType)
+		if err := modules.SeedPreset(ctx, tx, after.BusinessType); err != nil {
 			return err
-		}); err != nil {
-			httpx.LoggerFrom(ctx).WarnContext(ctx, "business type not copied to the platform registry", slog.Any("err", err))
 		}
 	}
-	httpx.WriteJSON(w, http.StatusOK, modules.SummaryOf(after, entitled))
+	if was, is := slices.Contains(before.Modules, modules.BatchExpiry), slices.Contains(after.Modules, modules.BatchExpiry); was != is {
+		ids, err := inventory.TrackedProducts(ctx, tx)
+		if err != nil {
+			return err
+		}
+		if is {
+			return inventory.StartTracking(ctx, tx, ids, userID)
+		}
+		return inventory.StopTracking(ctx, tx, ids, userID)
+	}
+	return nil
+}
+
+// SetBusinessType is the platform console's change of a shop's business
+// type (the shop cannot change its own). The type's recommended modules
+// that the plan allows replace the module set, its starting data is seeded
+// where none exists, and batch tracking follows the batch module. The
+// shop's audit log records a system change naming the console user (by);
+// the caller writes the platform audit entry and updates the console's
+// copy of the type. Returns the type before (no change when it is the same).
+func SetBusinessType(ctx context.Context, sessions *tenancy.Sessions, mods *modules.Service, t tenancy.Tenant, businessType, by string) (string, error) {
+	businessType = strings.ToLower(strings.TrimSpace(businessType))
+	if !modules.ValidType(businessType) {
+		return "", apperr.Invalid("businessType", "Use "+modules.TypeChoices()+".")
+	}
+	entitled, err := mods.Entitled(ctx, t)
+	if err != nil {
+		return "", err
+	}
+	var before modules.Shop
+	err = sessions.InTenantTx(ctx, t, tenancy.TxOptions{Access: tenancy.ReadWrite}, func(tx tenancy.TenantTx) error {
+		if err := tx.QueryRow(ctx, `SELECT business_type, modules FROM settings WHERE id = 1 FOR UPDATE`).
+			Scan(&before.BusinessType, &before.Modules); err != nil {
+			return err
+		}
+		if before.Modules == nil {
+			before.Modules = []string{}
+		}
+		if before.BusinessType == businessType {
+			return nil
+		}
+		after := modules.Shop{BusinessType: businessType, Modules: []string{}}
+		for _, k := range modules.Recommended(businessType) {
+			if slices.Contains(entitled, k) {
+				after.Modules = append(after.Modules, k)
+			}
+		}
+		if err := writeShop(ctx, tx, before, after, 0); err != nil {
+			return err
+		}
+		return audit.Write(ctx, tx, audit.Entry{ActorType: audit.ActorSystem, Action: "settings.business_update", Entity: "settings", EntityID: "1",
+			Before:    map[string]any{"businessType": before.BusinessType, "modules": before.Modules},
+			After:     map[string]any{"businessType": after.BusinessType, "modules": after.Modules, "by": "platform console", "platformUser": by},
+			RequestID: httpx.RequestID(ctx)})
+	})
+	if err != nil {
+		return "", err
+	}
+	mods.Forget(t.ID)
+	return before.BusinessType, nil
 }

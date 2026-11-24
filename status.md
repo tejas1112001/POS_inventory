@@ -21,6 +21,8 @@ Follow-up 4: date filters are one range button (`components/ui/dropdown-range-da
 
 Follow-up 5: filter line controls smaller (search, Add filter, date button and the page buttons on that line: 36 px on desktop, 40 px on phones; search 224–256 px wide). Checkout keeps its 40 px search.
 
+Business type is console-only (2026-11-24): a shop can no longer change its own type (`PUT /api/settings/business` answers 403 for a different `businessType`; the owner still switches modules). New console action **Change business type** (`POST /api/platform/tenants/{id}/business-type`, tenants:edit + step-up): sets the type in the shop's database (`settings.SetBusinessType`: the type's recommended modules the plan allows, starting data, batch tracking follows the batch module, shop audit as a system change naming the console user), updates the console's copy and writes the platform audit. Shop Settings shows the type read-only. Isolation tests switch types through the console now.
+
 Not done: the landing site (`landing/`) is still the old blue theme.
 
 # Rename to MintoBill (2026-11-23)

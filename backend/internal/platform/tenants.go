@@ -325,6 +325,45 @@ func (s *Service) PatchTenant(ctx context.Context, a Actor, id string, in PatchT
 	return s.GetTenant(ctx, id)
 }
 
+// ChangeBusinessType sets a shop's business type: the only way it changes
+// (the shop's own settings show it read-only). The shop gets the type's
+// recommended modules its plan allows and the type's starting data; the
+// console's copy of the type follows.
+func (s *Service) ChangeBusinessType(ctx context.Context, a Actor, id, businessType string, m Meta) (TenantView, error) {
+	if s.cfg.SetBusinessType == nil {
+		return TenantView{}, apperr.Unavailable()
+	}
+	t, err := s.GetTenant(ctx, id)
+	if err != nil {
+		return TenantView{}, err
+	}
+	switch t.Status {
+	case "provisioning", "failed", "pending_deletion", "deleted":
+		return TenantView{}, apperr.Conflict(apperr.CodeConflict, "The business type can be changed only for a working shop.")
+	}
+	businessType = strings.ToLower(strings.TrimSpace(businessType))
+	before, err := s.cfg.SetBusinessType(ctx, id, businessType, a.Email)
+	if err != nil {
+		return TenantView{}, err
+	}
+	if before == businessType && t.BusinessType == businessType {
+		return t, nil
+	}
+	err = s.rw(ctx, func(tx tenancy.PlatformTx) error {
+		if _, err := tx.Exec(ctx, `UPDATE platform.tenants SET business_type = $2, updated_at = now() WHERE id = $1`, id, businessType); err != nil {
+			return err
+		}
+		return writeAudit(ctx, tx, AuditEntry{ActorID: a.UserID, ActorEmail: a.Email, Action: "tenant.business_type", TargetTenant: id,
+			Before: map[string]any{"businessType": before}, After: map[string]any{"businessType": businessType},
+			IP: m.IP, UserAgent: m.UserAgent, RequestID: m.RequestID})
+	})
+	if err != nil {
+		return TenantView{}, err
+	}
+	s.flush()
+	return s.GetTenant(ctx, id)
+}
+
 // RenameSlug changes a tenant's subdomain. The old slug redirects and stays
 // reserved for a year (TENANCY §3).
 func (s *Service) RenameSlug(ctx context.Context, a Actor, id, newSlug string, m Meta) (TenantView, error) {

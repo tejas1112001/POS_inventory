@@ -28,16 +28,24 @@ func putBusiness(t *testing.T, l, tok string, body map[string]any) resp {
 	return do(t, rq{method: "PUT", host: tenants[l].Host, path: "/api/settings/business", token: tok, body: body})
 }
 
-// setModules switches a shop's type and modules as its owner would.
+// setType changes a shop's business type in the console (the only place
+// it changes).
+func setType(t *testing.T, l, businessType string) resp {
+	t.Helper()
+	return console(t, "POST", "/tenants/"+tenants[l].ID+"/business-type", map[string]any{"businessType": businessType})
+}
+
+// setModules sets a shop's type in the console and, given a list, its
+// modules as its owner would.
 func setModules(t *testing.T, l, businessType string, mods ...string) {
 	t.Helper()
-	tok, _ := ownerLogin(t, l)
-	body := map[string]any{"businessType": businessType}
-	if mods != nil {
-		body["modules"] = mods
-	}
-	r := putBusiness(t, l, tok, body)
+	r := setType(t, l, businessType)
 	require.Equal(t, 200, r.Code, r.Raw)
+	if mods != nil {
+		tok, _ := ownerLogin(t, l)
+		r = putBusiness(t, l, tok, map[string]any{"modules": mods})
+		require.Equal(t, 200, r.Code, r.Raw)
+	}
 }
 
 // An existing (retail) shop is unchanged: type retail, no modules, every
@@ -85,9 +93,11 @@ func TestModulesDefaultsForAnExistingShop(t *testing.T) {
 	require.Equal(t, "retail", bt)
 }
 
-// Only the owner (modules:manage) changes the type; choosing a type turns
-// on its recommended modules, the console copy follows, and the change is
-// audited. Unticking a module keeps the type.
+// The type changes in the console only: no shop user can change it (the
+// owner gets 403 too). The console's change turns on the type's
+// recommended modules, the console copy follows, and both audit logs
+// record it. The owner (modules:manage) still ticks modules; unticking one
+// keeps the type.
 func TestBusinessTypeChange(t *testing.T) {
 	ctx := context.Background()
 	l := billingTenant(t, "mod-change")
@@ -105,17 +115,35 @@ func TestBusinessTypeChange(t *testing.T) {
 	}
 	require.Equal(t, 200, get(t, host, "/api/modules", btok).Code, "billers have settings:view")
 
-	require.Equal(t, 400, putBusiness(t, l, tok, map[string]any{"businessType": "bakery"}).Code)
+	// The owner cannot change the type; sending the current one is harmless.
+	r := putBusiness(t, l, tok, map[string]any{"businessType": "clothing"})
+	require.Equal(t, 403, r.Code, r.Raw)
+	require.Equal(t, "FORBIDDEN", codeOf(r))
+	require.Equal(t, 200, putBusiness(t, l, tok, map[string]any{"businessType": "retail"}).Code)
 	require.Equal(t, 400, putBusiness(t, l, tok, map[string]any{"modules": []string{"batches"}}).Code)
 
-	r := putBusiness(t, l, tok, map[string]any{"businessType": "clothing"})
+	// The console: an unknown type is refused, a known one applied.
+	require.Equal(t, 400, setType(t, l, "bakery").Code)
+	r = setType(t, l, "clothing")
 	require.Equal(t, 200, r.Code, r.Raw)
 	require.Equal(t, "clothing", r.Body["businessType"])
-	require.Equal(t, []string{"product_attributes", "barcode_labels", "stock_counts"}, strList(r.Body["modules"]))
+	r = get(t, host, "/api/modules", tok)
+	require.Equal(t, "clothing", r.Body["businessType"])
+	var on []string
+	for _, m := range r.Body["modules"].([]any) {
+		if m.(map[string]any)["enabled"] == true {
+			on = append(on, m.(map[string]any)["key"].(string))
+		}
+	}
+	require.Equal(t, []string{"product_attributes", "barcode_labels", "stock_counts"}, on)
 
 	var bt string
 	require.NoError(t, admin(t).QueryRow(ctx, `SELECT business_type FROM platform.tenants WHERE id = $1`, tenants[l].ID).Scan(&bt))
 	require.Equal(t, "clothing", bt)
+	var platformAudits int
+	require.NoError(t, admin(t).QueryRow(ctx, `SELECT count(*) FROM platform.platform_audit_log WHERE action = 'tenant.business_type' AND target_tenant = $1`,
+		tenants[l].ID).Scan(&platformAudits))
+	require.Equal(t, 1, platformAudits)
 
 	// The owner unticks one module: the type stays.
 	r = putBusiness(t, l, tok, map[string]any{"modules": []string{"stock_counts", "barcode_labels"}})
@@ -129,10 +157,11 @@ func TestBusinessTypeChange(t *testing.T) {
 	require.NoError(t, admin(t).QueryRow(ctx, `SELECT count(*) FROM `+schema(l)+`.audit_log WHERE action = 'settings.business_update'`).Scan(&audits))
 	require.Equal(t, 2, audits)
 
-	// Back to retail with no list: retail recommends nothing.
-	r = putBusiness(t, l, tok, map[string]any{"businessType": "retail"})
-	require.Equal(t, 200, r.Code, r.Raw)
-	require.Empty(t, strList(r.Body["modules"]))
+	// Back to retail in the console: retail recommends nothing.
+	require.Equal(t, 200, setType(t, l, "retail").Code)
+	s := get(t, host, "/api/settings", tok)
+	require.Equal(t, "retail", s.Body["businessType"])
+	require.Empty(t, strList(s.Body["enabledModules"]))
 
 	// The admin role never holds modules:manage, the owner always does.
 	var adminHas, ownerHas bool
@@ -174,9 +203,13 @@ func TestModuleEntitlement(t *testing.T) {
 	tok2, _ := ownerLogin(t, l2)
 	s = get(t, tenants[l2].Host, "/api/settings", tok2)
 	require.Equal(t, []string{"product_attributes", "stock_counts", "batch_expiry"}, strList(s.Body["entitledModules"]))
-	r = putBusiness(t, l2, tok2, map[string]any{"businessType": "pharmacy"})
-	require.Equal(t, 403, r.Code, "pharmacy recommends barcode labels, which the plan excludes: %s", r.Raw)
-	r = putBusiness(t, l2, tok2, map[string]any{"businessType": "pharmacy", "modules": []string{"stock_counts"}})
+	// The console's type change switches on only what the plan allows:
+	// pharmacy recommends barcode labels, which this plan excludes.
+	require.Equal(t, 200, setType(t, l2, "pharmacy").Code)
+	s = get(t, tenants[l2].Host, "/api/settings", tok2)
+	require.Equal(t, "pharmacy", s.Body["businessType"])
+	require.NotContains(t, strList(s.Body["enabledModules"]), "barcode_labels")
+	r = putBusiness(t, l2, tok2, map[string]any{"modules": []string{"stock_counts"}})
 	require.Equal(t, 200, r.Code, r.Raw)
 }
 
@@ -192,7 +225,7 @@ func TestModulesIsolation(t *testing.T) {
 
 	tok, _ := ownerLogin(t, l)
 	require.Equal(t, 401, get(t, tenants["a"].Host, "/api/modules", tok).Code)
-	require.Equal(t, 401, putBusiness(t, "a", tok, map[string]any{"businessType": "clothing"}).Code)
+	require.Equal(t, 401, putBusiness(t, "a", tok, map[string]any{"modules": []string{"stock_counts"}}).Code)
 	require.Equal(t, "retail", get(t, tenants["a"].Host, "/api/settings", other).Body["businessType"])
 }
 

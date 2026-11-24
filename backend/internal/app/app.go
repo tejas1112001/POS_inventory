@@ -120,7 +120,8 @@ type App struct {
 	catalog  *catalog.API
 	worker   *worker.Worker
 	billing  *billing.Service
-	plans    *plans.Service // limit and feature checks; the console clears its override cache
+	plans    *plans.Service   // limit and feature checks; the console clears its override cache
+	modules  *modules.Service // the console changes a shop's business type through it
 }
 
 // New builds the app. It does not open network listeners.
@@ -348,6 +349,7 @@ func (a *App) tenantAPI(cfg *config.Config, log *slog.Logger, network httpx.Netw
 	planSvc := plans.NewService(a.sessions)
 	a.plans = planSvc
 	modSvc := modules.NewService(a.sessions, planSvc)
+	a.modules = modSvc
 	fileSvc := files.NewService(storage, a.sessions, planSvc, log)
 	productAPI := products.New(products.Deps{Sessions: a.sessions, Files: fileSvc, Plans: planSvc, MaxRows: cfg.MaxUnpagedRows})
 	purchaseAPI := purchases.New(purchases.Deps{Sessions: a.sessions, MaxRows: cfg.MaxUnpagedRows})
@@ -483,6 +485,16 @@ func (a *App) platformAPI(cfg *config.Config, log *slog.Logger, network httpx.Ne
 				return errors.New("no job runner")
 			}
 			return a.worker.EnqueueExport(ctx, id)
+		},
+		SetBusinessType: func(ctx context.Context, id, businessType, by string) (string, error) {
+			if a.modules == nil {
+				return "", errors.New("modules service not ready")
+			}
+			t, err := a.registry.ByID(ctx, id)
+			if err != nil {
+				return "", err
+			}
+			return settings.SetBusinessType(ctx, a.sessions, a.modules, t, businessType, by)
 		},
 		IssueOwnerInvite: func(ctx context.Context, id string, m platform.Meta) (string, time.Time, error) {
 			t, err := a.registry.ByID(ctx, id)
