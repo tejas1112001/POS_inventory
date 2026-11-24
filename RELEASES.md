@@ -11,6 +11,41 @@ folder on the VPS under `/var/www/bilmitra/releases/<server id>`
 Rolling back means pointing `/var/www/bilmitra/current` at an older server
 folder and restarting `bilmitra` (the VPS keeps the five newest folders).
 
+## How to make a release (every time)
+
+1. **Pick the version** with Semantic Versioning, counting from the live
+   release:
+   - PATCH (`v1.2.1` → `v1.2.2`): fixes, copy and layout changes, nothing new
+     for the user to learn.
+   - MINOR (`v1.2.1` → `v1.3.0`): new features or screens; existing shops,
+     data and integrations keep working. Additive database migrations are
+     fine.
+   - MAJOR (`v1.x` → `v2.0.0`): a change that breaks existing shops, data,
+     the API or integrations, or needs manual work from shop owners.
+   - Never reuse or move a version number. Tags are `v` + the number
+     (`v1.3.0`), on the merged commit on `main`.
+2. **Build and deploy** that commit (docs/DEPLOY_VPS.md §3). Build with the
+   version in the binary (`buildinfo.Version`) so the server log names it.
+3. **Write the notes here first**: a row in the table below (tag, date,
+   commit, server folder, status) and a `## vX.Y.Z` section with what
+   changed and whether there are database migrations. Mark the previous
+   release Replaced and the new one **Live** once `/readyz` says ready.
+4. **Publish it on GitHub as a Release, not only a tag**: an annotated tag
+   plus a GitHub Release with the same title and this section as its notes,
+   marked *Latest*:
+
+   ```sh
+   git tag -a vX.Y.Z <commit> -m "vX.Y.Z: <one-line summary>"
+   git push origin vX.Y.Z
+   gh release create vX.Y.Z --verify-tag --title "vX.Y.Z" --notes-file <notes.md> --latest
+   ```
+
+   (Or on GitHub: Releases → Draft a new release → pick the tag → paste the
+   notes.) Attaching the release tarball is optional.
+5. Commit `RELEASES.md` and update `status.md`.
+
+## History
+
 | Tag | Date | Commit | Server id | Status |
 |---|---|---|---|---|
 | `v1.2.1` | 2026-11-24 | `ad12ab6` | `20261124112651-ad12ab6` | **Live** |

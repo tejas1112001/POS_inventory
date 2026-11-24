@@ -62,6 +62,8 @@ It builds posd, posctl and both SPAs, uploads a release, runs `config check`, pl
 
 Manual rollback: `ln -sfn /var/www/mintobill/releases/<old> /var/www/mintobill/current && systemctl restart mintobill`.
 
+**Every production release gets a Semantic Versioning number (`vMAJOR.MINOR.PATCH`) and is published on GitHub as a Release (not only a tag).** Steps, the numbering rules and the release history are in [`RELEASES.md`](../RELEASES.md).
+
 ## 4. Operator commands (on the server, as root)
 
 ```sh
