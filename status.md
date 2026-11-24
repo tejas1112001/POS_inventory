@@ -26,7 +26,7 @@ Business type is console-only (2026-11-24): a shop can no longer change its own 
 Landing site on Teal & Cream (2026-11-24): `landing/src/styles/index.css` tokens (night #0b2a32, ink #123b45, brand #17807a, ivory surface #f4f2e9, amber warn #f2b544), Tailwind blue and slate scales remapped to teal and teal-grey, Manrope instead of Inter (preloaded), the app's teal "M" logo (on an ivory tile) and favicon, canvas effects and shadows retinted, amber second aurora in the hero.
 Landing responsive pass (2026-11-24): checked at 320/360/390/768/1024/1280 on every page (no horizontal overflow, tap targets 40 px+). Hero two columns from 1024 px; trust strip 1/2/4 columns; bento on a 6-column grid (desktop) and paired 2-column order (tablet); steps 3 across from 768 px; shop-type chips two per row on phones; hero and CTA buttons full width on phones (`btn-row` utility); demo products two per row; footer links three columns on phones.
 
-Not done: the landing site (`landing/`) is still the old blue theme.
+Production (2026-11-24): release `20261124100645-2c74dc8` (main `2c74dc8`) deployed to the VPS by the owner, still on the BilMitra layout (`/var/www/bilmitra`, `bilmitra.service`); mintobill.com serves the Teal & Cream landing and the console. Previous release `20261124032824-28cb2c1` kept for rollback.
 
 # Rename to MintoBill (2026-11-23)
 
