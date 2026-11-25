@@ -79,27 +79,15 @@ func mailWith(t *testing.T, srv *smtptest.Server, addr, subj string) parsed {
 	return parsed{}
 }
 
-func TestLandingPricingShowsOnlyPublicActivePlans(t *testing.T) {
-	ctx := context.Background()
-	adm := admin(t)
-	_, err := adm.Exec(ctx, `INSERT INTO platform.plans (code, name, price_minor, billing_interval, trial_days, limits, features, is_public, is_active) VALUES
-		('landing_shown', 'Landing Shown', 149900, 'monthly', 14, '{"max_stores":2,"max_users":5}', '{"public_shop":true}', true, true),
-		('landing_hidden', 'Landing Hidden', 99900, 'monthly', 0, '{}', '{}', false, true),
-		('landing_retired', 'Landing Retired', 49900, 'monthly', 0, '{}', '{}', true, false)`)
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		_, _ = adm.Exec(context.Background(), `DELETE FROM platform.plans WHERE code IN ('landing_shown','landing_hidden','landing_retired')`)
-	})
-
+// The old server-rendered home page (with plans from platform.plans) is
+// gone: the React landing build serves "/". Without a build, as here, "/"
+// is a plain notice and never the old page.
+func TestLandingHomeWithoutBuild(t *testing.T) {
 	p := apex(t, "GET", "/", nil, "10.250.0.2")
-	require.Equal(t, 200, p.Code)
-	require.Contains(t, p.Body, "Landing Shown")
-	require.Contains(t, p.Body, "₹1,499")
-	require.Contains(t, p.Body, "Up to 2 stores")
-	require.Contains(t, p.Body, "Online shop per store")
-	require.Contains(t, p.Body, `"price":"1499.00","priceCurrency":"INR"`)
-	require.NotContains(t, p.Body, "Landing Hidden")
-	require.NotContains(t, p.Body, "Landing Retired")
+	require.Equal(t, http.StatusServiceUnavailable, p.Code)
+	require.Equal(t, "noindex", p.Header.Get("X-Robots-Tag"))
+	require.Contains(t, p.Body, "Website not available")
+	require.Contains(t, p.Body, `href="/login"`)
 	require.NotContains(t, p.Body, "Contact us for pricing")
 	require.Contains(t, p.Header.Get("Content-Security-Policy"), "script-src 'self'")
 }

@@ -1,8 +1,9 @@
 // Package landing serves the public website on the main address
-// (<BASE_DOMAIN>, TENANCY §7.1): server-rendered HTML and one CSS file, no
-// JavaScript, under the strict CSP. It shows the public plans from
-// platform.plans, answers "Find my shop" with the same reply whatever the
-// email, and stores contact and demo requests. There is no sign-up.
+// (<BASE_DOMAIN>, TENANCY §7.1). The home, features, industries, pricing
+// and contact pages are the React marketing site (landing/ build, Deps.SPA).
+// The rest is server-rendered HTML and one CSS file, no JavaScript, under
+// the strict CSP: staff sign-in, "Find my shop" (the same reply whatever
+// the email), contact form replies, terms and privacy. There is no sign-up.
 package landing
 
 import (
@@ -16,7 +17,6 @@ import (
 	"html/template"
 	"log/slog"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -83,10 +83,10 @@ type Deps struct {
 	// SPA is the React marketing site (landing/ build, docs/LANDING_DEPLOYMENT.md).
 	// When set it serves the pages in spaPages and /assets/*, and the Go
 	// templates keep the other pages (terms, privacy, login, find my shop,
-	// form replies). Nil: the Go home and contact pages are served.
-	SPA      *httpx.SPA
-	Now      func() time.Time // tests
-	PlansTTL time.Duration    // default 1 minute
+	// form replies). Nil (no build deployed): the home page says the
+	// website is not available, and the Go contact page is served.
+	SPA *httpx.SPA
+	Now func() time.Time // tests
 }
 
 // FormKey derives the form-signing key from the master key, so every
@@ -105,25 +105,16 @@ type Site struct {
 	cssPath string
 	css     []byte
 	favicon []byte
-	plans   *planCache
 	store   store
-	content content
 
 	findIP, findEmail, contactIP, contactAll, loginIP *httprate.RateLimiter
-}
-
-// content is the page copy with {{domain}} filled in.
-type content struct {
-	Features, More []feature
-	Steps          []step
-	FAQs           []faq
 }
 
 // spaPages are the routes of the React marketing site (landing/src/App.jsx).
 // Any other path the Go site does not own is a real 404.
 var spaPages = []string{"/", "/features", "/industries", "/pricing", "/contact"}
 
-var pageNames = []string{"home", "find", "find_sent", "contact", "contact_sent", "login", "terms", "privacy", "error"}
+var pageNames = []string{"find", "find_sent", "contact", "contact_sent", "login", "terms", "privacy", "error"}
 
 // New builds the site.
 func New(d Deps) (*Site, error) {
@@ -132,9 +123,6 @@ func New(d Deps) (*Site, error) {
 	}
 	if d.Log == nil {
 		d.Log = slog.New(slog.DiscardHandler)
-	}
-	if d.PlansTTL <= 0 {
-		d.PlansTTL = time.Minute
 	}
 	if len(d.FormKey) < 32 {
 		return nil, fmt.Errorf("landing: form key too short")
@@ -161,24 +149,8 @@ func New(d Deps) (*Site, error) {
 		s.pages[name] = t
 	}
 
-	fill := func(v string) string { return strings.ReplaceAll(v, "{{domain}}", d.BaseDomain) }
-	for _, f := range mainFeatures {
-		s.content.Features = append(s.content.Features, feature{f.Icon, fill(f.Title), fill(f.Text)})
-	}
-	for _, f := range moreFeatures {
-		s.content.More = append(s.content.More, feature{f.Icon, fill(f.Title), fill(f.Text)})
-	}
-	s.content.Steps = steps
-	for _, f := range faqs {
-		s.content.FAQs = append(s.content.FAQs, faq{fill(f.Q), fill(f.A)})
-	}
-
-	s.plans = &planCache{ttl: d.PlansTTL, now: d.Now}
 	if d.Sessions != nil {
-		s.plans.load = loadPlans(d.Sessions)
 		s.store = dbStore{d.Sessions}
-	} else {
-		s.plans.load = func(context.Context) ([]Plan, error) { return nil, nil }
 	}
 
 	quiet := httprate.WithResponseHeaders(httprate.ResponseHeaders{})
@@ -206,7 +178,7 @@ func (s *Site) Mount(r chi.Router) {
 			}
 			get("/assets/*", s.d.SPA.ServeHTTP) // s.cssPath below is more specific and wins
 		} else {
-			get("/", s.home)
+			get("/", s.unavailable)
 			get("/contact", s.contactPage)
 		}
 		get("/terms", s.simple("terms", "Terms of Service", "The terms that apply when you use "+s.d.PlatformName+"."))
@@ -248,13 +220,12 @@ type view struct {
 	Canonical                string
 	Noindex                  bool
 	JSONLD                   template.JS
-	content
-	Plans            []Plan
-	Find, Contact    form
-	Heading, Message string
-	Shop             string // login: what was typed
-	ShopError        string
-	Year             int
+	Find, Contact            form
+	Heading, Message         string
+	Link, LinkText           string // error page button; default: the home page
+	Shop                     string // login: what was typed
+	ShopError                string
+	Year                     int
 }
 
 // form is the state of one form on a page.
@@ -271,7 +242,7 @@ func (f form) Error(k string) string { return f.Errors[k] }
 func (s *Site) view(r *http.Request, title, desc, path string) *view {
 	v := &view{
 		Site:  siteInfo{Name: s.d.PlatformName, Domain: s.d.BaseDomain, Origin: s.origin, CSS: s.cssPath},
-		Title: title, Description: desc, Path: path, content: s.content,
+		Title: title, Description: desc, Path: path,
 		Find:    form{Token: s.token(formFind)},
 		Contact: form{Token: s.token(formContact), Values: map[string]string{"topic": "demo"}},
 		Year:    s.d.Now().Year(),
@@ -304,12 +275,16 @@ func (s *Site) render(w http.ResponseWriter, r *http.Request, status int, name s
 	_, _ = w.Write(buf.Bytes())
 }
 
-func (s *Site) home(w http.ResponseWriter, r *http.Request) {
-	desc := s.d.PlatformName + " is a point of sale and stock system for shops with one or more stores: checkout, stock, receipts by email, returns, purchases, reports and an online shop per store."
-	v := s.view(r, s.d.PlatformName+": POS, stock and online shop for retail stores", desc, "/")
-	v.Plans = s.plans.get(r.Context())
-	v.JSONLD = s.homeJSONLD(v)
-	s.render(w, r, http.StatusOK, "home", v)
+// unavailable is the home page while no React build is deployed (Deps.SPA
+// nil): a plain notice, never an old copy of the site. Staff sign-in and
+// the other Go pages keep working.
+func (s *Site) unavailable(w http.ResponseWriter, r *http.Request) {
+	v := s.view(r, s.d.PlatformName, "The "+s.d.PlatformName+" website is not available right now.", "")
+	v.Noindex = true
+	v.Heading = "Website not available"
+	v.Message = "The " + s.d.PlatformName + " website is not available right now. Staff can still sign in to their shop."
+	v.Link, v.LinkText = "/login", "Staff login"
+	s.render(w, r, http.StatusServiceUnavailable, "error", v)
 }
 
 func (s *Site) simple(name, title, desc string) http.HandlerFunc {

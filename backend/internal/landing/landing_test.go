@@ -64,7 +64,7 @@ type harness struct {
 	queueMu sync.Mutex
 }
 
-func newSite(t *testing.T, mutate func(*Deps), plans []Plan) *harness {
+func newSite(t *testing.T, mutate func(*Deps)) *harness {
 	t.Helper()
 	hs := &harness{store: &fakeStore{}, clock: &clock{t: time.Date(2026, 10, 27, 10, 0, 0, 0, time.UTC)}}
 	d := Deps{
@@ -79,7 +79,6 @@ func newSite(t *testing.T, mutate func(*Deps), plans []Plan) *harness {
 	s, err := New(d)
 	require.NoError(t, err)
 	s.store = hs.store
-	s.plans.load = func(context.Context) ([]Plan, error) { return plans, nil }
 	hs.site = s
 	hs.h = httpx.NewRouter(httpx.RouterDeps{
 		Logger: obs.NewLogger(io.Discard, "error", "json"), Network: d.Network, Health: httpx.NewHealth(time.Second),
@@ -128,161 +127,8 @@ const origin = "http://pos.test" // httptest requests have no TLS, so the scheme
 
 func count(s, sub string) int { return strings.Count(s, sub) }
 
-var proPlan = Plan{Code: "pro", Name: "Pro", PriceMinor: 149900, Currency: "INR", Interval: "monthly", TrialDays: 14,
-	Limits: []string{"Up to 3 stores"}, Features: []string{"Online shop per store"}}
-
-func TestHomePage(t *testing.T) {
-	hs := newSite(t, nil, nil)
-	rec := hs.get(t, "/")
-	require.Equal(t, http.StatusOK, rec.Code)
-	body := rec.Body.String()
-	h := rec.Header()
-	require.Equal(t, "text/html; charset=utf-8", h.Get("Content-Type"))
-	require.Equal(t, httpx.CSPStrict, h.Get("Content-Security-Policy"), "strict CSP on the main address")
-	require.Empty(t, h.Get("X-Robots-Tag"), "the home page is indexable")
-	require.Equal(t, "public, max-age=300", h.Get("Cache-Control"))
-
-	require.Equal(t, 1, count(body, "<h1"), "one H1")
-	require.Contains(t, body, "<title>Shopline: POS, stock and online shop for retail stores</title>")
-	require.Contains(t, body, `<link rel="canonical" href="https://pos.test/">`)
-	for _, tag := range []string{`name="description"`, `property="og:title"`, `property="og:description"`, `property="og:url" content="https://pos.test/"`,
-		`property="og:type"`, `name="twitter:card"`, `name="twitter:title"`, `name="twitter:description"`} {
-		require.Contains(t, body, tag)
-	}
-	require.NotContains(t, body, `name="robots"`)
-	require.Contains(t, body, ">Request a demo</a>")
-	require.Contains(t, body, `href="/login">Staff login</a>`)
-	require.Contains(t, body, "Contact us for pricing", "no public plans yet")
-	require.Contains(t, body, "your-shop.pos.test", "BASE_DOMAIN fills the copy")
-	require.NotContains(t, body, "{{domain}}")
-	require.NotContains(t, body, "signup")
-	require.NotContains(t, body, "Sign up")
-
-	// Strict CSP: no inline scripts, styles or handlers; only JSON-LD.
-	require.NotContains(t, body, " style=")
-	require.NotRegexp(t, ` on[a-z]+=`, body)
-	require.Equal(t, 1, count(body, "<script"))
-	require.Equal(t, 1, count(body, `<script type="application/ld+json">`))
-
-	// Every img has alt text (there are none today; icons are inline SVG
-	// marked aria-hidden).
-	require.Equal(t, count(body, "<img"), count(body, " alt="))
-	require.Equal(t, count(body, "<svg"), count(body, `aria-hidden="true" focusable="false"`))
-
-	ld := jsonLD(t, body)
-	types := map[string]map[string]any{}
-	for _, n := range ld["@graph"].([]any) {
-		m := n.(map[string]any)
-		types[m["@type"].(string)] = m
-	}
-	require.Contains(t, types, "Organization")
-	require.Equal(t, "https://pos.test/", types["Organization"]["url"])
-	require.Contains(t, types, "SoftwareApplication")
-	require.NotContains(t, types["SoftwareApplication"], "offers", "no offers without public plans")
-	qa := types["FAQPage"]["mainEntity"].([]any)
-	require.Len(t, qa, len(faqs))
-	require.Equal(t, len(faqs), count(body, "<details>"), "JSON-LD FAQ matches the page")
-	require.Equal(t, faqs[0].Q, qa[0].(map[string]any)["name"])
-
-	// Every form carries the honeypot and a token.
-	require.Equal(t, 2, count(body, `name="website"`))
-	require.Equal(t, 2, count(body, `name="ft"`))
-
-	css := hs.get(t, hs.site.cssPath)
-	require.Equal(t, http.StatusOK, css.Code)
-	require.Contains(t, css.Header().Get("Cache-Control"), "immutable")
-	require.Contains(t, body, `href="`+hs.site.cssPath+`"`)
-	require.Equal(t, "image/svg+xml", hs.get(t, "/favicon.svg").Header().Get("Content-Type"))
-
-	head := httptest.NewRequest(http.MethodHead, "https://pos.test/", nil)
-	hrec := httptest.NewRecorder()
-	hs.h.ServeHTTP(hrec, head)
-	require.Equal(t, http.StatusOK, hrec.Code, "HEAD works")
-}
-
-func jsonLD(t *testing.T, body string) map[string]any {
-	t.Helper()
-	m := regexp.MustCompile(`(?s)<script type="application/ld\+json">(.*?)</script>`).FindStringSubmatch(body)
-	require.Len(t, m, 2)
-	var v map[string]any
-	require.NoError(t, json.Unmarshal([]byte(m[1]), &v), m[1])
-	require.Equal(t, "https://schema.org", v["@context"])
-	return v
-}
-
-func TestPricingFromPlans(t *testing.T) {
-	yearly := Plan{Code: "big", Name: "Business <b>", PriceMinor: 1499900, Currency: "INR", Interval: "yearly"}
-	hs := newSite(t, nil, []Plan{proPlan, yearly})
-	body := hs.get(t, "/").Body.String()
-	require.NotContains(t, body, "Contact us for pricing")
-	require.Contains(t, body, "₹1,499")
-	require.Contains(t, body, "/ month")
-	require.Contains(t, body, "₹14,999")
-	require.Contains(t, body, "/ year")
-	require.Contains(t, body, "14-day trial")
-	require.Contains(t, body, "Up to 3 stores")
-	require.Contains(t, body, "Business &lt;b&gt;", "plan names are escaped")
-
-	ld := jsonLD(t, body)
-	var app map[string]any
-	for _, n := range ld["@graph"].([]any) {
-		if m := n.(map[string]any); m["@type"] == "SoftwareApplication" {
-			app = m
-		}
-	}
-	offers := app["offers"].([]any)
-	require.Len(t, offers, 2)
-	o := offers[0].(map[string]any)
-	require.Equal(t, "1499.00", o["price"])
-	require.Equal(t, "INR", o["priceCurrency"])
-	require.Equal(t, "Pro", o["name"])
-	require.Equal(t, "Business <b>", offers[1].(map[string]any)["name"], "JSON keeps the text; the HTML escaping is json.Marshal's")
-	require.NotContains(t, body, "<b>\"")
-}
-
-func TestPlanFormatting(t *testing.T) {
-	require.Equal(t, "₹0", formatMoney(0, "INR"))
-	require.Equal(t, "₹999", formatMoney(99900, "INR"))
-	require.Equal(t, "₹1,49,999", formatMoney(14999900, "INR"))
-	require.Equal(t, "₹1,499.50", formatMoney(149950, "INR"))
-	require.Equal(t, "USD 12,345", formatMoney(1234500, "USD"))
-	require.Equal(t, "1499.05", Plan{PriceMinor: 149905}.Decimal())
-
-	p := planFromRow("pro", "Pro", 149900, "INR", "monthly", 14,
-		[]byte(`{"max_stores":3,"max_users":0,"max_products":5000,"max_storage_mb":1000,"max_emails_per_day":300,"odd":"x"}`),
-		[]byte(`{"public_shop":true,"custom_domain":false,"reports_export":true,"unknown_flag":true}`))
-	require.Equal(t, []string{"Up to 3 stores", "Unlimited staff accounts", "Up to 5,000 products", "1 GB file storage", "Up to 300 emails a day"}, p.Limits)
-	require.Equal(t, []string{"Online shop per store", "Report exports (Excel and PDF)"}, p.Features, "only known flags that are on")
-	require.Equal(t, "month", p.Per())
-
-	bad := planFromRow("x", "X", 0, "INR", "yearly", 0, []byte(`{"max_stores":"three"}`), []byte(`[]`))
-	require.Empty(t, bad.Limits)
-	require.Empty(t, bad.Features)
-	require.Equal(t, "year", bad.Per())
-}
-
-func TestPlanCache(t *testing.T) {
-	now := time.Unix(0, 0)
-	calls := 0
-	fail := false
-	c := &planCache{ttl: time.Minute, now: func() time.Time { return now }, load: func(context.Context) ([]Plan, error) {
-		calls++
-		if fail {
-			return nil, context.DeadlineExceeded
-		}
-		return []Plan{proPlan}, nil
-	}}
-	require.Len(t, c.get(t.Context()), 1)
-	require.Len(t, c.get(t.Context()), 1)
-	require.Equal(t, 1, calls, "cached")
-	now = now.Add(2 * time.Minute)
-	fail = true
-	require.Len(t, c.get(t.Context()), 1, "a failed reload keeps the last list")
-	require.Equal(t, 2, calls)
-}
-
 func TestFindMyShop(t *testing.T) {
-	hs := newSite(t, nil, nil)
+	hs := newSite(t, nil)
 	tok := hs.token(t, "/find-my-shop")
 	form := url.Values{"ft": {tok}, "email": {"Owner@Example.test"}}
 
@@ -345,7 +191,7 @@ func TestFindMyShop(t *testing.T) {
 }
 
 func TestFindMyShopLimits(t *testing.T) {
-	hs := newSite(t, func(d *Deps) { d.Limits = Limits{FindPerIP: 3, FindPerEmail: 2} }, nil)
+	hs := newSite(t, func(d *Deps) { d.Limits = Limits{FindPerIP: 3, FindPerEmail: 2} })
 	tok := hs.token(t, "/find-my-shop")
 	hs.clock.add(3 * time.Second)
 
@@ -369,7 +215,7 @@ func TestFindMyShopLimits(t *testing.T) {
 }
 
 func TestContact(t *testing.T) {
-	hs := newSite(t, nil, nil)
+	hs := newSite(t, nil)
 	tok := hs.token(t, "/contact")
 	hs.clock.add(3 * time.Second)
 
@@ -425,7 +271,7 @@ func TestContact(t *testing.T) {
 }
 
 func TestContactWithoutInboxAndLimits(t *testing.T) {
-	hs := newSite(t, func(d *Deps) { d.ContactEmail = ""; d.Limits = Limits{ContactPerIP: 1, ContactTotal: 2} }, nil)
+	hs := newSite(t, func(d *Deps) { d.ContactEmail = ""; d.Limits = Limits{ContactPerIP: 1, ContactTotal: 2} })
 	tok := hs.token(t, "/contact")
 	hs.clock.add(3 * time.Second)
 	f := func(n string) url.Values {
@@ -440,7 +286,7 @@ func TestContactWithoutInboxAndLimits(t *testing.T) {
 }
 
 func TestStaffLogin(t *testing.T) {
-	hs := newSite(t, func(d *Deps) { d.PublicPort = "8443" }, nil)
+	hs := newSite(t, func(d *Deps) { d.PublicPort = "8443" })
 	rec := hs.get(t, "/login")
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Equal(t, "noindex", rec.Header().Get("X-Robots-Tag"))
@@ -471,9 +317,9 @@ func TestStaffLogin(t *testing.T) {
 }
 
 func TestPagesAndSEOFiles(t *testing.T) {
-	hs := newSite(t, nil, nil)
+	hs := newSite(t, nil)
 	titles := map[string]string{}
-	for _, p := range []string{"/", "/find-my-shop", "/contact", "/terms", "/privacy", "/login"} {
+	for _, p := range []string{"/find-my-shop", "/contact", "/terms", "/privacy", "/login"} {
 		rec := hs.get(t, p)
 		require.Equal(t, http.StatusOK, rec.Code, p)
 		body := rec.Body.String()
@@ -486,6 +332,14 @@ func TestPagesAndSEOFiles(t *testing.T) {
 		require.Contains(t, body, `<html lang="en">`)
 		require.Contains(t, body, `<main id="main"`)
 		require.Contains(t, body, `href="#main"`, "skip link")
+		// Strict CSP: no scripts, inline styles or handlers.
+		require.NotContains(t, body, "<script", p)
+		require.NotContains(t, body, " style=", p)
+		require.NotRegexp(t, ` on[a-z]+=`, body, p)
+		require.Equal(t, count(body, "<svg"), count(body, `aria-hidden="true" focusable="false"`), p)
+		if p != "/login" { // its own CSP, see TestStaffLogin
+			require.Equal(t, httpx.CSPStrict, rec.Header().Get("Content-Security-Policy"), p)
+		}
 		if p != "/login" {
 			require.Contains(t, body, `<link rel="canonical" href="https://pos.test`+p+`">`, p)
 		}
@@ -493,6 +347,9 @@ func TestPagesAndSEOFiles(t *testing.T) {
 	for _, p := range []string{"/terms", "/privacy"} {
 		require.Contains(t, hs.get(t, p).Body.String(), "Placeholder text.", "legal pages are marked as placeholders")
 	}
+
+	require.Contains(t, hs.get(t, hs.site.cssPath).Header().Get("Cache-Control"), "immutable")
+	require.Equal(t, "image/svg+xml", hs.get(t, "/favicon.svg").Header().Get("Content-Type"))
 
 	robots := hs.get(t, "/robots.txt")
 	require.Equal(t, "text/plain; charset=utf-8", robots.Header().Get("Content-Type"))
@@ -531,7 +388,7 @@ func spaSite(t *testing.T) *harness {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "favicon.svg"), []byte(`<svg id="react-icon"/>`), 0o644))
 	spa, err := httpx.NewSPA(dir)
 	require.NoError(t, err)
-	return newSite(t, func(d *Deps) { d.SPA = spa }, nil)
+	return newSite(t, func(d *Deps) { d.SPA = spa })
 }
 
 func TestLandingSPA(t *testing.T) {
@@ -567,7 +424,22 @@ func TestLandingSPA(t *testing.T) {
 }
 
 func TestGoPagesWithoutSPA(t *testing.T) {
-	hs := newSite(t, nil, nil)
+	hs := newSite(t, nil)
+	for _, m := range []string{http.MethodGet, http.MethodHead} {
+		req := httptest.NewRequest(m, "https://pos.test/", nil)
+		rec := httptest.NewRecorder()
+		hs.h.ServeHTTP(rec, req)
+		require.Equal(t, http.StatusServiceUnavailable, rec.Code, "%s /: no old home page without the React build", m)
+		require.Equal(t, "noindex", rec.Header().Get("X-Robots-Tag"))
+		require.Equal(t, "no-store", rec.Header().Get("Cache-Control"))
+		if m == http.MethodGet {
+			body := rec.Body.String()
+			require.Contains(t, body, "Website not available")
+			require.Contains(t, body, `href="/login">Staff login</a>`)
+			require.NotContains(t, body, "Contact us for pricing", "none of the old home page copy")
+			require.NotContains(t, body, "<details>", "no old FAQ")
+		}
+	}
 	require.Equal(t, http.StatusNotFound, hs.get(t, "/pricing").Code)
 	require.NotContains(t, hs.get(t, "/sitemap.xml").Body.String(), "/pricing")
 	require.Equal(t, http.StatusOK, hs.get(t, "/contact").Code, "the Go contact page without the SPA")

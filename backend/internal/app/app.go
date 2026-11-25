@@ -196,13 +196,13 @@ func New(ctx context.Context, cfg *config.Config, log *slog.Logger, opts ...Opti
 		}
 	}
 
-	// The React marketing site (STATIC_DIR/landing). Without it the Go
-	// landing pages are served on the main address.
+	// The React marketing site (STATIC_DIR/landing). Without it the main
+	// address says the website is not available (sign-in still works).
 	var landingSPA *httpx.SPA
 	if cfg.StaticDir != "" {
 		spa, err := httpx.NewSPA(filepath.Join(cfg.StaticDir, "landing"))
 		if err != nil {
-			log.Warn("landing build not served; the Go landing pages stay", slog.Any("err", err))
+			log.Error("landing build missing: the home page says the website is not available; build landing/ (npm run build:landing)", slog.Any("err", err))
 		} else {
 			landingSPA = spa
 		}

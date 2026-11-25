@@ -1,11 +1,14 @@
-# Overlay: posd also serves the tenant app (frontend/dist) and the Super
-# Admin console (frontend/dist-admin), so each shares one origin with /api
-# as in production. Build both first (npm run build, npm run build:admin).
+# Overlay: posd also serves the tenant app (frontend/dist), the Super
+# Admin console (frontend/dist-admin) and the landing site (landing/dist) on
+# https://localhost:8443, so each shares one origin with /api as in
+# production. Build them first: in frontend, npm run build and
+# npm run build:admin; at the repo root,
+# VITE_BASE_DOMAIN=localhost:8443 npm run build:landing.
 #
 #   make up-web          # = docker compose -f docker-compose.yml -f docker-compose.web.yml up
 #
-# FRONTEND_DIST / FRONTEND_ADMIN_DIST point elsewhere if a build lives in
-# another folder.
+# FRONTEND_DIST / FRONTEND_ADMIN_DIST / LANDING_DIST point elsewhere if a
+# build lives in another folder.
 
 services:
   app:
@@ -14,3 +17,4 @@ services:
     volumes:
       - ${FRONTEND_DIST:-../../frontend/dist}:/static/tenant:ro
       - ${FRONTEND_ADMIN_DIST:-../../frontend/dist-admin}:/static/admin:ro
+      - ${LANDING_DIST:-../../landing/dist}:/static/landing:ro
