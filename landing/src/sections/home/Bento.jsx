@@ -1,9 +1,12 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
+import { ArrowRight } from 'lucide-react';
 import { bento } from '@/content/site';
 import { cn } from '@/lib/cn';
 import { money0 } from '@/lib/format';
 import { Container, SectionTitle } from '@/components/ui/Heading';
 import { IconTile } from '@/components/ui/IconTile';
+import { useHydrated } from '@/lib/useHydrated';
 
 const card = 'card-lift min-w-0 rounded-[22px] border';
 
@@ -34,6 +37,7 @@ const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const RUPEES_PER_POINT = 420;
 
 function SalesChart() {
+  const hydrated = useHydrated(); // inline styles only in the browser (CSP)
   const [w, setW] = useState(0);
   const { label, bars } = WEEKS[w];
   const top = Math.max(...bars);
@@ -56,7 +60,7 @@ function SalesChart() {
               'group/bar relative flex-1 rounded-t-md rounded-b-xs transition-[height,background-color] duration-500 ease-out',
               h === top ? 'bg-brand' : 'bg-blue-200 hover:bg-blue-400',
             )}
-            style={{ height: `${h}%` }}
+            style={hydrated ? { height: `${h}%` } : undefined}
           >
             <span className="pointer-events-none absolute bottom-full left-1/2 mb-1.5 -translate-x-1/2 rounded-md bg-ink px-1.5 py-0.5 text-[11px] font-semibold whitespace-nowrap text-white opacity-0 transition-opacity duration-150 group-hover/bar:opacity-100">
               {DAYS[i]} · {money0(h * RUPEES_PER_POINT)}
@@ -74,11 +78,20 @@ export function Bento() {
     <Container as="section" aria-labelledby="bento-title" className="pt-24 pb-10">
       <div className="mb-10 flex flex-wrap items-end justify-between gap-6">
         <SectionTitle className="max-w-[560px]">
-          <span id="bento-title">Everything your counter needs. Nothing it does not.</span>
+          <span id="bento-title">One system for billing, stock and customer dues</span>
         </SectionTitle>
-        <p className="max-w-[420px] text-[17px] leading-relaxed text-body">
-          From the first bill of the morning to the stock check at night, MintoBill keeps every number in one place.
-        </p>
+        <div className="max-w-[420px]">
+          <p className="text-[17px] leading-relaxed text-body">
+            From the first bill of the morning to the stock check at closing time, every number stays in one place.
+          </p>
+          <Link
+            to="/features"
+            className="group mt-2 inline-flex min-h-11 items-center gap-2 font-bold text-brand-strong hover:text-brand"
+          >
+            Explore all features
+            <ArrowRight className="size-[18px] transition-transform duration-150 group-hover:translate-x-0.5" aria-hidden="true" />
+          </Link>
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-6">

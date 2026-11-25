@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Ban, CircleCheck, PackagePlus, TriangleAlert } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { Button } from '@/components/ui/Button';
+import { useHydrated } from '@/lib/useHydrated';
 
 /* ---------------------------------------------------- size and colour */
 
@@ -93,6 +94,7 @@ const SHOES = [4, 7, 9, 3, 5, 2];
 const SHOE_MAX = 9;
 
 export function FootwearRuns() {
+  const hydrated = useHydrated(); // inline styles only in the browser (CSP)
   const [sel, setSel] = useState(3);
   const n = SHOES[sel];
   const low = n <= 3;
@@ -119,7 +121,7 @@ export function FootwearRuns() {
                   c <= 3 ? 'bg-warn' : on ? 'bg-brand' : 'bg-blue-300',
                   on && 'outline-2 outline-offset-2 outline-ink',
                 )}
-                style={{ height: `${Math.round((c / SHOE_MAX) * 100)}%` }}
+                style={hydrated ? { height: `${Math.round((c / SHOE_MAX) * 100)}%` } : undefined}
               />
             </button>
           );
@@ -217,6 +219,7 @@ const LOW = [
 ];
 
 export function LowStockList() {
+  const hydrated = useHydrated(); // inline styles only in the browser (CSP)
   return (
     <div>
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -234,7 +237,7 @@ export function LowStockList() {
               <p className="text-[13px] text-muted">Reorder at {l.min}</p>
             </div>
             <div className="hidden h-2 w-[120px] overflow-hidden rounded-full bg-line sm:block" aria-hidden="true">
-              <div className="h-2 bg-warn" style={{ width: `${Math.round((l.left / l.min) * 100)}%` }} />
+              <div className="h-2 bg-warn" style={hydrated ? { width: `${Math.round((l.left / l.min) * 100)}%` } : undefined} />
             </div>
             <p className="w-16 text-right font-extrabold text-ink">{l.left} left</p>
           </li>

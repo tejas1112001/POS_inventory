@@ -10,17 +10,17 @@ export function IndustriesTeaser() {
         <div className="mb-9 flex flex-wrap items-end justify-between gap-6">
           <div className="max-w-[640px]">
             <SectionTitle>
-              <span id="ind-title">One POS for every kind of shop</span>
+              <span id="ind-title">Works for clothing, pharmacy, grocery and more</span>
             </SectionTitle>
             <p className="mt-3 text-[17px] leading-relaxed text-body">
-              If you sell from a counter, MintoBill fits. Switch on the tools your shop needs and leave the rest off.
+              If you sell from a counter, MintoBill fits. Turn on the tools your shop needs and leave the rest off.
             </p>
           </div>
           <Link
             to="/industries"
             className="group inline-flex min-h-11 items-center gap-2 font-bold text-brand-strong hover:text-brand"
           >
-            See how it fits your shop
+            Find the tools for your shop
             <ArrowRight className="size-[18px] transition-transform duration-150 group-hover:translate-x-0.5" aria-hidden="true" />
           </Link>
         </div>

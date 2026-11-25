@@ -45,7 +45,7 @@ export function Footer() {
         <nav aria-label="Footer" className="grid w-full grid-cols-3 gap-4 sm:flex sm:w-auto sm:flex-wrap sm:gap-12">
           {columns.map((c) => (
             <div key={c.title}>
-              <h2 className="mb-1.5 text-[13px] font-bold tracking-[0.08em] text-slate-200 uppercase">{c.title}</h2>
+              <p className="mb-1.5 text-[13px] font-bold tracking-[0.08em] text-slate-200 uppercase">{c.title}</p>
               <ul>
                 {c.links.map((l) => (
                   <li key={l.label}>
@@ -66,7 +66,8 @@ export function Footer() {
           ))}
         </nav>
       </Container>
-      <Container className="border-t border-slate-400/15 pt-5 pb-8 text-sm">
+      {/* The year is baked in at build time; the browser may be in a newer one. */}
+      <Container className="border-t border-slate-400/15 pt-5 pb-8 text-sm" suppressHydrationWarning>
         © {new Date().getFullYear()} MintoBill · {BASE_DOMAIN}
       </Container>
     </footer>

@@ -52,8 +52,8 @@ export const nav = [
 
 export const heroPoints = [
   '14-day free trial',
-  'Runs in the browser. Nothing to install.',
-  'Your own address: yourshop.mintobill.com',
+  'Works in your browser, with nothing to install',
+  'Your own shop address, like yourshop.mintobill.com',
 ];
 
 export const heroBill = [
@@ -63,39 +63,39 @@ export const heroBill = [
 ];
 
 export const trustStrip = [
-  { icon: Percent, label: 'GST-ready invoices' },
-  { icon: Package, label: 'No overselling, ever' },
+  { icon: Percent, label: 'GST invoices on every sale' },
+  { icon: Package, label: 'Stock that stops overselling' },
   { icon: Lock, label: "Each shop's data kept separate" },
-  { icon: MapPin, label: 'Made for shops in India' },
+  { icon: MapPin, label: 'Built for Indian retail' },
 ];
 
 export const bento = {
   checkout: {
     icon: Zap,
     title: 'Fast checkout',
-    body: 'Search, pick the size or colour and bill in seconds. Hold a bill while the next customer pays. Take cash, UPI and card on the same bill.',
+    body: 'Search for a product, pick the size or colour and add it to the bill in seconds. Put a bill on hold while the next customer pays, and take cash, UPI and card on the same bill.',
     tags: ['Keyboard shortcuts', 'Variant picker', 'Held bills', 'Split and part payment'],
   },
   reports: {
     icon: ChartColumn,
     title: 'Reports and Excel export',
-    body: 'Sales, purchases and stock on one dashboard. Download any report to Excel for your accountant.',
+    body: 'See sales, purchases and stock on one dashboard. Download any report as an Excel file for your accountant.',
   },
   small: [
-    { icon: Percent, title: 'GST done right', body: 'Tax is split into CGST and SGST, or IGST, on every bill. Discounts are applied before tax.' },
-    { icon: Package, title: 'Stock you can trust', body: 'Stock per store, a full history of every change, and low-stock alerts before you run out.' },
-    { icon: Printer, title: 'Receipts your way', body: 'Print it, save it as PDF or email it to the customer. Resend any time.' },
+    { icon: Percent, title: 'Correct GST on every bill', body: 'Sales within your state get CGST and SGST. Sales to another state get IGST. Discounts come off before tax.' },
+    { icon: Package, title: 'Accurate stock', body: 'Stock for each store, a full history of every change, and an alert when an item runs low.' },
+    { icon: Printer, title: 'Print, PDF or email', body: 'Print the bill, save it as a PDF or email it to the customer. You can send it again at any time.' },
   ],
   more: [
-    { icon: IndianRupee, title: 'Customer dues', body: 'Credit sales with a limit per customer, part payments and clear statements.' },
-    { icon: Store, title: 'Online catalogue', body: 'Show your products to customers at your own shop address. No login needed for them.' },
-    { icon: Users, title: 'Staff and roles', body: 'Owner, admin and cashier. Each person sees only what their job needs.' },
+    { icon: IndianRupee, title: 'Customer dues', body: 'Sell on credit with a limit for each customer, record part payments and share a clear statement.' },
+    { icon: Store, title: 'Online catalogue', body: 'Customers can browse your products and prices at your own shop address, without creating an account.' },
+    { icon: Users, title: 'Staff and roles', body: 'Separate logins for the owner, admins and cashiers. Each person sees only what their job needs.' },
   ],
 };
 
 export const steps = [
   { title: 'We set up your shop', body: 'You get your own address, yourshop.mintobill.com, and logins for you and your staff.' },
-  { title: 'Add your products', body: 'Fill in our spreadsheet template and import your whole catalogue at once.' },
+  { title: 'Add your products', body: 'Fill in our spreadsheet template and import your whole catalogue in one go.' },
   { title: 'Start billing', body: 'Open the checkout on any computer and make your first GST bill.' },
 ];
 
@@ -107,7 +107,7 @@ export const tools = {
     label: 'Low-stock alerts',
     icon: BellRing,
     ready: true,
-    lead: 'Set a reorder level for each product. MintoBill tells you before you run out.',
+    lead: 'Set a reorder level for each product and MintoBill warns you before it runs out.',
     pains: ['Items run out without warning.', 'Reordering is done from memory.'],
     wins: ['Reorder level per product', 'Alerts on the dashboard', 'Purchases and receiving', 'Spreadsheet import'],
     usedBy: ['Every shop'],
@@ -116,7 +116,7 @@ export const tools = {
     label: 'Size and colour',
     icon: Grid3x3,
     ready: false,
-    lead: 'One style can come in many sizes and colours. See the stock of each one at a glance.',
+    lead: 'One style can come in many sizes and colours. See the stock of each combination at a glance.',
     pains: ['Stock of each size and colour is a guess.', 'Customers come back to exchange a size.', 'Price tags are written by hand.'],
     wins: ['Size and colour grid for every style', 'Barcode labels and scanning', 'Exchanges and store credit', 'Your own return rules'],
     usedBy: ['Clothing', 'Sports and fitness', 'Bags and accessories', 'Home textiles'],
@@ -125,7 +125,7 @@ export const tools = {
     label: 'Size runs',
     icon: Ruler,
     ready: false,
-    lead: 'Popular sizes sell out first. See every size of every product at a glance.',
+    lead: 'Popular sizes sell out first. See the stock of every size, for every product, on one screen.',
     pains: ['The popular size runs out while others sit on the shelf.', 'The wrong size is given at the counter.', 'Suppliers send part of an order.'],
     wins: ['Stock by size for each product', 'Scan the box to bill the right size', 'Receive purchases in parts', 'Stock counts'],
     usedBy: ['Footwear', 'Clothing', 'Uniforms', 'Sports and fitness'],
@@ -134,9 +134,9 @@ export const tools = {
     label: 'Batch and expiry',
     icon: CalendarClock,
     ready: false,
-    lead: 'For anything with a best-before date. The earliest expiry sells first and expired stock cannot be sold.',
+    lead: 'For anything with an expiry date. The batch that expires first is sold first, and expired stock is blocked at the counter.',
     pains: ['Expired stock found on the shelf.', 'Batches are hard to track.', 'Nobody knows what expires next month.'],
-    wins: ['Batch and expiry on every purchase', 'Earliest-expiry batch sold first', 'Expired batches blocked at the counter', 'Expiry alerts'],
+    wins: ['Batch and expiry on every purchase', 'Batch with the earliest expiry sold first', 'Expired batches blocked at the counter', 'Expiry alerts'],
     usedBy: ['Pharmacy', 'Grocery and kirana', 'Cosmetics and beauty', 'Bakery and sweets', 'Pet supplies'],
     note: 'For pharmacies: MRP checks, prescriptions and the scheduled-drug register are not part of the first release.',
   },
@@ -162,11 +162,11 @@ export const shopTypes = [
 
 export const featureTabs = [
   { id: 'selling', icon: ScanBarcode, title: 'Fast checkout', sub: 'Bill in seconds', kicker: 'Selling', h: 'Bill a full basket in seconds', body: 'Search or scan, pick the size or colour, and take payment. Put a bill on hold when a customer goes to get one more item.', points: ['Keyboard shortcuts', 'Held bills', 'Split payment', 'Part payment'] },
-  { id: 'gst', icon: ReceiptText, title: 'GST bills', sub: 'CGST, SGST and IGST', kicker: 'GST and bills', h: 'The right tax on every bill', body: 'MintoBill works out the tax for you. Same-state sales get CGST and SGST. Other-state sales get IGST.', points: ['Discount before tax', 'Gapless invoice numbers', 'Print, PDF, email'] },
-  { id: 'stock', icon: Package, title: 'Stock and history', sub: 'Never oversell', kicker: 'Stock', h: 'Know exactly what is on the shelf', body: 'Stock goes down with every sale and up with every purchase. Two counters can never sell the same last piece.', points: ['Stock per store', 'Full history', 'Low-stock alerts', 'Adjustments with reason'] },
-  { id: 'dues', icon: HandCoins, title: 'Customers and dues', sub: 'Credit with limits', kicker: 'Customers', h: 'Give credit without losing track', body: 'Sell on credit to trusted customers, set a limit and record part payments. Statements are always ready.', points: ['Credit limits', 'Part payments', 'Statements', 'Exact refunds'] },
-  { id: 'reports', icon: ChartColumn, title: 'Reports and Excel', sub: 'See your numbers', kicker: 'Reports', h: 'Your whole shop on one screen', body: 'Sales, purchases and stock in clear reports. Send any report to your accountant as an Excel file.', points: ['Live dashboard', 'Sales and purchase reports', 'Excel export'] },
-  { id: 'shop', icon: Store, title: 'Online catalogue', sub: 'Your shop on the web', kicker: 'Online', h: 'Let customers see your shop online', body: 'Every shop gets its own web address with a catalogue of products and prices, updated from your stock.', points: ['Own shop address', 'Live prices', 'No login for customers'] },
+  { id: 'gst', icon: ReceiptText, title: 'GST bills', sub: 'CGST, SGST and IGST', kicker: 'GST and bills', h: 'The right tax on every bill', body: 'MintoBill works out the tax for you. Sales within your state get CGST and SGST, and sales to another state get IGST.', points: ['Discount before tax', 'Gapless invoice numbers', 'Print, PDF, email'] },
+  { id: 'stock', icon: Package, title: 'Stock and history', sub: 'No overselling', kicker: 'Stock', h: 'Know exactly what is on the shelf', body: 'Stock goes down with every sale and up with every purchase. Two counters cannot sell the same last piece.', points: ['Stock per store', 'Full history', 'Low-stock alerts', 'Adjustments with reason'] },
+  { id: 'dues', icon: HandCoins, title: 'Customers and dues', sub: 'Credit with limits', kicker: 'Customers', h: 'Give credit without losing track', body: 'Sell on credit to customers you trust, set a limit for each one and record part payments. Their statement is always up to date.', points: ['Credit limits', 'Part payments', 'Statements', 'Exact refunds'] },
+  { id: 'reports', icon: ChartColumn, title: 'Reports and Excel', sub: 'See your numbers', kicker: 'Reports', h: 'Your whole shop on one screen', body: 'Sales, purchases and stock in clear reports. Send any of them to your accountant as an Excel file.', points: ['Live dashboard', 'Sales and purchase reports', 'Excel export'] },
+  { id: 'shop', icon: Store, title: 'Online catalogue', sub: 'Your shop on the web', kicker: 'Online', h: 'Let customers see your shop online', body: 'Every shop gets its own web address with a catalogue of your products and prices, kept up to date from your stock.', points: ['Own shop address', 'Live prices', 'No login for customers'] },
 ];
 
 export const sellTiles = [
@@ -183,7 +183,7 @@ export const versus = [
   { old: 'Stock counted once a month, if at all', now: 'Stock updated with every sale and purchase' },
   { old: 'Bill copies get lost or torn', now: 'Every bill saved, with print, PDF and email' },
   { old: 'Customer dues written in a diary', now: 'Dues, limits and statements per customer' },
-  { old: 'Old stock found after it expired', now: 'Alerts for low stock and near expiry' },
+  { old: 'Expired stock found on the shelf', now: 'Alerts for low stock and items close to expiry' },
 ];
 
 /* ------------------------------------------------------------- pricing */
@@ -209,11 +209,11 @@ export const compareRows = [
 
 export const faqs = [
   ['Do I need to install anything?', 'No. MintoBill runs in your web browser. Open your shop address on any computer and log in.'],
-  ['Is there a free trial?', 'Yes. Every new shop gets 14 days free. We set up the shop for you.'],
-  ['Does MintoBill take card or UPI payments?', 'No. You take payment the way you do today. MintoBill records how the customer paid, so your totals match.'],
+  ['Is there a free trial?', 'Yes. Every new shop gets 14 days free, and we set up the shop for you.'],
+  ['Does MintoBill take card or UPI payments?', 'No. You take payment the way you do today, and MintoBill records how the customer paid so your totals match.'],
   ['Is my shop data private?', 'Yes. Each shop has its own separate data space. Your staff see only what their role allows.'],
-  ['Can customers order online?', 'Your online catalogue shows your products and prices. Customers cannot order or pay online yet.'],
-  ['What if I stop paying?', 'Your shop becomes read-only. Nothing is deleted without a warning, and you can export your data.'],
+  ['Can customers order online?', 'Not yet. Your online catalogue shows your products and prices, but customers cannot order or pay online.'],
+  ['What if I stop paying?', 'Your shop becomes read-only. Nothing is deleted without a warning, and you can still export your data.'],
 ];
 
 /* ------------------------------------------------------------- contact */

@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { featureTabs } from '@/content/site';
 import { cn } from '@/lib/cn';
 import { tabKeyHandler } from '@/lib/tabKeys';
+import { useHydrated } from '@/lib/useHydrated';
 import { Container, Eyebrow } from '@/components/ui/Heading';
 import { mocks } from './mockMap';
 
@@ -11,8 +12,12 @@ const ids = featureTabs.map((f) => f.id);
 /** Vertical tab list of feature areas with a working preview of each. */
 export function FeatureExplorer() {
   // ?tab=gst links straight to a tab.
+  // The built HTML shows the first tab, so the link's tab is picked only once
+  // the page has hydrated (otherwise React reports a mismatch).
   const [params, setParams] = useSearchParams();
-  const active = ids.includes(params.get('tab')) ? params.get('tab') : ids[0];
+  const hydrated = useHydrated();
+  const asked = hydrated ? params.get('tab') : null;
+  const active = ids.includes(asked) ? asked : ids[0];
   const select = (id) => setParams({ tab: id }, { replace: true, preventScrollReset: true });
   const cur = featureTabs.find((f) => f.id === active);
   const Mock = mocks[active];

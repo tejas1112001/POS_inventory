@@ -1,4 +1,5 @@
-import { BadgeIndianRupee, DatabaseBackup, History, ShieldCheck } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { ArrowRight, BadgeIndianRupee, DatabaseBackup, History, ShieldCheck } from 'lucide-react';
 import { Container } from '@/components/ui/Heading';
 import { IconTile } from '@/components/ui/IconTile';
 
@@ -14,7 +15,7 @@ export function SafeByDesign() {
     <Container as="section" aria-labelledby="safe-title" className="pb-20">
       <div className="rounded-[26px] border border-line bg-surface p-6 sm:p-10">
         <h2 id="safe-title" className="text-[28px] font-extrabold tracking-[-0.03em] text-ink sm:text-[32px]">
-          Safe by design
+          Built to keep your data safe
         </h2>
         <p className="mt-2 mb-7 text-body">Your shop&apos;s numbers are your business. We built MintoBill to protect them.</p>
         <ul className="grid grid-cols-[repeat(auto-fit,minmax(230px,1fr))] gap-4">
@@ -26,6 +27,13 @@ export function SafeByDesign() {
             </li>
           ))}
         </ul>
+        <Link
+          to="/industries"
+          className="group mt-6 inline-flex min-h-11 items-center gap-2 font-bold text-brand-strong hover:text-brand"
+        >
+          See which tools suit your type of shop
+          <ArrowRight className="size-[18px] transition-transform duration-150 group-hover:translate-x-0.5" aria-hidden="true" />
+        </Link>
       </div>
     </Container>
   );

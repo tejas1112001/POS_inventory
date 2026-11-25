@@ -5,16 +5,13 @@ import { SafeByDesign } from '@/sections/features/SafeByDesign';
 import { Versus } from '@/sections/features/Versus';
 
 export default function Features() {
-  usePageMeta(
-    'Features | MintoBill',
-    'Fast checkout, GST bills, stock history, customer dues, reports and an online catalogue for your shop.',
-  );
+  usePageMeta('/features');
   return (
     <>
       <PageHero
         eyebrow="Features"
-        title="Everything you need to run the counter"
-        lead="Tap through the app below. Every screen here works like the real one."
+        title="Everything you need to run the billing counter"
+        lead="Click through the screens below. Each one works the way it does in MintoBill."
       />
       <FeatureExplorer />
       <Versus />

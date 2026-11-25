@@ -10,9 +10,9 @@ export function ShopTypeGrid({ shop, onPick }) {
     <Container as="section" aria-labelledby="types-title" className="pt-16 pb-6">
       <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
         <h2 id="types-title" className="text-[28px] leading-[1.1] font-extrabold tracking-[-0.03em] text-ink sm:text-[34px]">
-          Shops that use a POS like MintoBill
+          Choose your type of shop
         </h2>
-        <p className="max-w-[420px] text-[15px] text-body">Tap your shop type to see the tool that helps it most.</p>
+        <p className="max-w-[420px] text-[15px] text-body">Each shop type shows the tool that helps it most.</p>
       </div>
       <ul className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-3.5">
         {shopTypes.map(({ slug, name, icon: Icon, tint, tool }) => {

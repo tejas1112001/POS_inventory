@@ -11,8 +11,11 @@ import (
 	"github.com/tejas1112001/POS_inventory/backend/internal/apperr"
 )
 
-// SPA serves a single-page-app build from a directory. Unknown paths without
-// a file extension fall back to index.html so client-side routes work.
+// SPA serves a single-page-app build from a directory. A path that is a
+// folder with its own index.html (a page built ahead of time, like the
+// landing site's features/index.html for /features) gets that file. Other
+// unknown paths without a file extension fall back to index.html so
+// client-side routes work.
 // Files are opened through os.Root, so ".." and symlinks cannot escape.
 type SPA struct {
 	fsys    fs.FS
@@ -69,6 +72,11 @@ func (s *SPA) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		name = "index.html"
 	}
 	st, err := fs.Stat(s.fsys, name)
+	if err == nil && st.IsDir() {
+		if pst, perr := fs.Stat(s.fsys, name+"/index.html"); perr == nil && !pst.IsDir() {
+			name, st = name+"/index.html", pst
+		}
+	}
 	if err != nil || st.IsDir() {
 		if path.Ext(name) != "" {
 			WriteError(w, r, apperr.NotFound())
@@ -76,7 +84,7 @@ func (s *SPA) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		name = "index.html"
 	}
-	if name == "index.html" {
+	if name == "index.html" || strings.HasSuffix(name, "/index.html") {
 		w.Header().Set("Cache-Control", "no-cache")
 		if s.noindex != nil && s.noindex(r.URL.Path) {
 			w.Header().Set("X-Robots-Tag", "noindex")

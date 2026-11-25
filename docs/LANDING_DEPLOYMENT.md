@@ -57,3 +57,9 @@ The React site links to these and expects the Go app to keep serving them (`back
 - [ ] **Resolve the `GET /contact` conflict** (section 4) and update `/sitemap.xml`.
 - [x] **Retire the Go template home page** (`s.home` on `/`) once the React site serves `/`. Done 2026-11-25.
 
+## SEO build (2026-11-25)
+
+`npm run build:landing` now also renders every public page to HTML at build time (`landing/scripts/prerender.mjs`): `dist/index.html`, `dist/features/index.html`, `dist/industries/index.html`, `dist/pricing/index.html`, `dist/contact/index.html`. Each file has its own title, description, canonical, Open Graph and Twitter tags and JSON-LD (all from `landing/src/content/seo.js`), and the browser hydrates it. posd serves `<page>/index.html` for `/<page>` (`backend/internal/httpx/static.go`). The build fails if a page breaks an SEO check: one H1 first, no skipped heading levels, unique title (65 characters max) and description (70 to 160), one canonical, valid JSON-LD, no inline scripts or `style=""` attributes (the strict CSP blocks them), no placeholders in titles.
+
+- Social preview and logo images: `landing/public/assets/*-v1.png`, drawn by `node landing/scripts/brand-images.mjs`. Bump the `-vN` when they change (`/assets/*` is cached for a year).
+- Search engines stay blocked in Nginx (docs/DEPLOY_VPS.md) until the owner turns SEO on.

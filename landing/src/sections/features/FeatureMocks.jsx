@@ -5,6 +5,7 @@ import { cn } from '@/lib/cn';
 import { money, money0 } from '@/lib/format';
 import { Button } from '@/components/ui/Button';
 import { Segmented } from '@/components/ui/Segmented';
+import { useHydrated } from '@/lib/useHydrated';
 
 const Hint = ({ children }) => <p className="mt-2.5 text-[13px] text-muted">{children}</p>;
 const th = 'py-2 text-xs font-bold tracking-[0.06em] text-muted uppercase';
@@ -168,6 +169,7 @@ const LIMIT = 20000;
 const OPENING_DUE = 12450;
 
 export function DuesMock() {
+  const hydrated = useHydrated(); // inline styles only in the browser (CSP)
   const [paid, setPaid] = useState(0);
   const due = Math.max(0, OPENING_DUE - paid * 2000);
   const pct = Math.round((due / LIMIT) * 100);
@@ -202,7 +204,7 @@ export function DuesMock() {
         aria-valuemin={0}
         aria-valuemax={100}
       >
-        <div className="h-3 rounded-full bg-brand transition-[width] duration-300" style={{ width: `${pct}%` }} />
+        <div className="h-3 rounded-full bg-brand transition-[width] duration-300" style={hydrated ? { width: `${pct}%` } : undefined} />
       </div>
       <p className="mt-1.5 text-[13px] text-muted">{pct}% of credit limit used</p>
       <ul className="mt-4">
@@ -238,6 +240,7 @@ const RANGES = {
 };
 
 export function ReportsMock() {
+  const hydrated = useHydrated(); // inline styles only in the browser (CSP)
   const [range, setRange] = useState(7);
   const { bars, kpis } = RANGES[range];
   const max = Math.max(...bars.map((b) => b[0]));
@@ -271,7 +274,7 @@ export function ReportsMock() {
             <div key={label} className="flex h-full flex-1 items-end justify-center">
               <div
                 className={cn('w-full max-w-11 rounded-t-md rounded-b-xs transition-[height] duration-300', h === max ? 'bg-brand' : 'bg-blue-200')}
-                style={{ height: `${h}%` }}
+                style={hydrated ? { height: `${h}%` } : undefined}
               />
             </div>
           ))}

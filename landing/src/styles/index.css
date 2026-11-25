@@ -1,6 +1,10 @@
 @import "tailwindcss";
 @import "@fontsource-variable/manrope";
 
+/* Laptop-width screens with little height (e.g. 1366x768, or 1080p at 125%
+   scaling): used to compact the home hero so it fits on one screen. */
+@custom-variant short (@media (min-width: 64rem) and (max-height: 56rem));
+
 /* Design tokens. Components use these names, not raw hex values. */
 @theme {
   /* Teal & Cream (the shop app's palette): deep teal #123b45, fresh teal

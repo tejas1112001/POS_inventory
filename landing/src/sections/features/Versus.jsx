@@ -7,7 +7,7 @@ export function Versus() {
   return (
     <Container as="section" aria-labelledby="vs-title" className="pt-10 pb-[72px]">
       <h2 id="vs-title" className="mb-7 text-[30px] leading-[1.1] font-extrabold tracking-[-0.03em] text-ink sm:text-[38px]">
-        The old way vs. MintoBill
+        From notebook to MintoBill
       </h2>
       <div className="flex flex-wrap gap-5">
         <div className="flex-[1_1_360px] rounded-[22px] border border-line bg-white p-7">

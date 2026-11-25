@@ -10,7 +10,8 @@ const items = [
 
 export function Extras() {
   return (
-    <Container as="section" aria-label="Also included" className="pb-20">
+    <Container as="section" aria-labelledby="extras-title" className="pb-20">
+      <h2 id="extras-title" className="sr-only">Included for every shop</h2>
       <ul className="grid grid-cols-[repeat(auto-fit,minmax(260px,1fr))] gap-4">
         {items.map((it) => (
           <li key={it.t} className="rounded-[20px] border border-line bg-surface p-6">

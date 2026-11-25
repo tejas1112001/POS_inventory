@@ -14,7 +14,7 @@ export function ToolExplorer({ tool, onSelect }) {
     <Container as="section" id="tools" tabIndex={-1} aria-labelledby="tools-title" className="scroll-mt-6 pt-12 pb-[72px] outline-none">
       <Eyebrow>Tools you can switch on</Eyebrow>
       <h2 id="tools-title" className="mt-2.5 mb-6 text-[28px] leading-[1.1] font-extrabold tracking-[-0.03em] text-ink sm:text-[34px]">
-        Every shop gets the basics. Add what your shop needs.
+        Every shop gets billing, GST and stock. Add the tools your trade needs.
       </h2>
 
       <div role="tablist" aria-label="Shop tools" onKeyDown={tabKeyHandler(toolOrder, tool, onSelect)} className="flex flex-wrap gap-2.5">

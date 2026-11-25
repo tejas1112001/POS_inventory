@@ -28,7 +28,7 @@ function PlanCard({ plan, period }) {
       )}
     >
       <div className="flex items-center justify-between gap-2.5">
-        <h2 className={cn('text-[22px] font-bold', f ? 'text-white' : 'text-ink')}>{plan.name}</h2>
+        <h3 className={cn('text-[22px] font-bold', f ? 'text-white' : 'text-ink')}>{plan.name}</h3>
         {f && <span className="rounded-full bg-brand px-3 py-1 text-xs font-bold text-white">Best for growing shops</span>}
       </div>
       <p className={cn('text-[15px]', f ? 'text-slate-300' : 'text-body')}>{plan.forWho}</p>
@@ -86,7 +86,7 @@ function Faq() {
   const [open, setOpen] = useState(0);
   return (
     <Container as="section" aria-labelledby="faq-title" width="max-w-[860px]" className="pt-12 pb-24">
-      <h2 id="faq-title" className={cn(h2, 'mb-6')}>Questions</h2>
+      <h2 id="faq-title" className={cn(h2, 'mb-6')}>Frequently asked questions</h2>
       <div className="flex flex-col gap-3">
         {faqs.map(([q, a], i) => {
           const isOpen = open === i;
@@ -121,17 +121,18 @@ function Faq() {
 
 export default function Pricing() {
   const [yearly, setYearly] = useState(false);
-  usePageMeta('Pricing | MintoBill', 'Simple plans with a 14-day free trial. Every plan has GST bills, stock and reports.');
+  usePageMeta('/pricing');
 
   return (
     <>
       <PageHero
         eyebrow="Pricing"
-        title="Simple plans. 14 days free."
+        title="Simple plans, with 14 days free"
         lead="Every plan has GST bills, stock and reports. Pick one when your trial ends."
       />
 
-      <Container as="section" aria-label="Plans" className="pt-16 pb-10">
+      <Container as="section" aria-labelledby="plans-title" className="pt-16 pb-10">
+        <h2 id="plans-title" className="sr-only">Plans</h2>
         <div className="flex justify-center">
           <Segmented
             size="lg"

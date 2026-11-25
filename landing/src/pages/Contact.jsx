@@ -21,11 +21,11 @@ const next = [
 ];
 
 export default function Contact() {
-  usePageMeta('Contact | MintoBill', 'Book a free MintoBill demo, call us, or open your own shop login.');
+  usePageMeta('/contact');
 
   return (
     <>
-      <PageHero eyebrow="Contact" title="Talk to a real person" lead="Book a free demo, call us, or open your own shop login." />
+      <PageHero eyebrow="Contact" title="Talk to the MintoBill team" lead="Book a free demo, give us a call, or find the login page for your shop." />
 
       <Container as="section" aria-label="Ways to reach us" className="pt-16 pb-6">
         <ul className="grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-4">
