@@ -165,7 +165,7 @@ export default function EditProductForm({ product, onSaved, onCancel }) {
     const baseFields = [
       {
         name: 'name',
-        label: 'Product Name',
+        label: 'Product name',
         required: true,
         placeholder: 'Enter product name',
       },
@@ -223,7 +223,7 @@ export default function EditProductForm({ product, onSaved, onCancel }) {
       },
       {
         name: 'sellingType',
-        label: 'Selling Type',
+        label: 'Selling type',
         type: 'select',
         options: ['Online', 'POS'],
       },
@@ -240,7 +240,7 @@ export default function EditProductForm({ product, onSaved, onCancel }) {
       },
       {
         name: 'taxType',
-        label: 'Tax Type',
+        label: 'Tax type',
         type: 'select',
         options: ['Exclusive', 'Inclusive'],
       },
@@ -251,24 +251,24 @@ export default function EditProductForm({ product, onSaved, onCancel }) {
       },
       {
         name: 'discountType',
-        label: 'Discount Type',
+        label: 'Discount type',
         type: 'select',
         options: ['Percentage', 'Fixed'],
       },
       {
         name: 'discountValue',
-        label: 'Discount Value',
+        label: 'Discount value',
         type: 'number',
       },
       {
         name: 'barcodeSymbology',
-        label: 'Barcode Symbology',
+        label: 'Barcode symbology',
         type: 'select',
         options: ['Code 128', 'Code 39', 'UPC-A'],
       },
       {
         name: 'image',
-        label: 'Product Image',
+        label: 'Product image',
         type: 'image',
         fullWidth: true,
       },
@@ -287,7 +287,7 @@ export default function EditProductForm({ product, onSaved, onCancel }) {
       },
       {
         name: 'itemBarcode',
-        label: 'Item Barcode',
+        label: 'Item barcode',
         placeholder: 'Enter barcode',
       },
       {
@@ -323,7 +323,7 @@ export default function EditProductForm({ product, onSaved, onCancel }) {
       },
       {
         name: 'quantityAlert',
-        label: 'Quantity Alert',
+        label: 'Quantity alert',
         type: 'number',
       },
     ];

@@ -40,6 +40,19 @@ export default function ListTable({
 
   const headerCellClass =
     'sticky top-0 z-10 border-b border-border bg-muted px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground';
+  // meta.sticky: the column stays at this left offset (px) while the table
+  // scrolls sideways (# and the receipt number of the reports). Pinned cells
+  // need a solid background, so they mix the row colours into the card.
+  const pin = (column) => {
+    const left = column.columnDef.meta?.sticky;
+    return left === undefined ? undefined : { left };
+  };
+  const pinnedCell = (rowIndex) =>
+    cn(
+      'sticky z-[1]',
+      rowIndex % 2 === 1 ? 'bg-[color-mix(in_oklab,var(--muted)_30%,var(--card))]' : 'bg-card',
+      'group-hover:bg-[color-mix(in_oklab,var(--accent)_40%,var(--card))]'
+    );
 
   return (
     <>
@@ -60,9 +73,12 @@ export default function ListTable({
                       className={cn(
                         headerCellClass,
                         header.column.id === 'select' && 'px-0',
-                        header.column.columnDef.meta?.align === 'center' && 'text-center'
+                        // ! beats the .pos-table th rule (text-left).
+                        header.column.columnDef.meta?.align === 'center' && '!text-center',
+                        header.column.columnDef.meta?.align === 'right' && '!text-right',
+                        pin(header.column) && 'z-20'
                       )}
-                      style={{ width: header.getSize() }}
+                      style={{ width: header.getSize(), ...pin(header.column) }}
                     >
                       {!header.isPlaceholder && flexRender(
                         header.column.columnDef.header,
@@ -78,7 +94,7 @@ export default function ListTable({
                 <tr
                   key={row.id}
                   className={cn(
-                    'transition-colors duration-150 hover:bg-accent/40',
+                    'group transition-colors duration-150 hover:bg-accent/40',
                     rowIndex % 2 === 1 && 'bg-muted/30'
                   )}
                 >
@@ -89,8 +105,11 @@ export default function ListTable({
                         'border-b border-border/60 px-3 py-2.5 text-sm text-foreground',
                         cell.column.id === 'select' && 'px-0',
                         cell.column.columnDef.meta?.align === 'center' ? 'text-center' : '',
-                        cell.column.id !== 'select' && 'whitespace-nowrap'
+                        cell.column.columnDef.meta?.align === 'right' && 'text-right tabular-nums',
+                        cell.column.id !== 'select' && !cell.column.columnDef.meta?.wrap && 'whitespace-nowrap',
+                        pin(cell.column) && pinnedCell(rowIndex)
                       )}
+                      style={pin(cell.column)}
                     >
                       {flexRender(cell.column.columnDef.cell, { ...cell.getContext(), openModal })}
                     </td>

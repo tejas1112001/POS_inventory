@@ -1,82 +1,92 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { PrinterIcon, CurrencyDollarIcon, ArrowUturnLeftIcon, BanknotesIcon, CubeIcon } from '@heroicons/react/24/outline';
+import { useEffect, useMemo, useState } from 'react';
+import { CurrencyDollarIcon, ArrowUturnLeftIcon, BanknotesIcon, CubeIcon } from '@heroicons/react/24/outline';
 import StatCard from '../kit/StatCard';
 import { useUI } from '../ListComponents/useUI';
 import { indexColumn } from '../ListComponents/columnHelpers';
-import ListPageLayout from '../ListComponents/ListPageLayout';
-import ListControlButtons from '../ListComponents/ListControlButtons';
-import DateRangePicker from '../ListComponents/DateRangePicker';
-import SelectField from '../ListComponents/SelectField';
-import SearchInput from '../ListComponents/SearchInput';
-import ReportExportButtons from '../ListComponents/ReportExportButtons';
+import ReportToolbar, { ReportActions } from '../reports/ReportToolbar';
+import ReportTable from '../reports/ReportTable';
+import PaymentMethodsReport from './PaymentMethodsReport';
+import { InlineAlert } from '@/components/feedback/InlineAlert';
 import { useServerReport } from '@/hooks/useServerReport';
 import { api } from '@/services/api';
-import { formatCurrency, formatDate } from '@/lib/format';
+import { formatCurrency, formatDate, todayInShop } from '@/lib/format';
+import { addDays } from '@/lib/payments';
 import { unitQtyText } from '@/lib/saleUnits';
 import { addQty, fmtQty } from '@/lib/qty';
 
 const n = (v) => Number(v) || 0;
+const INDEX_W = 48;
 
-// SalesReportList: one row per sold line (GET /api/sales/report). Dates
-// and store are filtered by the server, which also limits users without
-// sales:view_all to their own sales; product and text search filter the
-// rows here. Totals are worked out from the rows shown.
+// SalesReportList: one row per sold line (GET /api/sales/report). One date
+// range and store for the whole tab: the cards, the payment-method summary
+// and the table all show the same period. Dates and store are filtered by
+// the server, which also limits users without sales:view_all to their own
+// sales; product and text search filter the rows here. Totals are worked
+// out from the rows shown.
 export default function SalesReportList() {
   const [search, setSearch] = useState('');
-  const [fromDate, setFromDate] = useState('');
-  const [toDate, setToDate] = useState('');
-  const [storeName, setStoreName] = useState('All');
-  const [productFilter, setProductFilter] = useState('All');
+  const [fromDate, setFromDate] = useState(() => addDays(todayInShop(), -29));
+  const [toDate, setToDate] = useState(() => todayInShop());
+  const [values, setValues] = useState({ storeId: '', product: '' });
   const [stores, setStores] = useState([]);
 
   useEffect(() => {
     api.get('/api/stores', { quiet: true }).then((s) => setStores(s || [])).catch(() => {});
   }, []);
-  const storeId = stores.find((s) => s.name === storeName)?.id;
-  const { rows, loading, error, qs } = useServerReport('/api/sales/report', { startDate: fromDate, endDate: toDate, storeId });
+  const { rows, loading, error, qs } = useServerReport('/api/sales/report', { startDate: fromDate, endDate: toDate, storeId: values.storeId });
+  const manyStores = stores.length > 1;
 
-  const storeOptions = useMemo(() => ['All', ...stores.map((s) => s.name)], [stores]);
-  const productOptions = useMemo(() => ['All', ...new Set(rows.map((r) => r.product?.name).filter(Boolean))], [rows]);
+  const filters = useMemo(
+    () => [
+      ...(manyStores ? [{ key: 'storeId', label: 'Store', options: stores.map((s) => ({ value: String(s.id), label: s.name })) }] : []),
+      { key: 'product', label: 'Product', options: [...new Set(rows.map((r) => r.product?.name).filter(Boolean))].sort().map((p) => ({ value: p, label: p })) },
+    ],
+    [manyStores, stores, rows]
+  );
 
   const columns = useMemo(
     () => [
-      indexColumn(),
-      { accessorKey: 'date', header: 'Date', size: 110, cell: ({ getValue }) => formatDate(getValue()) },
-      { accessorKey: 'reference', header: 'Receipt', size: 120 },
-      { id: 'sku', accessorFn: (r) => r.itemSku || '', header: 'SKU', size: 90 },
+      { ...indexColumn(INDEX_W), meta: { align: 'center', sticky: 0 } },
+      { accessorKey: 'reference', header: 'Receipt', size: 120, meta: { sticky: INDEX_W }, cell: ({ getValue }) => <span className="font-medium">{getValue()}</span> },
+      { accessorKey: 'date', header: 'Date', size: 104, cell: ({ getValue }) => formatDate(getValue()) },
       {
         id: 'product',
         accessorFn: (r) => r.product?.name || '',
         header: 'Product',
         size: 200,
-        cell: ({ row }) => (
-          <div>
-            <div>{row.original.product?.name}</div>
-            {row.original.product?.brand && <div className="text-xs text-muted-foreground">{row.original.product.brand}</div>}
-          </div>
-        ),
+        meta: { wrap: true },
+        cell: ({ row }) => {
+          const r = row.original;
+          const sub = [r.product?.brand, r.itemSku].filter(Boolean).join(' · ');
+          return (
+            <div className="max-w-[13rem] min-w-[9rem]">
+              <div className="line-clamp-2">{r.product?.name}</div>
+              {sub && <div className="truncate text-xs text-muted-foreground">{sub}</div>}
+            </div>
+          );
+        },
       },
       { accessorKey: 'category', header: 'Category', size: 110 },
       { id: 'customer', accessorFn: (r) => r.customerName || r.customer?.name || '', header: 'Customer', size: 140 },
-      { id: 'store', accessorFn: (r) => r.store?.name || '', header: 'Store', size: 120 },
+      ...(manyStores ? [{ id: 'store', accessorFn: (r) => r.store?.name || '', header: 'Store', size: 120 }] : []),
       // H3: "2 Box (24)" for a line sold in another unit.
-      { accessorKey: 'soldQty', header: 'Sold', size: 100, meta: { align: 'center' }, cell: ({ row }) => unitQtyText(row.original, row.original.soldQty) },
-      { accessorKey: 'returnedQty', header: 'Returned', size: 80, meta: { align: 'center' }, cell: (c) => fmtQty(c.getValue()) },
-      { accessorKey: 'soldAmount', header: 'Sold amount', size: 120, cell: ({ getValue }) => formatCurrency(getValue()) },
-      { accessorKey: 'netAmount', header: 'Net', size: 120, cell: ({ getValue }) => formatCurrency(getValue()) },
-      { accessorKey: 'stockQty', header: 'In stock', size: 80, meta: { align: 'center' }, cell: (c) => fmtQty(c.getValue()) },
+      { accessorKey: 'soldQty', header: 'Sold', size: 80, meta: { align: 'right' }, cell: ({ row }) => unitQtyText(row.original, row.original.soldQty) },
+      { accessorKey: 'returnedQty', header: 'Returned', size: 80, meta: { align: 'right' }, cell: (c) => fmtQty(c.getValue()) },
+      { accessorKey: 'soldAmount', header: 'Sold amount', size: 110, meta: { align: 'right' }, cell: ({ getValue }) => formatCurrency(getValue()) },
+      { accessorKey: 'netAmount', header: 'Net', size: 110, meta: { align: 'right' }, cell: ({ getValue }) => formatCurrency(getValue()) },
+      { accessorKey: 'stockQty', header: 'In stock', size: 80, meta: { align: 'right' }, cell: (c) => fmtQty(c.getValue()) },
     ],
-    []
+    [manyStores]
   );
 
   const filteredData = useMemo(() => {
     const q = search.trim().toLowerCase();
     return rows.filter((r) => {
-      const passesProduct = productFilter === 'All' || r.product?.name === productFilter;
+      const passesProduct = !values.product || r.product?.name === values.product;
       const text = `${r.reference} ${r.itemSku || ''} ${r.product?.name} ${r.product?.brand} ${r.category} ${r.customerName}`.toLowerCase();
       return passesProduct && (!q || text.includes(q));
     });
-  }, [rows, search, productFilter]);
+  }, [rows, search, values.product]);
 
   const totals = useMemo(
     () =>
@@ -89,57 +99,54 @@ export default function SalesReportList() {
   const summary = [
     { title: 'Sold', value: formatCurrency(totals.sold), icon: CurrencyDollarIcon, tone: 'teal' },
     { title: 'Returned', value: formatCurrency(totals.returned), icon: ArrowUturnLeftIcon, tone: 'warn' },
-    { title: 'Net sales', value: formatCurrency(totals.net), icon: BanknotesIcon, tone: 'deep' },
+    { title: 'Net sales', value: formatCurrency(totals.net), icon: BanknotesIcon, tone: 'teal' },
     { title: 'Items sold', value: fmtQty(totals.qty), icon: CubeIcon, tone: 'amber' },
   ];
 
-  const { table, controlButtons, emptyState } = useUI({
-    moduleName: 'sales reports',
+  const clear = () => {
+    setSearch('');
+    setValues({ storeId: '', product: '' });
+    setFromDate('');
+    setToDate('');
+  };
+  const { table, emptyState } = useUI({
+    moduleName: 'sales',
     filteredData,
     columns,
     rowSelection: {},
     setRowSelection: () => {},
     onAddItem: false,
-    resetFilters: () => {
-      setSearch('');
-      setStoreName('All');
-      setProductFilter('All');
-      setFromDate('');
-      setToDate('');
-    },
+    resetFilters: clear,
   });
 
   return (
-    <ListPageLayout
-      title="Sales Report"
-      controlButtons={<ListControlButtons buttons={[...controlButtons, { icon: <PrinterIcon className="h-5 w-5" />, onClick: () => window.print(), title: 'Print' }]} />}
-      extraContent={
-        <>
-        {error && <div role="alert" className="mb-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</div>}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {summary.map((item) => (
-            <StatCard key={item.title} icon={item.icon} tone={item.tone} label={item.title} value={loading ? '…' : item.value} />
-          ))}
-        </div>
-        </>
-      }
-      filterRow={
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-12">
-          <DateRangePicker fromDate={fromDate} toDate={toDate} setFromDate={setFromDate} setToDate={setToDate} />
-          <div className="md:col-span-2">
-            <SelectField name="store" label="Store" value={storeName} onChange={setStoreName} options={storeOptions} placeholder="All" colClass="" />
-          </div>
-          <div className="md:col-span-3">
-            <SelectField name="product" label="Product" value={productFilter} onChange={setProductFilter} options={productOptions} placeholder="All" colClass="" />
-          </div>
-          <ReportExportButtons path="/api/sales/report/export" qs={qs} name="sales-report" />
-        </div>
-      }
-      filters={<SearchInput search={search} setSearch={setSearch} placeholder="Search receipt, product, customer..." />}
-      table={table}
-      isLoading={loading}
-      emptyState={emptyState}
-      dataLength={filteredData.length}
-    />
+    <>
+      <ReportToolbar
+        search={search}
+        onSearch={setSearch}
+        placeholder="Search receipt or product…"
+        filters={filters}
+        values={values}
+        onFilter={(k, v) => setValues((s) => ({ ...s, [k]: v }))}
+        onClear={clear}
+        dates={{
+          from: fromDate,
+          to: toDate,
+          onChange: ({ from, to }) => {
+            setFromDate(from);
+            setToDate(to);
+          },
+        }}
+        actions={<ReportActions server={{ path: '/api/sales/report/export', qs, name: 'sales-report' }} />}
+      />
+      {error && <InlineAlert>{error}</InlineAlert>}
+      <div className="mb-3 grid shrink-0 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {summary.map((item) => (
+          <StatCard key={item.title} icon={item.icon} tone={item.tone} label={item.title} value={loading ? '…' : item.value} />
+        ))}
+      </div>
+      <PaymentMethodsReport qs={qs} />
+      <ReportTable table={table} loading={loading} emptyState={emptyState} dataLength={filteredData.length} />
+    </>
   );
 }

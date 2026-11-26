@@ -4,7 +4,9 @@ import { cn } from '@/lib/utils';
 const TILE_TONES = {
   teal: 'bg-teal-soft text-primary dark:text-teal',
   amber: 'bg-amber-soft text-[#b46f00] dark:text-amber-brand',
-  deep: 'bg-[#123b45] text-white dark:bg-[#8fd9cd] dark:text-[#0b2a32]',
+  // One icon style: every tone is a soft tile with a coloured glyph (no
+  // filled dark tile next to light ones).
+  deep: 'bg-[#123b45]/10 text-[#123b45] dark:bg-[#8fd9cd]/15 dark:text-[#8fd9cd]',
   muted: 'bg-muted text-primary dark:text-teal',
   warn: 'bg-warning-bg text-warning-fg',
   danger: 'bg-danger-bg text-danger-fg',

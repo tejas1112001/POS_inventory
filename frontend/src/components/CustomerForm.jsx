@@ -73,7 +73,7 @@ export default function CustomerForm({ isOpen, onClose, onAddCustomer }) {
       />
       <div className="relative bg-white rounded-xl shadow-xl border border-gray-800 w-full max-w-lg mx-auto">
         <form onSubmit={handleSubmit} className="p-6">
-          <h2 className="text-xl font-semibold mb-6">Add New Customer</h2>
+          <h2 className="text-xl font-semibold mb-6">Add customer</h2>
           
           {apiError && (
             <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg relative mb-4 text-center">

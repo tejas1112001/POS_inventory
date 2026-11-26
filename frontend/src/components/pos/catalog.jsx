@@ -33,7 +33,8 @@ export function CategoryPill({ active, onClick, children }) {
 
 // ProductTile: picture, name (two lines), category, price, stock badge and
 // "N options". Optional: a favourite star and the count already in the cart.
-export function ProductTile({ product, lockedByOther: locked, onPick, inCart = 0, favourite, onToggleFavourite }) {
+// sameName: another product has the same name, so the SKU is shown too.
+export function ProductTile({ product, lockedByOther: locked, onPick, inCart = 0, favourite, onToggleFavourite, sameName = false }) {
   const variants = variantsOf(product);
   const stock = productStock(product);
   const out = stock <= 0;
@@ -68,14 +69,16 @@ export function ProductTile({ product, lockedByOther: locked, onPick, inCart = 0
         </div>
         <div className="flex flex-1 flex-col gap-0.5 p-2.5">
           <p className="line-clamp-2 min-h-[2.5em] text-sm leading-tight font-semibold text-navy">{product.name}</p>
-          {product.category && <p className="truncate text-xs text-muted-foreground">{product.category}</p>}
+          {(product.category || (sameName && variants[0]?.sku)) && (
+            <p className="truncate text-xs text-muted-foreground">{[product.category, sameName && variants[0]?.sku].filter(Boolean).join(' · ')}</p>
+          )}
           <div className="mt-auto flex items-end justify-between gap-1 pt-1">
             <span className="min-w-0">
               <span className="block font-bold tabular-nums text-foreground">{formatCurrency(product.price)}</span>
               {stock > LOW ? <span className="block text-[11px] font-semibold text-success">In stock</span> : <StockBadge qty={stock} />}
             </span>
             {!disabled && (
-              <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-amber-gradient text-[#3d2600] shadow-xs transition-transform duration-150 group-hover:scale-105" aria-hidden="true">
+              <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary bg-primary-gradient text-primary-foreground shadow-xs transition-transform duration-150 group-hover:scale-105" aria-hidden="true">
                 <Plus className="size-4" strokeWidth={2.6} />
               </span>
             )}

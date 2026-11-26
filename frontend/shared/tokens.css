@@ -113,8 +113,8 @@
     --ds-surface: #10353f;
     --ds-text: #dbe8e6;
     --ds-text-muted: #9db3b3;
-    --ds-border: #1f4b55;
-    --ds-border-strong: #2b5c66;
+    --ds-border: #2b5c66;
+    --ds-border-strong: #3a6e78;
     --ds-focus: #3fc7b3;
     --ds-shadow-1: 0 1px 2px rgb(0 0 0 / 0.25);
     --ds-shadow-2: 0 4px 14px -4px rgb(0 0 0 / 0.35);
@@ -149,8 +149,8 @@
   --ds-surface: #10353f;
   --ds-text: #dbe8e6;
   --ds-text-muted: #9db3b3;
-  --ds-border: #1f4b55;
-  --ds-border-strong: #2b5c66;
+  --ds-border: #2b5c66;
+  --ds-border-strong: #3a6e78;
   --ds-focus: #3fc7b3;
   --ds-shadow-1: 0 1px 2px rgb(0 0 0 / 0.25);
   --ds-shadow-2: 0 4px 14px -4px rgb(0 0 0 / 0.35);

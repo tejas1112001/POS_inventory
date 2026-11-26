@@ -190,8 +190,8 @@ body,
   --accent: color-mix(in oklab, var(--primary) 32%, #10353f);
   --accent-foreground: #e6f7f3;
   --destructive: #d92d2d;
-  --border: #1f4b55;
-  --input: #2b5c66;
+  --border: #2b5c66; /* dividers read on the card (was #1f4b55, too faint) */
+  --input: #3a6e78;
   --chart-2: #8fd9cd;
   --chart-4: #2b6f78;
   --sidebar: #0b2c35;
@@ -254,7 +254,8 @@ body,
 }
 
 .pos-table thead th {
-  @apply border-b border-border bg-muted/70 px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground;
+  /* Opaque: the header is sticky and rows scroll under it. */
+  @apply border-b border-border bg-muted px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground;
 }
 
 .pos-table tbody td {
@@ -284,6 +285,10 @@ body,
 }
 .bg-primary-gradient {
   background-image: var(--primary-gradient);
+}
+/* A disabled primary button is flat grey (Button), not faded teal. */
+.bg-primary-gradient:disabled {
+  background-image: none;
 }
 .bg-amber-gradient {
   background-image: var(--ds-gradient-amber);

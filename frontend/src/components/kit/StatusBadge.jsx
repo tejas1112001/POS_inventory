@@ -1,4 +1,5 @@
 import { cn } from '@/lib/utils';
+import { statusLabel } from '@/lib/status';
 
 // One colour map for every status in the app.
 const TONE = {
@@ -19,7 +20,7 @@ export default function StatusBadge({ value }) {
   if (!value) return null;
   return (
     <span className={cn('inline-flex items-center whitespace-nowrap rounded-md px-2.5 py-1 text-xs leading-none font-semibold', CLS[TONE[value] || 'muted'])}>
-      {value}
+      {statusLabel(value)}
     </span>
   );
 }

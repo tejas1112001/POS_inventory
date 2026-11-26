@@ -11,7 +11,7 @@ const OrderItemsTable = ({ items }) => {
         <thead>
           <tr>
             <th>Product (Code - Name)</th>
-            <th>Net Unit Cost</th>
+            <th>Net unit cost</th>
             <th>Quantity</th>
             <th>Discount</th>
             <th>Subtotal</th>

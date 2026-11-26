@@ -1,3 +1,19 @@
+# UI audit fixes (2026-11-26)
+
+Branch `ui/audit-fixes` (local, not pushed). The 25 items of the MintoBill UI audit (test-clothing, light and dark).
+
+| # | What |
+|---|---|
+| 1-9 | Reports › Sales: the page scrolls and the table keeps at least ~10 rows; payment-method box folds (heading shows money taken, open state remembered); one filter line (search, Add filter with Store/Product chips, one date range for cards, payment box and table, default last 30 days); one Excel/PDF/Print set (green icon gone); # and Receipt pinned, SKU under the product name, Store column only with several stores; payment table: sentence-case header, "Dues collected" only when non-zero, "*" + footnote instead of "(recorded)"; one icon style (the dark "deep" tile is now soft, Dashboard too) |
+| 10-14 | Customers / Customer dues rebuilt on the same toolbar (no overlap; fake payment-method filter and "-" column removed; due dates now filter correctly); Purchases card "Purchased" + hint, Print added; GST returns and Expiry use the app's labelled dropdowns (GSTIN disabled with "No GSTIN set"), month picker is a dropdown; every tab: Excel, PDF (when the server has it), Print |
+| 15 | Low-stock banner only on Dashboard and Stock; dismissals remembered on the device (id still changes with day/count) |
+| 16-20 | Invoices on the Add-filter toolbar ("Invoice no.", "Due date", "Amount due", invoice links to the sale); status badges sentence case ("In stock"); Stock quantities grouped (1,199); other Title Case labels fixed; Settings: Stores and Plan & billing tabs removed; disabled primary buttons are flat grey with readable text; checkboxes square with a darker border |
+| 21-24 | Greeting skips role-like names ("Clothing Owner"); Average bill = net sales / orders; ticked checklist steps keep text (no strike-through, "Done"); card rows fill their width (3 → 3 columns), Money cards same size as the headline cards; Checkout "+" teal, Clear hidden on an empty cart, same-name products show their SKU, no-photo tiles get a tone from the name |
+| 25 | Dark: borders #2b5c66 (was #1f4b55), warning banner on the card colour with an amber edge |
+
+Checks: eslint 0 errors; unit 32/32; both vite builds; screenshots (mocked API, 1366 light/dark, 390 phone) of Sales, Purchases, Customers, Customer dues, GST, Invoices, Stock, Dashboard, Settings. Checkout not screenshotted (needs a fuller mock). e2e `s1-forms` SKU check updated for the new Product cell (not run: dev stack down).
+Not changed: the duplicate "Chintu" products and the "Walk-in Customer" name are shop data.
+
 # Teal & Cream redesign (2026-11-24)
 
 Branch `ui/teal-theme` (local, not pushed). Shop app and platform console restyled to the moodboards in the repo root (deep teal #123B45, teal #20B6A4, ivory #F4F2E9, amber #F2B544, Manrope; light and dark).

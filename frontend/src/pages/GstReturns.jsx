@@ -1,16 +1,26 @@
 import { useEffect, useMemo, useState } from 'react';
-import { FileSpreadsheet, Loader2 } from 'lucide-react';
 import ReportTabs from '@/components/layout/ReportTabs';
 import ListPageShell from '@/components/layout/ListPageShell';
 import { InlineAlert } from '@/components/feedback/InlineAlert';
-import { Button } from '@/components/ui/button';
-import { usePermission } from '@/context/PermissionContext';
+import ReportSelect from '@/components/reports/ReportSelect';
+import { ReportActions } from '@/components/reports/ReportToolbar';
 import { formatCurrency } from '@/lib/format';
 import { api } from '@/services/api';
 
-const selectCls = 'h-11 rounded-lg border border-input bg-card px-3 text-base sm:h-9 sm:text-sm';
 const pad = (n) => String(n).padStart(2, '0');
 const month = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
+
+// months are the last 24 months, newest first: { value: "2026-11", label }.
+function months(today = new Date()) {
+  return Array.from({ length: 24 }, (_, i) => {
+    const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+    return { value: month(d), label: d.toLocaleString('en-IN', { month: 'long', year: 'numeric' }) };
+  });
+}
+const MODES = [
+  { value: 'month', label: 'A month' },
+  { value: 'quarter', label: 'A quarter (QRMP)' },
+];
 
 // quarters are the last eight GST quarters (financial year: Q1 is April to
 // June), newest first: { value: "2026-10|2026-12", label }.
@@ -48,17 +58,16 @@ const SECTIONS = [
 // GSTR-3B summary of a GSTIN for a month or a quarter, and the workbook
 // for the accountant. The app prepares the figures; it files nothing.
 export default function GstReturns() {
-  const { hasPermission } = usePermission();
   const [choices, setChoices] = useState(null);
   const [gstin, setGstin] = useState('');
   const [mode, setMode] = useState('month');
   const [monthValue, setMonthValue] = useState(month(new Date()));
   const qs = useMemo(() => quarters(), []);
+  const ms = useMemo(() => months(), []);
   const [quarter, setQuarter] = useState(qs[0].value);
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
-  const [downloading, setDownloading] = useState(false);
 
   const [from, to] = mode === 'month' ? [monthValue, monthValue] : quarter.split('|');
   const query = `gstin=${encodeURIComponent(gstin)}&from=${from}&to=${to}`;
@@ -88,17 +97,6 @@ export default function GstReturns() {
     };
   }, [gstin, from, to, query]);
 
-  const download = async () => {
-    setDownloading(true);
-    try {
-      await api.download(`/api/reports/gst/export?${query}`, `GSTR1-${gstin}.xlsx`, { quiet: true });
-    } catch (e) {
-      setError(e);
-    } finally {
-      setDownloading(false);
-    }
-  };
-
   const g = data?.gstr3b;
   const tiles = g
     ? [
@@ -111,7 +109,7 @@ export default function GstReturns() {
     : [];
 
   return (
-    <ListPageShell>
+    <ListPageShell scroll>
       <ReportTabs />
       <div className="space-y-4">
         <p className="text-sm text-muted-foreground">
@@ -121,46 +119,24 @@ export default function GstReturns() {
         {choices && choices.length === 0 && (
           <InlineAlert kind="info">No GSTIN yet. Set the shop&apos;s GST state and GSTIN in Settings, or a store&apos;s own on the Stores page.</InlineAlert>
         )}
-        <div className="flex flex-wrap items-end gap-3">
-          <label className="flex flex-col gap-1 text-sm font-medium">
-            GSTIN
-            <select className={selectCls} value={gstin} onChange={(e) => setGstin(e.target.value)} disabled={!choices?.length}>
-              {(choices || []).map((c) => (
-                <option key={c.gstin} value={c.gstin}>
-                  {c.gstin} · {c.state} · {c.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex flex-col gap-1 text-sm font-medium">
-            Period
-            <select className={selectCls} value={mode} onChange={(e) => setMode(e.target.value)}>
-              <option value="month">A month</option>
-              <option value="quarter">A quarter (QRMP)</option>
-            </select>
-          </label>
+        <div className="flex flex-wrap items-center gap-2">
+          <ReportSelect
+            id="gst-gstin"
+            label="GSTIN"
+            value={gstin}
+            onChange={setGstin}
+            options={(choices || []).map((c) => ({ value: c.gstin, label: `${c.gstin} · ${c.state} · ${c.label}` }))}
+            empty={choices ? 'No GSTIN set' : 'Loading…'}
+          />
+          <ReportSelect id="gst-period" label="Period" value={mode} onChange={setMode} options={MODES} />
           {mode === 'month' ? (
-            <label className="flex flex-col gap-1 text-sm font-medium">
-              Month
-              <input type="month" className={selectCls} value={monthValue} max={month(new Date())} onChange={(e) => e.target.value && setMonthValue(e.target.value)} />
-            </label>
+            <ReportSelect id="gst-month" label="Month" value={monthValue} onChange={setMonthValue} options={ms} />
           ) : (
-            <label className="flex flex-col gap-1 text-sm font-medium">
-              Quarter
-              <select className={selectCls} value={quarter} onChange={(e) => setQuarter(e.target.value)}>
-                {qs.map((q) => (
-                  <option key={q.value} value={q.value}>
-                    {q.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <ReportSelect id="gst-quarter" label="Quarter" value={quarter} onChange={setQuarter} options={qs} />
           )}
-          {hasPermission('reports', 'export') && (
-            <Button type="button" variant="outline" onClick={download} disabled={!gstin || downloading}>
-              {downloading ? <Loader2 className="size-4 animate-spin" /> : <FileSpreadsheet className="size-4" />} Download GSTR-1 workbook
-            </Button>
-          )}
+          <div className="flex flex-wrap items-center gap-2 max-sm:w-full max-sm:[&>*]:flex-1 sm:ml-auto sm:[&>*]:h-9 sm:[&>*]:text-[13px]">
+            <ReportActions server={{ path: '/api/reports/gst/export', qs: `?${query}`, name: `GSTR1-${gstin}`, pdf: false }} disabled={!gstin} />
+          </div>
         </div>
         {error && <InlineAlert>{error.message || 'The GST report could not be loaded.'}</InlineAlert>}
         {busy && !data && <p className="text-sm text-muted-foreground">Loading…</p>}
@@ -185,11 +161,11 @@ export default function GstReturns() {
             </p>
             <section className="overflow-hidden rounded-2xl border bg-card shadow-xs" aria-label="GSTR-1 sections">
               <table className="w-full text-sm">
-                <thead className="bg-muted text-left text-xs uppercase tracking-wide text-slate-600 dark:text-slate-300">
+                <thead className="bg-muted text-left text-xs font-semibold text-muted-foreground">
                   <tr>
-                    <th scope="col" className="px-4 py-2 font-medium">GSTR-1 section</th>
-                    <th scope="col" className="px-3 py-2 text-right font-medium">Rows</th>
-                    <th scope="col" className="px-4 py-2 text-right font-medium">Taxable value</th>
+                    <th scope="col" className="px-4 py-2">GSTR-1 section</th>
+                    <th scope="col" className="px-3 py-2 text-right">Rows</th>
+                    <th scope="col" className="px-4 py-2 text-right">Taxable value</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">

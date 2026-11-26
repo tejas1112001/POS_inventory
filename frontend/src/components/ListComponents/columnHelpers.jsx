@@ -3,6 +3,7 @@ import React from 'react';
 import { EyeIcon, PencilIcon, TrashIcon } from '@heroicons/react/24/outline';
 import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
+import { statusLabel } from '@/lib/status';
 
 const statusStyles = {
   Received: { dot: 'bg-emerald-500', badge: 'bg-emerald-500/10 text-emerald-700 border-emerald-500/20' },
@@ -30,7 +31,7 @@ export function StatusBadge({ value, className }) {
       )}
     >
       <span className={cn('size-1.5 shrink-0 rounded-full', style.dot)} />
-      {value}
+      {statusLabel(value)}
     </span>
   );
 }

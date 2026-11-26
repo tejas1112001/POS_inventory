@@ -8,6 +8,7 @@ import DataTable from '@/components/kit/DataTable';
 import FilterBar from '@/components/kit/FilterBar';
 import RowActions from '@/components/kit/RowActions';
 import StatusBadge from '@/components/kit/StatusBadge';
+import { statusLabel } from '@/lib/status';
 import { EmptyState } from '@/components/kit/States';
 import { FormSheet, TextField } from '@/components/kit/Form';
 import { ProductImage } from '@/components/shared/product-image';
@@ -87,8 +88,8 @@ export default function Inventory() {
       ),
     },
     { id: 'store', header: 'Store', card: 'subtitle', cell: (r) => r.storeName },
-    { id: 'qty', header: 'In stock', card: 'meta', align: 'right', cell: (r) => <span className={cn('font-semibold', r.qty <= 0 && 'text-danger')}>{r.qty}</span> },
-    { id: 'alert', header: 'Alert at', card: 'meta', align: 'right', className: 'hidden md:table-cell', cell: (r) => r.quantityAlert },
+    { id: 'qty', header: 'In stock', card: 'meta', align: 'right', cell: (r) => <span className={cn('font-semibold', r.qty <= 0 && 'text-danger')}>{fmtQty(r.qty)}</span> },
+    { id: 'alert', header: 'Alert at', card: 'meta', align: 'right', className: 'hidden md:table-cell', cell: (r) => fmtQty(r.quantityAlert) },
     { id: 'price', header: 'Price', card: 'hidden', align: 'right', className: 'hidden lg:table-cell', cell: (r) => (r.price != null ? formatCurrency(r.price) : '—') },
     { id: 'status', header: 'Status', card: 'meta', cell: (r) => <StatusBadge value={r.status} /> },
   ];
@@ -125,7 +126,7 @@ export default function Inventory() {
         placeholder="Search product, SKU or store…"
         filters={[
           { key: 'storeId', label: 'Store', allLabel: 'All stores', options: stores.map((s) => ({ value: String(s.id), label: s.name })) },
-          { key: 'stockStatus', label: 'Stock status', allLabel: 'Any stock status', options: STOCK.map((s) => ({ value: s, label: s })) },
+          { key: 'stockStatus', label: 'Stock status', allLabel: 'Any stock status', options: STOCK.map((s) => ({ value: s, label: statusLabel(s) })) },
         ]}
         values={list.values}
         onFilter={list.setFilter}

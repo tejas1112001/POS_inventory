@@ -1,5 +1,4 @@
 import TabBar from '@/components/kit/TabBar';
-import { Link } from 'react-router-dom';
 import React, { useState } from 'react';
 import { Palette, Check, Moon, Sun } from 'lucide-react';
 import ShopSettings from '@/components/settings/ShopSettings';
@@ -29,14 +28,13 @@ export default function Settings() {
     hasPermission('settings', 'view') && { key: 'returns', label: 'Returns' },
     hasPermission('settings', 'view') && hasModule('batch_expiry') && { key: 'batches', label: 'Batches' },
     { key: 'appearance', label: 'Appearance' },
-    hasPermission('stores', 'view') && { key: 'stores', label: 'Stores', to: '/stores' },
-    hasPermission('billing', 'view') && { key: 'billing', label: 'Plan & billing', to: '/billing' },
   ].filter(Boolean);
   const [tab, setTab] = useState(tabs[0].key);
 
   return (
     <div className="flex h-full flex-col gap-3">
-      <TabBar label="Settings" tabs={tabs.map((t) => (t.to ? { ...t, plain: true } : t))} value={tab} onChange={setTab} />
+      {/* Stores and Plan & billing are in the sidebar, not repeated here. */}
+      <TabBar label="Settings" tabs={tabs} value={tab} onChange={setTab} />
       {tab === 'shop' && (
         <div className="space-y-3">
           <BusinessSettings canManage={hasPermission('modules', 'manage')} />

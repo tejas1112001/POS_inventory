@@ -74,8 +74,8 @@ export default function OnboardingCard() {
                 <Circle className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-label="Not done" />
               )}
               <span>
-                <span className={s.done ? 'text-sm font-medium text-muted-foreground line-through' : 'text-sm font-medium'}>{s.label}</span>
-                {!s.done && <span className="block text-xs text-muted-foreground">{s.hint}</span>}
+                <span className={s.done ? 'text-sm font-medium text-muted-foreground' : 'text-sm font-medium'}>{s.label}</span>
+                <span className="block text-xs text-muted-foreground">{s.done ? 'Done' : s.hint}</span>
               </span>
             </Link>
           </li>

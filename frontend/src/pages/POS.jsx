@@ -345,9 +345,11 @@ export default function POS() {
         <CartHeader count={itemCount}>
           <span className="truncate">{selectedCustomerObj?.name || 'Walk-in Customer'}</span>
         </CartHeader>
-        <Button variant="ghost" size="sm" className="text-danger hover:bg-danger-bg hover:text-danger" disabled={!lines.length} onClick={askClear}>
-          <X className="size-4" aria-hidden="true" /> Clear
-        </Button>
+        {lines.length > 0 && (
+          <Button variant="ghost" size="sm" className="text-danger hover:bg-danger-bg hover:text-danger" onClick={askClear}>
+            <X className="size-4" aria-hidden="true" /> Clear
+          </Button>
+        )}
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin">
         {lines.length === 0 ? (
@@ -485,7 +487,7 @@ export default function POS() {
                 </SelectContent>
               </Select>
               <Button variant="outline" className="h-10 shrink-0" onClick={() => setShowCustomerForm(true)}>
-                <UserPlus className="size-4" aria-hidden="true" /> <span className="hidden sm:inline">Add New</span>
+                <UserPlus className="size-4" aria-hidden="true" /> <span className="hidden sm:inline">Add new</span>
                 <span className="sr-only sm:hidden">Add customer</span>
               </Button>
             </div>

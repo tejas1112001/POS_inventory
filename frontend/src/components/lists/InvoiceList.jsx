@@ -1,137 +1,105 @@
+import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { ProductImage } from '@/components/shared/product-image';
-import React, { useState, useMemo } from 'react';
-import { useUI } from "../ListComponents/useUI";
+import { useUI } from '../ListComponents/useUI';
 import { selectColumn, indexColumn, statusColumn } from '../ListComponents/columnHelpers';
-
-// Reusable components
-import ListPageLayout from '../ListComponents/ListPageLayout';
-import SearchInput from '../ListComponents/SearchInput';
-import SelectField from '../ListComponents/SelectField';
-import ListControlButtons from '../ListComponents/ListControlButtons';
+import ReportToolbar, { ReportActions } from '../reports/ReportToolbar';
+import ReportTable from '../reports/ReportTable';
 import { formatCurrency } from '@/lib/format';
 
+const EMPTY = { customer: '', status: '' };
+
+// InvoiceList: every non-void sale as an invoice (GET /api/invoices), with
+// the same filter line as the other lists (search, Add filter).
 export default function InvoiceList({ invoices }) {
   const [search, setSearch] = useState('');
-  const [customerFilter, setCustomerFilter] = useState('All');
-  const [statusFilter, setStatusFilter] = useState('All');
+  const [values, setValues] = useState(EMPTY);
   const [rowSelection, setRowSelection] = useState({});
-  
-  // Customer options
-  const customerOptions = useMemo(() => {
-    const customers = [...new Set(invoices.map(invoice => invoice.customer.name))];
-    return ['All', ...customers];
-  }, [invoices]);
-  
-  // Status options
-  const statusOptions = ['All', 'Paid', 'Unpaid', 'Overdue'];
 
-  // Columns configuration
-  const columns = [
-    selectColumn(),
-    indexColumn(),
-    {
-      accessorKey: 'invoiceNo',
-      header: 'Invoice No',
-      cell: ({ getValue }) => (
-        <a href="#" className="text-blue-600 hover:text-blue-800">
-          {getValue()}
-        </a>
-      ),
-      size: 120,
-    },
-    {
-      accessorKey: 'customer',
-      header: 'Customer',
-      cell: ({ row }) => (
-        <div className="flex items-center">
-          <ProductImage name={row.original.customer.name} src={row.original.customer.avatar} size={32} rounded="rounded-full" className="mr-3" />
-          <span>{row.original.customer.name}</span>
-        </div>
-      ),
-      size: 200,
-    },
-    {
-      accessorKey: 'dueDate',
-      header: 'Due Date',
-      size: 120,
-    },
-    {
-      accessorKey: 'amount',
-      header: 'Amount',
-      cell: ({ getValue }) => <span>{formatCurrency(getValue())}</span>,
-      size: 100,
-    },
-    {
-      accessorKey: 'paid',
-      header: 'Paid',
-      cell: ({ getValue }) => <span>{formatCurrency(getValue())}</span>,
-      size: 100,
-    },
-    {
-      accessorKey: 'amountDue',
-      header: 'Amount Due',
-      cell: ({ getValue }) => <span>{formatCurrency(getValue())}</span>,
-      size: 120,
-    },
-    statusColumn('status', 'Status'),
-  ];
+  const filters = useMemo(
+    () => [
+      { key: 'customer', label: 'Customer', options: [...new Set(invoices.map((i) => i.customer?.name).filter(Boolean))].sort().map((c) => ({ value: c, label: c })) },
+      { key: 'status', label: 'Status', options: ['Paid', 'Unpaid', 'Overdue'].map((s) => ({ value: s, label: s })) },
+    ],
+    [invoices]
+  );
 
-  // Filtered data
+  const columns = useMemo(
+    () => [
+      selectColumn(),
+      indexColumn(),
+      {
+        accessorKey: 'invoiceNo',
+        header: 'Invoice no.',
+        size: 120,
+        cell: ({ row, getValue }) => (
+          <Link to={`/sales/${row.original.id}`} className="font-medium text-primary hover:underline">
+            {getValue()}
+          </Link>
+        ),
+      },
+      {
+        id: 'customer',
+        accessorFn: (r) => r.customer?.name || '',
+        header: 'Customer',
+        size: 200,
+        cell: ({ row }) => (
+          <div className="flex items-center gap-3">
+            <ProductImage name={row.original.customer?.name} src={row.original.customer?.avatar} size={32} rounded="rounded-full" />
+            <span>{row.original.customer?.name}</span>
+          </div>
+        ),
+      },
+      { accessorKey: 'dueDate', header: 'Due date', size: 120 },
+      { accessorKey: 'amount', header: 'Amount', size: 110, meta: { align: 'right' }, cell: ({ getValue }) => formatCurrency(getValue()) },
+      { accessorKey: 'paid', header: 'Paid', size: 110, meta: { align: 'right' }, cell: ({ getValue }) => formatCurrency(getValue()) },
+      { accessorKey: 'amountDue', header: 'Amount due', size: 120, meta: { align: 'right' }, cell: ({ getValue }) => formatCurrency(getValue()) },
+      statusColumn('status', 'Status'),
+    ],
+    []
+  );
+
   const filteredData = useMemo(() => {
-    return invoices.filter(invoice => 
-      (customerFilter === 'All' || invoice.customer.name === customerFilter) &&
-      (statusFilter === 'All' || invoice.status === statusFilter) &&
-      `${invoice.customer.name} ${invoice.invoiceNo}`.toLowerCase().includes(search.toLowerCase())
+    const q = search.trim().toLowerCase();
+    return invoices.filter(
+      (i) =>
+        (!values.customer || i.customer?.name === values.customer) &&
+        (!values.status || i.status === values.status) &&
+        (!q || `${i.customer?.name} ${i.invoiceNo}`.toLowerCase().includes(q))
     );
-  }, [invoices, search, customerFilter, statusFilter]);
+  }, [invoices, search, values]);
+  const exportRows = useMemo(
+    () => filteredData.map((i) => ({ 'Invoice no.': i.invoiceNo, Customer: i.customer?.name, 'Due date': i.dueDate, Amount: i.amount, Paid: i.paid, 'Amount due': i.amountDue, Status: i.status })),
+    [filteredData]
+  );
 
-  // Use UI hook
-  const {
-    table,
-    controlButtons,
-    emptyState
-  } = useUI({
+  const clear = () => {
+    setSearch('');
+    setValues(EMPTY);
+  };
+  const { table, emptyState } = useUI({
     moduleName: 'invoices',
     filteredData,
     columns,
     rowSelection,
     setRowSelection,
     onAddItem: false,
-    resetFilters: () => {
-      setSearch('');
-      setCustomerFilter('All');
-      setStatusFilter('All');
-    }
+    resetFilters: clear,
   });
 
   return (
-    <ListPageLayout
-      title="Invoices"
-      controlButtons={<ListControlButtons buttons={controlButtons} />}
-      filters={
-        <>
-          <SearchInput search={search} setSearch={setSearch} placeholder="Search invoices..." />
-          <SelectField
-            name="customer"
-            label="Customer"
-            value={customerFilter}
-            onChange={setCustomerFilter}
-            options={customerOptions}
-            placeholder="All Customers"
-          />
-          <SelectField
-            name="status"
-            label="Status"
-            value={statusFilter}
-            onChange={setStatusFilter}
-            options={statusOptions}
-            placeholder="All Statuses"
-          />
-        </>
-      }
-      table={table}
-      emptyState={emptyState}
-      dataLength={filteredData.length}
-    />
+    <>
+      <ReportToolbar
+        search={search}
+        onSearch={setSearch}
+        placeholder="Search invoice or customer…"
+        filters={filters}
+        values={values}
+        onFilter={(k, v) => setValues((s) => ({ ...s, [k]: v }))}
+        onClear={clear}
+        actions={<ReportActions rows={exportRows} name="invoices" print={false} gated={false} />}
+      />
+      <ReportTable table={table} emptyState={emptyState} dataLength={filteredData.length} />
+    </>
   );
 }

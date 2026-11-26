@@ -7,15 +7,24 @@ import { cn } from '@/lib/utils';
 
 const STYLE = {
   info: 'border-transparent bg-info-bg text-info-fg',
-  warning: 'border-amber-brand/40 bg-warning-bg text-warning-fg',
+  // Dark mode: the card colour with an amber edge and icon (the brown
+  // warning fill looked muddy on the teal page).
+  warning: 'border-amber-brand/40 bg-warning-bg text-warning-fg dark:border-amber-brand/60 dark:bg-card dark:text-foreground dark:[&>svg:first-child]:text-amber-brand',
   critical: 'border-danger/30 bg-danger-bg text-danger-fg',
 };
 const ICON = { info: Info, warning: AlertTriangle, critical: ShieldAlert };
 const DISMISSED_KEY = 'dismissedBanners';
+// Stock notices (low stock) only show where stock is worked on, not on
+// the checkout or the other pages.
+const STOCK_PAGES = ['/dashboard', '/inventory'];
 
+// Dismissed banners are remembered on this device. A banner's id changes
+// when its news changes (the low-stock id carries the day and the count),
+// so a dismissed banner comes back when there is something new.
 function dismissedIds() {
   try {
-    return JSON.parse(sessionStorage.getItem(DISMISSED_KEY) || '[]');
+    const ids = JSON.parse(localStorage.getItem(DISMISSED_KEY) || '[]');
+    return Array.isArray(ids) ? ids : [];
   } catch {
     return [];
   }
@@ -26,7 +35,7 @@ const safePath = (p) => (typeof p === 'string' && /^\/[a-z0-9/-]*$/i.test(p) ? p
 
 // BannerArea shows the billing banners (GET /api/notifications/banners),
 // a notice while a platform support person is signed in to the shop, and
-// one for a read-only shop. Dismissed banners stay hidden in this tab.
+// one for a read-only shop. Dismissed banners stay hidden on this device.
 export default function BannerArea() {
   const { impersonation, tenant } = usePos();
   const [banners, setBanners] = useState([]);
@@ -52,10 +61,10 @@ export default function BannerArea() {
   }, [location.pathname, load]);
 
   const dismiss = (id) => {
-    const next = [...dismissed, id];
+    const next = [...dismissed, id].slice(-50);
     setDismissed(next);
     try {
-      sessionStorage.setItem(DISMISSED_KEY, JSON.stringify(next));
+      localStorage.setItem(DISMISSED_KEY, JSON.stringify(next));
     } catch {
       /* the banner just comes back on reload */
     }
@@ -68,7 +77,8 @@ export default function BannerArea() {
   if (tenant?.status === 'read_only' && !banners.some((b) => b.level === 'critical')) {
     items.push({ id: 'read-only', level: 'critical', message: 'This shop is read-only: you can look things up but not sell or change anything.' });
   }
-  items.push(...banners.filter((b) => !(b.dismissible && dismissed.includes(b.id))));
+  const onStockPage = STOCK_PAGES.includes(location.pathname);
+  items.push(...banners.filter((b) => !(b.dismissible && dismissed.includes(b.id)) && (b.kind !== 'stock' || onStockPage)));
   if (items.length === 0) return null;
 
   return (

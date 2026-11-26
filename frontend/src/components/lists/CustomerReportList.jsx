@@ -1,222 +1,122 @@
-import React, { useState, useMemo } from 'react';
-import { useUI } from "../ListComponents/useUI";
+import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { UsersRound, Wallet } from 'lucide-react';
+import { useUI } from '../ListComponents/useUI';
 import { indexColumn } from '../ListComponents/columnHelpers';
+import ReportToolbar, { ReportActions } from '../reports/ReportToolbar';
+import ReportTable from '../reports/ReportTable';
+import StatCard from '../kit/StatCard';
+import { InlineAlert } from '@/components/feedback/InlineAlert';
+import { useServerReport } from '@/hooks/useServerReport';
+import { formatCurrency, formatDate } from '@/lib/format';
+import { addQty, fmtQty } from '@/lib/qty';
 
-// Reusable components
-import ListPageLayout from '../ListComponents/ListPageLayout';
-import ListControlButtons from '../ListComponents/ListControlButtons';
-import DateRangePicker from '../ListComponents/DateRangePicker';
-import SelectField from '../ListComponents/SelectField';
-import GenerateButton from '../ListComponents/GenerateButton';
-import { exportToExcel } from '../ListComponents/exportFunctions';
-import { PrinterIcon } from '@heroicons/react/24/outline';
-import { formatCurrency } from '@/lib/format';
+const INDEX_W = 48;
 
-export default function CustomerReportList({ reports }) {
+// byCustomer: one row per customer from the sold lines (returns netted),
+// with the last receipt in the period.
+function byCustomer(lines) {
+  const out = {};
+  for (const item of lines) {
+    const name = item.customerName || item.customer?.name || 'Walk-in customer';
+    const key = item.customer?.id ?? name;
+    const c = (out[key] ||= { id: String(key), customerId: item.customer?.id, name, sales: new Set(), items: 0, amount: 0, lastDate: item.date, reference: item.reference });
+    c.sales.add(item.saleId);
+    c.items = addQty(c.items, Number(item.soldQty) || 0);
+    c.amount += Number(item.netAmount ?? item.soldAmount) || 0;
+    if (new Date(item.date) > new Date(c.lastDate)) {
+      c.lastDate = item.date;
+      c.reference = item.reference;
+    }
+  }
+  return Object.values(out)
+    .map((c) => ({ ...c, totalOrders: c.sales.size, sales: undefined }))
+    .sort((a, b) => b.amount - a.amount);
+}
+
+// CustomerReportList: sales per customer in a period, from the sales
+// report (GET /api/sales/report, own sales only without sales:view_all).
+export default function CustomerReportList() {
   const [search, setSearch] = useState('');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
-  const [customerFilter, setCustomerFilter] = useState('All');
-  const [paymentMethodFilter, setPaymentMethodFilter] = useState('All');
-  const [paymentStatusFilter, setPaymentStatusFilter] = useState('All');
-  
-  // Customer options
-  const customerOptions = useMemo(() => {
-    const customers = [...new Set(reports.map(report => report.customer.name))];
-    return ['All', ...customers];
-  }, [reports]);
+  const { rows: lines, loading, error } = useServerReport('/api/sales/report', { startDate: fromDate, endDate: toDate });
+  const reports = useMemo(() => byCustomer(lines), [lines]);
 
-  // Payment method options
-  const paymentMethodOptions = ['All', 'Cash', 'Paypal', 'Stripe', 'Credit Card'];
-  
-  // Payment status options
-  const paymentStatusOptions = ['All', 'Completed', 'Unpaid', 'Paid', 'Overdue'];
-
-  // Print function
-  const handlePrint = () => {
-    window.print();
-  };
-  const handleGenerate = () => {
-    void exportToExcel(filteredData, 'customer_report');
-  };
-
-  // Columns configuration
-  const columns = useMemo(() => {
-    return [
-      indexColumn(),
+  const columns = useMemo(
+    () => [
+      { ...indexColumn(INDEX_W), meta: { align: 'center', sticky: 0 } },
       {
-        accessorKey: 'reference',
-        header: 'Last receipt',
-        size: 120,
-        cell: ({ getValue }) => (
-          <span>{getValue()}</span>
-        )
-      },
-      {
-        accessorKey: 'customer',
+        accessorKey: 'name',
         header: 'Customer',
-        cell: ({ row }) => (
-          <div className="flex items-center">
-            <span>{row.original.customer.name}</span>
-          </div>
-        ),
         size: 200,
+        meta: { sticky: INDEX_W },
+        cell: ({ row }) =>
+          row.original.customerId ? (
+            <Link to={`/customers/${row.original.customerId}`} className="font-medium text-primary hover:underline">
+              {row.original.name}
+            </Link>
+          ) : (
+            <span className="font-medium">{row.original.name}</span>
+          ),
       },
-      {
-        accessorKey: 'totalOrders',
-        header: 'Sales',
-        size: 100,
-        meta: { align: 'center' }
-      },
-      {
-        accessorKey: 'amount',
-        header: 'Net amount',
-        cell: ({ getValue }) => <span>{formatCurrency(getValue())}</span>,
-        size: 110,
-      },
-      {
-        accessorKey: 'paymentMethod',
-        header: 'Payment Method',
-        size: 120,
-      },
-      {
-        accessorKey: 'status',
-        header: 'Status',
-        size: 120,
-        cell: ({ getValue }) => (
-          <span className="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs">
-            {getValue()}
-          </span>
-        )
-      }
-    ];
-  }, []);
+      { accessorKey: 'totalOrders', header: 'Sales', size: 80, meta: { align: 'right' } },
+      { accessorKey: 'items', header: 'Items', size: 80, meta: { align: 'right' }, cell: (c) => fmtQty(c.getValue()) },
+      { accessorKey: 'amount', header: 'Net amount', size: 120, meta: { align: 'right' }, cell: ({ getValue }) => formatCurrency(getValue()) },
+      { accessorKey: 'reference', header: 'Last receipt', size: 120 },
+      { accessorKey: 'lastDate', header: 'Last sale', size: 110, cell: ({ getValue }) => formatDate(getValue()) },
+    ],
+    []
+  );
 
-  // Filtered data
   const filteredData = useMemo(() => {
-    return reports.filter(report => {
-      // Customer filter
-      const passesCustomer = customerFilter === 'All' || report.customer.name === customerFilter;
-      
-      // Payment method filter
-      const passesPaymentMethod = paymentMethodFilter === 'All' || 
-        (report.paymentMethod && report.paymentMethod === paymentMethodFilter);
-      
-      // Payment status filter
-      const passesPaymentStatus = paymentStatusFilter === 'All' || report.status === paymentStatusFilter;
-      
-      // Search filter
-      const searchFields =
-        `${report.reference} ${report.customer.name} ${report.paymentMethod} ${report.status}`;
-        
-      const passesSearch = searchFields
-        .toLowerCase()
-        .includes(search.toLowerCase());
-      
-      // Date filter
-      const reportDate = new Date(report.reportDate || report.dueDate || new Date());
-      const from = fromDate ? new Date(fromDate) : null;
-      const to = toDate ? new Date(toDate) : null;
+    const q = search.trim().toLowerCase();
+    return reports.filter((r) => !q || `${r.name} ${r.reference}`.toLowerCase().includes(q));
+  }, [reports, search]);
+  const total = useMemo(() => filteredData.reduce((s, r) => s + r.amount, 0), [filteredData]);
+  const exportRows = useMemo(
+    () => filteredData.map((r) => ({ Customer: r.name, Sales: r.totalOrders, Items: r.items, 'Net amount': r.amount, 'Last receipt': r.reference, 'Last sale': formatDate(r.lastDate) })),
+    [filteredData]
+  );
 
-      const passesFrom = from ? reportDate >= from : true;
-      const passesTo = to ? reportDate <= to : true;
-
-      return passesCustomer && passesPaymentMethod && passesPaymentStatus && passesSearch && passesFrom && passesTo;
-    });
-  }, [reports, search, customerFilter, paymentMethodFilter, paymentStatusFilter, fromDate, toDate]);
-
-  // Calculate total amount
-  const totalAmount = useMemo(() => {
-    return filteredData.reduce((sum, report) => sum + report.amount, 0);
-  }, [filteredData]);
-
-  // Use UI hook
-  const {
-    table,
-    controlButtons,
-    emptyState
-  } = useUI({
-    moduleName: 'customer reports',
+  const clear = () => {
+    setSearch('');
+    setFromDate('');
+    setToDate('');
+  };
+  const { table, emptyState } = useUI({
+    moduleName: 'customers',
     filteredData,
     columns,
     rowSelection: {},
     setRowSelection: () => {},
     onAddItem: false,
-    resetFilters: () => {
-      setSearch('');
-      setCustomerFilter('All');
-      setPaymentMethodFilter('All');
-      setPaymentStatusFilter('All');
-      setFromDate('');
-      setToDate('');
-    }
+    resetFilters: clear,
   });
 
-  // Add custom buttons to controlButtons
-  const customControlButtons = [
-    ...controlButtons,
-    { 
-      icon: <PrinterIcon className="w-5 h-5" />,
-      onClick: handlePrint,
-      title: 'Print'
-    }
-  ];
-
   return (
-    <ListPageLayout
-      title="Customer Report"
-      controlButtons={<ListControlButtons buttons={customControlButtons} />}
-      filterRow={
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-12">
-          <DateRangePicker
-            fromDate={fromDate}
-            toDate={toDate}
-            setFromDate={setFromDate}
-            setToDate={setToDate}
-          />
-          <SelectField
-            name="customer"
-            label="Customer"
-            value={customerFilter}
-            onChange={setCustomerFilter}
-            options={customerOptions}
-            placeholder="All"
-            colClass="md:col-span-3"
-          />
-          <SelectField
-            name="paymentMethod"
-            label="Payment Method"
-            value={paymentMethodFilter}
-            onChange={setPaymentMethodFilter}
-            options={paymentMethodOptions}
-            placeholder="All"
-            colClass="md:col-span-3"
-          />
-          <SelectField
-            name="paymentStatus"
-            label="Payment Status"
-            value={paymentStatusFilter}
-            onChange={setPaymentStatusFilter}
-            options={paymentStatusOptions}
-            placeholder="All"
-            colClass="md:col-span-2"
-          />
-          <GenerateButton onClick={handleGenerate} label="Export to Excel" />
-        </div>
-      }
-      table={table}
-      emptyState={emptyState}
-      dataLength={filteredData.length}
-      afterTable={
-        filteredData.length > 0 ? (
-          <div className="rounded-b-xl border border-t border-border bg-muted/40 p-4">
-            <div className="flex items-center justify-between">
-              <span className="font-semibold">Total</span>
-              <span className="font-bold">{formatCurrency(totalAmount)}</span>
-            </div>
-          </div>
-        ) : null
-      }
-    />
+    <>
+      <ReportToolbar
+        search={search}
+        onSearch={setSearch}
+        placeholder="Search customer or receipt…"
+        onClear={clear}
+        dates={{
+          from: fromDate,
+          to: toDate,
+          onChange: ({ from, to }) => {
+            setFromDate(from);
+            setToDate(to);
+          },
+        }}
+        actions={<ReportActions rows={exportRows} name="customer-report" />}
+      />
+      {error && <InlineAlert>{error}</InlineAlert>}
+      <div className="mb-3 grid shrink-0 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard icon={UsersRound} tone="teal" label="Customers" value={loading ? '…' : filteredData.length} />
+        <StatCard icon={Wallet} tone="teal" label="Net sales" value={loading ? '…' : formatCurrency(total)} />
+      </div>
+      <ReportTable table={table} loading={loading} emptyState={emptyState} dataLength={filteredData.length} />
+    </>
   );
 }

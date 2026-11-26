@@ -258,7 +258,7 @@ const AddPurchase = () => {
                   className="w-full px-3 py-2 border border-gray-600 rounded-lg focus:ring-blue-500 focus:border-blue-500"
                   required
                 >
-                  <option value="">Select Supplier</option>
+                  <option value="">Select supplier</option>
                   {suppliers.map(supplier => (
                     <option key={supplier.id} value={supplier.id}>
                       {supplier.name}
@@ -386,7 +386,7 @@ const AddPurchase = () => {
                               onChange={(e) => updatePurchaseItem(index, 'productId', e.target.value)}
                               required
                             >
-                              <option value="">Select Product</option>
+                              <option value="">Select product</option>
                               {products.map(product => (
                                 <option key={product.id} value={product.id}>
                                   {product.name}
@@ -403,7 +403,7 @@ const AddPurchase = () => {
                               required
                               disabled={!item.productId || variants.length === 0}
                             >
-                              <option value="">Select Variant</option>
+                              <option value="">Select variant</option>
                               {variants.map(variant => (
                                 <option key={variant.id} value={variant.id}>
                                   {variant.sku || `Variant ${variant.id}`} (${variant.price})

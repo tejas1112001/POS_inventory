@@ -309,7 +309,7 @@ const AddProduct = () => {
                   name="supplierId" 
                   className="w-full px-3 py-2 border border-gray-600 rounded-lg focus:ring-blue-500 focus:border-blue-500"
                 >
-                  <option value="">Select Supplier</option>
+                  <option value="">Select supplier</option>
                   {suppliers.map(supplier => (
                     <option key={supplier.id} value={supplier.id}>{supplier.name}</option>
                   ))}
@@ -502,7 +502,7 @@ const AddProduct = () => {
                     checked={productType === 'single'}
                     onChange={() => setProductType('single')}
                   />
-                  <span className="ml-2 text-gray-700">Single Product</span>
+                  <span className="ml-2 text-gray-700">Single product</span>
                 </label>
                 <label className="flex items-center">
                   <input
@@ -513,7 +513,7 @@ const AddProduct = () => {
                     checked={productType === 'variable'}
                     onChange={() => setProductType('variable')}
                   />
-                  <span className="ml-2 text-gray-700">Variable Product</span>
+                  <span className="ml-2 text-gray-700">Variable product</span>
                 </label>
               </div>
             </div>
@@ -688,7 +688,7 @@ const AddProduct = () => {
                     <thead>
                       <tr>
                         <th>Variation</th>
-                        <th>Variant Value</th>
+                        <th>Variant value</th>
                         <th>SKU</th>
                         <th>Quantity</th>
                         <th>Price</th>
@@ -846,7 +846,7 @@ const AddProduct = () => {
             
             {selectedImages.length > 0 && (
               <div className="mt-6">
-                <h3 className="text-sm font-medium text-gray-700 mb-3">Selected Images</h3>
+                <h3 className="text-sm font-medium text-gray-700 mb-3">Selected images</h3>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
                   {selectedImages.map((img, index) => (
                     <div key={index} className="relative group">

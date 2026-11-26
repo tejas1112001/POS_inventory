@@ -115,7 +115,7 @@ export default function Orders() {
               Try another search, status or dates.
             </EmptyState>
           ) : (
-            <EmptyState title="No orders yet" action={hasPermission('pos', 'view') && <Button onClick={() => navigate('/pos')}>Open Checkout</Button>} />
+            <EmptyState title="No orders yet" action={hasPermission('pos', 'view') && <Button onClick={() => navigate('/pos')}>Open checkout</Button>} />
           )
         }
         actions={(row) => (

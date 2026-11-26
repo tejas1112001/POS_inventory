@@ -29,7 +29,7 @@ export default function Invoices() {
   if (error) return <div className="p-6 text-red-500">{error}</div>;
 
   return (
-    <ListPageShell>
+    <ListPageShell scroll>
       <InvoiceList invoices={invoices} />
     </ListPageShell>
   );

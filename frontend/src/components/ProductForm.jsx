@@ -43,7 +43,7 @@ const ProductForm = ({ onClose }) => {
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid md:grid-cols-2 gap-4">
           <div>
-            <label className="block font-medium mb-1">Product Name</label>
+            <label className="block font-medium mb-1">Product name</label>
             <input
               name="productName"
               className="w-full border px-3 py-2 rounded"
@@ -88,7 +88,7 @@ const ProductForm = ({ onClose }) => {
               onChange={handleChange}
               value={formData.category}
             >
-              <option value="">Select Category</option>
+              <option value="">Select category</option>
               {Object.keys(categories).map((cat) => (
                 <option key={cat} value={cat}>
                   {cat}
@@ -151,7 +151,7 @@ const ProductForm = ({ onClose }) => {
         </div>
 
         <div>
-          <label className="block font-medium mb-1">Product Image</label>
+          <label className="block font-medium mb-1">Product image</label>
           <input
             name="image"
             type="file"

@@ -1,212 +1,126 @@
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { HandCoins, ReceiptText } from 'lucide-react';
 import { ProductImage } from '@/components/shared/product-image';
-import React, { useState, useMemo } from 'react';
-import { useUI } from "../ListComponents/useUI";
-import { indexColumn } from '../ListComponents/columnHelpers';
-import { PrinterIcon } from '@heroicons/react/24/outline';
+import { useUI } from '../ListComponents/useUI';
+import { indexColumn, StatusBadge } from '../ListComponents/columnHelpers';
+import ReportToolbar, { ReportActions } from '../reports/ReportToolbar';
+import ReportTable from '../reports/ReportTable';
+import StatCard from '../kit/StatCard';
+import { InlineAlert } from '@/components/feedback/InlineAlert';
 import { formatCurrency } from '@/lib/format';
 
-// Reusable components
-import ListPageLayout from '../ListComponents/ListPageLayout';
-import ListControlButtons from '../ListComponents/ListControlButtons';
-import DateRangePicker from '../ListComponents/DateRangePicker';
-import SelectField from '../ListComponents/SelectField';
-import GenerateButton from '../ListComponents/GenerateButton';
-import { exportToExcel } from '../ListComponents/exportFunctions';
+const INDEX_W = 48;
+// day turns the server's "02 Jan 2026" into 2026-01-02 (local calendar day).
+const pad = (n) => String(n).padStart(2, '0');
+const day = (s) => {
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? null : `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+};
 
-export default function CustomerDueReportList({ reports }) {
+// CustomerDueReportList: every sale with money still due (from
+// GET /api/invoices), filtered here by due date, status and text.
+export default function CustomerDueReportList({ reports, loading, error }) {
   const [search, setSearch] = useState('');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
-  const [customerFilter, setCustomerFilter] = useState('All');
-  const [paymentMethodFilter, setPaymentMethodFilter] = useState('All');
-  const [paymentStatusFilter, setPaymentStatusFilter] = useState('All');
-  const handleGenerate = () => {
-    void exportToExcel(filteredData, 'customer_due_report');
-  };
-  
-  // Customer options
-  const customerOptions = useMemo(() => {
-    const customers = [...new Set(reports.map(report => report.customer.name))];
-    return ['All', ...customers];
-  }, [reports]);
+  const [values, setValues] = useState({ status: '' });
 
-  // Payment method options
-  const paymentMethodOptions = ['All', 'Cash', 'Paypal', 'Stripe', 'Credit Card'];
-  
-  // Payment status options
-  const paymentStatusOptions = ['All', 'Paid', 'Unpaid', 'Completed', 'Overdue'];
+  const filters = useMemo(
+    () => [{ key: 'status', label: 'Status', options: [...new Set(reports.map((r) => r.status).filter(Boolean))].sort().map((s) => ({ value: s, label: s })) }],
+    [reports]
+  );
 
-  // Columns configuration
-  const columns = [
-    indexColumn(),
-    {
-      accessorKey: 'reference',
-      header: 'Reference',
-      size: 120,
-      cell: ({ getValue }) => (
-        <span>{getValue()}</span>
-      )
-    },
-    {
-      accessorKey: 'customer',
-      header: 'Customer',
-      cell: ({ row }) => (
-        <div className="flex items-center">
-          <ProductImage name={row.original.customer.name} src={row.original.customer.image} size={32} rounded="rounded-full" className="mr-3" />
-          {row.original.customer.id ? (
-            <Link to={`/customers/${row.original.customer.id}`} className="text-primary hover:underline">
-              {row.original.customer.name}
-            </Link>
-          ) : (
-            <span>{row.original.customer.name}</span>
-          )}
-        </div>
-      ),
-      size: 200,
-    },
-    {
-      accessorKey: 'totalAmount',
-      header: 'Total Amount',
-      cell: ({ getValue }) => <span>{formatCurrency(getValue())}</span>,
-      size: 120,
-    },
-    {
-      accessorKey: 'paid',
-      header: 'Paid',
-      cell: ({ getValue }) => <span>{formatCurrency(getValue())}</span>,
-      size: 110,
-    },
-    {
-      accessorKey: 'due',
-      header: 'Due',
-      cell: ({ getValue }) => <span>{formatCurrency(getValue())}</span>,
-      size: 110,
-    },
-    {
-      accessorKey: 'status',
-      header: 'Status',
-      size: 120,
-      cell: ({ getValue }) => {
-        const status = getValue();
-        let badgeClass = '';
-        if (status === 'Paid' || status === 'Completed') {
-          badgeClass = 'bg-green-100 text-green-800';
-        } else if (status === 'Unpaid') {
-          badgeClass = 'bg-red-100 text-red-800';
-        } else if (status === 'Overdue') {
-          badgeClass = 'bg-amber-soft text-[#7a4a05] dark:text-amber-brand';
-        }
-        
-        return (
-          <span className={`px-2 py-1 rounded-full text-xs ${badgeClass}`}>
-            {status}
-          </span>
-        );
-      }
-    }
-  ];
+  const columns = useMemo(
+    () => [
+      { ...indexColumn(INDEX_W), meta: { align: 'center', sticky: 0 } },
+      { accessorKey: 'reference', header: 'Receipt', size: 120, meta: { sticky: INDEX_W }, cell: ({ getValue }) => <span className="font-medium">{getValue()}</span> },
+      {
+        id: 'customer',
+        accessorFn: (r) => r.customer?.name || '',
+        header: 'Customer',
+        size: 200,
+        cell: ({ row }) => (
+          <div className="flex items-center gap-3">
+            <ProductImage name={row.original.customer?.name} src={row.original.customer?.avatar} size={32} rounded="rounded-full" />
+            {row.original.customer?.id ? (
+              <Link to={`/customers/${row.original.customer.id}`} className="text-primary hover:underline">
+                {row.original.customer.name}
+              </Link>
+            ) : (
+              <span>{row.original.customer?.name}</span>
+            )}
+          </div>
+        ),
+      },
+      { accessorKey: 'dueDate', header: 'Due date', size: 110 },
+      { accessorKey: 'totalAmount', header: 'Total', size: 110, meta: { align: 'right' }, cell: ({ getValue }) => formatCurrency(getValue()) },
+      { accessorKey: 'paid', header: 'Paid', size: 110, meta: { align: 'right' }, cell: ({ getValue }) => formatCurrency(getValue()) },
+      { accessorKey: 'due', header: 'Due', size: 110, meta: { align: 'right' }, cell: ({ getValue }) => <span className="font-semibold">{formatCurrency(getValue())}</span> },
+      { accessorKey: 'status', header: 'Status', size: 110, cell: ({ getValue }) => <StatusBadge value={getValue()} /> },
+    ],
+    []
+  );
 
-  // Filtered data
   const filteredData = useMemo(() => {
-    return reports.filter(report => {
-      const passesCustomer = customerFilter === 'All' || report.customer.name === customerFilter;
-      const passesPaymentMethod = paymentMethodFilter === 'All';
-      const passesPaymentStatus = paymentStatusFilter === 'All' || report.status === paymentStatusFilter;
-      const passesSearch = `${report.reference} ${report.customer.name} ${report.status}`
-                          .toLowerCase()
-                          .includes(search.toLowerCase());
-      
-      const reportDate = new Date(report.dueDate || new Date());
-      const from = fromDate ? new Date(fromDate) : null;
-      const to = toDate ? new Date(toDate) : null;
-
-      const passesFrom = from ? reportDate >= from : true;
-      const passesTo = to ? reportDate <= to : true;
-
-      return passesCustomer && passesPaymentMethod && passesPaymentStatus && passesSearch && passesFrom && passesTo;
+    const q = search.trim().toLowerCase();
+    return reports.filter((r) => {
+      const d = day(r.dueDate);
+      if (fromDate && (!d || d < fromDate)) return false;
+      if (toDate && (!d || d > toDate)) return false;
+      if (values.status && r.status !== values.status) return false;
+      return !q || `${r.reference} ${r.customer?.name} ${r.status}`.toLowerCase().includes(q);
     });
-  }, [reports, search, customerFilter, paymentMethodFilter, paymentStatusFilter, fromDate, toDate]);
+  }, [reports, search, values.status, fromDate, toDate]);
+  const totalDue = useMemo(() => filteredData.reduce((s, r) => s + (Number(r.due) || 0), 0), [filteredData]);
+  const exportRows = useMemo(
+    () => filteredData.map((r) => ({ Receipt: r.reference, Customer: r.customer?.name, 'Due date': r.dueDate, Total: r.totalAmount, Paid: r.paid, Due: r.due, Status: r.status })),
+    [filteredData]
+  );
 
-  // Use UI hook
-  const {
-    table,
-    controlButtons,
-    emptyState
-  } = useUI({
-    moduleName: 'customer due reports',
+  const clear = () => {
+    setSearch('');
+    setValues({ status: '' });
+    setFromDate('');
+    setToDate('');
+  };
+  const { table, emptyState } = useUI({
+    moduleName: 'dues',
     filteredData,
     columns,
     rowSelection: {},
     setRowSelection: () => {},
     onAddItem: false,
-    resetFilters: () => {
-          setSearch('');
-          setCustomerFilter('All');
-          setPaymentMethodFilter('All');
-          setPaymentStatusFilter('All');
-          setFromDate('');
-          setToDate('');
-        }
+    resetFilters: clear,
   });
 
-  // Add print button to control buttons
-  const customControlButtons = [
-    ...controlButtons,
-    { 
-      icon: <PrinterIcon className="w-5 h-5" />,
-      onClick: () => window.print(),
-      title: 'Print'
-    }
-  ];
-
-
-
   return (
-    <ListPageLayout
-      title="Customer Due Report"
-      controlButtons={<ListControlButtons buttons={customControlButtons} />}
-      filterRow={
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-12">
-          <DateRangePicker
-            fromDate={fromDate}
-            toDate={toDate}
-            setFromDate={setFromDate}
-            setToDate={setToDate}
-          />
-          <SelectField
-            name="customer"
-            label="Customer"
-            value={customerFilter}
-            onChange={setCustomerFilter}
-            options={customerOptions}
-            placeholder="All"
-            colClass="md:col-span-3"
-          />
-          <SelectField
-            name="paymentMethod"
-            label="Payment Method"
-            value={paymentMethodFilter}
-            onChange={setPaymentMethodFilter}
-            options={paymentMethodOptions}
-            placeholder="All"
-            colClass="md:col-span-3"
-          />
-          <SelectField
-            name="paymentStatus"
-            label="Payment Status"
-            value={paymentStatusFilter}
-            onChange={setPaymentStatusFilter}
-            options={paymentStatusOptions}
-            placeholder="All"
-            colClass="md:col-span-2"
-          />
-          <GenerateButton onClick={handleGenerate} label="Export to Excel" />
-        </div>
-      }
-      table={table}
-      emptyState={emptyState}
-      dataLength={filteredData.length}
-    />
+    <>
+      <ReportToolbar
+        search={search}
+        onSearch={setSearch}
+        placeholder="Search receipt or customer…"
+        filters={filters}
+        values={values}
+        onFilter={(k, v) => setValues((s) => ({ ...s, [k]: v }))}
+        onClear={clear}
+        dates={{
+          from: fromDate,
+          to: toDate,
+          placeholder: 'Any due date',
+          onChange: ({ from, to }) => {
+            setFromDate(from);
+            setToDate(to);
+          },
+        }}
+        actions={<ReportActions rows={exportRows} name="customer-dues" />}
+      />
+      {error && <InlineAlert>{error}</InlineAlert>}
+      <div className="mb-3 grid shrink-0 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard icon={HandCoins} tone="warn" label="Total due" value={loading ? '…' : formatCurrency(totalDue)} />
+        <StatCard icon={ReceiptText} tone="teal" label="Unpaid receipts" value={loading ? '…' : filteredData.length} />
+      </div>
+      <ReportTable table={table} loading={loading} emptyState={emptyState} dataLength={filteredData.length} />
+    </>
   );
 }

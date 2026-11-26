@@ -178,7 +178,7 @@ export default function PublicShopPage({ slug, homeSlug = null, onMissing }) {
       <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4">
         <div className="max-w-md w-full text-center bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-2xl">
           <Store className="size-12 text-slate-600 mx-auto mb-4" />
-          <h2 className="text-xl font-bold mb-2">Showcase Temporarily Offline</h2>
+          <h2 className="text-xl font-bold mb-2">Showcase temporarily offline</h2>
           <p className="text-sm text-slate-400 mb-6">
             {error || 'This shop showcase is currently unavailable or set to offline by the owner.'}
           </p>
@@ -253,7 +253,7 @@ export default function PublicShopPage({ slug, homeSlug = null, onMissing }) {
           <section className="space-y-4">
             <div className="flex items-center gap-2">
               <Sparkles className="size-5 text-amber-400" />
-              <h2 className="text-lg font-bold text-white tracking-tight">Featured Products</h2>
+              <h2 className="text-lg font-bold text-white tracking-tight">Featured products</h2>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
               {featuredProducts.map((p) => (
@@ -313,7 +313,7 @@ export default function PublicShopPage({ slug, homeSlug = null, onMissing }) {
               onChange={(e) => setSort(e.target.value)}
               className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none"
             >
-              <option value="newest">Newest First</option>
+              <option value="newest">Newest first</option>
               <option value="price_asc">Price: Low to High</option>
               <option value="price_desc">Price: High to Low</option>
               <option value="name_asc">Name: A to Z</option>
@@ -346,7 +346,7 @@ export default function PublicShopPage({ slug, homeSlug = null, onMissing }) {
           {products.length === 0 ? (
             <div className="text-center py-16 bg-slate-900/40 border border-slate-800/60 rounded-3xl p-8">
               <ShoppingBag className="size-12 text-slate-700 mx-auto mb-3" />
-              <h3 className="text-base font-semibold text-slate-300">No Products Available</h3>
+              <h3 className="text-base font-semibold text-slate-300">No products available</h3>
               <p className="text-xs text-slate-500 mt-1">
                 Try adjusting your category filter or search query.
               </p>
@@ -471,11 +471,11 @@ export default function PublicShopPage({ slug, homeSlug = null, onMissing }) {
                   <div className="flex items-center gap-2 mb-4">
                     {selectedProduct.inStock ? (
                       <span className="inline-flex items-center gap-1.5 text-xs text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-3 py-1 rounded-full font-medium">
-                        <CheckCircle2 className="size-3.5" /> In Stock at Physical Shop
+                        <CheckCircle2 className="size-3.5" /> In stock at the shop
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1.5 text-xs text-red-400 bg-red-500/15 border border-red-500/30 px-3 py-1 rounded-full font-medium">
-                        <XCircle className="size-3.5" /> Out of Stock
+                        <XCircle className="size-3.5" /> Out of stock
                       </span>
                     )}
                   </div>

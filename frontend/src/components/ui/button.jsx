@@ -10,7 +10,9 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          "bg-primary bg-primary-gradient text-primary-foreground shadow-[0_6px_16px_-6px_color-mix(in_oklab,var(--primary)_55%,transparent),inset_0_1px_0_rgb(255_255_255/0.14)] hover:brightness-[0.93] active:brightness-90",
+          // Disabled: a flat grey button with readable text, so it neither
+          // looks clickable (faded teal) nor unreadable.
+          "bg-primary bg-primary-gradient text-primary-foreground shadow-[0_6px_16px_-6px_color-mix(in_oklab,var(--primary)_55%,transparent),inset_0_1px_0_rgb(255_255_255/0.14)] hover:brightness-[0.93] active:brightness-90 disabled:border disabled:border-input disabled:bg-muted disabled:bg-none disabled:text-muted-foreground disabled:shadow-none disabled:opacity-100",
         destructive:
           "bg-destructive text-white shadow-xs hover:bg-[color-mix(in_oklch,var(--destructive),black_12%)] focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/60",
         outline:

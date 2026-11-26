@@ -3,7 +3,8 @@ import { useSearchParams } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import ReportTabs from '@/components/layout/ReportTabs';
 import ListPageShell from '@/components/layout/ListPageShell';
-import ReportExportButtons from '@/components/ListComponents/ReportExportButtons';
+import ReportSelect from '@/components/reports/ReportSelect';
+import { ReportActions } from '@/components/reports/ReportToolbar';
 import BatchDialog from '@/components/batches/BatchDialog';
 import { InlineAlert } from '@/components/feedback/InlineAlert';
 import { usePermission } from '@/context/PermissionContext';
@@ -23,7 +24,6 @@ const SECTIONS = [
   { key: 'recalled', label: 'Recalled with stock', tone: 'text-destructive' },
 ];
 const WINDOWS = ['30', '60', '90', '180'];
-const selectCls = 'h-11 rounded-lg border border-input bg-card px-3 text-base sm:h-9 sm:text-sm';
 
 // ExpiryReport (industry P3 item 7, A33): what is expired, about to
 // expire, quarantined or recalled, per batch and store, with cost and MRP
@@ -69,32 +69,28 @@ export default function ExpiryReport() {
   };
 
   return (
-    <ListPageShell>
+    <ListPageShell scroll>
       <ReportTabs />
-      <div className="space-y-4 overflow-y-auto pb-6">
-        <div className="flex flex-wrap items-end gap-3">
-          <label className="grid gap-1 text-sm font-medium">
-            Store
-            <select className={selectCls} value={storeId} onChange={(e) => setStoreId(e.target.value)}>
-              <option value="">All stores</option>
-              {stores.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="grid gap-1 text-sm font-medium">
-            Expiring within
-            <select className={selectCls} value={win} onChange={(e) => setWindowDays(e.target.value)}>
-              {windows.map((w) => (
-                <option key={w} value={w}>
-                  {w} days
-                </option>
-              ))}
-            </select>
-          </label>
-          <ReportExportButtons path="/api/reports/expiry/export" qs={qs} name="expiry-report" csv />
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <ReportSelect
+            id="expiry-store"
+            label="Store"
+            value={storeId || 'all'}
+            onChange={(v) => setStoreId(v === 'all' ? '' : v)}
+            options={[{ value: 'all', label: 'All stores' }, ...stores.map((s) => ({ value: String(s.id), label: s.name }))]}
+          />
+          <ReportSelect
+            id="expiry-window"
+            label="Expiring within"
+            value={win}
+            onChange={setWindowDays}
+            options={windows.map((w) => ({ value: w, label: `${w} days` }))}
+            empty="Loading…"
+          />
+          <div className="flex flex-wrap items-center gap-2 max-sm:w-full max-sm:[&>*]:flex-1 sm:ml-auto sm:[&>*]:h-9 sm:[&>*]:text-[13px]">
+            <ReportActions server={{ path: '/api/reports/expiry/export', qs, name: 'expiry-report', csv: true }} />
+          </div>
         </div>
 
         {error && <InlineAlert>{error.message}</InlineAlert>}
@@ -129,27 +125,27 @@ export default function ExpiryReport() {
             </p>
             <div className="overflow-x-auto rounded-lg border">
               <table className="w-full text-sm">
-                <thead className="bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                <thead className="bg-muted text-left text-xs font-semibold text-muted-foreground">
                   <tr>
-                    <th scope="col" className="px-3 py-2 font-medium">
+                    <th scope="col" className="px-3 py-2">
                       Item
                     </th>
-                    <th scope="col" className="px-3 py-2 font-medium">
+                    <th scope="col" className="px-3 py-2">
                       Batch
                     </th>
-                    <th scope="col" className="px-3 py-2 font-medium">
+                    <th scope="col" className="px-3 py-2">
                       Expiry
                     </th>
-                    <th scope="col" className="px-3 py-2 font-medium">
+                    <th scope="col" className="px-3 py-2">
                       Store
                     </th>
-                    <th scope="col" className="px-3 py-2 text-right font-medium">
+                    <th scope="col" className="px-3 py-2 text-right">
                       Qty
                     </th>
-                    <th scope="col" className="px-3 py-2 text-right font-medium">
+                    <th scope="col" className="px-3 py-2 text-right">
                       Cost value
                     </th>
-                    <th scope="col" className="px-3 py-2 text-right font-medium">
+                    <th scope="col" className="px-3 py-2 text-right">
                       MRP value
                     </th>
                   </tr>

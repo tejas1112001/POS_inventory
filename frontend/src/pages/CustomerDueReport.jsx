@@ -1,61 +1,47 @@
-// frontend/src/pages/CustomerDueReport.jsx
-
+import { useEffect, useState } from 'react';
 import ReportTabs from '../components/layout/ReportTabs';
-import React, { useState, useEffect } from 'react';
-import { NavLink } from 'react-router-dom';
 import ListPageShell from '../components/layout/ListPageShell';
 import CustomerDueReportList from '../components/lists/CustomerDueReportList';
-import { api } from '../services/api'; // <-- IMPORT API
+import { api } from '../services/api';
 
-// --- REMOVED DUMMY DATA ---
-
+// Sales with money still due, from the invoices list.
 export default function CustomerDueReport() {
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState('');
 
-  // Fetch data from the API
   useEffect(() => {
-    const fetchReports = async () => {
-      try {
-        setLoading(true);
-        // The /api/invoices route has the due data we need
-        const invoiceData = await api.get('/api/invoices');
-        
-        // Filter for only invoices that have an amount due
-        const dueInvoices = invoiceData
-          .filter(invoice => invoice.amountDue > 0)
-          .map(invoice => ({ // Map to the structure expected by the list
-            id: invoice.id,
-            reference: invoice.invoiceNo,
-            code: invoice.customer?.id ?? '-',
-            customer: invoice.customer,
-            totalAmount: invoice.amount,
-            paid: invoice.paid,
-            due: invoice.amountDue,
-            status: invoice.status
-          }));
-        
-        setReports(dueInvoices);
-      } catch (err) {
-        setError(err.message || 'Failed to fetch customer due reports');
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
+    let live = true;
+    api
+      .get('/api/invoices', { quiet: true })
+      .then((data) => {
+        if (!live) return;
+        setReports(
+          (Array.isArray(data) ? data : [])
+            .filter((invoice) => invoice.amountDue > 0)
+            .map((invoice) => ({
+              id: invoice.id,
+              reference: invoice.invoiceNo,
+              customer: invoice.customer,
+              dueDate: invoice.dueDate,
+              totalAmount: invoice.amount,
+              paid: invoice.paid,
+              due: invoice.amountDue,
+              status: invoice.status,
+            }))
+        );
+      })
+      .catch((err) => live && setError(err.message || 'The dues could not be loaded.'))
+      .finally(() => live && setLoading(false));
+    return () => {
+      live = false;
     };
-    fetchReports();
   }, []);
 
-
-
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col">
+    <ListPageShell scroll>
       <ReportTabs />
-
-      <ListPageShell>
-        <CustomerDueReportList reports={reports} loading={loading} error={error} />
-      </ListPageShell>
-    </div>
+      <CustomerDueReportList reports={reports} loading={loading} error={error} />
+    </ListPageShell>
   );
 }

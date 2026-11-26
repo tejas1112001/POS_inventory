@@ -42,7 +42,7 @@ const SupplierModal = ({ showModal, setShowModal, onSupplierCreated }) => {
       <div className="relative w-full max-w-md" onClick={(e) => e.stopPropagation()}>
         <div className="bg-white rounded-xl shadow-xl border border-gray-800">
           <div className="flex items-center justify-between p-4 border-b border-gray-600">
-            <h3 className="text-lg font-semibold">Create New Supplier</h3>
+            <h3 className="text-lg font-semibold">Create supplier</h3>
             <button onClick={() => setShowModal(false)} className="p-1 rounded-full hover:bg-gray-200">
               <XMarkIcon className="w-5 h-5" />
             </button>

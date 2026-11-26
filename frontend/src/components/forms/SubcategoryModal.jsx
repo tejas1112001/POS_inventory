@@ -54,7 +54,7 @@ const SubcategoryModal = ({ showModal, setShowModal, onSubcategoryCreated }) => 
         <div className="bg-white rounded-xl shadow-xl border border-gray-800 overflow-hidden" onClick={e => e.stopPropagation()}>
           {/* Modal Header */}
           <div className="flex justify-between items-center p-5 border-b border-gray-800">
-            <h3 className="text-xl font-bold text-gray-800">Create New Subcategory</h3>
+            <h3 className="text-xl font-bold text-gray-800">Create subcategory</h3>
             <button 
               onClick={() => setShowModal(false)}
               className="p-1 text-gray-500 hover:text-gray-800 rounded-full hover:bg-gray-100"
@@ -92,7 +92,7 @@ const SubcategoryModal = ({ showModal, setShowModal, onSubcategoryCreated }) => 
                   onChange={handleChange}
                   required
                 >
-                  <option value="">Select Category</option>
+                  <option value="">Select category</option>
                   {categories.map(category => (
                     <option key={category.id} value={category.id}>{category.name}</option>
                   ))}

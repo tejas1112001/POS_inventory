@@ -5,7 +5,7 @@ import PurchaseReportList from '../components/lists/PurchaseReportList';
 // The list loads the report itself, with the filters applied by the server.
 export default function PurchaseReport() {
   return (
-    <ListPageShell>
+    <ListPageShell scroll>
       <ReportTabs />
       <PurchaseReportList />
     </ListPageShell>

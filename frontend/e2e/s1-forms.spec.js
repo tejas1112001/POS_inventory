@@ -93,9 +93,10 @@ test('S1 forms and fixes', async ({ page }, info) => {
   await test.step('Sales Report shows product SKUs', async () => {
     await go(page, '/sales-report');
     await settle(page);
+    // The SKU is the small line under the product name (4th column).
     const skus = await page.locator('tbody tr td:nth-child(4)').allTextContents();
     expect(skus.length).toBeGreaterThan(0);
-    expect(skus.some((s) => /^SO-\d+-\d+$/.test(s.trim())), skus.join(',')).toBe(false);
+    expect(skus.some((s) => /SO-\d+-\d+/.test(s)), skus.join(',')).toBe(false);
   });
 
   await test.step('Category pictures load (no 401 for files)', async () => {

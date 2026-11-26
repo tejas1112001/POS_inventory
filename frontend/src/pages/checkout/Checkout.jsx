@@ -127,6 +127,15 @@ export default function Checkout() {
       return p.name.toLowerCase().includes(q) || variantsOf(p).some((v) => v.sku?.toLowerCase().includes(q) || v.itemBarcode?.toLowerCase() === q);
     });
   }, [c.products, category, favs, search]);
+  // Products sharing a name show their SKU on the tile, so they can be told apart.
+  const nameCount = useMemo(() => {
+    const m = new Map();
+    for (const p of c.products) {
+      const k = (p.name || '').trim().toLowerCase();
+      m.set(k, (m.get(k) || 0) + 1);
+    }
+    return m;
+  }, [c.products]);
 
   const isLocked = useCallback((p) => lockedByOther(p, currentUser?.id), [currentUser]);
 
@@ -411,9 +420,11 @@ export default function Checkout() {
           <Button variant="ghost" size="sm" onClick={() => setRecalling(true)} title="Held bills (F7)">
             <ListRestart className="size-4" aria-hidden="true" /> Recall
           </Button>
-          <Button variant="ghost" size="sm" className="text-danger hover:bg-danger-bg hover:text-danger" disabled={!lines.length} onClick={askClear}>
-            <X className="size-4" aria-hidden="true" /> Clear
-          </Button>
+          {lines.length > 0 && (
+            <Button variant="ghost" size="sm" className="text-danger hover:bg-danger-bg hover:text-danger" onClick={askClear}>
+              <X className="size-4" aria-hidden="true" /> Clear
+            </Button>
+          )}
         </div>
       </div>
       <PlaceOfSupply c={c} gst={gst} customer={customer} />
@@ -686,6 +697,7 @@ export default function Checkout() {
                 <ProductTile
                   key={p.id}
                   product={p}
+                  sameName={nameCount.get((p.name || '').trim().toLowerCase()) > 1}
                   lockedByOther={isLocked(p)}
                   onPick={pick}
                   inCart={inCart.get(p.id) || 0}

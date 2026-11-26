@@ -71,6 +71,20 @@ function greeting() {
   return hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
 }
 
+// greetName: the user's first name for the greeting, or nothing when the
+// account name is a role rather than a person ("Clothing Owner", "Admin").
+const ROLE_WORDS = /\b(owner|admin|administrator|manager|cashier|staff|user|shop|store)\b/i;
+function greetName(name) {
+  const n = (name || '').trim();
+  if (!n || ROLE_WORDS.test(n) || n.includes('@')) return '';
+  return n.split(/\s+/)[0];
+}
+
+// GRID_COLS: a row of n cards fills its width (3 cards are three columns,
+// not four with an empty slot).
+const GRID_COLS = { 1: 'sm:grid-cols-1', 2: 'sm:grid-cols-2', 3: 'sm:grid-cols-3', 4: 'sm:grid-cols-2 xl:grid-cols-4' };
+const gridCols = (n) => GRID_COLS[n] || (n % 3 === 0 ? 'sm:grid-cols-2 xl:grid-cols-3' : 'sm:grid-cols-2 xl:grid-cols-4');
+
 // change: "+12%" vs the previous period; null when there is nothing to compare.
 function change(now, before) {
   const a = Number(now) || 0;
@@ -184,12 +198,13 @@ export default function Dashboard() {
     };
   }, [canSales, canStock, storeId, tick]);
 
-  const firstName = (currentUser?.name || '').split(' ')[0];
+  const firstName = greetName(currentUser?.name);
   const x = data?.extra;
   const cur = x?.current;
   const prev = x?.previous;
   const ownOnly = data?.filters?.ownOnly;
-  const avg = (f) => (f && f.orders ? Number(f.revenue) / f.orders : 0);
+  // Average bill after returns, from the same figure as Net sales.
+  const avg = (f) => (f && f.orders ? Number(f.net) / f.orders : 0);
   const series = x?.series || [];
   const top = data?.salesDistribution || [];
   const topTotal = top.reduce((s, t) => s + (Number(t.value) || 0), 0);
@@ -360,11 +375,11 @@ export default function Dashboard() {
             <section aria-label={`${rangeLabel} figures`} className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <StatCard icon={Wallet} label="Net sales" value={formatCurrency(cur.net)} delta={prev && change(cur.net, prev.net)} hint={prev ? 'vs previous period' : 'after returns'} />
               <StatCard icon={ShoppingCart} label="Orders" value={formatNumber(cur.orders, 0)} delta={prev && change(cur.orders, prev.orders)} />
-              <StatCard icon={ReceiptText} tone="deep" label="Average bill" value={formatCurrency(avg(cur))} delta={prev && change(avg(cur), avg(prev))} />
+              <StatCard icon={ReceiptText} label="Average bill" value={formatCurrency(avg(cur))} delta={prev && change(avg(cur), avg(prev))} />
               <StatCard icon={Package} tone="amber" label="Items sold" value={fmtQty(cur.itemsSold)} delta={prev && change(cur.itemsSold, prev.itemsSold)} />
             </section>
 
-            <section aria-label="Money" className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <section aria-label="Money" className={cn('grid grid-cols-1 gap-3', gridCols(ownOnly ? 3 : 4))}>
               <MetricCard icon={Banknote} label="Collected" value={formatCurrency(cur.collected ?? cur.paid)} hint="Payments received, incl. dues" />
               {!ownOnly && <MetricCard icon={HandCoins} label="Due from customers" value={formatCurrency(cur.due)} hint={hasPermission('reports', 'view') ? 'See customer dues →' : undefined} to={hasPermission('reports', 'view') ? '/customer-due-report' : undefined} />}
               <MetricCard icon={Undo2} label="Refunds" value={formatCurrency(cur.returns)} />
@@ -372,7 +387,7 @@ export default function Dashboard() {
             </section>
 
             {actions.length > 0 && (
-              <section aria-label="Needs attention" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <section aria-label="Needs attention" className={cn('grid gap-3', gridCols(actions.length))}>
                 {actions}
               </section>
             )}
