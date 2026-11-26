@@ -48,12 +48,35 @@ folder and restarting `bilmitra` (the VPS keeps the five newest folders).
 
 | Tag | Date | Commit | Server id | Status |
 |---|---|---|---|---|
-| `v1.2.1` | 2026-11-24 | `ad12ab6` | `20261124112651-ad12ab6` | **Live** |
-| `v1.2.0` | 2026-11-24 | `2c74dc8` | `20261124100645-2c74dc8` | Replaced (rollback target) |
+| `v1.3.0` | 2026-11-26 | `ea77600` | `20261126093818-ea77600` | **Live** |
+| `v1.2.1` | 2026-11-24 | `ad12ab6` | `20261124112651-ad12ab6` | Replaced (rollback target) |
+| `v1.2.0` | 2026-11-24 | `2c74dc8` | `20261124100645-2c74dc8` | Replaced |
 | `v1.1.0` | 2026-11-24 | `28cb2c1` | `20261124032824-28cb2c1` | Replaced |
 | `v1.0.0` | 2026-11-22 | `08024c4` | `20261122-08024c4-landing` | Replaced |
 
-## v1.2.1 (live)
+## v1.3.0 (live)
+
+UI audit fixes, SEO landing pages and a checkout fix. No database changes.
+Built off the server (Go in Docker) and installed with `install-release.sh`
+(the same steps as `deploy.sh`).
+
+- Reports: one filter line on every tab (search, Add filter, one date range,
+  Excel / PDF / Print); the Sales tab scrolls and keeps the table usable; its
+  payment-method box folds and follows the tab's dates and store; Customers
+  and Customer dues no longer have overlapping filters; GST returns and
+  Expiry use the app's dropdowns.
+- App: low-stock banner only on Dashboard and Stock; sentence-case labels and
+  statuses; grouped numbers on Stock; Invoices on the Add-filter toolbar;
+  square checkboxes; clear disabled buttons; Settings no longer repeats
+  Stores and Plan & billing; dashboard greeting, average bill from net
+  sales, even card rows; checkout teal add buttons, no Clear on an empty
+  cart, SKU shown for products with the same name; stronger dark-mode
+  borders and banner.
+- Landing site: SEO-ready pages built at build time (the old server-rendered
+  home page is removed), rewritten copy, real contact details.
+- Checkout: the quote is read after it is set.
+
+## v1.2.1
 
 Landing site layout fixes. No database changes.
 
