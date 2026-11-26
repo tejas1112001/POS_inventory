@@ -346,6 +346,7 @@ export default function Checkout() {
   }, [lines, selected, search, openPay, c]);
 
   const customer = c.customers.find((x) => String(x.id) === String(c.customerId));
+  const q = c.quoteReady ? c.quote.data : null;
   // M3: the quote's GST (split, place of supply) and its tax by kind.
   const gst = q?.gst;
   const taxParts = useMemo(() => {
@@ -363,7 +364,6 @@ export default function Checkout() {
   }, [q, gst?.taxSplit]);
   const canCredit = hasPermission('sales', 'credit');
   const store = c.stores.find((s) => String(s.id) === String(c.storeId));
-  const q = c.quoteReady ? c.quote.data : null;
   const estimate = lines.reduce((n, l) => n + l.price * lineBase(l), 0);
   const total = q ? Number(q.total) : Math.max(0, estimate - c.discount);
   const itemCount = lines.reduce((n, l) => addQty(n, lineBase(l)), 0); // base units
