@@ -34,8 +34,8 @@ import {
 } from 'lucide-react';
 
 export const contact = {
-  phone: '[PHONE NUMBER]',
-  email: '[EMAIL]@mintobill.com',
+  phone: '9673030057',
+  email: 'info@mintobill.com',
   city: 'Pune, Maharashtra',
   callbackHours: '[X]',
 };
